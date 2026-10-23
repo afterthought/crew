@@ -2468,6 +2468,25 @@ BOLT_LIVES = r"""cd "$1" || exit 1
 bolt=$2 file=$3
 """ + BOLT_AT
 
+# Whether a bolt's branch on the remote its host's tip names holds that tip (plan.19), read in its kit's main checkout
+# with one fetch of it (plan.18), for kit.bolt_split: THERE=- when the remote has no bolt/<bolt>, READ with git's words
+# when it can't be asked or fetched, else LOCAL and THERE, the host's commit and the remote's, HELD, yes when the
+# host's tip is an ancestor of the remote's, and MERGES, the merges the host holds beyond it.
+BOLT_SPLIT = r"""cd "$1" || exit 1
+bolt=$2 remote=$3
+l=$(git rev-parse --verify -q "refs/heads/bolt/$bolt^{commit}")
+err=$(git ls-remote --exit-code "$remote" "refs/heads/bolt/$bolt" 2>&1); rc=$?
+if [ $rc = 2 ]; then echo "THERE=-"; exit 0; fi
+if [ $rc != 0 ]; then echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0; fi
+if ! err=$(git fetch -q "$remote" "+refs/heads/bolt/$bolt:refs/remotes/$remote/bolt/$bolt" 2>&1); then
+  echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+fi
+there=$(git rev-parse --verify -q "refs/remotes/$remote/bolt/$bolt^{commit}")
+echo "LOCAL=$l"; echo "THERE=$there"
+git merge-base --is-ancestor "$l" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
+echo "MERGES=$(git rev-list --count --merges "$there..$l" 2>/dev/null)"
+"""
+
 
 # Where a bolt lives (BOLT_LIVES), and AT_MAIN, the policy at the kit's main now as this host last fetched it, with no
 # fetch (plan.18): origin/main for a kit with an origin, else its own main, base64, or - when it holds none.
@@ -2503,6 +2522,17 @@ def bolts_local_said(fleet, t, plan):
         if said:
             out.append(said)
     return out
+
+
+def bolt_split_check(fleet, t, bolt):
+    """What a merge into the bolt reads of a split (plan.19), on the team's host in the kit's main checkout: where the
+    bolt lives (BOLT_LIVES), and when the host's own tip names a remote for it (kit.split_remote), that remote's copy
+    after one fetch (BOLT_SPLIT); (remote, kit.bolt_split's facts), or None when there is nothing to read, so a bolt
+    whose tip names no remote fetches nothing."""
+    remote = kit.split_remote(host_run(fleet, t["machine"], BOLT_LIVES, t["kit"]["main"], bolt, kit.DECLARATION), bolt)
+    if not remote:
+        return None
+    return remote, kit.bolt_split(host_run(fleet, t["machine"], BOLT_SPLIT, t["kit"]["main"], bolt, remote), bolt)
 
 
 def bolt_upstream(fleet, t, bolt):
@@ -3316,10 +3346,108 @@ def tell_planner(fleet, label, text):
         crew.tell(fleet, planner, text)
 
 
+# A decision record a source names by its path (plan-proposals): docs/adr/ and its four digits, the repository's when
+# <owner>/<name> and a colon or a space come right before it. The lookbehinds keep a path's tail from reading as a
+# repository, and other/docs/adr/ from reading as a record.
+RECORD_REF = re.compile(r"(?:(?<![\w./-])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)[:\s])?(?<![\w./-])docs/adr/(\d{4})(?!\d)")
+UNACCEPTED = "crew refuses the proposal: it rests on records the user has not accepted."
+UNACCEPTED_AFTER = "Propose it once each record is accepted on its kit's main."
+
+
+def record_refs(source, kit_repo):
+    """The decision records a source names, [(repo, number)] in the order they appear and each once: each by its path
+    (RECORD_REF), of the repository written before it, else of kit_repo, the repository of the kit whose work names it.
+    A record named only in words ("record 0026") is no record here, since nothing in the words says whose it is."""
+    return list(dict.fromkeys((m.group(1) or kit_repo, int(m.group(2))) for m in RECORD_REF.finditer(source)))
+
+
+def record_items(fleet, label, plan, argvs):
+    """The records a proposal's new work names (plan-proposals, briefs.15): for each bolt its `bolt new`s create, then
+    each unit or chore it makes new to a bolt or the queue (new_units), as the plan its commands leave holds them, each
+    record its sources name (record_refs), as (kind, name, kit, repo, number): kit the record's kit as a refusal names
+    it, the work's kit by its name, or <owner>/<name> when the record is another repository's, and repo the repository
+    it is read in, from the teams file (code.5). Work whose sources name a record and whose kit no team of the partition
+    builds is refused, since crew can't tell whose records they are (read.1)."""
+    work = [("bolt", a.bolt, plan.bolt(a.bolt)) for a in argvs if (a.cmd, a.sub) == ("bolt", "new")]
+    work += [(kind_of(plan.item(u)) if plan.item(u) else "unit", u, plan.item(u)) for u in new_units(argvs)]
+    out = []
+    for kind, name, r in work:
+        sources = [s for s in (r.all("Source") if r else []) if RECORD_REF.search(s)]
+        if not sources:
+            continue
+        kit = r.get("Repo")
+        teams = kit_teams(fleet, kit, label)
+        teams or fail(f"{kind} {name} names a decision record, and no team of {label} builds {kit}, so crew can't tell whose it is")
+        k = next(k for k in crew.kits_of(teams[0]) if kit in (k.get("name"), k.get("repo")))
+        for s in sources:
+            out += [(kind, name, k["name"] if repo == k["repo"] else repo, repo, n) for repo, n in record_refs(s, k["repo"])]
+    return list(dict.fromkeys(out))
+
+
+def unaccepted(items, held):
+    """Why a proposal can't be written because its new work rests on records the user has not accepted, or None when
+    every one is (plan-proposals, roles.3 on briefs.15): one line for each item, (kind, name, kit, repo, number) as
+    record_items gives them, whose record its main does not hold accepted, saying what it holds, read from held, which
+    maps (repo, number) to the files main holds by that number with the one file's status and whether an amendment is
+    marked proposed ({"files", "status", "marked"}), or to why it could not be read ({"why"}, read.1)."""
+    lines = []
+    for kind, name, kit, repo, number in items:
+        h, n = held[(repo, number)], f"{number:04d}"
+        if "why" in h:
+            says = h["why"]
+        elif not h["files"]:
+            says = f"{kit}'s main holds no record {n} in docs/adr/"
+        elif len(h["files"]) > 1:
+            says = f"{kit}'s main holds {len(h['files'])} records numbered {n}: {', '.join(h['files'])}"
+        elif record_accepted(h["status"], h["marked"]):
+            continue
+        else:
+            says = f"{kit}'s main holds it " + ("" if h["status"] else "with ") + record_says(h["status"], h["marked"])
+        lines.append(f"  {kind} {name} names record {n} of {kit}: {says}")
+    return "\n".join([UNACCEPTED, *lines, UNACCEPTED_AFTER]) if lines else None
+
+
+def proposal_records(fleet, label, scratch, argvs):
+    """The records a proposal's new work names, read on each repository's main as GitHub holds it now (plan.18): the
+    items record_items finds in the plan its commands leave (scratch), and what each repository's main holds by each
+    number, for unaccepted. Each repository is fetched once into crew's cache, held for the command (plan.12), its
+    docs/adr/ listed at that tip and the one file by a number read; a main that can't be fetched, or a file that can't
+    be read as text, gives why, naming it (read.1, read.2). Returns (items, held)."""
+    items, held = record_items(fleet, label, scratch.plan, argvs), {}
+    for repo in dict.fromkeys(i[3] for i in items):
+        numbers = sorted({i[4] for i in items if i[3] == repo})
+        try:
+            tip = fetch(repo, "main")
+            listed = git(repo, "ls-tree", "--name-only", tip, "docs/adr/").splitlines() if tip else []
+        except Refusal as e:
+            held.update({(repo, n): {"why": str(e)} for n in numbers})
+            continue
+        for n in numbers:
+            if not tip:
+                held[(repo, n)] = {"why": f"{repo} has no main on GitHub"}
+                continue
+            files = [f for f in listed if re.fullmatch(rf"docs/adr/{n:04d}-[^/]*\.md", f)]
+            held[(repo, n)] = {"files": files, "status": "", "marked": False}
+            if len(files) != 1:
+                continue
+            try:
+                text = show(repo, tip, files[0])
+            except UnicodeDecodeError:
+                text = None
+            if text is None:
+                held[(repo, n)] = {"why": f"crew can't read {files[0]} on {repo}'s main at {tip[:7]} as text"}
+                continue
+            status, marked = record_status_held(text)
+            held[(repo, n)].update(status=status, marked=bool(marked))
+    return items, held
+
+
 def plan_propose(fleet, a):
     """crew plan propose <file> [--replaces <n>]: the planner's proposal, checked against the plan at the tip, written
-    open with the next number; the conductor of each bolt in flight it touches is told. Once it is written, crew raises
-    its card in the planner's name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
+    open with the next number; the conductor of each bolt in flight it touches is told. Refused, with nothing written,
+    when a bolt it creates, or a unit or chore it adds or moves into a bolt, names a decision record its main on GitHub
+    does not hold accepted (proposal_records, unaccepted). Once it is written, crew raises its card in the planner's
+    name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
     kind, of = role(fleet, os.environ.get("CREW_AGENT"))
     kind in ("planner", "user") or fail(proposer_refusal(fleet, os.environ.get("CREW_AGENT"), kind, of))
     label = of if kind == "planner" else proposal_label(fleet, a)
@@ -3332,7 +3460,9 @@ def plan_propose(fleet, a):
     def change(w):
         pl = proposals(w)
         n = next_proposal(pl)
-        check_ops(fleet, label, w, argvs, n)
+        scratch = check_ops(fleet, label, w, argvs, n)
+        said = unaccepted(*proposal_records(fleet, label, scratch, argvs))
+        not said or fail(said)
         per = touched_by(w.plan, argvs)
         seen["old_by"] = open_proposal(pl, n, case, dos, agent(), datetime.date.today().isoformat(), a.replaces, label)
         w.replace("proposals.rec", pl.text())
@@ -4859,9 +4989,10 @@ def run_check(fleet, a):
     the user, makes it; on a unit whose intent was amended, which the user approved, anyone starts its construct, and
     the prompt carries the amendment's words, read from the mark. Code starts once the change is committed, with no
     review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits until each After
-    unit has merged (teams.5), and a unit carried onto its bolt inside another's merge, whose place is gone, has its
-    place made again from the bolt for its merge (teams.17), which holds the bolt's landing pull request first
-    (merge_holds); settle runs only for a unit that has delivered its verify.
+    unit has merged (teams.5), is refused while its bolt is split (split_refusal, plan.19), and a unit carried onto its
+    bolt inside another's merge, whose place is gone, has its place made again from the bolt for its merge (teams.17),
+    which holds the bolt's landing pull request first (merge_holds); settle runs only for a unit that has delivered its
+    verify.
     crew chore run asks with --chore, and a chore's stages are chore_check's; a stage asked of the other kind is refused
     naming it (plan.11)."""
     label, repo, tip, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a), "chore" if a.chore else "unit")
@@ -4908,6 +5039,9 @@ def run_check(fleet, a):
         got = (k["places"].get(a.unit) or {}).get("touches") or {}
         facts = dict(loose=undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After")), touches=got)
     elif a.stage == "merge":
+        split = bolt_split_check(fleet, t, bolt)
+        why = split and split_refusal("unit", a.unit, bolt, t["machine"], *split)
+        not why or fail(why)
         if not s.get("worktree"):  # carried onto the bolt inside another's merge, its place gone: made again from the bolt
             make_place(fleet, t, place, f"unit/{a.unit}", bolt)
         merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "unit", a.unit)
@@ -5059,12 +5193,30 @@ def landing_refusal(kind, name, stage, bolt, path, standing, alive):
             f"has landed or been refused, since what merges into bolt/{bolt} meanwhile is left out of main's landing")
 
 
+def split_refusal(kind, name, bolt, host, remote, f):
+    """Why a unit's, chore's or fix's merge is refused while its bolt is split (plan.19), or None: the host's tip names
+    remote for the bolt and that remote's bolt/<bolt> lacks it (f, kit.bolt_split), so sluice would form the merge
+    there and drop what the host holds; the landing, whose push makes the two one, is the way on. A copy that holds the
+    host's tip, or none at all, which sluice refuses itself, lets it through; one crew could not read refuses (read.1)."""
+    if f["read"]:
+        return f"crew can't tell whether bolt/{bolt} is split, so {kind} {name}'s merge waits: {f['read']}"
+    if f["there"] == "-" or f["held"] == "yes":
+        return None
+    n = f["merges"]
+    lacks = f"{host}'s tip" if not n else f"{n} merge{'' if n == 1 else 's'} {host} holds"
+    return (f"bolt/{bolt} is split: its tip on {host}, {f['local'][:7]}, names {remote} for it, so sluice would form "
+            f"{kind} {name}'s merge on {remote}'s bolt/{bolt} at {f['there'][:7]}, which lacks {lacks}, and drop "
+            f"{'them' if n > 1 else 'it'}. The bolt takes no merge until it lands: its landing (crew bolt submit {bolt}, "
+            f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one")
+
+
 def chore_check(fleet, a, label, plan, c):
     """Whether a chore's stage may start (chore_refusal), its place (made at its first code, on chore/<name> from the
     bolt, tracking it, and taking the head of each unmerged unit or chore it comes after, as a unit's construct's place
     does, TOOK, plan.13), and the prompt the stage is sent (chore_prompt), as facts for the stage's start, as run_check
-    gives a unit's. A merge is refused while a commit of its own lacks the chore's trailer, which is how its merge and
-    its landing are read (plan.11), and holds the bolt's landing pull request before it starts (merge_holds)."""
+    gives a unit's. A merge is refused while its bolt is split (split_refusal, plan.19) or a commit of its own lacks the
+    chore's trailer, which is how its merge and its landing are read (plan.11), and holds the bolt's landing pull
+    request before it starts (merge_holds)."""
     bolt = c.get("Bolt") or fail(f"chore {a.unit} is queued: move it into a bolt first")
     t = bolt_team(fleet, plan.bolt(bolt))
     st_all = Stages(fleet, plan, survey(fleet, [(t["name"], bolt, t["kit"]["name"])]))
@@ -5083,6 +5235,9 @@ def chore_check(fleet, a, label, plan, c):
             print(f"{place} starts from the kept chore/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], c), "chore")
     elif a.stage == "merge":
+        split = bolt_split_check(fleet, t, bolt)
+        why = split and split_refusal("chore", a.unit, bolt, t["machine"], *split)
+        not why or fail(why)
         loose = untrailed(chore_commits(fleet, t, bolt, a.unit), a.unit)
         not loose or fail(f"chore {a.unit} merges only once every commit of its own beyond bolt/{bolt} carries `Chore: {a.unit}`, and "
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
@@ -5420,7 +5575,8 @@ def fix_cmd(fleet, a):
     any (SLOT); for a merge, how it merges into the bolt (MERGE), by a submission to sluice as a unit's does, the bolt's
     landing pull request held first (merge_holds); for a drop, its branch when it is there (BRANCH). A name crew does
     not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
-    already there (fix.start), a merge from a place not the fix's own (fix.merge), and a drop of a merged fix, of one
+    already there (fix.start), a merge from a place not the fix's own or into a split bolt (fix.merge, split_refusal,
+    plan.19), and a drop of a merged fix, of one
     nothing holds or of a place not the fix's own (fix.drop) are refused and recorded (teams.3, teams.5, record
     0028)."""
     t = at_work(fleet, a.team)
@@ -5445,6 +5601,9 @@ def fix_cmd(fleet, a):
             not why or fail(why)
         elif a.mode == "merge":
             why = own_place(place, *place_branch(fleet, t, place), fix, bolt)
+            not why or fail(why)
+            split = bolt_split_check(fleet, t, bolt)
+            why = split and split_refusal("fix", a.name, bolt, t["machine"], *split)
             not why or fail(why)
             merge_holds(fleet, t, bolt, f"{fix}'s merge into bolt/{bolt}")
             said["MERGE"] = merge_command(bolt)
@@ -11279,6 +11438,33 @@ def card_closed(acts, label, owner, key, outcome, reason):
 
 # ------------------------------------------------------------------------------------------------ crew record
 
+def record_split(md):
+    """A decision record's Markdown as crew reads it: its frontmatter's fields, its body and the body's paragraphs."""
+    m = re.match(r"---\n(.*?)\n---\n", md, re.S)
+    fields = dict(l.split(":", 1) for l in m.group(1).splitlines() if re.match(r"[a-z][\w-]*:", l)) if m else {}
+    body = (md[m.end():] if m else md).strip()
+    return {k: v.strip().strip("'\"") for k, v in fields.items()}, body, [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+
+
+def record_status_held(md):
+    """A decision record's status as its file holds it, the one reading crew record and a proposal's check share
+    (briefs.15): its frontmatter's status, and the paragraphs that mark an amendment proposed ("Status: proposed" past
+    the record's own status line)."""
+    fields, _, paras = record_split(md)
+    own = next((i for i, p in enumerate(paras) if p.startswith("Status:")), None)
+    return fields.get("status", "").lower(), [p for i, p in enumerate(paras) if i != own and "Status: proposed" in p]
+
+
+def record_says(status, marked):
+    """What a record's file holds, in crew's words, from its status and the amendments marked proposed."""
+    return "accepted, with an amendment still marked proposed" if marked and status == "accepted" else status or "no status in its frontmatter"
+
+
+def record_accepted(status, marked):
+    """Whether a record's file holds it accepted: its status accepted, with no amendment still marked proposed."""
+    return status == "accepted" and not marked
+
+
 def record_facts(kit, number, text, status, before=None, alternatives=None):
     """A decision record's facts as its card is built from them (cards.record_card), from its Markdown at a commit, and
     whether the file holds the status the design agent records (briefs.15): its title, its frontmatter's or else its
@@ -11292,22 +11478,11 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     the commit before) held is gone, the amendment taken in or out. Refused naming what the file holds when it holds no
     such status, and refused when what the card is built from can't be read (read.1)."""
     n = f"{number:04d}"
-
-    def split(md):  # its frontmatter's fields, its body and the body's paragraphs
-        m = re.match(r"---\n(.*?)\n---\n", md, re.S)
-        fields = dict(l.split(":", 1) for l in m.group(1).splitlines() if re.match(r"[a-z][\w-]*:", l)) if m else {}
-        body = (md[m.end():] if m else md).strip()
-        return {k: v.strip().strip("'\"") for k, v in fields.items()}, body, [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
-
-    def held(md):  # its status, and the paragraphs that mark an amendment proposed
-        fields, _, paras = split(md)
-        own = next((i for i, p in enumerate(paras) if p.startswith("Status:")), None)
-        return fields.get("status", "").lower(), [p for i, p in enumerate(paras) if i != own and "Status: proposed" in p]
-    fields, body, paras = split(text)
-    now, marked = held(text)
-    then, was = held(before) if before else ("", [])
+    fields, body, paras = record_split(text)
+    now, marked = record_status_held(text)
+    then, was = record_status_held(before) if before else ("", [])
     holds = ["proposed"] if now == "accepted" and marked else ["accepted", "rejected"] if now == "accepted" and then == "accepted" and was else [now]
-    says = "accepted, with an amendment still marked proposed" if marked and now == "accepted" else now or "no status in its frontmatter"
+    says = record_says(now, marked)
     status in holds or fail(f"crew refuses record {n} in {kit} as {status}: its file on main says {says}. Commit it {status} "
                             f"and land it on main, then run crew record again.")
     head = next((p for p in paras if p.startswith("# ")), "")
@@ -11322,7 +11497,7 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     quoted = [a or b for a, b in re.findall(r"“([^”]+)”|\"([^\"]+)\"", deciders)]
     alt = None
     if alternatives is not None:
-        afields, abody, _ = split(alternatives)
+        afields, abody, _ = record_split(alternatives)
         rules = [r.strip() for r in afields.get("rules", "").split(",") if r.strip()]
         other, rec = afields.get("other", ""), afields.get("recommended", "accept")
         why = ("their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>" if not rules else

@@ -245,6 +245,51 @@ class TestWhereABoltLives:
             kit.bolt_home(at(self.SHA, at_local=b64(POLICY)), "b")
 
 
+class TestASplitBolt:
+    """Whether a merge reads a bolt's copy on a remote for a split (plan.19, design Decisions 1 to 3): only when the host
+    has its own bolt/<bolt> whose tip's policy names a remote; and what BOLT_SPLIT printed of that copy."""
+    LOCAL, THERE = "1" * 40, "2" * 40
+
+    def test_a_host_with_no_bolt_of_its_own_reads_no_remote(self):
+        assert kit.split_remote(at(tracked=self.LOCAL, at_tracked=b64(ON_GITHUB)), "b") is None
+
+    def test_a_host_tip_whose_policy_names_origin_reads_origin(self):
+        assert kit.split_remote(at(self.LOCAL, self.THERE, b64(ON_GITHUB), b64(POLICY)), "b") == "origin"
+
+    def test_a_host_tip_whose_policy_names_no_remote_reads_none_whatever_the_tracking_ref_says(self):
+        assert kit.split_remote(at(self.LOCAL, self.THERE, b64(POLICY), b64(ON_GITHUB)), "b") is None
+        assert kit.split_remote(at(self.LOCAL, self.THERE, "-", b64(ON_GITHUB)), "b") is None
+
+    def test_a_split_is_read_with_its_commits_and_the_merges_lacked(self):
+        said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=no\nMERGES=2\n"
+        assert kit.bolt_split(said, "b") == dict(local=self.LOCAL, there=self.THERE, held="no", merges=2, read=None)
+
+    def test_a_held_copy_is_read_as_held(self):
+        said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=yes\nMERGES=0\n"
+        assert kit.bolt_split(said, "b")["held"] == "yes"
+
+    def test_an_absent_copy_is_read_as_absent(self):
+        assert kit.bolt_split("THERE=-\n", "b") == dict(local=None, there="-", held=None, merges=None, read=None)
+
+    def test_a_copy_git_could_not_read_is_read_with_gits_words(self):
+        said = "READ=fatal: '/gone.git' does not appear to be a git repository fatal: Could not read from remote repository. \n"
+        assert kit.bolt_split(said, "b")["read"] == ("fatal: '/gone.git' does not appear to be a git repository fatal: "
+                                                     "Could not read from remote repository.")
+        assert kit.bolt_split("READ=\n", "b")["read"] == "git said nothing"
+
+    @pytest.mark.parametrize("said", [
+        "",
+        "fatal: bad\n",
+        f"LOCAL={LOCAL}\nTHERE={THERE}\nMERGES=2\n",
+        f"LOCAL=\nTHERE={THERE}\nHELD=no\nMERGES=2\n",
+        f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=maybe\nMERGES=2\n",
+        f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=no\nMERGES=\n",
+    ])
+    def test_an_output_that_is_none_of_these_is_refused(self, said):
+        with pytest.raises(Refusal, match=r"^crew can't read whether bolt/b is split from: "):
+            kit.bolt_split(said, "b")
+
+
 GITHUB, OWN = "a" * 40, "b" * 40
 
 
