@@ -8898,7 +8898,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
 
 
 def stranded_said(entries, card, owner, new):
-    """What the sweep says of a batch's card this host could not reach once its raise posted it again as new
+    """What the sweep says of a row's card this host could not reach once its raise posted it again as new
     (cards.stranded), from the run record's entries, oldest first: lost to its owner when its last close says so, else
     held on the host its post names, which this host's sign-in does not reach."""
     state, host = None, None
@@ -11264,10 +11264,10 @@ def sweep_cards(fleet, read, acts=None):
     name with its card key and why (briefs.12), so a host not signed in still records it; a card open under its key is
     withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
     (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
-    that assistant's, and for a card this host's sign-in no longer reaches with "not found". A batch's card this
-    host's sign-in can't reach, posted from another host or lost to the planner, while the batch's owner runs here, is
-    posted again through the batch's raise, its summary saying the older copy is dead, the older copy reported lost
-    and never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again,
+    that assistant's, and for a card this host's sign-in no longer reaches with "not found". Every row's card this
+    host's sign-in can't reach, posted from another host or lost to its owner, while the row's owner runs here, is
+    posted again through its kind's raise, its summary saying the older copy is dead, the older copy reported lost and
+    never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again, briefs.11,
     briefs.12, read.1). A host not signed in,
     or a bridge that fails, changes nothing more, and is said, as is a partition whose record did not answer there,
     which records no close either (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
@@ -11363,7 +11363,8 @@ def sweep_cards(fleet, read, acts=None):
             if new:
                 did(l, row["key"], older, owner, "lost", stranded_said(read["logs"].get(l, []), older, owner, new), new)
             elif kind_raises:
-                did(l, row["key"], older, owner, "left", "its batch no longer waits to be read")
+                did(l, row["key"], older, owner, "left",
+                    "its batch no longer waits to be read" if row["key"].startswith("batch/") else "its raise posted none")
         for c, row in j["unread"]:
             if cards.lost(found[c["card"]][1]):
                 continue

@@ -944,6 +944,40 @@ class TestSweep:
         assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [
             ("req_b13", "left", "its batch no longer waits to be read", None)]
 
+    # Every other row's card held on a host its owner's sign-in does not reach: a proposal's, a deploy's and a step's
+    # where the main level runs, here mac-studio, and a landing's on its team's host, the box.
+    STRANDED = [("proposal/13", "proposals", "proposal", "wldn-planner", "mac-studio", BOX),
+                ("deploy/dev", "operations", "deploy", "wldn-ops", "mac-studio", BOX),
+                ("op/dev/2", "operations", "op", "wldn-ops", "mac-studio", BOX),
+                ("land/apex-zones", "land", "land", "swb-2-conductor", BOX, "mac-studio")]
+
+    @pytest.mark.parametrize("key, group, kind, by, here, there", STRANDED)
+    def test_a_rows_card_held_on_another_host_is_posted_again_through_its_kinds_raise_handed_the_older_copy(self, key, group, kind, by, here, there):
+        """rail-cards, "A proposal's card left on the host the main level left", "A deploy's and a step's card left
+        behind" and "A landing's card left on the host its team left"."""
+        seen = []
+
+        def raise_(fleet, r, acts=None):
+            seen.append((r["key"], r.get("dead")))
+            return "req_new"
+        held = [dict(did("card.post", 60, Card="req_old", Key=key, On=[cards.row_object(key)], By=by), Host=there)]
+        out, acts = swept(rows_=[row(key, group)], cards_=[card(key, "req_old", by, host=there)], entries=held, raises={kind: raise_}, here=here)
+        assert seen == [(key, "req_old")]
+        assert out == {"done": [dict(label="wldn", key=key, card="req_old", by=by, did="lost",
+                                     words=f"held on {there}, which this host's sign-in does not reach: posted again as req_new", new="req_new")],
+                       "unswept": []}
+        assert acts.emitted == [] and acts.calls == []
+
+    @pytest.mark.parametrize("key, group, kind, by, here, there", STRANDED)
+    def test_a_rows_card_lost_to_its_owner_is_said_lost_once_posted_again_and_left_when_its_raise_posts_none(self, key, group, kind, by, here, there):
+        """rail-cards, "The proposal no longer waits": a raise that finds its row no longer waits posts nothing."""
+        lost = [dict(did("card.post", 60, Card="req_old", Key=key, On=[cards.row_object(key)], By=by), Host=there),
+                dict(did("card.close", 50, Card="req_old", Key=key, On=[cards.row_object(key)], State="lost", By=by), Host=there)]
+        out, _ = swept(rows_=[row(key, group)], entries=lost, raises={kind: lambda fleet, r, acts=None: "req_new" if r.get("dead") else None}, here=here)
+        assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [("req_old", "lost", f"lost to {by}: posted again as req_new", "req_new")]
+        out, _ = swept(rows_=[row(key, group)], entries=lost, raises={kind: lambda fleet, r, acts=None: None}, here=here)
+        assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [("req_old", "left", "its raise posted none", None)]
+
     def test_a_partition_whose_record_did_not_answer_on_its_branch_here_or_its_main_host_is_not_swept(self):
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"mac-studio": "x"}})
         assert out["unswept"] == [dict(label="wldn", why="its run record did not answer whole, so which cards are open can't be told: mac-studio: x")]
