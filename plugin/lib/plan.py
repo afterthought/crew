@@ -11984,7 +11984,9 @@ def end_session(label, key, unit=None):
     gathered for a proposal's card stay, and with them their folder: they go only with the approval or the decline.
     Returns what it did, in words, and whether it sent SIGTERM. crew's card hook runs it when a crew agent closes or
     withdraws a keyed card, the act when crew closes or withdraws one of its own (row_card_close), and crew card sweep
-    for each session the rail judges dead. A session that ended as the user sent it is forgotten, said so."""
+    for each session the rail judges dead. A session that ended as the user sent it is forgotten, said so. A folder or
+    file of the key's that another of these ends swept first, while this one read plannotator's list, is swept as
+    empty, never raised, so a wait whose card's close ends the session returns."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
     d = CARDS / label / key / unit if unit else CARDS / label / key
     key = f"{key} {unit}" if unit else key
@@ -12002,13 +12004,27 @@ def end_session(label, key, unit=None):
     import shutil
     if s and listed is None:
         return end_said(key, s, None, why), False
-    for f in d.iterdir():
+    try:
+        left = list(d.iterdir())
+    except FileNotFoundError:
+        left = []  # another end swept it first
+    for f in left:
         if f.name != "answers.json":
-            shutil.rmtree(f) if f.is_dir() and not f.is_symlink() else f.unlink()
+            try:
+                shutil.rmtree(f) if f.is_dir() and not f.is_symlink() else f.unlink()
+            except FileNotFoundError:
+                pass  # another end swept it first
     for p in [d, *d.parents]:
-        if p == CARDS / label or not p.is_dir() or any(p.iterdir()):
+        if p == CARDS / label:
             break
-        p.rmdir()
+        try:
+            if any(p.iterdir()):
+                break
+            p.rmdir()
+        except FileNotFoundError:
+            continue  # another end swept it first: swept as empty
+        except NotADirectoryError:
+            break
     if s and decided and decided[0] != "dismissed" and not serving(listed, s):
         return f"{key}'s session had ended as the user sent it, and {key} is forgotten", False
     if not s or not serving(listed, s):
