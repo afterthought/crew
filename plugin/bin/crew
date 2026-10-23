@@ -133,7 +133,9 @@
 #                                      whose row is gone. It sweeps the cards on this host under its sign-in: closes
 #                                      a card whose row is gone, withdraws a question whose asker has ended, and
 #                                      posts again a row's card Pending You no longer finds and a row's card that
-#                                      has none, through its kind's raise; and it ends, on every host of the
+#                                      has none, through its kind's raise, and on the main level's host a batch's
+#                                      card posted from another host or lost to the planner, saying the older copy
+#                                      is dead; and it ends, on every host of the
 #                                      partition, each card session crew started whose card is closed or whose row
 #                                      is gone. It says what each did, and each host it could not check
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
@@ -153,7 +155,8 @@
 #                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
 #                                      waits for the user's decision in it and prints it with their words, for a batch
 #                                      card waits on the card too, printing its note and every annotation, and closes
-#                                      the card, and for a landing prints its annotations as notes on the landing card
+#                                      the card, recording the batch read in the planner's name when the session is
+#                                      sent and no card of it closes there, and for a landing prints its annotations as notes on the landing card
 #                                      and its approval as landing nothing, leaving the card, starting the reading
 #                                      first when none runs while its conductor holds the card, refused naming crew
 #                                      card session land/<bolt> when it will not open; end ends it, as the card's

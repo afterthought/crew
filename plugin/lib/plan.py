@@ -8069,20 +8069,22 @@ def latest_changes(entries):
 
 
 def batch_closed(entries):
-    """The batch card keys the run record holds closed, entries oldest first: those whose last card act under the key
-    is a card.close, not refused and not lost to its owner, once the user sent the card back with a tap or sent its
-    reading session, or closed it in Pending You. A card posted under the key after it, one followed or raised again,
-    opens the key again, and a close as lost leaves it open for its card posted again; a refused post or close changes
-    nothing, since Pending You did neither. A batch the user answered in a main-level pane (pane_answered) has every key
-    of it closed for good, whatever card is posted under one after, in whichever order the hosts' entries came."""
+    """The batch card keys the run record holds closed, entries oldest first: those whose last act under the key is a
+    card.close, not refused and not lost to its owner, once the user sent the card back with a tap or sent its reading
+    session, or closed it in Pending You, or crew's own close of the batch, a batch.close not refused, card or none,
+    once the user sent its reading session and no card of it was closed (batch_read_close), or the sweep found it
+    waits on nothing. A card posted under the key after it, one followed or raised again, opens the key again, and a
+    close as lost leaves it open for its card posted again; a refused post or close changes nothing, since neither
+    Pending You nor crew did it. A batch the user answered in a main-level pane (pane_answered) has every key of it
+    closed for good, whatever card is posted under one after, in whichever order the hosts' entries came."""
     closed = set()
     for e in entries:
-        key = e.get("Key") or ""
-        if not key.startswith("batch/") or not e.get("Card") or e.get("Refused"):
+        key, act = e.get("Key") or "", e.get("Act")
+        if not key.startswith("batch/") or e.get("Refused") or (act != "batch.close" and not e.get("Card")):
             continue
-        if e.get("Act") == "card.post" or (e.get("Act") == "card.close" and e.get("State") == "lost"):
+        if act == "card.post" or (act == "card.close" and e.get("State") == "lost"):
             closed.discard(key)
-        elif e.get("Act") == "card.close":
+        elif act in ("card.close", "batch.close"):
             closed.add(key)
     return closed | set(pane_answered(entries))
 
@@ -8418,8 +8420,10 @@ def raise_batch(fleet, row, acts=None):
     Pending You no longer finds is recorded lost and posted again saying its older copy is dead; nothing while
     batch_facts finds its point not come or passed, and nothing for a key not batch/<n>, an old batch card's among
     them. crew review --wait calls it once the batch is recorded, and the rail's sweep for a row whose card is missing
-    or lost. Run on the main level's host, where the batch and its card are recorded and its summary written. What
-    crew can't read is said and refuses nothing, since the batch stands. The card's id, or None."""
+    or lost, and for one whose card this host can't reach, handed that older copy as the row's dead, when the card is
+    posted saying first that an older copy was lost and to dismiss it in the app (cards.posted_again). Run on the main
+    level's host, where the batch and its card are recorded and its summary written. What crew can't read is said and
+    refuses nothing, since the batch stands. The card's id, or None."""
     m = re.fullmatch(r"batch/(\d+)", row["key"] or "")
     if not m:
         return None
@@ -8440,8 +8444,18 @@ def raise_batch(fleet, row, acts=None):
         print(f"batch {n}'s card is not raised: none of its units' teams is in the teams file, so it has no kit to be filed in",
               file=sys.stderr)
         return None
-    return row_card_change(fleet, label, owner, cards.batch_card, facts, "Raised again: crew could not find its earlier copy",
+    build = built_again(cards.batch_card) if row.get("dead") else cards.batch_card
+    return row_card_change(fleet, label, owner, build, facts, "Raised again: crew could not find its earlier copy",
                            card_where(t["kit"]), acts)
+
+
+def built_again(build):
+    """A builder whose card, posted again under its key once an older copy was lost to its owner, says so first
+    (cards.posted_again)."""
+    def again(facts):
+        b = build(facts)
+        return dict(b, card=cards.posted_again(b["card"]))
+    return again
 
 
 # ------------------------------------------------------------------------------------------------ crew rail
@@ -8794,14 +8808,18 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     whose record crew record has recorded accepted or rejected since, to close with its status (record_settled). Then
     each row in record 0031's
     form with no card open on any host, whose owner runs here (owners, {row key: (owner, host)}), to post through its
-    kind's raise. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is left for a
-    later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a batch), each
-    batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why, once: none is
-    under its key yet, and the user's answer has not closed it (batch_closed). Returns {gone: [(card, outcome,
-    reason)], questions: [card], held: [(card, row)], none: [row], settled: [(key, why)]}."""
+    kind's raise; but a batch's row, batch/<n>, whose owner runs here and whose owner's newest card under its key this
+    host's sign-in can't reach, one posted from another host and not closed, or one lost to its owner on any host
+    (cards.stranded, over the whole record read), to post again through the batch's raise, the older copy named, and
+    not as a row with no card. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is
+    left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
+    batch), each batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why,
+    once: none is under its key yet, and the user's answer has not closed it (batch_closed). Returns {gone: [(card,
+    outcome, reason)], questions: [card], held: [(card, row)], none: [row], again: [(row, older card)], settled:
+    [(key, why)]}."""
     import ops  # its decision of a deploy's card alone
     rowed = {r["key"]: r for r in rows}
-    out = {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
+    out = {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": []}
     for c in cards_:
         kind = card_kind(c["key"])
         if c["host"] != here:
@@ -8818,12 +8836,33 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
               and not ops.word_stands(c["key"], entries)):
             out["gone"].append((c, *row_gone(c["key"], entries)))
     carded = {c["key"] for c in cards_}
-    out["none"] = [r for r in rows if r["key"] not in carded and cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
-                   and not refused_lately(entries, now, key=r["key"])]
+    mine = [r for r in rows if cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
+            and not refused_lately(entries, now, key=r["key"])]
+    for r in mine:
+        older = cards.stranded(entries, r["key"], owners[r["key"]][0], here) if re.fullmatch(r"batch/\d+", r["key"]) else None
+        if older:
+            out["again"].append((r, older))
+    again = {r["key"] for r, _ in out["again"]}
+    out["none"] = [r for r in mine if r["key"] not in carded | again]
     if planner[1] == here:
         done = {e.get("Key") for e in entries if e.get("Act") == "batch.close" and not e.get("Refused")} | batch_closed(entries)
         out["settled"] = [(k, why) for k, why in batch_settled(entries).items() if k not in done]
     return out
+
+
+def stranded_said(entries, card, owner, new):
+    """What the sweep says of a batch's card this host could not reach once its raise posted it again as new
+    (cards.stranded), from the run record's entries, oldest first: lost to its owner when its last close says so, else
+    held on the host its post names, which this host's sign-in does not reach."""
+    state, host = None, None
+    for e in entries:
+        if e.get("Card") != card or e.get("Refused"):
+            continue
+        if e.get("Act") == "card.post":
+            host = e.get("Host")
+        elif e.get("Act") == "card.close":
+            state = e.get("State")
+    return (f"lost to {owner}" if state == "lost" else f"held on {host}, which this host's sign-in does not reach") + f": posted again as {new}"
 
 
 def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
@@ -9785,12 +9824,15 @@ def batch_wait(fleet, label, key, d, acts=None):
     together, on the main level's host, until the user sends either back: the card read in Pending You every CARD_READ
     seconds, the session's result every CARD_POLL. It prints what batch_waited gives, the card's note and every
     annotation as the user wrote them, and closes the card with the outcome, which ends the session (row_card_close); a
-    word given while nobody waited is returned at once. A card closed outside crew is recorded closed as Pending You
-    shows it, and the session ended. A batch answered in a main-level pane (pane_answered), read in this host's run
-    record each round before the card, ends the wait, saying in whose pane and when and never the words, which the
-    planner has from crew card answer: its card is closed answered and the session ended. A session closed or ended
-    with no decision leaves the wait on the card, said once; a card lost to its owner is recorded lost, leaving the wait on the session; a session crew ended, as its card
-    closed, ends the wait. Refused with neither a card nor a session of the batch on this host."""
+    word given while nobody waited is returned at once. A session sent with no card held on this host, or one lost or
+    whose close Pending You refused, so that no card is closed, records the batch read: crew's own close of it,
+    batch.close on batch/<n> in the planner's name with what was read (batch_read_close, briefs.12), the session
+    ended when no card was held. A card closed outside crew is recorded closed as Pending You shows it, and the session
+    ended. A batch answered in a main-level pane (pane_answered), read in this host's run record each round before the
+    card, ends the wait, saying in whose pane and when and never the words, which the planner has from crew card
+    answer: its card is closed answered and the session ended. A session closed or ended with no decision leaves the
+    wait on the card, said once; a card lost to its owner is recorded lost, leaving the wait on the session; a session
+    crew ended, as its card closed, ends the wait. Refused with neither a card nor a session of the batch on this host."""
     acts = acts or CardActs(fleet)
     here = acts.host()
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], here)
@@ -9832,10 +9874,15 @@ def batch_wait(fleet, label, key, d, acts=None):
         done = batch_waited(key, decided, got)
         if done:
             print(done[1])
-            if done[0] == "read" and card:
-                row_card_close(fleet, label, owner, key, outcome=done[2], acts=acts)
-                return
-            if done[0] == "closed":
+            if done[0] == "read":
+                closed = row_card_close(fleet, label, owner, key, outcome=done[2], acts=acts) if card else None
+                if batch_read_close(closed):
+                    acts.emit(label, "batch.close", [cards.row_object(key) or key], by=owner,
+                              why=f"batch({key.split('/', 1)[1]}): read in its session", Key=key, State="read", Outcome=done[2])
+                    print(f"{key}: recorded read, {done[2]}")
+                if card:
+                    return
+            elif done[0] == "closed":
                 acts.emit(label, "card.close", [cards.row_object(key)], by=owner, Card=card, Key=key, State=done[2],
                           Outcome="closed outside crew")
             print(acts.end(label, key) or f"no session was running for {key}")
@@ -9861,6 +9908,13 @@ def batch_wait(fleet, label, key, d, acts=None):
             print(f"{key}: its card is lost to {owner}, and it has no session to wait on")
             return
         time.sleep(CARD_POLL)
+
+
+def batch_read_close(closed):
+    """Whether a batch whose reading the user sent is recorded read by crew's own close of it (review-batches, briefs.12):
+    when no card of it was closed, closed being what row_card_close gave, the card's id or None, or None when no card
+    was held, so the user's word holds the batch's landings no longer whatever became of the card."""
+    return closed is None
 
 
 def batch_waited(key, decided, got):
@@ -11047,7 +11101,11 @@ def sweep_cards(fleet, read, acts=None):
     name with its card key and why (briefs.12), so a host not signed in still records it; a card open under its key is
     withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
     (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
-    that assistant's, and for a card this host's sign-in no longer reaches with "not found"; a host not signed in,
+    that assistant's, and for a card this host's sign-in no longer reaches with "not found". A batch's card this
+    host's sign-in can't reach, posted from another host or lost to the planner, while the batch's owner runs here, is
+    posted again through the batch's raise, its summary saying the older copy is dead, the older copy reported lost
+    and never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again,
+    briefs.12, read.1). A host not signed in,
     or a bridge that fails, changes nothing more, and is said, as is a partition whose record did not answer there,
     which records no close either (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
     card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left, a batch's close
@@ -11075,6 +11133,7 @@ def sweep_cards(fleet, read, acts=None):
             out["done"].append(dict(label=l, key=key, card=None, by=planner[0], did="closed" if got else "left",
                                     words=why if got else "crew's close was not recorded, as said above", new=None))
         j["none"] = [r for r in j["none"] if acts.raise_of(r["key"].split("/")[0])]
+        j["again"] = [(r, c) for r, c in j["again"] if acts.raise_of(r["key"].split("/")[0])]
         if any(j.values()):
             judged.append((l, owners, j))
     if not judged:
@@ -11135,6 +11194,13 @@ def sweep_cards(fleet, read, acts=None):
                 did(l, c["key"], c["card"], c["by"], "lost", f"crew raises no card for {c['key']} on a rail read, so {c['by']} raises it again with the command that raised it")
             elif kind_raises:
                 did(l, c["key"], c["card"], c["by"], "left", "Pending You no longer finds it, and its raise posted none")
+        for row, older in j["again"]:
+            owner = owners[row["key"]][0]
+            new, kind_raises = raised(l, dict(row, dead=older), owner)
+            if new:
+                did(l, row["key"], older, owner, "lost", stranded_said(read["logs"].get(l, []), older, owner, new), new)
+            elif kind_raises:
+                did(l, row["key"], older, owner, "left", "its batch no longer waits to be read")
         for row in j["none"]:
             owner = owners[row["key"]][0]
             new, _ = raised(l, row, owner)

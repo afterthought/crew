@@ -506,6 +506,12 @@ class TestSessions:
         assert plan.batch_waited("batch/3", ("annotated", notes, 2), tapped)[2] == "Read; 3 notes sent to their teams"
         assert plan.batch_waited("batch/3", ("annotated", notes, None), None)[2] == "Read; its notes sent to their teams"
 
+    def test_a_batch_whose_session_was_sent_is_recorded_read_by_crew_whenever_no_card_of_it_closed(self):
+        """review-batches, "A batch whose reading session is sent is read, with or without its card": a card closed is
+        the record; none held, or one lost or whose close was refused, which row_card_close gives as None, is not."""
+        assert plan.batch_read_close("req_b13") is False
+        assert plan.batch_read_close(None) is True
+
     def test_a_batch_wait_goes_on_while_neither_has_the_users_word_and_ends_on_a_card_closed_outside_crew(self):
         for decided in (None, ("dismissed", None, None)):
             assert plan.batch_waited("batch/3", decided, {"status": "pending", "turn": "you"}) is None
@@ -535,6 +541,26 @@ class TestSessions:
         assert acts.sessions == [("wldn", "batch/3")]
         assert plan.raise_batch(FLEET, dict(row, key="batch/3-1"), acts) is None
         assert plan.raise_batch(FLEET, dict(row, key="batch/4"), acts) is None
+
+    def test_the_sweeps_raise_of_a_batch_handed_an_older_copy_this_host_cant_reach_posts_it_saying_that_copy_is_dead(self, monkeypatch, tmp_path):
+        """rail-cards, "The main level moved to another host": batch 3's card is held under another host's sign-in, so
+        this host holds none and its raise, handed the older copy, posts one card saying it is dead and closes nothing;
+        a raise handed none posts the batch's card as it is."""
+        (tmp_path / "batch-wldn-3.md").write_text("## x1 (swb-1)\n\nx1 gives each tenant its own zone.\n")
+        monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        held = [{"Act": "review.batch", "Batch": "3", "Units": "x1:swb-1@aaa1", "On": ["batch/3"], "At": "2026-10-12T10:00:00Z"}]
+        answers = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                   "post_request": ({"requestId": "req_b4", "version": 1}, None)}
+        row = {"label": "wldn", "key": "batch/3", "group": "batches"}
+        acts = ReadingActs(answers, held)
+        assert plan.raise_batch(FLEET, dict(row, dead="req_b3"), acts) == "req_b4"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_b4")]
+        assert [t for t, _ in acts.calls if t != "tell"] == ["match_area", "post_request"]
+        assert acts.calls[[t for t, _ in acts.calls].index("post_request")][1]["summary"].startswith(f"{built.DEAD}\n\n1 change to read")
+        acts = ReadingActs(answers, held)
+        assert plan.raise_batch(FLEET, row, acts) == "req_b4"
+        assert next(a for t, a in acts.calls if t == "post_request")["summary"].startswith("1 change to read")
 
 LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="abc1234", at=None, moved=0, pr=None)
 
@@ -1286,6 +1312,32 @@ class TestFollows:
         ([dict(Act="card.post", Key="land/b1", By="swancloud-ops", Card="req_l1")], None)])
     def test_the_key_a_followed_card_is_still_open_under_is_read_from_the_record_alone(self, entries, key):
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
+
+
+class TestStranded:
+    """rail-cards, "A batch's card the main level's host can't reach is raised again there": which of the planner's
+    cards under a batch's key the main level's host, deneb, can't reach (cards.stranded), from the run record alone."""
+    POST = dict(Act="card.post", Key="batch/13", By="swancloud-planner", Card="req_b13", Host="mac-studio")
+
+    def lost(self, host="mac-studio"):
+        return dict(Act="card.close", Key="batch/13", By="swancloud-planner", Card="req_b13", State="lost", Host=host)
+
+    @pytest.mark.parametrize("entries, card", [
+        ([POST], "req_b13"),
+        ([dict(POST, Host="deneb")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="closed")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="withdrawn", Host="mac-studio")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="lost", Host="mac-studio")], "req_b13"),
+        ([dict(POST, Host="deneb"), dict(Act="card.close", Card="req_b13", State="lost", Host="deneb")], "req_b13"),
+        ([POST, dict(Act="card.close", Card="req_b13", State="lost"), dict(POST, Card="req_b14", Host="deneb")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="closed", Refused="Pending You refused the close: x")], "req_b13"),
+        ([dict(POST, Host="deneb"), dict(POST, Card=None, Refused="Pending You refused post_request: x")], None),
+        ([dict(POST, By="swancloud-design")], None),
+        ([dict(POST, Key="batch/12")], None),
+        ([dict(POST, Host=None)], None),
+        ([], None)])
+    def test_the_owners_newest_card_held_on_another_host_or_lost_is_the_one_this_host_cant_reach(self, entries, card):
+        assert built.stranded(entries, "batch/13", "swancloud-planner", "deneb") == card
 
 
 
