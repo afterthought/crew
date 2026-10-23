@@ -422,7 +422,7 @@ class TestDocks:
                     "D.docks", 'ev.key === "Escape"', 'ev.key === "Enter"', 'ev.key === " "', '$("scrim").addEventListener("click", closeDock)',
                     'x.setAttribute("role", "button")', "x.tabIndex = 0", 'el("span", "host tm")', "preventScroll: true", "opener.focus"):
             assert has in rest
-        for no in (".dk-f", "innerHTML", "fetch(", "XMLHttpRequest", "WebSocket", "<script src", "<link", "@import", "url("):
+        for no in (".dk-f", "innerHTML", "XMLHttpRequest", "WebSocket", "<script src", "<link", "@import", "url("):
             assert no not in rest
 
     def test_the_open_dock_is_kept_in_the_address_and_a_key_the_page_no_longer_holds_is_dropped(self):
@@ -465,6 +465,21 @@ class TestWord:
     def test_every_dock_page_names_its_agent(self):
         d = TestDocks().paged()
         assert d["docks"] and all(p["to"] for p in d["docks"].values())
+
+    def test_every_dock_ends_with_a_word_to_its_agent_posted_to_the_pages_own_address_as_its_one_request(self):
+        """board-page "A unit's dock", "Opened from disk", "The dock says what became of the word" and "Only the word is
+        posted": the dock's last section names whom the word goes to and that a card is answered on the rail; Send
+        posts it to the page's own address, `word`, and says the listener's answer as text, or that it did not answer;
+        a page opened from disk sends nothing."""
+        rest = TestDocks().rest()
+        for has in ('class="word"', 'maxlength="1000"', 'new URL("word", location.href)', '"POST"', "JSON.stringify({ label: D.label, key: key, to: page.to, text: text })",
+                    'location.protocol === "file:"', "a card is answered on the rail", "the board's listener did not answer: nothing was sent",
+                    "a word is sent only from the served board", "r.status === 200 || r.status === 422", "wordSend.disabled = true", "wordSaid.textContent = words",
+                    "if (ok) wordText.value = \"\";", "dkB.append(wordSec)", 'aria-live="polite"'):
+            assert has in rest
+        assert rest.count("fetch(") == 1
+        for no in ("XMLHttpRequest", "WebSocket", "innerHTML", ".dk-f", "sendBeacon", "<form action", "method=\""):
+            assert no not in rest
 
     def test_a_kind_with_no_dock_yet_goes_to_its_role_and_any_other_to_the_operator(self):
         d = TestDocks().paged()

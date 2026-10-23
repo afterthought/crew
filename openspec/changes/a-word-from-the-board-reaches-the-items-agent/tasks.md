@@ -8,7 +8,7 @@
 
 ## 2. The word in the dock
 
-- [ ] 2.1 Every dock ends with a one-line field and Send naming its agent and saying a card is answered on the rail, posts the word to the page's own address as its one request, says what came back or that the listener did not answer, and sends nothing from a page opened from disk (design, Decision 6; Task notes 2.1); passes `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
+- [x] 2.1 Every dock ends with a one-line field and Send naming its agent and saying a card is answered on the rail, posts the word to the page's own address as its one request, says what came back or that the listener did not answer, and sends nothing from a page opened from disk (design, Decision 6; Task notes 2.1); passes `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
 
 ## 3. Wiring and docs
 
