@@ -171,7 +171,7 @@ class TestTheSubmission:
         monkeypatch.setattr(plan, "READ", type("R", (), {"drop_kit": lambda s, h, m: None})())
         monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: ran.append(("host_run", script, host)) or before)
         monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: ran.append(("on_machine", argv[2], host)) or outs.pop(0))
-        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, why: emitted.append((label, act, on, why)))
+        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, why, **_: emitted.append((label, act, on, why)))
         monkeypatch.setenv("CREW_AGENT", "wldn-ops")
         plan.bolt_submit({}, type("A", (), {"bolt": "b"})())
         return ran, emitted
