@@ -2,9 +2,10 @@
 # the teams journey (t-journey-teams): crew main up starts the main level, its operator among it, and a dispatcher on
 # each host of the partition, each greeted once, one waiting on a question holding back no other; main status reaches
 # every host; a tell records its length and never its text; crew send reaches the partition's operator, marked with
-# whom it was for, and records its length; the console gets its tabs and starts no agent; crew revive brings back what
-# a restart left empty, leaving down what was taken down; crew revive and crew main up open again a pane herdr brought
-# back dead; and a role its partition names a session for comes up there (record 0035).
+# whom it was for, and records its length; the console gets its tabs and starts no agent; a tell reaches an agent
+# whose pane herdr names no session for, refused while the session crew recorded in its pane has a question open;
+# crew revive brings back what a restart left empty, leaving down what was taken down; crew revive and crew main up
+# open again a pane herdr brought back dead; and a role its partition names a session for comes up there (record 0035).
 # What each agent is greeted with, where it runs and whether a pane is dead are logic cases (tests/py/test_teams.py).
 # Reads: plugin/hooks/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -81,6 +82,26 @@ grep -q "workspace create\|tab create\|pane run\|agent prompt" "$CREW_TEST_LOG" 
 expect_ok crew operator up wldn
 has "$out" "crew operator up is crew console up now; the operator is <label>-operator, at the main level"
 ok "main status reaches every host, a tell and a send record their length and never their text, a send reaching the partition's operator, and the console comes up with its flow, rail and board tabs and no agent, crew operator up opening it too"
+
+# herdr names no session for the planner's pane, as after its own restore: crew reads the session it recorded there.
+as $box herdr --session wldn-3 stub nosession wldn-planner on
+expect_ok crew tell wldn-planner "No session KWPD"
+grep -q "^$box wldn-3 agent prompt wldn-planner '\[crew tell from [^]]*@mac-studio\] No session KWPD'" "$CREW_TEST_LOG" ||
+  fail "a tell did not reach the planner whose pane herdr names no session for"
+planner_pane=$(herdr_state $box wldn-3 '.agents | to_entries[] | select(.value.name == "wldn-planner") | .key')
+planner_record=$(grep -lx "CREW_PANE=$planner_pane" $(grep -lx "CREW_AGENT=wldn-planner" "$(home_of $box)"/.local/state/crew/sessions/*))
+sid=$(basename "$planner_record")
+printf '{"session_id":"%s","transcript_path":"%s","tool_name":"AskUserQuestion","tool_use_id":"toolu_q1","tool_input":{}}' \
+  "$sid" "$(ls "$(home_of $box)"/.claude/projects/*/"$sid.jsonl")" | as $box python3 "$CREW/plugin/hooks/questions"
+expect_fail "wldn-planner is waiting on a question in its pane: nothing was sent" crew tell wldn-planner "Into a question JHTB"
+grep -q "JHTB" "$CREW_TEST_LOG" && fail "a tell was typed into the question of the session crew recorded in the planner's pane"
+rewrite "$planner_record" '/^CREW_HERDR_SESSION=/d; /^CREW_PANE=/d'
+expect_ok crew tell wldn-planner "No record VNMC"
+grep -q "^$box wldn-3 agent prompt wldn-planner '\[crew tell from [^]]*@mac-studio\] No record VNMC'" "$CREW_TEST_LOG" ||
+  fail "a tell to the planner with no session herdr or crew names was refused"
+rm "$(home_of $box)/.local/state/crew/questions/$sid"
+as $box herdr --session wldn-3 stub nosession wldn-planner off
+ok "a tell reaches an agent whose pane herdr names no session for, is refused while the session crew recorded in its pane has a question open, and with no record of its pane is guarded by herdr's reading alone"
 
 # A restart: herdr brings each tab back as its shell alone. console up, which the fleet runs every five minutes, runs
 # each tab's command there again, and leaves a pane running something else.
