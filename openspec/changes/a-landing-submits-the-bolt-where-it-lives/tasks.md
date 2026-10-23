@@ -13,5 +13,5 @@
 ## 3. Proved end to end, and said
 
 - [x] 3.1 A bolt whose host copy lags GitHub's lands at GitHub's head, main holding the merge the copy lacked (design, Decision 4; Task notes 3.1); verified by `tests/suite t-journey-land` ending with "0 failed".
-- [ ] 3.2 README and the crew skill say the landing submits GitHub's head, levelling the host's copy first, and refuses a diverged bolt (design, Decision 2; Task notes 3.2); verified by `tests/suite t-docs` ending with "0 failed".
+- [x] 3.2 README and the crew skill say the landing submits GitHub's head, levelling the host's copy first, and refuses a diverged bolt (design, Decision 2; Task notes 3.2); verified by `tests/suite t-docs` ending with "0 failed".
 - [ ] 3.3 The tests the change affects pass; verified by `tests/suite --affected` ending with "0 failed".
