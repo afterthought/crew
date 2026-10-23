@@ -218,14 +218,12 @@ def board_data(fleet, labels, read, now):
 
         def ordered(ts):
             return [t for t in p["teams"] if t in ts]
-        asked = set(crew.partition_hosts(fleet, l))
-        hosts = {}
-        for h in sorted(asked | (set(record.hosts_of(fleet, l)) if l in read["unread"] else set())):
+        hosts = {}  # each host asked for its kits, never for its run record, which is read from the branch (read.5)
+        for h in sorted(crew.partition_hosts(fleet, l)):
             v = sv.get(h)
-            why = ([f"its kits: {v['error']}"] if h in asked and v and not v["ok"] else []) + ([f"its run record: {unread[h]}"] if h in unread else [])
-            hosts[h] = "; ".join(why) or True
+            hosts[h] = f"its kits: {v['error']}" if v and not v["ok"] else True
         attention = [{"what": "host", "name": h, "why": v} for h, v in hosts.items() if v is not True]
-        attention += [{"what": "plan", "name": n, "why": why} for n, why in unread.items() if n not in fleet["hosts"]]
+        attention += [{"what": "plan", "name": n, "why": why} for n, why in unread.items()]
         attention += [{"what": "plan", "name": n, "why": why} for n, why in read["errors"].items() if n.startswith(f"{l}/main of ") or n == f"the plan of {l}"]
         if found and not tip:
             attention.append({"what": "plan", "name": f"{l}/main of {repo}", "why": "not started, so there is no plan to read"})

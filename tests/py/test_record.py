@@ -1,10 +1,10 @@
 """The run record (record.1 to record.4, the run-record spec): record.emit appending an entry to the host's file of the
 day and asking for its push, record.reach saying a push that is refused, record.unpushed giving the entries the branch
 lacks with each day's file as the union by Id and record.entry_message each one's commit, record.parse and line reading
-and printing entries, the events crew events shows, the history crew trace walks, the hosts a partition runs on, and
+and printing entries, the events crew events shows, read from the branch alone, the history crew trace walks, and
 the act and objects each plan command's entry names. That a write's entry follows its commit, that a refused push goes
-with the host's next, that crew events reads the branch then each host, and that --follow tails every host are the
-state journey's (t-journey-state). A file written is no process, so these are logic cases."""
+with the host's next, that crew events and crew trace read the branch and ask no host, and that --follow follows the
+branch are the state journey's (t-journey-state). A file written is no process, so these are logic cases."""
 import json
 
 import pytest
@@ -208,10 +208,10 @@ class TestTrace:
 
 
 class TestEvents:
-    def test_events_are_shown_from_a_time_narrowed_to_one_object_and_each_silent_host_named(self):
-        out = record.events_text(E, {BOX: "ssh: timed out"}, "2026-10-05T10:40:00Z", "unit/u").splitlines()
+    def test_events_are_shown_from_a_time_narrowed_to_one_object_and_a_branch_not_read_named(self):
+        out = record.events_text(E, {"wldn/main": "could not fetch wldn/main"}, "2026-10-05T10:40:00Z", "unit/u").splitlines()
         assert [l.split()[2] for l in out[:-1]] == ["unit.move", "stage.start", "stage.end"]
-        assert out[-1] == f"{BOX} did not answer: ssh: timed out"
+        assert out[-1] == "wldn/main did not answer: could not fetch wldn/main"
 
     def test_a_follow_prints_what_it_has_not_printed_in_time_order(self):
         assert [e["Id"] for e in record.fresh({E[0]["Id"], E[2]["Id"]}, [E[3], E[2], E[1], E[0]])] == [E[1]["Id"], E[3]["Id"]]
@@ -221,10 +221,25 @@ class TestEvents:
         got = json.loads(record.events_text(E, {}, "0000", None, as_json=True))
         assert [e["Act"] for e in got["entries"]][:2] == ["capture", "capture"] and got["unreachable"] == {}
 
-    def test_a_partition_runs_on_its_teams_hosts_and_its_main_levels(self):
-        fleet = {"partitions": {"wldn": dict(FLEET["partitions"]["wldn"], teams=["swb-1", "swb-2"], partition="willdan")},
-                 "teams": FLEET["teams"], "hosts": {"laptop": {"sessions": {"wldn": {"partition": "willdan"}}}}}
-        assert record.hosts_of(fleet, "wldn") == [BOX, "laptop", "mac-studio"]
+    def test_the_record_is_read_from_the_branch_alone_and_no_host_is_asked(self, monkeypatch):
+        def asked(*a, **k):
+            raise AssertionError(f"a host was asked for the run record: {a}")
+        monkeypatch.setattr(crew, "on_machine", asked)
+        tips = {}
+
+        def branch(fleet, label, since_day, tips=None):
+            tips[label] = "c" * 40
+            return [E[3], E[0], dict(E[0])]
+        monkeypatch.setattr(record, "on_branch", branch)
+        found, missing = record.gather(FLEET, ["wldn"], "2026-10-05", tips)
+        assert [e["Id"] for e in found] == [E[0]["Id"], E[3]["Id"]] and missing == {} and tips == {"wldn": "c" * 40}
+
+    def test_a_branch_that_cannot_be_fetched_is_the_one_thing_named(self, monkeypatch):
+        def refused(fleet, label, since_day, tips=None):
+            raise crew.Refusal(f"could not fetch {label}/main of WilldanGroup/crew-state over https: timed out")
+        monkeypatch.setattr(record, "on_branch", refused)
+        assert record.gather(FLEET, ["wldn"], "2026-10-05") == (
+            [], {"wldn/main": "could not fetch wldn/main of WilldanGroup/crew-state over https: timed out"})
 
 
 class TestPlanEntries:

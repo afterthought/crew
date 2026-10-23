@@ -5,8 +5,8 @@
 # own, and every entry is on the branch when the command that wrote it returns; a push the branch refuses is said and
 # goes with the host's next entry, crew events --push pushes what is left, and an entry cut short stops the record's
 # push, not the write; an agent's entry names its session as herdr has it; a refused write is an entry and a read none;
-# crew events and crew trace read the branch, then each host, naming a host that does not answer, and --follow prints
-# what another host pushes, asking no host. What an entry holds, which entries a push takes and how their commits are worded, how a
+# crew events and crew trace read the branch alone, a host that does not answer hiding nothing it pushed, and --follow
+# prints what another host pushes; none of them asks a host. What an entry holds, which entries a push takes and how their commits are worded, how a
 # trace walks and what events shows, the act and objects of each plan write, and how plans are joined are logic cases
 # (tests/py/test_record.py); two processes appending at once, and a chain of entries landing on a moved branch, contract
 # cases (tests/contract/test_record.py); each step here checks a command's wiring once.
@@ -156,17 +156,16 @@ ok "a refused write is one entry and a read none, and an agent's entry names its
 
 emit $box --act unit.add --on unit/x --on queue/switchboard-kit --why "plan(queue): add x" >/dev/null
 emit $box --act unit.drop --on unit/x --on queue/switchboard-kit --why "plan(queue): drop x" >/dev/null
-echo "$box" > "$T/down"
-expect_ok crew events --about unit/x
-eq "$(acts "$(grep -v 'did not answer' <<<"$out")")" "unit.add unit.drop "; has "$out" "$box did not answer"
-expect_ok crew trace unit/x
-has "$out" "unit.add"; has "$out" "unit.drop"; has "$out" "$box did not answer"
-rm "$T/down"
+echo "$box" > "$T/down"; : > "$CREW_TEST_LOG"
 expect_ok crew events --about unit/x
 eq "$(acts "$out")" "unit.add unit.drop "
+expect_ok crew trace unit/x
+has "$out" "unit.add"; has "$out" "unit.drop"; lacks "$out" "did not answer"
+rm "$T/down"
 expect_ok crew events --json
-eq "$(jq -r '[.entries[].Host] | unique | join(" ")' <<<"$out")" "$box mac-studio"
-ok "crew events and crew trace read the branch, then each host: one that does not answer is shown as far as it had pushed, and named"
+eq "$(jq -r '[.entries[].Host] | unique | join(" ")' <<<"$out")" "$box mac-studio"; eq "$(jq -c .unreachable <<<"$out")" "{}"
+lacks "$(calls)" " ssh "
+ok "crew events and crew trace read the branch alone: a host that does not answer hides none of what it pushed, and no host is asked"
 
 carried=$(onbranch $box)
 mv "$(home_of $box)/.local/state/crew/wldn" "$T/box-record-lost"

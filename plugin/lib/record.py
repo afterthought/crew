@@ -322,29 +322,9 @@ def parse(text):
     return out
 
 
-def hosts_of(fleet, label):
-    """The hosts a partition runs on: its teams', its main level's, and each holding an operator session named for it."""
-    p = crew.partition_of(fleet, label)
-    hosts = {p["machine"]} | {fleet["teams"][t]["machine"] for t in p["teams"]}
-    hosts |= {h for h, v in fleet["hosts"].items() if (v.get("sessions") or {}).get(label, {}).get("partition") == p["partition"]}
-    return sorted(hosts)
-
-
-READ = r"""since=$1; shift
-for l in "$@"; do
-  for f in "$HOME/.local/state/crew/$l"/runs/*/*.rec; do
-    [ -f "$f" ] || continue
-    n=$(basename "$f" .rec)
-    [[ $n < $since ]] && continue
-    cat "$f"; echo
-  done
-done
-"""
-
-
 def on_branch(fleet, label, since_day, tips=None):
-    """The entries carried to the label's branch of its state repository, from since_day on. tips, when given, is
-    told the commit they were read at, {label: sha}, None for a branch not started."""
+    """The entries the label's branch of its state repository holds, from since_day on. tips, when given, is told the
+    commit they were read at, {label: sha}, None for a branch not started."""
     import plan  # plan.py imports this module; its git layer is only needed here
     repo, ref = plan.state_of(fleet, label)
     tip = plan.fetch(repo, ref)
@@ -360,14 +340,9 @@ def on_branch(fleet, label, since_day, tips=None):
 
 
 def gather(fleet, labels, since_day, tips=None):
-    """Every entry of the labels' run records from since_day on: what each label's branch holds, then what each
-    host has not yet carried, one call per host, duplicates dropped by Id and sorted by time then Id; and what did
-    not answer, with why. A host that does not answer is shown as far as it had carried. tips, when given, is told
-    the commit each branch was read at, as on_branch tells it."""
-    by_host = {}
-    for l in labels:
-        for h in hosts_of(fleet, l):
-            by_host.setdefault(h, []).append(l)
+    """Every entry of the labels' run records from since_day on, read from each label's branch alone, sorted by time
+    then Id; and each branch that could not be read, {<label>/main: why}. No host is asked for the record (read.5).
+    tips, when given, is told the commit each branch was read at, as on_branch tells it."""
     entries, missing = {}, {}
     for l in labels:
         try:
@@ -375,13 +350,6 @@ def gather(fleet, labels, since_day, tips=None):
                 entries.setdefault(e["Id"], e)
         except Refusal as err:
             missing[f"{l}/main"] = str(err)
-    for h, ls in sorted(by_host.items()):
-        r = crew.on_machine(fleet, h, ["bash", "-c", READ, "crew", since_day, *ls])
-        if r.returncode:
-            missing[h] = (r.stderr.strip().splitlines() or [f"exit {r.returncode}"])[-1]
-            continue
-        for e in parse(r.stdout):
-            entries.setdefault(e["Id"], e)
     return sorted(entries.values(), key=lambda e: (e["At"], e["Id"])), missing
 
 
@@ -487,7 +455,7 @@ def events(fleet, a):
 
 def events_text(found, missing, stamp, about=None, as_json=False):
     """crew events: the entries gathered at or after stamp, those naming about alone when given, one line each, then
-    each host that did not answer; or the same as JSON."""
+    each branch that could not be read; or the same as JSON."""
     found = [e for e in found if e["At"] >= stamp and (not about or names(e, about))]
     if as_json:
         return json.dumps({"entries": found, "unreachable": missing}, indent=1)
@@ -582,7 +550,7 @@ def trace(fleet, a):
     if start is None:
         for h, why in missing.items():
             print(f"{h} did not answer: {why}", file=sys.stderr)
-        sys.exit(f"no entry names {' or '.join(candidates)}" + (" (some hosts did not answer)" if missing else ""))
+        sys.exit(f"no entry names {' or '.join(candidates)}" + (f" ({' and '.join(missing)} could not be read)" if missing else ""))
     for e in lineage(found, start):
         print(line(e, zoe=True))
     for h, why in missing.items():
