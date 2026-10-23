@@ -9913,14 +9913,15 @@ def land_start(fleet, label, key, acts=None):
     not words or fail(words)
 
 
-def batch_unstarted(key, recorded, held, refused=None):
+def batch_unstarted(key, recorded, held, refused=None, answered=False):
     """What crew card wait batch/<n> does before it waits (card-sessions "A batch's wait starts its reading when none
     runs"), from whether a session of the key is recorded on this host, whether the planner holds its card open here
-    (held), and why the start it made refused (refused): ("wait", None) with a session recorded, or no card held,
-    which the wait refuses when neither is there; ("start", None) with none and the card held, to start it as crew card
-    session does; ("card", words) when the start refused, to say once, naming crew card session, and wait on the card
-    alone, which the user sends back with a tap."""
-    if recorded or not held:
+    (held), why the start it made refused (refused), and whether the batch is answered in a main-level pane already
+    (answered, pane_answered): ("wait", None) with a session recorded, or no card held, which the wait refuses when
+    neither is there, or the batch answered so, since it waits on the user no more and the wait ends on its answer;
+    ("start", None) with none and the card held, to start it as crew card session does; ("card", words) when the start
+    refused, to say once, naming crew card session, and wait on the card alone, which the user sends back with a tap."""
+    if recorded or not held or answered:
         return "wait", None
     if refused:
         return "card", (f"{key}'s reading could not be opened: {refused}; crew card session {key} starts it once that is "
@@ -9953,11 +9954,11 @@ def batch_wait(fleet, label, key, d, acts=None):
     here = acts.host()
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], here)
     not why or fail(why)
-    owner = f"{label}-planner"
-    card, started = cards.card_under(acts.entries(label), key, owner), card_recorded(d)
+    owner, entries = f"{label}-planner", acts.entries(label)
+    card, started = cards.card_under(entries, key, owner), card_recorded(d)
     card or started or fail(f"no card and no session of {key} is open on {here}: crew raises both when the reviewer's "
                             f"summary is delivered, with crew review {label} --wait")
-    if batch_unstarted(key, started, card)[0] == "start":
+    if batch_unstarted(key, started, card, answered=key in pane_answered(entries))[0] == "start":
         try:
             reading_again(fleet, label, key, acts, lambda url, decided: print(url))
         except Refusal as e:

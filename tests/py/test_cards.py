@@ -573,6 +573,11 @@ class TestSessions:
     def test_a_batch_wait_with_its_card_held_and_no_session_starts_its_reading_and_says_once_when_it_cannot(self, recorded, held, refused, step):
         assert plan.batch_unstarted("batch/3", recorded, held, refused) == step
 
+    def test_a_batch_wait_starts_no_reading_for_a_batch_answered_in_a_pane(self):
+        """review-batches "A batch answered in a main-level pane": it waits on the user no more, and the wait ends on its
+        answer."""
+        assert plan.batch_unstarted("batch/3", None, "req_b3", answered=True) == ("wait", None)
+
     def waited_on(self, monkeypatch, tmp_path, acts):
         """crew card wait batch/3 on mac-studio, the main level's host, its card and its reading read as acts gives them."""
         monkeypatch.setattr(plan, "batch_read", lambda fleet, label, n, acts: dict(n=3, previous=2, units=BATCH_UNITS, link=None))
