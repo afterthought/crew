@@ -1278,10 +1278,12 @@ def main_held(name, machine, said):
 def tidy_after(fleet, t, what, landed=None):
     """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
     has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did; and,
-    after a landing (landed, (bolt, words)), the bolt's landing card closed there with the words, where its conductor
-    holds it (landing_cards_closed). A host that does not answer leaves that to the team's next read, and the write
-    stands."""
-    more = ["--landed", landed[0], "--outcome", landed[1]] if landed else []
+    after a landing, the bolt's landing card closed there with the words, where its conductor
+    holds it (landing_cards_closed): landed is (bolt, the outcome recorded, what Pending You is sent in its place or
+    None, whether the user answered it in a conversation). A host that does not answer leaves that to the team's next
+    read, and the write stands."""
+    bolt, outcome, said, here = landed or (None, None, None, False)
+    more = (["--landed", bolt, "--outcome", outcome] + (["--said", said] if said else []) + (["--here"] if here else [])) if landed else []
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"], *more))
     READ.drop_kit(t["machine"], t["kit"]["main"])
     said = tidied(t["name"], what, r.returncode, r.stdout, r.stderr)
@@ -1966,11 +1968,12 @@ def frees_note(team, planned):
     return f"A yes now frees {team} for {planned}" if planned else f"A yes now frees {team}, and nothing is planned for it"
 
 
-def landing_cards_closed(fleet, t, bolt, outcome):
+def landing_cards_closed(fleet, t, bolt, outcome, said=None, here=False):
     """At crew bolt land, on the team's host, where its conductor's cards are posted and recorded (plan.16): each card
     the conductor holds under the bolt's landing keys (landing_card_keys) closed in its name with outcome, acked when
     the user answered it (row_card_close), only once the partition's plan no longer holds the bolt; a plan that can't be
-    read closes none, saying so (read.1)."""
+    read closes none, saying so (read.1). A landing on the user's word in ops's pane sends said in place of the
+    outcome, and closes a card still waiting as answered there (here, pane_landed)."""
     pl = plan_of(fleet, t["label"])
     if pl is None or pl.bolt(bolt):
         print(f"no landing card of bolt {bolt} is closed: " + (f"{t['label']}/main could not be read" if pl is None else
@@ -1978,13 +1981,15 @@ def landing_cards_closed(fleet, t, bolt, outcome):
         return
     owner, (_, outcome, reason) = f"{t['name']}-conductor", landing_act("landed", words=outcome)
     for key in landing_card_keys(cards.host_entries(record, t["label"], crew.this_host()), bolt, owner):
-        row_card_close(fleet, t["label"], owner, key, outcome=outcome, reason=reason)
+        row_card_close(fleet, t["label"], owner, key, outcome=outcome, reason=reason, said=said, here=here)
 
 
 def bolt_land(fleet, a):
     """A bolt whose units and chores have all landed on its kit's main, out of the plan, the landing recording the
     commit main holds (plan.14, plan.16), and its landing card closed on its team's host with where GitHub's main holds
-    it (landed_words). A bolt no team holds, built outside a team, is read on the host and main
+    it (landed_words), after, for a landing on the user's word in ops's pane (pane_word_of), that word and their words
+    kept on this host (landing_word_read), as answered there (pane_landed); the words kept are removed once the
+    landing is written. A bolt no team holds, built outside a team, is read on the host and main
     checkout of a team of the partition building its kit, and lands the same way once main holds each of its units'
     changes and chores, on the user's word (roles.2)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
@@ -2003,14 +2008,19 @@ def bolt_land(fleet, a):
         stage_of = unheld_stages(k, h.get("error") or f"{t['machine']} did not read {t['kit']['main']}", Stages(fleet, plan, {}).of,
                                  [u.name() for u in plan.work_of(a.bolt) if is_chore(u)])
     landed = all(stage_of(u)["stage"] == "landed" for u in units)
-    outside = [u for u, *_ in due_changes(plan, partition_entries(fleet, label)) if u in units] if landed else []
+    entries = partition_entries(fleet, label) if landed else []
+    outside = [u for u, *_ in due_changes(plan, entries) if u in units] if landed else []
     why = land_refusal(a.bolt, units, stage_of, outside, label)
     not why or fail(why)
+    # The user's word to land, when it was given in ops's pane, and their words, kept where it was submitted (plan.16).
+    pane = pane_word_of(entries, a.bolt) if b.get("Team") else None
+    kept = landing_word_read(label, a.bolt, pane[2]) if pane else None
     # What main holds once the bolt has landed on it, GitHub's after a fetch, which the landing records (plan.14).
     said = host_run(fleet, t["machine"], MAIN, t["kit"]["main"])
     ref, head, why = kit.main_now(said, t["kit"]["name"], t["machine"])
     not why or fail(why)
     landed = landed_words(head, kit.said_of(said).get("SUBMISSION_GITHUB" if ref == "origin/main" else "SUBMISSION_OWN"))
+    outcome, sent = pane_landed(landed, pane[0], pane[1], kept) if pane else (landed, None)
 
     def change(w):
         w.bolt(a.bolt)
@@ -2026,7 +2036,13 @@ def bolt_land(fleet, a):
     if b.get("Team"):
         after = plan_of(fleet, label)
         print(landed_line(a.bolt, t["kit"]["name"], head, t["name"], [x.name() for x in held_by(after, t["name"])] if after else None))
-        tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, landed))
+        if pane and kept is None:
+            here = crew.this_host()
+            where = f"are kept on {pane[3]}, where it was submitted, not on {here}" if pane[3] != here else f"are not kept on {here}"
+            print(f"the user's words to land {a.bolt} {where}: its landing card closes naming {pane[0]}'s pane and the time, without them")
+        tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, outcome, sent, bool(pane)))
+        if pane:
+            landing_word_drop(label, a.bolt)
     else:
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]}; no team held it")
 
@@ -7442,7 +7458,8 @@ def carried_units(fleet, t, slotted):
 
 
 def team_tidy(fleet, a):
-    """crew _tidy <team> [--landed <bolt> --outcome <words>], on the team's host: the team's read (reap), which a plan
+    """crew _tidy <team> [--landed <bolt> --outcome <words> [--said <words>] [--here]], on the team's host: the team's
+    read (reap), which a plan
     write that ends work asks for there, and crew rebuild runs once its agents are ended; the conductor's and ops's
     panes told the branch they work for now, none once the bolt has landed or been dropped, and each whose session
     carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing,
@@ -7454,7 +7471,7 @@ def team_tidy(fleet, a):
     for name in team.hint_standing(crew.team_bolt(t)):
         hold.hand(name)
     if a.landed:
-        landing_cards_closed(fleet, t, a.landed, a.outcome or "")
+        landing_cards_closed(fleet, t, a.landed, a.outcome or "", a.said, a.here)
 
 
 def unit_free(fleet, a):
@@ -11117,7 +11134,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     return card
 
 
-def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None, said=None):
+def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None, said=None, here=False):
     """The act that closes a card of crew's own at the event that ends it (record 0031 §1): the card the owner holds
     under the row's key on this host, acked with the outcome once the user answered it, else withdrawn with the
     reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
@@ -11125,10 +11142,11 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     host ends with the card, closed, lost or held by nobody, and stays while a refused close leaves the card open
     (card-sessions); a landing's preview crew asked for is released whatever became of the card, since the event that
     closes it, the bolt landed or held for a fix, is over that head (rail-cards). said, when given, is what Pending You
-    is sent in place of the outcome, words the run record does not keep (record.3). The card's id, or None when none
-    was closed."""
+    is sent in place of the outcome, words the run record does not keep (record.3); here, that the user answered it in
+    a conversation, so a card still waiting closes as answered there (cards.close_call). The card's id, or None when
+    none was closed."""
     acts = acts or CardActs(fleet)
-    card = card_closed(acts, label, owner, key, outcome, reason, said)
+    card = card_closed(acts, label, owner, key, outcome, reason, said, here)
     if card is not False and key.split("/")[0] in READING:
         said = acts.end(label, key)
         if said:
@@ -11140,10 +11158,10 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     return card or None
 
 
-def card_closed(acts, label, owner, key, outcome, reason, said=None):
+def card_closed(acts, label, owner, key, outcome, reason, said=None, here=False):
     """row_card_close's close in Pending You: the card's id once closed, None when none was held or it was lost, and
     False when the close was refused, so the card stays open. said is sent in place of the outcome, and the outcome
-    recorded."""
+    recorded; here closes a card still waiting as answered in a conversation."""
     obj = cards.row_object(key) or f"agent/{owner}"
     card = cards.card_under(acts.entries(label), key, owner)
     if not card:
@@ -11157,7 +11175,7 @@ def card_closed(acts, label, owner, key, outcome, reason, said=None):
             if state:
                 outcome, reason = ENDED_ELSEWHERE, None
             elif lost is None:
-                tool, args, state = cards.close_call(got, card, owner, outcome if said is None else said, reason)
+                tool, args, state = cards.close_call(got, card, owner, outcome if said is None else said, reason, here)
                 _, lost = py.answer(tool, args)
             if lost is not None and not cards.lost(lost):
                 fail(f"Pending You refused the close: {lost}")
@@ -11972,6 +11990,8 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--force", action="store_true")
     x.add_argument("--landed")
     x.add_argument("--outcome")
+    x.add_argument("--said")
+    x.add_argument("--here", action="store_true")
     x = sub.add_parser("_unit-free")
     x.add_argument("unit")
     x.add_argument("--team")
