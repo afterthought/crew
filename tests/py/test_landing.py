@@ -203,6 +203,9 @@ def listing(*subs):
     return json.dumps(dict(STATUS, submissions=STATUS["submissions"] + list(subs)))
 
 
+NONE_YET = json.dumps(dict(STATUS, submissions=[]))  # sluice's listing of a main it has recorded no submission to
+
+
 # sluice 0.36.4's answer to a landing's submission to a main that takes pull requests, as submit_pull prints it under
 # --no-wait --json once intake has queued it (lib.rs, serde_json's keys in their order; pulls.rs queued), and the
 # submission intake made for it from the pull request's place, pull/113, at the tip submitted: the recorded #153, made
@@ -210,6 +213,12 @@ def listing(*subs):
 PULLED = '{"branch":"main","pull_request":113,"state":"queued: next on main"}'
 MADE = dict({k: v for k, v in STATUS["submissions"][2].items() if k not in ("landed_as", "result", "tested")}, id=170, head=TIP,
             state="queued", **{"from": dict(STATUS["submissions"][2]["from"], head="bolt/b", worktree="pull/113")})
+# The signal's case (2026-10-23-madswan-ops-5023c5ba/01 on madswan/main): the pull request's submission sluice blamed
+# on the tip before the landing, #171, and sluice 0.36.4's answer to the landing's --no-wait submission of that tip, its
+# intake not having read the pull request marked ready since: #171's own record, pretty, its exit 1, nothing queued
+# (lib.rs submit_pull, Reached::Before, report; pulls.rs consider), SUBMIT's ID read from it.
+SENT_BACK = dict(MADE, id=171, state="failed")
+SENT_BACK_ANSWER = base64.b64encode(json.dumps(SENT_BACK, indent=2).encode()).decode()
 
 
 class TestAPullRequestsSubmission:
@@ -225,6 +234,24 @@ class TestAPullRequestsSubmission:
                 "sluice records no submission of ccccccc to main from pull request #113")
         assert plan.submission_of(TIP, 0, listing(dict(MADE, **{"from": dict(MADE["from"], worktree="pull/99")})), "") == (
             {"id": 170, "state": "queued"})  # with no pull request, any submission of the tip
+
+    def test_the_submission_is_only_ever_one_made_since_the_landing_began(self):
+        """Not the pull request's last, nor any older one: only one newer than the last sluice recorded before."""
+        assert plan.submission_of(TIP, 0, listing(SENT_BACK), "", 113, 171) == (
+            "sluice records no submission of ccccccc to main from pull request #113 newer than #171")
+        assert plan.submission_of(TIP, 0, listing(SENT_BACK, dict(MADE, id=172)), "", 113, 171) == {"id": 172, "state": "queued"}
+        assert plan.submission_of(TIP, 0, listing(dict(SENT_BACK, head=TIP)), "", None, 171) == (
+            "sluice records no submission of ccccccc to main newer than #171")
+        assert plan.submission_of(TIP, 0, listing(SENT_BACK), "", 113) == {"id": 171, "state": "failed"}
+
+    def test_an_answer_naming_a_submission_sluice_recorded_before_the_landing_is_not_its_own(self):
+        f = dict(RC="1", TIP=TIP, OLD=OLD, ID="171", PULL="", ANSWER=SENT_BACK_ANSWER, SAID="")
+        assert plan.answered_before(f, 171) == {"id": 171, "state": "failed", "pull": "113"}
+        assert plan.answered_before(f, 175) == {"id": 171, "state": "failed", "pull": "113"}
+        assert plan.answered_before(f, 170) is None  # one sluice made since
+        assert plan.answered_before(dict(f, RC="0", ID="", PULL="113"), 171) is None  # no submission named
+        plain = base64.b64encode(b'{"id":171,"branch":"main","ahead":[]}').decode()
+        assert plan.answered_before(dict(f, ANSWER=plain), 180) == {"id": 171, "state": None, "pull": None}
 
     @pytest.mark.parametrize("state, rc", [("landed", "0"), ("failed", "1"), ("conflict", "2"), ("withdrawn", "4")])
     def test_the_outcome_is_the_state_the_waits_record_has_it_out_in(self, state, rc):
@@ -325,13 +352,14 @@ class TestTheSubmission:
     T = {"name": "swb-1", "machine": "box", "kit": {"name": "k", "main": "/k/main", "dir": "/k", "repo": "o/k"}}
     BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\nSUBMISSION_OWN=\n"
 
-    def submit(self, monkeypatch, before, outs, bolts=("b",), teams=None, close=None, said=None):
+    def submit(self, monkeypatch, before, outs, bolts=("b",), teams=None, close=None, said=None, record=None):
         """bolt_submit of the bolts, held by swb-1 on box unless teams says otherwise, MAIN saying before on each host
-        and POLICY said, a policy at main taking no pull requests unless given, and each script crew runs there
-        answering in turn from outs; what ran (the script and its bolt, the submission's number or gh's act), what was
-        recorded, and which bolts crew bolt land closed, kept on self."""
+        and POLICY said, a policy at main taking no pull requests unless given, sluice's record of main read right
+        after MAIN (SUBMISSIONS) answering record, none of main's submissions unless given, and each other script crew
+        runs there answering in turn from outs; what ran (the script and its bolt, the submission's number, gh's act or
+        the main checkout), what was recorded, and which bolts crew bolt land closed, kept on self."""
         ran_, emitted, closed, argvs = self.ran, self.emitted, self.closed, self.argvs = [], [], [], []
-        said = said or policy(TAKES_NONE)
+        said, record = said or policy(TAKES_NONE), record or ran_as(0, NONE_YET)
         monkeypatch.setattr(plan, "CONTEXT", {})
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
         bolt = lambda s, n: {"Bolt": n, "Repo": "k"}
@@ -343,8 +371,12 @@ class TestTheSubmission:
         names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK", plan.PULL: "PULL",
                  plan.PULL_MARK: "PULL_MARK", plan.SUBMISSIONS: "SUBMISSIONS"}
         at = {plan.SUBMIT: 6, plan.WAIT: 5, plan.LANDED: 6, plan.LANDED_MARK: 5, plan.PULL: 5, plan.PULL_MARK: 6, plan.SUBMISSIONS: 4}
-        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: argvs.append(argv) or ran_.append((names[argv[2]], argv[at[argv[2]]]))
-                            or outs.pop(0))
+        def on_machine(fleet, host, argv):
+            first = argv[2] == plan.SUBMISSIONS and ran_[-1][0] == "MAIN"  # sluice's record before the landing
+            argvs.append(argv)
+            ran_.append((names[argv[2]], argv[at[argv[2]]]))
+            return record if first else outs.pop(0)
+        monkeypatch.setattr(plan.crew, "on_machine", on_machine)
         monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: emitted.append((act, on, f)))
         monkeypatch.setattr(plan.record, "who", lambda: "wldn-ops")
         monkeypatch.setattr(plan, "may_write", lambda fleet, key, a: None)
@@ -375,7 +407,7 @@ class TestTheSubmission:
         ran_, emitted = self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(3, "{}", f"{SIGNAL}\n"),
                                                                ran_as(0, said(3, new=OLD, github=NEW, level="''", sluice=SIGNAL)),
                                                                ran_as(0, "MARKED=yes\n")])
-        assert ran_ == [("MAIN", "box"), ("POLICY", "box"), ("SUBMIT", "b"), ("WAIT", "7"), ("LANDED", "b"), ("MARK", "b")]
+        assert ran_ == [("MAIN", "box"), ("SUBMISSIONS", "/k/main"), ("POLICY", "box"), ("SUBMIT", "b"), ("WAIT", "7"), ("LANDED", "b"), ("MARK", "b")]
         assert emitted == [("bolt.submit", ["bolt/b"], {"why": "bolt(b): landed on main at bbbbbbb", "Head": TIP})]
         out = capsys.readouterr().out
         assert "bolt/b submitted to k's main, sluice's #7" in out
@@ -385,7 +417,7 @@ class TestTheSubmission:
     def test_a_wait_that_is_still_undecided_is_waited_on_again(self, monkeypatch):
         self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(5, "{}"), ran_as(5, "{}"), ran_as(0, "{}"),
                                                ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")])
-        assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "WAIT", "WAIT", "WAIT", "LANDED", "MARK"]
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "WAIT", "WAIT", "LANDED", "MARK"]
 
     def test_a_mark_crew_could_not_set_is_named_in_the_hosts_words_and_the_landing_stands(self, monkeypatch, capsys):
         self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)),
@@ -405,7 +437,7 @@ class TestTheSubmission:
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(2, "{}", f"{conflict}\n"),
                                                    ran_as(0, said(2, new=OLD, github=OLD, held="no", level="''", sluice=conflict))])
-        assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "POLICY"] and self.closed == [] and self.handed == ["k"]
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "POLICY"] and self.closed == [] and self.handed == ["k"]
         assert self.handed_landed() == conflict
         (act, on, f), = self.emitted
         assert (act, on, f["Head"], f["refused"]) == ("bolt.submit", ["bolt/b"], TIP, conflict)
@@ -419,7 +451,7 @@ class TestTheSubmission:
         refused = ran_as(0, f"RC=2 TIP={TIP} OLD={OLD} ID= PULL= ANSWER= SAID={base64.b64encode(f'{no_gate}\n'.encode()).decode()}\n", f"{no_gate}\n")
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, [refused, ran_as(0, said(2, new=OLD, github=OLD, held="no", level="''", sluice=no_gate))])
-        assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "LANDED", "POLICY"] and self.handed_landed() == no_gate
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "LANDED", "POLICY"] and self.handed_landed() == no_gate
         (_, _, f), = self.emitted
         assert (f["Head"], f["refused"]) == (TIP, no_gate)
         assert "bolt/b submitted to k's main, sluice queueing nothing" in capsys.readouterr().out
@@ -435,7 +467,7 @@ class TestTheSubmission:
         assert f["refused"].startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was.")
         assert f["refused"].endswith(" Its pull request https://github.com/o/k/pull/99 is a draft, so no merge into bolt/b "
                                      "lands it; the next crew bolt submit b, on the user's word, makes it live again.")
-        assert self.scripts() == ["MAIN", "POLICY", "PULL", "SUBMIT", "WAIT", "LANDED", "POLICY", "PULL", "PULL_MARK"]
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "PULL", "SUBMIT", "WAIT", "LANDED", "POLICY", "PULL", "PULL_MARK"]
 
     def test_a_landing_whose_submission_failed_leaves_it_a_draft_too(self, monkeypatch):
         outs = [ran(0, gh_list(DRAFT)), ran(0, gh_marked(0, "✓")), ran(2, "", "wt submit needs sluice's wt-submit, which is not on box's path\n"),
@@ -453,7 +485,7 @@ class TestTheSubmission:
         outs = [ran(0, gh_list(DRAFT)), ran(0, gh_marked(0, "✓")), QUEUED, ran_as(0, "{}"), ran(0, said(0, github=NEW)),
                 ran(0, "MARKED=yes\n")]
         _, emitted = self.submit(monkeypatch, self.BEFORE, outs, said=policy(TAKES))
-        assert self.scripts() == ["MAIN", "POLICY", "PULL", "PULL_MARK", "SUBMIT", "WAIT", "LANDED", "MARK"]
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "PULL", "PULL_MARK", "SUBMIT", "WAIT", "LANDED", "MARK"]
         assert capsys.readouterr().out.splitlines() == [
             "Its pull request https://github.com/o/k/pull/99 is ready for review again, so sluice takes it at the head bolt/b has now.",
             "bolt/b submitted to k's main, sluice's #7", "bolt/b landed on k's main at bbbbbbb: now crew bolt land b."]
@@ -499,7 +531,7 @@ class TestTheSubmission:
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, outs, bolts=("y", "z", "w"))
         assert [r for r in self.ran if r[0] != "POLICY"] == [
-            ("MAIN", "box"), ("SUBMIT", "y"), ("MAIN", "box"), ("SUBMIT", "z"), ("MAIN", "box"), ("SUBMIT", "w"),
+            ("MAIN", "box"), ("SUBMISSIONS", "/k/main"), ("SUBMIT", "y"), ("MAIN", "box"), ("SUBMISSIONS", "/k/main"), ("SUBMIT", "z"), ("MAIN", "box"), ("SUBMISSIONS", "/k/main"), ("SUBMIT", "w"),
             ("WAIT", "1"), ("LANDED", "y"), ("MARK", "y"), ("WAIT", "2"), ("LANDED", "z"), ("WAIT", "3"), ("LANDED", "w"), ("MARK", "w")]
         assert self.closed == ["y", "w"]
         assert [("refused" in f) for _, _, f in self.emitted] == [False, True, False]
@@ -511,7 +543,7 @@ class TestTheSubmission:
         self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n"),
                                                QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github="d" * 40)), ran_as(0, "MARKED=yes\n")],
                     bolts=("y", "z"), teams={"z": other})
-        assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK", "MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK", "MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
 
     def test_a_landed_bolt_crew_could_not_close_is_named_with_the_act_that_closes_it(self, monkeypatch, capsys):
         """bolt-teams "A landed bolt crew could not close"."""
@@ -533,7 +565,7 @@ class TestTheSubmission:
         self.submit(monkeypatch, self.BEFORE, [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=7 PULL= ANSWER= SAID=\n")] + self.failing(tip)
                     + [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=160 PULL= ANSWER= SAID=\n"), ran_as(0, "{}"), ran_as(0, said(0, github=NEW, tip=tip)),
                        ran_as(0, "MARKED=yes\n")])
-        assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "SUBMISSIONS", "SUBMIT", "WAIT", "LANDED", "MARK"]
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "SUBMISSIONS", "SUBMIT", "WAIT", "LANDED", "MARK"]
         assert [a[4:] for a in self.argvs if a[2] == plan.SUBMIT] == [
             ["/k/main", "/k/places/land-b", "b", "wldn-ops"], ["/k/main", "/k/places/land-b", "b", "wldn-ops", "160", tip]]
         assert [n for s, n in self.ran if s == "WAIT"] == ["7", "160"]
@@ -547,7 +579,7 @@ class TestTheSubmission:
         tip = HEADS["conflict"]
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=7 PULL= ANSWER= SAID=\n")] + self.failing(tip))
-        assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "SUBMISSIONS", "POLICY"] and self.closed == []
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "SUBMISSIONS", "POLICY"] and self.closed == []
         (_, _, f), = self.emitted
         assert (f["Head"], f["refused"]) == (tip, FAILED)
         assert ("bolt/b did not land: sluice itself failed, and its record has #137 in conflict, and main is where it was"
@@ -558,7 +590,7 @@ class TestTheSubmission:
         again = [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=160 PULL= ANSWER= SAID=\n")] + self.failing(tip)
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=7 PULL= ANSWER= SAID=\n")] + self.failing(tip) + again * plan.AGAIN)
-        assert self.scripts().count("SUBMIT") == plan.AGAIN + 1 and self.scripts().count("SUBMISSIONS") == plan.AGAIN + 1
+        assert self.scripts().count("SUBMIT") == plan.AGAIN + 1 and self.scripts().count("SUBMISSIONS") == plan.AGAIN + 2
         (_, _, f), = self.emitted
         assert f["refused"].startswith(f"crew can't tell whether bolt/b will land on k's main: sluice itself failed again each of "
                                        f"the {plan.AGAIN} times crew waited on #160")
@@ -583,7 +615,7 @@ class TestTheSubmission:
         outs = [ran(0, gh_list()), self.answered(), ran_as(0, listing(MADE)), ran_as(5, json.dumps(MADE)),
                 ran_as(0, json.dumps(dict(MADE, state="landed"))), ran(0, said(0, github=NEW)), ran(0, "MARKED=yes\n")]
         _, emitted = self.submit(monkeypatch, self.BEFORE, outs, said=policy(TAKES))
-        assert self.scripts() == ["MAIN", "POLICY", "PULL", "SUBMIT", "SUBMISSIONS", "WAIT", "WAIT", "LANDED", "MARK"]
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "PULL", "SUBMIT", "SUBMISSIONS", "WAIT", "WAIT", "LANDED", "MARK"]
         assert [n for s, n in self.ran if s == "WAIT"] == ["170", "170"]
         assert capsys.readouterr().out.splitlines() == [
             "bolt/b submitted to k's main, sluice's #170 from pull request #113", "bolt/b landed on k's main at bbbbbbb: now crew bolt land b."]
@@ -607,7 +639,7 @@ class TestTheSubmission:
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, [ran(0, gh_list()), self.answered(), ran_as(0, listing(dict(MADE, head="d" * 40)))],
                         said=policy(TAKES))
-        assert self.scripts() == ["MAIN", "POLICY", "PULL", "SUBMIT", "SUBMISSIONS"] and self.closed == [] and self.handed == []
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "PULL", "SUBMIT", "SUBMISSIONS"] and self.closed == [] and self.handed == []
         words = ("crew can't tell whether bolt/b will land on k's main: sluice holds it as pull request #113 (queued: next on "
                  "main), and sluice records no submission of ccccccc to main from pull request #113. crew withdraws nothing: the "
                  "pull request stands as sluice has it, and sluice wait main from /k/places/land-b follows it.")
@@ -615,10 +647,65 @@ class TestTheSubmission:
         out, err = capsys.readouterr()
         assert "bolt/b submitted to k's main as pull request #113" in out and words in err
 
+    def test_an_earlier_submission_sluice_answers_with_is_never_the_landings_outcome(self, monkeypatch, capsys):
+        """The signal's case: sluice answers the landing with #171, the pull request's submission it blamed on the tip
+        before the landing began, and #171's exit, and has made none for the landing: crew reads no outcome from it,
+        names it with how sluice takes the pull request again, drafts and waits on nothing, and records no refusal, so
+        no row is held for a fix the bolt does not need."""
+        sent_back = ran_as(0, f"RC=1 TIP={TIP} OLD={OLD} ID=171 PULL= ANSWER={SENT_BACK_ANSWER} SAID=\n")
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, self.BEFORE, [ran(0, gh_list()), sent_back, ran_as(0, listing(SENT_BACK))],
+                        said=policy(TAKES), record=ran_as(0, listing(SENT_BACK)))
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "PULL", "SUBMIT", "SUBMISSIONS"]
+        assert self.closed == [] and self.handed == [] and "LANDED" not in self.scripts()
+        words = ("crew can't tell whether bolt/b will land on k's main: sluice answered its submission with #171, an earlier one "
+                 "from pull request #113, blamed for a check that failed, and sluice records no submission of ccccccc to main from "
+                 "pull request #113 newer than #171. crew withdraws nothing: the pull request stands as sluice has it, which sluice "
+                 "takes again on that head only once it is marked a draft and then ready for review, and sluice wait main from "
+                 "/k/places/land-b follows it.")
+        assert self.emitted == [("bolt.submit", ["bolt/b"], {"why": words, "Head": TIP})]
+        out, err = capsys.readouterr()
+        assert "bolt/b submitted to k's main as pull request #113" in out and words in err and "checks failed" not in err
+
+    def test_one_sluice_made_since_the_landing_began_is_waited_on_as_its_own(self, monkeypatch, capsys):
+        """sluice answers with the earlier one while its record has one made since from the pull request, as when its
+        intake read the pull request readied in a round beside: that one is the landing's, and the bolt lands from it."""
+        made = dict(MADE, id=172)
+        outs = [ran(0, gh_list()), ran_as(0, f"RC=1 TIP={TIP} OLD={OLD} ID=171 PULL= ANSWER={SENT_BACK_ANSWER} SAID=\n"),
+                ran_as(0, listing(SENT_BACK, made)), ran_as(0, json.dumps(dict(made, state="landed"))), ran(0, said(0, github=NEW)),
+                ran(0, "MARKED=yes\n")]
+        self.submit(monkeypatch, self.BEFORE, outs, said=policy(TAKES), record=ran_as(0, listing(SENT_BACK)))
+        assert [n for s, n in self.ran if s == "WAIT"] == ["172"] and [a for a in self.argvs if a[2] == plan.LANDED][-1][9] == "0"
+        assert "bolt/b submitted to k's main, sluice's #172 from pull request #113" in capsys.readouterr().out
+        assert self.closed == ["b"]
+
+    def test_a_record_crew_cant_read_before_the_landing_submits_nothing(self, monkeypatch):
+        """read.1: with no record of what sluice held before, no submission it answers with could be told from one made
+        before the landing, so nothing is readied or submitted, and nothing drafted."""
+        locked = ran_as(3, json.dumps({"error": {"message": "its records are locked"}}))
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, self.BEFORE, [], said=policy(TAKES), record=locked)
+        assert self.scripts() == ["MAIN", "SUBMISSIONS"]
+        (_, _, f), = self.emitted
+        assert f["refused"] == ("bolt/b was not submitted: crew can't read sluice's record of k's main on box, so could not tell "
+                                "its submission from any made before it: sluice status main --all exited 3: its records are locked")
+
+    def test_a_submission_sluice_failed_on_is_never_read_from_one_made_before_the_landing(self, monkeypatch):
+        """sluice itself fails on the landing's #161, and its record holds only #137 of the tip, made before the landing
+        began: crew can't tell, and never says the bolt did not land on #137's conflict."""
+        tip = HEADS["conflict"]
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, self.BEFORE, [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=161 PULL= ANSWER= SAID=\n")] + self.failing(tip),
+                        record=ran_as(0, listing()))
+        (_, _, f), = self.emitted
+        assert f["refused"] == (f"crew can't tell whether bolt/b will land on k's main: sluice itself failed ({FAILED}), k's main now, "
+                                f"aaaaaaa, does not hold bolt/b's tip {tip[:7]}, and sluice records no submission of {tip[:7]} to "
+                                "main newer than #160.")
+
     def test_an_answer_crew_cant_read_is_named_and_left_standing(self, monkeypatch, capsys):
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, [ran(0, gh_list()), self.answered("queued,\n  somewhere", pull="")], said=policy(TAKES))
-        assert self.scripts() == ["MAIN", "POLICY", "PULL", "SUBMIT"] and self.closed == [] and self.handed == []
+        assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "PULL", "SUBMIT"] and self.closed == [] and self.handed == []
         words = ("crew can't tell whether bolt/b will land on k's main: sluice answered its submission with what crew can't read, "
                  "queued, somewhere. crew withdraws nothing: what sluice queued stands, its place /k/places/land-b kept, and sluice "
                  "status main says where it is.")

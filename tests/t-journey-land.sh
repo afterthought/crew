@@ -280,10 +280,11 @@ expect_ok crew bolt submit tenant-environments
 has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
 has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is ready for review again, so sluice takes it at the head bolt/tenant-environments has now."
 eq "$(drafted "$pr")" false
-# sluice answers with the pull request, as on a main that takes them: crew waits on the submission it made from it.
+# sluice answers with the pull request, as on a main that takes them: crew waits on the submission it made from it,
+# told from any made before by sluice's record of main read before the pull request is readied, and read again after.
 has "$out" "bolt/tenant-environments submitted to switchboard-kit's main, sluice's #"
 has "$out" " from pull request #$pr"
-eq "$(calls | grep -c "^$box sluice status main --all --json in ")" 1
+eq "$(calls | grep -c "^$box sluice status main --all --json in ")" 2
 eq "$(calls | grep -E "^$box (gh pr ready|wt submit) " | cut -d' ' -f2-4)" $'gh pr ready\nwt submit main'
 eq "$(calls | grep -c "^$box gh pr ready .* --undo$")" 0
 grep -q level <<<"$out" && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
