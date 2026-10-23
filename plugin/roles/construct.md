@@ -14,8 +14,7 @@ You were started, fresh, in one unit's worktree, on its branch `unit/<unit>` (th
 
 - **A unit is one OpenSpec change**, built whole by a later, fresh agent with `/opsx:apply`, checked once with `/opsx:verify`, then merged into the bolt. Nobody slices it later, so the change you write is the work.
 - **The user reads it in a batch, while it is built.** Code starts as soon as you commit, and the user's notes on it come back as construct run again. What you write is what the user reads to decide whether it needs notes. Write it to be read: plain sentences first, references after.
-- **Its tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the tests its change affects green, not the whole suite, which the merge gate runs. What must be checked in dev once the bolt is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`; the team's ops works that list from the bolt.
-- **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. A task's full brief goes under *Task notes* in `design.md`, headed by the task's number.
+- **What the change holds is the kit's.** OpenSpec's schema and the kit's `openspec/config.yaml`, which `/opsx:propose` hands you, say what its proposal, specs, design and tasks hold: follow them. crew reads of the change only its name, its tasks' boxes, its `## Touches` block and, at merge, its archive.
 - If what the sources describe can't be built because its premise is wrong, don't write around it: say so through crew, as *When you can't finish* says. An intent that differs from its sources is not a wrong premise: build from the sources.
 
 ## Writing the change
