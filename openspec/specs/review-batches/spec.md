@@ -103,7 +103,7 @@ For a unit that has not merged, its conductor SHALL run construct again with the
 - **THEN** the unit is not amended, and its conductor starts a fix with the user's words
 
 ### Requirement: A bolt lands only once every unit's latest change has been in a batch the user has answered
-A bolt SHALL be offered for landing only once every unit's latest change, the commit its last construct left, has been in a batch the user has answered. A batch is answered when its card was sent back with a tap, sent from its reading session or closed in Pending You, as crew records the card's close, or when the user answered it in their own words in a main-level pane, as crew records from that session's transcript. When a bolt is otherwise ready to land and some unit's latest change has not been in a batch, a batch SHALL be due at once for those units, and the bolt's landing row SHALL name them. While a batch holding a unit's latest change waits on the user's answer, the landing row SHALL name that batch. No landing card SHALL be raised, and the row SHALL carry no word to land, until every unit's latest change has been in a batch the user has answered. `crew bolt land` SHALL be refused while any unit's latest change remains outside a batch. A card Pending You lost to its owner SHALL be no answer, and neither SHALL an agent's own words or another agent's tell of what the user said. A chore SHALL be in no batch and SHALL hold no landing.
+A bolt SHALL be offered for landing only once every unit's latest change, the commit its last construct left, has been in a batch the user has answered. A batch is answered when its card was sent back with a tap or closed in Pending You, as crew records the card's close, when its reading session was sent, as crew records the card's close or, with no card closed, the batch's, or when the user answered it in their own words in a main-level pane, as crew records from that session's transcript. When a bolt is otherwise ready to land and some unit's latest change has not been in a batch, a batch SHALL be due at once for those units, and the bolt's landing row SHALL name them. While a batch holding a unit's latest change waits on the user's answer, the landing row SHALL name that batch. No landing card SHALL be raised, and the row SHALL carry no word to land, until every unit's latest change has been in a batch the user has answered. `crew bolt land` SHALL be refused while any unit's latest change remains outside a batch. A card Pending You lost to its owner SHALL be no answer, and neither SHALL an agent's own words or another agent's tell of what the user said. A chore SHALL be in no batch and SHALL hold no landing.
 
 #### Scenario: A late amendment
 - **WHEN** every unit of a bolt has merged and its verification is green, and one unit's change was constructed again after the last batch
@@ -120,6 +120,10 @@ A bolt SHALL be offered for landing only once every unit's latest change, the co
 #### Scenario: The batch answered in a pane
 - **WHEN** the user answers batch 7 in their own words in the planner's pane, and the planner records it with `crew card answer batch/7`
 - **THEN** the next rail read on `y`'s team's host raises `y`'s landing card, and its row carries the word to land
+
+#### Scenario: The batch's session sent with no card held
+- **WHEN** batch 7's card is held on a host the main level has left, and the user sends batch 7's reading session on the main level's host
+- **THEN** crew records batch 7 read, and the next rail read on `y`'s team's host raises `y`'s landing card
 
 #### Scenario: Notes send a unit back
 - **WHEN** the user's notes on batch 7 send one of `y`'s units back to construct, and its new change is in no batch yet
@@ -237,3 +241,18 @@ Once a batch is answered in a pane, crew SHALL treat it exactly as a batch whose
 #### Scenario: The planner's wait was running
 - **WHEN** the planner's `crew card wait batch/16` is running, and the operator answers batch 16 in its pane
 - **THEN** the wait ends, saying batch 16 was answered in swancloud-operator's pane, and the card it holds is closed
+
+### Requirement: A batch whose reading session is sent is read, with or without its card
+When the user sends a batch's reading session, approved or annotated, `crew card wait batch/<n>` SHALL record the batch read whether or not the planner holds a card of it on the main level's host: when it closes no card there, because none is held, the card is lost, or Pending You refused its close, crew SHALL record its own close of the batch in the planner's name, saying what was read ("Read; no notes", "Read; 2 notes sent to their teams"), and the wait SHALL print the notes as it does when it closes the card. A batch recorded read so SHALL be closed for every read of batches: no row on the rail, no batch named on a landing row, no card raised for it, until a newer card is posted under its key.
+
+#### Scenario: Sent with no card on the main level's host
+- **WHEN** batch 13's card was posted from mac-studio, the planner's wait runs on deneb with batch 13's session, and the user approves the session with no annotations
+- **THEN** the wait prints "batch/13: approved", records crew's close of `batch/13` in the planner's name "Read; no notes", ends the session, and the rail no longer shows batch 13
+
+#### Scenario: Sent while the card is lost
+- **WHEN** the planner's wait finds batch 13's card lost, records it so, and the user then sends the session with two annotations
+- **THEN** the wait prints both annotations as written and records crew's close of `batch/13` "Read; 2 notes sent to their teams"
+
+#### Scenario: Sent while the card's close is refused
+- **WHEN** the user sends batch 13's session and Pending You refuses the close of its card
+- **THEN** crew records its close of `batch/13` with what was read, and the card, its row gone, is withdrawn by a later rail read
