@@ -2,8 +2,9 @@
 crates/sluice-core/src/branches.rs): by the policy, .config/sluice.toml, at the branch's own revision in this
 repository, or at origin's tracking ref of it when there is no local branch; the `remote` of the [branches."<pattern>"]
 table that matches the branch, the most specific first, names where it lives, and no remote means local refs. Run as
-`python3 route.py <branch>` in a checkout, it prints the remote, or nothing for local refs. Not executable, so no
-command of the stubs' PATH."""
+`python3 route.py <branch>` in a checkout, it prints the remote, or nothing for local refs; `python3 route.py --pulls
+<branch>` prints yes when that table takes pull requests, its `pull_requests` table present, as sluice 0.36.4's
+takes_pulls reads it (crates/sluice/src/lib.rs), else nothing. Not executable, so no command of the stubs' PATH."""
 import fnmatch
 import subprocess
 import sys
@@ -24,12 +25,20 @@ def table(at, branch):
     return branches[matching[0]] if matching else {}
 
 
-def remote(branch):
-    """The remote sluice keeps the branch on, or None: by the policy at its own revision, or at origin's tracking ref
-    of it when there is no local branch; None too when there is neither."""
+def policy(branch):
+    """The branch's table of the policy at its own revision, or at origin's tracking ref of it when there is no local
+    branch; {} when there is neither."""
     at = rev(f"refs/heads/{branch}") or rev(f"refs/remotes/origin/{branch}")
-    return table(at, branch).get("remote") or None if at else None
+    return table(at, branch) if at else {}
+
+
+def remote(branch):
+    """The remote sluice keeps the branch on, or None."""
+    return policy(branch).get("remote") or None
 
 
 if __name__ == "__main__":
-    print(remote(sys.argv[1]) or "")
+    if sys.argv[1] == "--pulls":
+        print("yes" if "pull_requests" in policy(sys.argv[2]) else "")
+    else:
+        print(remote(sys.argv[1]) or "")

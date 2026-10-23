@@ -4,6 +4,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import time
 
 import pytest
 
@@ -487,6 +488,11 @@ def test_a_landings_verdict_is_its_trailer(repo):
         "passed (9 run, 0 replayed)")
 
 
+# sluice 0.36.4's answer to a submission to a main that takes pull requests, once intake has queued the one it opened
+# (lib.rs submit_pull under --no-wait --json).
+PULLED = '{"branch":"main","pull_request":113,"state":"queued: next on main"}'
+
+
 def landing(repo, tmp_path):
     """plan.SUBMIT and plan.LANDED as bolt_submit runs them on the team's host, for bolt b of the kit at repo, after
     plan.MAIN has read main now there, with a path holding wt and the tools they run but no wt-submit; and stand_in(),
@@ -496,14 +502,18 @@ def landing(repo, tmp_path):
     there, leaving the host's own main where it was, then fails releasing a place, its outcome sluice's exit 3, as
     sluice 0.36.4 does on a release that fails after its push; with refused, it pushes nothing, its outcome a conflict,
     exit 2; with at_once, sluice refuses the submission itself, saying why on standard error and exiting 2; with
-    failing, it pushes nothing, its outcome sluice itself failing while the submission waits, exit 3. It names no
-    submission, so SUBMIT leaves no `sluice wait` running; the outcome sluice's wait would give is handed to LANDED as
-    crew hands it, with sluice's last line, or, with none, SUBMIT's exit and the last line SUBMIT says the submission
-    said, as landing_ended hands them. A stand-in sluice beside it takes `sluice wait 7`, for SUBMIT run again with a
-    submission and its tip (again): the wait SUBMIT leaves running ends at once, and the one plan.WAIT runs, as
-    landing_ended does, finds the landing's place made again on bolt/b, lands from it as wt-submit does and exits 0,
-    handed to LANDED with its last line. Each run is LANDED's result, SUBMIT's said on its standard error before
-    LANDED's, or SUBMIT's own when it refused, and the commit main now was at before it."""
+    failing, it pushes nothing, its outcome sluice itself failing while the submission waits, exit 3; with pulled, it
+    lands nothing and answers as sluice 0.36.4 does on a main that takes pull requests once intake has queued the one it
+    opened, its number on standard output and no submission, exit 0. Otherwise it names no submission, so SUBMIT leaves
+    no `sluice wait` running; the outcome sluice's wait would give is handed to LANDED as crew hands it, with sluice's
+    last line, or, with none, SUBMIT's exit and the last line SUBMIT says the submission said, as landing_ended hands
+    them. A stand-in sluice beside it takes `sluice wait 7`, for SUBMIT run again with a submission and its tip (again):
+    the wait SUBMIT leaves running ends at once, and the one plan.WAIT runs, as landing_ended does, finds the landing's
+    place made again on bolt/b, lands from it as wt-submit does and exits 0, handed to LANDED with its last line; and
+    `sluice wait main`, which writes where it ran and what it was asked to the file followed, and ends once the file
+    release is there. Each run is
+    LANDED's result, SUBMIT's said on its standard error before LANDED's, or SUBMIT's own when it refused, and the
+    commit main now was at before it."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
@@ -536,7 +546,7 @@ def landing(repo, tmp_path):
                             base64.b64encode(said.encode()).decode()], capture_output=True, text=True, env=env)
         return subprocess.CompletedProcess(e.args, e.returncode, e.stdout, r.stderr + e.stderr), before
 
-    def stand_in(stray=False, on_github=False, refused=False, at_once=False, failing=False):
+    def stand_in(stray=False, on_github=False, refused=False, at_once=False, failing=False, pulled=False):
         onto = "refs/remotes/origin/main" if on_github else "main"
         pushed = 'git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
         moved = (pushed + 'echo "sluice: releasing try/b: its command failed" >&2\n'
@@ -557,10 +567,13 @@ git status --porcelain > "{tmp_path}/status"
 {f"echo 'sluice: bolt/b conflicts with main' >&2; printf '2\\nsluice: bolt/b conflicts with main' > '{outcome}'; exit 0" if refused else ""}
 {"echo 'sluice: main has no gate for bolt/b' >&2; exit 2" if at_once else ""}
 {f"echo '{failed}' >&2; printf '3\\n{failed}' > '{outcome}'; exit 0" if failing else ""}
+{f"echo '{PULLED}'; exit 0" if pulled else ""}
 {"echo s > stray.txt" if stray else ""}
 {lands}{moved}
 ''')
         (bin_ / "sluice").write_text(f'''#!/bin/sh
+[ "$1 $2" = "wait main" ] && {{ echo "$PWD $*" > "{tmp_path}/followed"; n=0
+  while [ ! -e "{tmp_path}/release" ] && [ $n -lt 6000 ]; do sleep 0.1; n=$((n + 1)); done; exit 0; }}
 [ "$1 $2" = "wait 7" ] || exit 9
 [ "$3 $4" = "--timeout 9m" ] || exit 0
 cd "{land}" && [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
@@ -771,6 +784,37 @@ def test_a_submission_sluice_failed_on_is_waited_on_again_while_its_record_has_i
     assert plan.sluice_failed(r.stdout, before) is None
     assert not land.exists() and "land-b" not in repo.git("worktree", "list")
 
+
+
+def test_a_landing_sluice_queued_as_a_pull_request_is_followed_from_its_place_while_it_stands(repo, tmp_path):
+    """plan.SUBMIT, plan.submitted_line and plan.landing_now (plan.16, plan.8): to a main that takes pull requests
+    sluice 0.36.4 answers a landing's submission with the pull request it opened, its number and no submission. SUBMIT
+    reads its number, PULL, beside no ID, hands crew the answer as sluice printed it, and leaves `sluice wait main`
+    running from the landing's place, which follows the pull request to its submission's outcome, its process held in
+    crew-landing, so no stage starts on the bolt while it stands; once that wait ends the mark is emptied."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    land, _, stand_in = landing(repo, tmp_path)
+    stand_in(pulled=True)
+    env = dict(os.environ, PATH=f"{tmp_path / 'bin'}:{os.environ['PATH']}")
+    r = subprocess.run(["bash", "-c", plan.SUBMIT, "crew", str(repo.path), str(land), "b", "wldn-ops"], capture_output=True,
+                       text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    f = dict(w.split("=", 1) for w in shlex.split(r.stdout.strip().splitlines()[-1]))
+    assert (f["RC"], f["ID"], f["PULL"]) == ("0", "", "113") and base64.b64decode(f["ANSWER"]).decode().strip() == PULLED
+    assert plan.submitted_line("b", "kit", f) == "bolt/b submitted to kit's main as pull request #113"
+    t = {"kit": {"dir": str(tmp_path)}}
+    followed, release, end = tmp_path / "followed", tmp_path / "release", time.monotonic() + 600  # tests.8: a condition
+    while not followed.exists() and time.monotonic() < end:
+        time.sleep(0.1)
+    ran_in, *asked = followed.read_text().split()
+    assert os.path.realpath(ran_in) == os.path.realpath(land) and asked == ["wait", "main", "--timeout", "24h", "--json"]
+    assert plan.landing_now(t, "b") == (str(land), True, True)
+    release.write_text("")
+    while plan.landing_now(t, "b")[2] and time.monotonic() < end:
+        time.sleep(0.1)
+    assert plan.landing_now(t, "b") == (str(land), True, False)
 
 def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):
     """plan.landed_at (plan.13, teams.17, record 0026): the commit that brought a unit's change to its bolt, which

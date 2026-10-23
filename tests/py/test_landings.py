@@ -112,6 +112,17 @@ def test_a_landing_after_a_refusal_holds_nothing():
     assert plan.refusals([submitted("y", "c" * 40, "no"), submitted("y", "c" * 40)]) == {}
 
 
+def test_a_landing_left_standing_in_sluice_holds_its_row_for_no_fix():
+    """A landing whose submission sluice answered with nothing crew can wait on, a pull request crew found no
+    submission of, is recorded with its words and no refusal (plan.left_standing), since what sluice queued stands: its
+    row keeps its box, never held for a fix the bolt does not need."""
+    head = "d" * 40
+    f = dict(RC="0", ID="", PULL="113", ANSWER="")
+    standing = dict(submitted("y", head), Why=plan.left_standing("y", "crew", "/c/places/land-y", f, "sluice records none"))
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, plan.refusals([submitted("y", head, "no"), standing]))
+    assert row["box"] and plan.refused_at([standing], "y", head) is None
+
+
 # ---------------------------------------------------------------------------------------------- the forecasts
 
 def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():
