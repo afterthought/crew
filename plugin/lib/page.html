@@ -1,8 +1,12 @@
 <!doctype html>
 <!-- crew's page: page.py puts the partitions' links and the flywheel's data in the two placeholders below and writes
      the file whole. It opens on the partition's board, narrowed to the team last chosen; its lineage is the flow
-     view, and its deploys, by environment, the deploys view, each one switch away. Everything it draws is in this file: no font, script or style is loaded from anywhere, and
-     the only links are to the other partitions' pages beside it. Every label is set as text, never as markup. -->
+     view, and its deploys, by environment, the deploys view, each one switch away. A click or Enter on any item of the
+     board, a team of the strip or a deploy of the deploys view opens its dock over the board, the page page.py made
+     for it (D.docks); the dock answers nothing, and its last section takes a word to the item's agent, posted to the
+     page's own address on Send, the one request the page makes. Everything it draws is in this file: no font, script or
+     style is loaded from anywhere, and the only links are to the fleet page and the other partitions' pages beside it.
+     Every label, and every answer to a word, is set as text, never as markup. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -14,25 +18,27 @@
    (251 to 256), the header (263, 267), the hosts strip (281 to 291), .dot (351, 356), the segmented control (365 to
    367), .lanes and .lane with Bolt plan's hatch (371, 431 to 439), .sec-h and .empty (440 to 442), .sheet and .slip (512
    to 535), .ledger (574 to 599), .record (614 to 626), .quote (627 to 633), .marks and .mark (666 to 669), and the
-   phone's .lanes and .lane (from 1016: 1035, 1044). Its web fonts give way to their system fallbacks, the sheet's
-   minimum height is dropped, and so is the pointer over the forms, since nothing on the board is clicked. A restyle
-   starts there. */
+   phone's .lanes and .lane (from 1016: 1035, 1044); and its dock, borrowed and not its file: .scrim, .dock, .dk-h with
+   its forms, .dk-b, .sec, .rows, .row, .kv and .tl (772 to 826, its --dock and --shadow from 238), and the phone's dock
+   (1052), with no foot, since the dock answers nothing; its last section, the word to the item's agent, is the page's
+   own. Its web fonts give way to their system fallbacks, and the
+   sheet's minimum height is dropped. Every item that opens a dock takes the pointer. A restyle starts there. */
 :root{
   --bg:#EEF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --ink:#16202A; --ink2:#4A5763; --ink3:#7A8794;
   --line:#D5DBE1; --line2:#E4E8EC; --accent:#0B6E79; --accent-ink:#FFFFFF; --accent-soft:#D9EEF0; --accent-hatch:rgba(11,110,121,.10);
   --ok:#2E8B57; --warn:#B7791F; --crit:#B3362B; --lit:#FFF3C4; --lit-line:#E5C34A;
-  --top:46px; --hosts:40px;
+  --shadow:0 10px 30px rgba(22,32,42,.16); --top:46px; --hosts:40px; --dock:600px;
   --sans:system-ui,-apple-system,"Segoe UI",sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
   --bg:#12171C; --surface:#1A2128; --surface2:#20282F; --ink:#E6EBEF; --ink2:#A9B4BE; --ink3:#74818C;
   --line:#2A333C; --line2:#232C34; --accent:#4FB3BF; --accent-ink:#0E1A1C; --accent-soft:#173A3E; --accent-hatch:rgba(79,179,191,.10);
-  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; color-scheme:dark; } }
+  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark; } }
 :root[data-theme="dark"]{
   --bg:#12171C; --surface:#1A2128; --surface2:#20282F; --ink:#E6EBEF; --ink2:#A9B4BE; --ink3:#74818C;
   --line:#2A333C; --line2:#232C34; --accent:#4FB3BF; --accent-ink:#0E1A1C; --accent-soft:#173A3E; --accent-hatch:rgba(79,179,191,.10);
-  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; color-scheme:dark; }
+  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark; }
 
 *{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -54,12 +60,13 @@ h1,h2,h3,h4{margin:0;font-weight:700;text-wrap:balance}
 .parts .part{padding:2px 6px;border-radius:4px;font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--ink3);text-decoration:none;white-space:nowrap}
 .parts a.part:hover{color:var(--ink);background:var(--surface2)}
 .parts .part[aria-current]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent);border-radius:4px 4px 0 0}
+.parts .fleet{font-size:12px;font-weight:600;color:var(--accent);margin-right:6px}
 .team{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3)}
 .team select{padding:3px 6px;font-size:12px;max-width:100%}
 body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 
 /* ---------- the board view ---------- */
-#view-board{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+#view-board{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .hosts{flex:none;min-height:var(--hosts);display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:4px 14px;border-bottom:1px solid var(--line);background:var(--surface2)}
 .hosts .lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700;margin-right:4px;white-space:nowrap}
 .host{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px 3px 6px;font-size:12px;white-space:nowrap}
@@ -69,6 +76,7 @@ body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 .host.gone .hm b{color:var(--warn)}
 .hosts .sep{width:1px;height:20px;background:var(--line);margin:0 4px;flex:none}
 .hosts .mark{white-space:normal;overflow-wrap:anywhere}
+.host.tm .hn{font-weight:700}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
 .dot.gone{background:var(--crit)}
 .lanes{flex:1;min-height:0;overflow-x:auto;display:grid;grid-template-columns:minmax(225px,.95fr) minmax(185px,.6fr) minmax(330px,1.45fr) minmax(215px,.9fr)}
@@ -150,6 +158,55 @@ body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 .mark.approve{color:var(--accent);border-color:var(--accent)} .mark.attention{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
 /* long names and addresses break rather than run past the edge */
 .sh-title,.sh-meta,.sh-foot,.sl-n,.sl-to,.lg-name,.lg-un,.lg-at,.lg-mach,.rc-name,.rc-env,.quote,.xp,.counter,.mark{overflow-wrap:anywhere}
+/* every item that opens a dock */
+[data-dock]{cursor:pointer}
+.quote[data-dock]:hover,.sheet[data-dock]:hover,.slip[data-dock]:hover,.record[data-dock]:hover,.dp[data-dock]:hover{border-color:var(--ink3)}
+.lg-unit[data-dock]:hover,.lg-mach[data-dock]:hover,.host.tm:hover{border-color:var(--accent)}
+
+/* ---------- the dock: one panel over the right of the board, slid in, so nothing under it moves ---------- */
+.scrim{position:absolute;inset:0;background:transparent;display:none;z-index:8}
+body.docked .scrim{display:block}
+.dock{position:absolute;top:0;right:0;bottom:0;width:min(var(--dock),calc(100% - 200px));background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);z-index:9;display:flex;flex-direction:column;transform:translateX(102%);visibility:hidden;transition:transform .2s cubic-bezier(.2,.7,.3,1),visibility 0s .2s}
+body.docked .dock{transform:none;visibility:visible;transition:transform .2s cubic-bezier(.2,.7,.3,1)}
+.dock:focus{outline:none}
+.dk-h{padding:12px 16px 10px;border-bottom:1px solid var(--line)}
+.dk-h.dk-sheet{border-top:3px solid var(--ink2);background:var(--surface)} .dk-h.dk-sheet h2{border-bottom:1px solid var(--ink);padding-bottom:5px} .dk-h.dk-sheet .tail{font:11.5px var(--mono)}
+.dk-h.dk-slip{background:var(--surface2);box-shadow:inset 4px 0 0 var(--ink3)}
+.dk-h.dk-ledger{background:var(--surface2);border-bottom:1px solid var(--ink3);border-top:1px solid var(--ink3)} .dk-h.dk-ledger h2{font-family:var(--mono);font-size:16px;letter-spacing:0}
+.dk-h.dk-record{background:transparent;border-bottom:1px solid var(--line2)} .dk-h.dk-record h2{color:var(--ink2);font-weight:600}
+.dk-h .row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink3)}
+.dk-h .row .kind{font-weight:700;color:var(--ink2)}
+.dk-h .nav{margin-left:auto;display:flex;align-items:center;gap:6px}
+.dk-h .back{font:600 12px var(--mono);color:var(--accent);padding:0 4px}
+.dk-h .back.solo{display:none}
+.dk-h .x{font-size:18px;line-height:1;color:var(--ink3);padding:0 4px}
+.dk-h h2{font-size:18px;font-weight:800;letter-spacing:-.01em;margin-top:6px;overflow-wrap:anywhere}
+.dk-h .tail{color:var(--ink2);font-size:12.5px;margin-top:2px;overflow-wrap:anywhere}
+.dk-b{flex:1;overflow:auto;padding:6px 16px 20px}
+.dock .sec{padding:12px 0;border-bottom:1px solid var(--line2)}
+.dock .sec:last-child{border-bottom:0}
+.dock .sec h3,.dock .word h3{display:flex;align-items:baseline;gap:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700;margin-bottom:8px}
+.dock .rows{display:flex;flex-direction:column;gap:4px}
+.dock .rows .row,.dock .rows .lk{display:block;font-size:12.5px;padding:4px 0;text-align:left;overflow-wrap:anywhere}
+.dock .lk{color:var(--accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 40%,transparent);text-underline-offset:2px;text-align:left;overflow-wrap:anywhere}
+.dock .lk:hover{text-decoration-color:var(--accent)}
+/* a dock's word to its item's agent, its last section: whom it goes to, a field and Send, and what came back */
+.dock .word{padding:12px 0}
+.dock .word .to{font-size:12px;color:var(--ink2);margin-bottom:6px;overflow-wrap:anywhere}
+.dock .word form{display:flex;gap:6px}
+.dock .word input{flex:1;min-width:0;font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.dock .word button{font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:6px;background:var(--accent);color:var(--accent-ink)}
+.dock .word input:disabled,.dock .word button:disabled{opacity:.5;cursor:default}
+.dock .word .said{font-size:12px;color:var(--ink2);margin-top:6px;overflow-wrap:anywhere}
+.dock .word .said:empty{display:none}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0;font-size:12.5px}
+.kv dt{font:500 11.5px var(--mono);color:var(--ink3)} .kv dd{margin:0;overflow-wrap:anywhere}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:grid;grid-template-columns:86px 110px 1fr;gap:8px;padding:4px 0;border-bottom:1px solid var(--line2);font-size:12.5px}
+.tl time{font:11px var(--mono);color:var(--ink3)}
+.tl .who{font-weight:600;color:var(--ink2);overflow-wrap:anywhere}
+.tl .who i{display:block;font:10px var(--mono);font-style:normal;color:var(--ink3);letter-spacing:.04em}
+.tl .what{overflow-wrap:anywhere} .tl li.fail .what{color:var(--crit)}
 
 @media (max-width:759px){
   :root{--hosts:38px}
@@ -165,6 +222,12 @@ body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
   .ledger .lg-unit{white-space:normal}
   .ledger .lg-foot .ep{white-space:normal;overflow-wrap:anywhere}
   .record .rc-head{flex-wrap:wrap}
+  #view-board{overflow:visible}
+  .dock{width:100%;position:fixed;top:0;bottom:0;left:0;right:0}
+  body:not(.docked) .dock{display:none}
+  .dk-h .back.solo{display:inline-flex}
+  .tl li{grid-template-columns:70px 1fr}
+  .tl li .what{grid-column:1/-1}
   #view-flow{overflow:visible}
   #view-deploys{overflow:visible}
   .dp-envs{grid-template-columns:1fr}
@@ -277,6 +340,18 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     <section class="lane construction" id="lane-construction" aria-label="Construction"></section>
     <section class="lane operation" id="lane-operation" aria-label="Operation"></section>
   </div>
+  <div class="scrim" id="scrim"></div>
+  <aside class="dock" id="dock" role="dialog" aria-modal="false" aria-labelledby="dk-title" tabindex="-1">
+    <div class="dk-h" id="dk-h"></div>
+    <div class="dk-b" id="dk-b">
+      <section class="word" id="dk-word" aria-label="A word to the item's agent">
+        <h3>a word</h3>
+        <p class="to" id="dk-to"></p>
+        <form id="dk-form"><input type="text" id="dk-text" maxlength="1000" autocomplete="off" aria-label="Your word"><button type="submit" id="dk-send">Send</button></form>
+        <p class="said" id="dk-said" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </aside>
 </main>
 <main id="view-deploys" aria-label="Deploys" hidden>
 <p class="dp-empty" id="dp-empty" hidden>No deploy and no operation has been recorded.</p>
@@ -322,6 +397,16 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     return x;
   }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  // An item that opens a dock: its key, as page.py gave it, when the page holds that dock; a button to the keyboard.
+  var DOCKS = D.docks || {};
+  function item(x, key) {
+    if (!key || !DOCKS[key]) return x;
+    x.dataset.dock = key;
+    x.tabIndex = 0;
+    x.setAttribute("role", "button");
+    return x;
+  }
 
   // What the page was made from: when, and the commit of the branch; both commits, should the board's read have
   // found the branch at another.
@@ -405,7 +490,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     units.forEach(function (u, i) {
       if (i) c.append(el("span", "lg-arrow", "→"));
       var kind = queued ? "queued" : MERGED.indexOf(u.stage) >= 0 ? "merged" : BUILDING.indexOf(u.stage) >= 0 ? "building" : "queued";
-      var link = el("div", "lg-unit " + kind);
+      var link = item(el("div", "lg-unit " + kind), u.dock);
       link.append(el("span", "lg-un", (u.kind === "chore" ? "chore " : "") + u.unit));
       if (kind === "merged") link.title = u.stage;
       if (kind === "queued") link.append(el("span", "lg-ut", u.stage || "unknown"));
@@ -419,11 +504,17 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     });
     x.append(c);
   }
-  function ledgerHead(x, repo, bolt, run) {
+  // A ledger's head: its repository, its name, and the team holding it, which opens the team's dock, then the rest.
+  function ledgerHead(x, repo, bolt, run, team) {
     var h = el("div", "lg-head");
     if (repo) h.append(el("span", "lg-repo", repo));
     h.append(el("span", "lg-name", bolt));
-    if (run) h.append(el("span", "lg-run", run));
+    if (run || team) {
+      var r = el("span", "lg-run");
+      if (team) r.append(item(el("span", null, team), "team:" + team));
+      r.append(run || "");
+      h.append(r);
+    }
     x.append(h);
   }
 
@@ -439,6 +530,14 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       pill.title = v;
     }
     pill.append(el("span", "dot" + (v === true ? "" : " gone")), el("span", "hn", h), hm);
+    strip.append(pill);
+  });
+  // Then the partition's teams, in the teams file's order, each opening its dock. Never narrowed.
+  if (B.teams.length) strip.append(el("span", "sep"), el("span", "lab", "teams"));
+  B.teams.forEach(function (t) {
+    var pill = item(el("span", "host tm"), t.dock);
+    pill.append(el("span", "hn", t.team), el("span", "hm", "on " + t.host));
+    pill.title = t.kits.join(", ");
     strip.append(pill);
   });
   var SAID = {
@@ -464,7 +563,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     var g = el("div", "signals"), oldest = mine.map(function (s) { return ago(s.at); }).filter(Boolean)[0];
     g.append(el("div", "counter", (who || "no one named") + " · " + mine.length + " not moved" + (oldest ? " · oldest " + oldest : "")));
     mine.forEach(function (s) {
-      var q = el("div", "quote"), qm = el("span", "qm");
+      var q = item(el("div", "quote"), s.dock), qm = el("span", "qm");
       q.append(el("q", null, s.first || s.signal));
       qm.append(el("b", null, s.kind || "-"), " · " + (ago(s.at) || "-") + " · ", el("span", "dim", s.signal));
       q.append(qm);
@@ -484,7 +583,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   var bp = lane("lane-plan", "Bolt plan", "proposals · planned bolts · the queue", "gate");
   var sheets = section(bp, null);
   B.bolt_plan.proposals.forEach(function (d) {
-    var x = el("article", "sheet");
+    var x = item(el("article", "sheet"), d.dock);
     x.append(el("span", "sh-k", "proposal " + d.proposal), el("div", "sh-title", d.case || "proposal " + d.proposal),
       el("div", "sh-meta", "by " + (d.by || "-") + " · opened " + (d.opened || "-")));
     if (d.waiting.length) x.append(el("div", "sh-foot", "waiting on " + d.waiting.map(function (t) { return t + "-conductor"; }).join(", ")));
@@ -493,7 +592,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   });
   var planned = section(bp, "planned");
   B.bolt_plan.planned.forEach(function (b) {
-    var x = el("div", "ledger");
+    var x = item(el("div", "ledger"), b.dock);
     ledgerHead(x, b.repo, b.bolt, null);
     if (b.goal) x.title = b.goal;
     chain(x, b.units, true);
@@ -502,7 +601,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   var queue = section(bp, "queue");
   B.bolt_plan.queue.slice().sort(function (a, b) { return (a.repo || "") < (b.repo || "") ? -1 : (a.repo || "") > (b.repo || "") ? 1 : 0; })
     .forEach(function (u) {
-      var x = el("div", "slip");
+      var x = item(el("div", "slip"), u.dock);
       x.append(el("span", "sl-k", u.kind === "chore" ? "chore queued" : "queued"));
       if (u.repo) x.append(el("span", "sl-repo", u.repo));
       x.append(el("span", "sl-n", u.unit));
@@ -515,13 +614,13 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   var con = lane("lane-construction", "Construction", "held bolts · units in flight");
   var ledgers = section(con, null);
   B.construction.forEach(function (b) {
-    var x = el("div", "ledger");
-    ledgerHead(x, b.repo, b.bolt, (b.host ? b.team + " on " + b.host : b.team || "") + (b.state !== "active" ? " · " + b.state : ""));
+    var x = item(el("div", "ledger"), b.dock);
+    ledgerHead(x, b.repo, b.bolt, (b.host ? " on " + b.host : "") + (b.state !== "active" ? " · " + b.state : ""), b.team);
     if (b.goal) x.title = b.goal;
     marks(x, b.markers, b.state === "landed" ? "every unit has landed, and the bolt is still in the plan" : null);
     chain(x, b.units);
     b.fixes.forEach(function (f) {
-      var r = el("div", "lg-mach");
+      var r = item(el("div", "lg-mach"), f.dock);
       r.append(el("span", null, f.merged ? "fix merged" : "fix"), el("span", "lg-fn", f.fix));
       [f.slot, f.url].filter(Boolean).forEach(function (t) { r.append(el("span", null, t)); });
       x.append(r);
@@ -556,18 +655,22 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   var op = lane("lane-operation", "Operation", "landed and deployed in the last 7 days", "ro");
   var records = section(op, null);
   B.operation.forEach(function (o) {
-    var x = el("div", "record"), h = el("div", "rc-head");
+    var x = item(el("div", "record"), o.dock), h = el("div", "rc-head");
     h.append(el("span", "rc-name", o.bolt), el("span", "rc-at", o.at ? local(o.at) : ""));
     x.append(h, el("span", "rc-stamp", "landed" + (o.by ? " by " + o.by : "")));
-    var env = [o.team, o.units.join(", ")].filter(Boolean).join(" · ");
-    if (env) x.append(el("div", "rc-env", env));
+    if (o.team || o.units.length) {
+      var env = el("div", "rc-env");
+      if (o.team) env.append(item(el("span", null, o.team), "team:" + o.team));
+      env.append((o.team && o.units.length ? " · " : "") + o.units.join(", "));
+      x.append(env);
+    }
     op.sec.append(obj(records, x, o.teams));
   });
   (B.environments || []).forEach(function (e) {
     if (!e.deploys.length && !e.waiting.length) return;
     var envs = section(op, e.env);
     e.deploys.forEach(function (d) {
-      var x = el("div", "record"), h = el("div", "rc-head"), st = deployStamp(d);
+      var x = item(el("div", "record"), d.dock), h = el("div", "rc-head"), st = deployStamp(d);
       h.append(el("span", "rc-name", "deploy " + d.to.slice(0, 7)), el("span", "rc-at", local(d.ended || d.started || d.offered || d.at)));
       x.append(h, el("span", "rc-stamp " + st[1], st[0] + (d.word && d.word.by && d.answer === "approved" ? " · " + d.word.by : "")));
       x.append(el("div", "rc-env", from(d) + " · " + carries(d)));
@@ -575,7 +678,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       op.sec.append(obj(envs, x, e.teams));
     });
     e.waiting.forEach(function (w) {
-      var x = el("div", "record"), h = el("div", "rc-head");
+      var x = item(el("div", "record"), w.dock), h = el("div", "rc-head");
       h.append(el("span", "rc-name", w.key), el("span", "rc-at", local(w.at)));
       x.append(h, el("div", "rc-env", [waitSaid(w), w.text || w.note].filter(Boolean).join(" · ")));
       marks(x, w.markers);
@@ -603,7 +706,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       var col = el("section", "dp-env"), line = el("ol", "dp-line");
       col.append(el("h2", null, e.env));
       e.deploys.slice().reverse().forEach(function (d) {
-        var st = deployStamp(d), x = el("li", "dp " + (d.answer === "replaced" ? "replaced" : st[1])), h = el("div", "dp-head"), w = word(d);
+        var st = deployStamp(d), x = item(el("li", "dp " + (d.answer === "replaced" ? "replaced" : st[1])), d.dock), h = el("div", "dp-head"), w = word(d);
         h.append(el("span", null, d.to.slice(0, 7) + " " + from(d)), el("span", "rc-stamp " + st[1], st[0]),
                  el("span", "dp-at", local(d.ended || d.started || d.offered || d.at)));
         x.append(h, el("div", "dp-word " + w[1], w[0]));
@@ -654,7 +757,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       if (e.waiting.length) {
         col.append(el("span", "dp-k", "operations waiting"));
         var wl = el("ul");
-        e.waiting.forEach(function (w) { wl.append(el("li", null, [w.key, waitSaid(w), w.text || w.note].filter(Boolean).join(" · "))); });
+        e.waiting.forEach(function (w) { wl.append(item(el("li", null, [w.key, waitSaid(w), w.text || w.note].filter(Boolean).join(" · ")), w.dock)); });
         col.append(wl);
       }
       at.append(col);
@@ -899,11 +1002,190 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     return layout;
   })();
 
+  // ------------------------------------------------------------------------------------------------ the dock
+  // One panel over the right of the board (S27): a click, Enter or space on an item opens the page page.py made for it,
+  // over the board, which does not move; a link in it opens that item's page in its place, and back returns along the
+  // trail. Esc, × or a click outside closes it, and the focus goes back to the item it was opened from. A deploy opened
+  // from the deploys view opens over the board, and closing it shows the deploys view again. Under 760 px it fills the
+  // screen, its back control always shown, closing it with the trail empty. It holds no control that answers or
+  // moves anything: it has no foot, its markers are the board's, and its last section, a word to the item's agent,
+  // answers no card.
+  var dock = $("dock"), dkH = $("dk-h"), dkB = $("dk-b"), trail = [], shown = null, opener = null, openedIn = "board";
+  // A time in a dock's words, as page.py writes it in UTC, said in the viewer's own zone as the lanes say theirs.
+  var STAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?Z/g;
+  function said(text) { return String(text).replace(STAMP, function (at) { return local(at); }); }
+  function link(text, key) {
+    var b = el("button", "lk", said(text));
+    b.type = "button";
+    b.dataset.dock = key;
+    return b;
+  }
+  function sec(title) {
+    var s = el("section", "sec");
+    if (title) s.append(el("h3", null, title));
+    dkB.append(s);
+    return s;
+  }
+  // A dock's page, whatever its kind: its head in its item's form, with its kind, its title, its line of what it is and
+  // its markers; its facts; its parts, each item in them a link where it has a dock; its history, oldest first.
+  function drawDock(p) {
+    var row = el("div", "row"), nav = el("div", "nav"), bk = el("button", "back" + (trail.length ? "" : " solo"), "‹ back"), x = el("button", "x", "×");
+    bk.type = x.type = "button";
+    bk.setAttribute("aria-label", "back");
+    x.setAttribute("aria-label", "close");
+    bk.addEventListener("click", back);
+    x.addEventListener("click", closeDock);
+    nav.append(bk, x);
+    row.append(el("span", "kind", p.kind), nav);
+    var h = el("h2", null, said(p.title));
+    h.id = "dk-title";
+    dkH.className = "dk-h" + (p.form ? " dk-" + p.form : "");
+    dkH.replaceChildren(row, h);
+    if (p.tail) dkH.append(el("div", "tail", said(p.tail)));
+    marks(dkH, p.markers, p.attention);
+    dkB.replaceChildren();
+    if (p.facts.length) {
+      var kv = el("dl", "kv");
+      p.facts.forEach(function (f) {
+        var dd = el("dd");
+        dd.append(f[2] ? link(f[1], f[2]) : document.createTextNode(said(f[1])));
+        kv.append(el("dt", null, f[0]), dd);
+      });
+      sec(null).append(kv);
+    }
+    p.parts.forEach(function (part) {
+      var rows = el("div", "rows");
+      part.rows.forEach(function (r) { rows.append(r.key ? link(r.text, r.key) : el("div", "row", said(r.text))); });
+      sec(part.title).append(rows);
+    });
+    var tl = el("ol", "tl");
+    p.history.forEach(function (id) {
+      var e = D.entries[id];
+      if (!e) return;
+      var li = el("li", e.Refused ? "fail" : null), who = el("span", "who", e.By || "no one named");
+      if (e.Host) who.append(el("i", null, e.Host));
+      li.append(el("time", null, local(e.At)), who,
+        el("span", "what", (e.Act || "?") + (e.Refused ? " · refused: " + e.Refused : e.Why ? " · " + e.Why : "")));
+      li.title = e.Id;
+      tl.append(li);
+    });
+    if (tl.childNodes.length) sec("history").append(tl);
+    wordFor(p);
+  }
+
+  // A dock's last section, a word to its item's agent (record 0038 §3): the agent page.py named for it (to), and that a
+  // card is answered on the rail, since a word from the board answers nothing. Send posts it to the page's own address,
+  // `word` beside it, where swancloud's listener hands it to crew tell --board, which tells the agent as the user's from
+  // the board, naming the item, or refuses; the listener's answer, 200 or 422 with crew's words, is said as text, and
+  // anything else, or nothing, is the listener not answering. Send waits while a word is on its way; an answer that
+  // comes once another dock is shown is said naming its item. That post is the one request the page makes, and a page
+  // opened from disk sends nothing.
+  var wordSec = $("dk-word"), wordText = $("dk-text"), wordSend = $("dk-send"), wordSaid = $("dk-said"), sending = null;
+  var LOCAL = location.protocol === "file:", NO_LISTENER = "the board's listener did not answer: nothing was sent";
+  function wordFor(p) {
+    var off = LOCAL || !p.to;
+    $("dk-to").textContent = p.to ? "to " + p.to + "; a card is answered on the rail" : "this page names no agent for a word on it";
+    wordText.value = "";
+    wordText.disabled = off;
+    wordSend.disabled = off || sending !== null;
+    wordSaid.textContent = LOCAL ? "a word is sent only from the served board" : "";
+    dkB.append(wordSec);
+  }
+  function sendWord(key, page) {
+    var text = wordText.value;
+    if (LOCAL || !page.to || sending !== null || !text.trim()) return;
+    sending = key;
+    wordSend.disabled = true;
+    wordSaid.textContent = "sending to " + page.to + "…";
+    function told(ok, words) {
+      sending = null;
+      wordSend.disabled = false;
+      if (shown !== key) { wordSaid.textContent = page.kind + " " + page.title + ": " + words; return; }
+      wordSaid.textContent = words;
+      if (ok) wordText.value = "";
+    }
+    fetch(new URL("word", location.href), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: D.label, key: key, to: page.to, text: text })
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        t = t.trim();
+        if (t && (r.status === 200 || r.status === 422)) told(r.status === 200, t);
+        else told(false, NO_LISTENER);
+      });
+    }).catch(function () { told(false, NO_LISTENER); });
+  }
+  $("dk-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    if (shown) sendWord(shown, DOCKS[shown]);
+  });
+  function showDock(key) {
+    shown = key;
+    drawDock(DOCKS[key]);
+    document.body.classList.add("docked");
+    dkB.scrollTop = 0;
+    keep("dock", key);
+    dock.focus({ preventScroll: true });
+  }
+  function openDock(key, from) {
+    if (!DOCKS[key]) return;
+    openedIn = document.body.dataset.view;
+    if (openedIn !== "board") { view("board"); keep("view", ""); }
+    trail = [];
+    opener = from || null;
+    showDock(key);
+  }
+  function follow(key) {
+    if (!DOCKS[key] || key === shown) return;
+    trail.push(shown);
+    showDock(key);
+  }
+  function back() {
+    if (trail.length) showDock(trail.pop());
+    else closeDock();
+  }
+  // The dock gone, its trail with it, and the address no longer naming it; nothing else moves.
+  function dropDock() {
+    if (!shown) return false;
+    shown = null;
+    trail = [];
+    document.body.classList.remove("docked");
+    keep("dock", "");
+    return true;
+  }
+  function closeDock() {
+    if (!dropDock()) return;
+    if (openedIn !== "board") { view(openedIn); keep("view", openedIn); }
+    if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+    opener = null;
+  }
+  function opens(ev) {
+    var x = ev.target.closest("[data-dock]");
+    if (!x) return;
+    if (dock.contains(x)) follow(x.dataset.dock);
+    else openDock(x.dataset.dock, x);
+  }
+  [$("view-board"), $("view-deploys")].forEach(function (v) {
+    v.addEventListener("click", opens);
+    v.addEventListener("keydown", function (ev) {
+      if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches("[data-dock]:not(button)")) {
+        ev.preventDefault();
+        opens(ev);
+      }
+    });
+  });
+  $("scrim").addEventListener("click", closeDock);
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && shown) { ev.preventDefault(); closeDock(); }
+  });
+
   // ------------------------------------------------------------------------------------------- the team and the view
   // Each is kept in the page's address (#team=<name>&view=flow), so a reload or a page written over this one opens
   // on it, and in the browser for this partition, for when the address names none. The browser may refuse its
   // storage, on a page opened from disk or in a private window; the address alone then keeps it. A team the
-  // partition no longer has is shown as all teams, and the address is left as it is.
+  // partition no longer has is shown as all teams, and the address is left as it is. The dock open is kept in the
+  // address too (#dock=<key>), and only there: a reload opens it again, and a key this page holds no dock for is
+  // dropped from the address, the board shown with none open.
   var KEY = "crew-page:" + D.label + ":";
   function stored(k) { try { return localStorage.getItem(KEY + k); } catch (e) { return null; } }
   function store(k, v) { try { localStorage.setItem(KEY + k, v); } catch (e) { /* the address keeps it */ } }
@@ -927,7 +1209,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     } catch (e) {
       location.replace("#" + hash);
     }
-    store(k, v);
+    if (k !== "dock") store(k, v);
   }
 
   var TEAMS = B.teams.map(function (t) { return t.team; }), pick = $("team");
@@ -950,6 +1232,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   var VIEWS = { board: $("view-board"), flow: $("view-flow"), deploys: $("view-deploys") };
   function view(v) {
     v = VIEWS[v] ? v : "board";
+    if (v !== "board") dropDock();
     Object.keys(VIEWS).forEach(function (k) { VIEWS[k].hidden = k !== v; });
     document.body.dataset.view = v;
     document.querySelectorAll(".seg button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.view === v ? "true" : "false"); });
@@ -964,6 +1247,12 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     var f = fragment();
     team("team" in f ? f.team : stored("team"));
     view("view" in f ? f.view : stored("view"));
+    if (f.dock && DOCKS[f.dock]) {
+      if (f.dock !== shown) openDock(f.dock);
+    } else {
+      if (f.dock) keep("dock", "");
+      dropDock();
+    }
   }
   window.addEventListener("hashchange", open);
   open();
