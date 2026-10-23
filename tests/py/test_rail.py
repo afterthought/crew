@@ -1014,6 +1014,39 @@ class TestSweep:
         out, _ = swept(rows_=[row(key, group)], entries=lost, raises={kind: lambda fleet, r, acts=None: None}, here=here)
         assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [("req_old", "left", "its raise posted none", None)]
 
+    def stranded_record(self, **proposed):
+        """Record 32's card, posted from the box in wldn-design's name once crew record recorded it proposed there."""
+        return [dict(did("record.proposed", 70, On=["record/switchboard-kit/0032"], By="wldn-design", **proposed), Host=BOX),
+                dict(did("card.post", 60, Card="req_r32", Key="record/switchboard-kit/0032", On=["record/switchboard-kit/0032"],
+                         By="wldn-design"), Host=BOX)]
+
+    def test_a_records_card_held_on_another_host_is_posted_again_through_the_records_raise_in_the_design_agents_name(self):
+        """rail-cards, "A record's card left on the host the main level left"."""
+        seen = []
+
+        def raise_record(fleet, r, acts=None):
+            seen.append(r)
+            return "req_r33"
+        out, acts = swept(entries=self.stranded_record(), raises={"record": raise_record})
+        assert seen == [dict(label="wldn", key="record/switchboard-kit/0032", group="records", alternatives=False, dead="req_r32")]
+        assert out == {"done": [dict(label="wldn", key="record/switchboard-kit/0032", card="req_r32", by="wldn-design", did="lost",
+                                     words=f"held on {BOX}, which this host's sign-in does not reach: posted again as req_r33", new="req_r33")],
+                       "unswept": []}
+        assert acts.emitted == [] and acts.calls == []
+
+    def test_a_records_card_raised_with_alternatives_is_left_naming_the_command_that_raises_it_again(self):
+        """rail-cards, "A record raised with alternatives": the record's raise refuses, as raise_record_again does."""
+        said = ("crew keeps no copy of record 0032's alternatives, so wldn-design raises it again with "
+                "crew record switchboard-kit 32 --proposed --alternatives <file>")
+
+        def raise_record(fleet, r, acts=None):
+            not r["alternatives"] or crew.fail(said)
+            return "req_r33"
+        out, acts = swept(entries=self.stranded_record(Form="alternatives"), raises={"record": raise_record})
+        assert out["done"] == [dict(label="wldn", key="record/switchboard-kit/0032", card=None, by="wldn-design", did="left",
+                                    words=f"its raise refused: {said}", new=None)]
+        assert acts.emitted == [] and acts.calls == []
+
     def test_a_partition_whose_record_did_not_answer_on_its_branch_here_or_its_main_host_is_not_swept(self):
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"mac-studio": "x"}})
         assert out["unswept"] == [dict(label="wldn", why="its run record did not answer whole, so which cards are open can't be told: mac-studio: x")]

@@ -1871,6 +1871,31 @@ class TestRecordCommand:
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
         assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
 
+    def test_the_sweeps_raise_of_a_record_posts_it_again_from_its_record_saying_an_older_copy_was_lost(self, monkeypatch):
+        """rail-cards, "A record's card left on the host the main level left": the record read with status proposed on
+        the kit's main, as crew record reads it, and its card posted in the design agent's name; one raised with
+        alternatives refused naming the command that raises it again, nothing read or posted."""
+        from test_card_commands import Acts, MATCHED, POSTED
+        where, reads = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), []
+
+        def read(fleet, label, kit, number, status, alternatives=None):
+            reads.append((label, kit, number, status, alternatives))
+            return recorded(MADR, status), where, "abc1234" + "0" * 33, "switchboard runs GitHub's workflows itself"
+        monkeypatch.setattr(plan, "record_read", read)
+        row = dict(label="wldn", key="record/switchboard-kit/0032", group="records", alternatives=False, dead="req_c0")
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
+        assert plan.raise_record_again(None, row, acts) == "req_c1"
+        assert reads == [("wldn", "switchboard-kit", 32, "proposed", None)]
+        sent = next(a for t, a in acts.calls if t == "post_request")
+        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032")
+        assert sent["summary"] == f"{built.DEAD}\n\n" + built.record_card(recorded(MADR, "proposed"))["card"]["summary"]
+        acts = Acts({}, caller="wldn-design")
+        with pytest.raises(crew.Refusal) as e:
+            plan.raise_record_again(None, dict(row, alternatives=True), acts)
+        assert str(e.value) == ("crew keeps no copy of record 0032's alternatives, so wldn-design raises it again with "
+                                "crew record switchboard-kit 32 --proposed --alternatives <file>")
+        assert (acts.calls, len(reads)) == ([], 1)
+
     def test_a_card_pending_you_ended_already_is_recorded_closed_and_followed_never_changed_or_closed_again(self, capsys):
         from test_card_commands import Acts, MATCHED, POSTED
         where, f = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), recorded(MADR, "proposed")

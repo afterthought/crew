@@ -11120,13 +11120,34 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     return {"kit": kit, "number": number, "title": title, "opening": opening, "quoted": quoted, "text": body, "alternatives": alt}
 
 
-def raise_record(fleet, label, facts, where, note, acts=None):
+def raise_record(fleet, label, facts, where, note, acts=None, dead=False):
     """A decision record's card raised in its design agent's name (record 0031 §1, briefs.15), record/<kit>/<number>,
     from the record's facts (record_facts), from where, the kit's checkout on this host and its remote: posted the
     first time, and while the design agent holds it open, changed in place with note, naming the new commit, or once the
-    user has answered it, closed with note and followed by a new card (row_card_change). A
-    refusal is said and recorded and refuses nothing of the status, already recorded. The card's id, or None."""
-    return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts)
+    user has answered it, closed with note and followed by a new card (row_card_change). With dead, an older copy this
+    host can't reach standing, the card is built saying first that it was lost (built_again). A refusal is said and
+    recorded and refuses nothing of the status, already recorded. The card's id, or None."""
+    build = built_again(cards.record_card) if dead else cards.record_card
+    return row_card_change(fleet, label, f"{label}-design", build, facts, note, where, acts)
+
+
+def raise_record_again(fleet, row, acts=None):
+    """The rail's sweep's raise of a decision record's card its design agent's host can't reach (sweep_judged's again,
+    record 0031 §1), for its row of the group records, of which it reads the label, the key record/<kit>/<number> and
+    whether its card offered alternatives: the record read with status proposed as crew record reads it on the kit's
+    main (record_read), and its card posted in the design agent's name saying first that an older copy was lost
+    (raise_record). A card that offered alternatives is refused, since crew keeps no copy of the file they were read
+    from (read.1), naming the crew record command that raises it again; a record whose file no longer holds proposed,
+    or that crew can't read, is refused in record_read's words. The card's id, or None."""
+    m = re.fullmatch(r"record/([a-z0-9][a-z0-9-]*)/(\d{4})", row.get("key") or "")
+    if not m:
+        return None
+    label, kit_, n = row["label"], m.group(1), int(m.group(2))
+    not row.get("alternatives") or fail(
+        f"crew keeps no copy of record {n:04d}'s alternatives, so {label}-design raises it again with "
+        f"crew record {kit_} {n} --proposed --alternatives <file>")
+    facts, where, sha, subject = record_read(fleet, label, kit_, n, "proposed")
+    return raise_record(fleet, label, facts, where, f"Raised again at {sha[:7]}: {subject}", acts, dead=True)
 
 
 def record_card_close(fleet, label, owner, obj, outcome, acts=None):
@@ -11138,25 +11159,59 @@ def record_card_close(fleet, label, owner, obj, outcome, acts=None):
     return [c for c in (row_card_close(fleet, label, owner, k, outcome=outcome, acts=acts) for k in keys) if c]
 
 
+def record_kit(fleet, label, name):
+    """The kit of a partition's teams named name, read from the teams file alone (code.5); refused naming the kits it
+    takes."""
+    kits = {k["name"]: k for t in crew.partition_of(fleet, label)["teams"] for k in crew.kits_of(fleet["teams"][t])}
+    name in kits or fail(f"crew record takes a kit of {label}'s, " + (f"{either(sorted(kits))}, not {name}." if kits else
+                                                                     f"and no team of {label} builds one."))
+    return kits[name]
+
+
+def record_read(fleet, label, kit_, number, status, alternatives=None):
+    """A decision record as crew record reads it (briefs.15): the kit's docs/adr/<number>-*.md on its main now, GitHub's
+    after a fetch for a kit with an origin (kit.main_now, plan.18), read in this host's checkout of the kit, at the
+    last commit that changed it, and its facts with the status and alternatives text given (record_facts). (facts,
+    where, the commit, its subject), where as card_where gives it for the checkout; refused when the checkout, main,
+    the one file or the status it holds can't be read (read.1)."""
+    here, k, n = crew.this_host(), record_kit(fleet, label, kit_), f"{number:04d}"
+    checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
+
+    def git(*args):
+        r = subprocess.run(["git", "-C", checkout, *args], capture_output=True, text=True)
+        r.returncode == 0 or fail(f"git {args[0]} in {checkout} failed: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
+        return r.stdout
+    # The record as the kit's main holds it now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18).
+    r = subprocess.run(["bash", "-c", MAIN, "crew", checkout], capture_output=True, text=True, env=gitenv())
+    r.returncode == 0 or fail(f"{checkout} could not be read: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
+    _, now, why = kit.main_now(r.stdout, kit_, here)
+    not why or fail(why)
+    files = [f for f in git("ls-tree", "--name-only", now, "docs/adr/").splitlines() if re.fullmatch(rf"docs/adr/{n}-[^/]*\.md", f)]
+    len(files) == 1 or fail(f"{kit_}'s main holds " + (f"no record {n} in docs/adr/" if not files else
+                                                         f"{len(files)} records numbered {n}: {', '.join(files)}") + ", so crew records nothing.")
+    commits = [l.split("\t", 1) for l in git("log", "-2", "--format=%H\t%s", now, "--", files[0]).splitlines()]
+    sha, subject = commits[0]
+    facts = record_facts(kit_, number, git("show", f"{sha}:{files[0]}"), status,
+                         git("show", f"{commits[1][0]}:{files[0]}") if len(commits) > 1 else None, alternatives)
+    return facts, card_where(dict(k, main=checkout)), sha, subject
+
+
 def record_status(fleet, a):
     """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"]
     [--alternatives <file>] [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031
-    §1). The kit is one of the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
-    its main now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18), read in this host's checkout
-    of the kit, at the last commit that changed it, read where the
-    partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
-    alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
-    record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
-    changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane, in the
-    words --excerpt gives, which crew reads in the caller's own transcript on this host as the user's before it
-    reads the kit (settled_refusal), whoever the caller is (roles.2), and records naming the transcript record and the words' length, never the words
-    (record.3), raising nothing; --alternatives makes the card the choice a rule decided; and --accepted or
-    --rejected closes the card with the commit, under either key form (record_card_close)."""
+    §1). The kit is one of the partition's teams', read from the teams file alone (code.5); the record is read as
+    record_read reads it, where the partition's main level runs. A status its file does not hold there is refused,
+    naming what it holds, and so is an alternatives file crew can't read, with nothing recorded. Else record.<status>
+    is recorded on record/<kit>/<number> with that commit; then --proposed raises the record's card in the design
+    agent's name, or changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in
+    the pane, in the words --excerpt gives, which crew reads in the caller's own transcript on this host as the user's
+    before it reads the kit (settled_refusal), whoever the caller is (roles.2), and records naming the transcript
+    record and the words' length, never the words (record.3), raising nothing; --alternatives makes the card the
+    choice a rule decided; and --accepted or --rejected closes the card with the commit, under either key form
+    (record_card_close)."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
     p = crew.partition_of(fleet, label)
-    kits = {k["name"]: k for t in p["teams"] for k in crew.kits_of(fleet["teams"][t])}
-    a.kit in kits or fail(f"crew record takes a kit of {label}'s, " + (f"{either(sorted(kits))}, not {a.kit}." if kits else
-                                                                      f"and no team of {label} builds one."))
+    k = record_kit(fleet, label, a.kit)
     0 < a.number < 10000 or fail(f"a record's number is its one to four digits, not {a.number}")
     a.status == "proposed" or not (a.settled_in_pane or a.alternatives) or fail(
         f"--settled-in-pane and --alternatives go with --proposed: a record {a.status} closes its card")
@@ -11166,37 +11221,20 @@ def record_status(fleet, a):
         "--settled-in-pane needs --excerpt \"<the user's yes, as they wrote it in your pane>\": crew reads it in your transcript")
     a.excerpt is None or a.settled_in_pane or fail(
         "--excerpt goes with --settled-in-pane: the words are the user's yes, given in your pane")
-    here, k, n = crew.this_host(), kits[a.kit], f"{a.number:04d}"
+    here, n = crew.this_host(), f"{a.number:04d}"
     p["machine"] == here or fail(f"crew record runs on {p['machine']}, where {label}'s design agent holds its records' cards")
     v = sid = None
     if a.settled_in_pane:
         v, sid = CardActs(fleet).heard(a.excerpt)
         why = settled_refusal(a.number, a.kit, v)
         not why or fail(why)
-    checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
     alternatives = None
     if a.alternatives:
         try:
             alternatives = pathlib.Path(a.alternatives).read_text()
         except (OSError, UnicodeDecodeError) as e:
             fail(f"crew can't read the alternatives file {a.alternatives}: {getattr(e, 'strerror', None) or e}. Nothing is raised.")
-
-    def git(*args):
-        r = subprocess.run(["git", "-C", checkout, *args], capture_output=True, text=True)
-        r.returncode == 0 or fail(f"git {args[0]} in {checkout} failed: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
-        return r.stdout
-    # The record as the kit's main holds it now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18).
-    r = subprocess.run(["bash", "-c", MAIN, "crew", checkout], capture_output=True, text=True, env=gitenv())
-    r.returncode == 0 or fail(f"{checkout} could not be read: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
-    _, now, why = kit.main_now(r.stdout, a.kit, here)
-    not why or fail(why)
-    files = [f for f in git("ls-tree", "--name-only", now, "docs/adr/").splitlines() if re.fullmatch(rf"docs/adr/{n}-[^/]*\.md", f)]
-    len(files) == 1 or fail(f"{a.kit}'s main holds " + (f"no record {n} in docs/adr/" if not files else
-                                                           f"{len(files)} records numbered {n}: {', '.join(files)}") + ", so crew records nothing.")
-    commits = [l.split("\t", 1) for l in git("log", "-2", "--format=%H\t%s", now, "--", files[0]).splitlines()]
-    sha, subject = commits[0]
-    facts = record_facts(a.kit, a.number, git("show", f"{sha}:{files[0]}"), a.status,
-                         git("show", f"{commits[1][0]}:{files[0]}") if len(commits) > 1 else None, alternatives)
+    facts, where, sha, subject = record_read(fleet, label, a.kit, a.number, a.status, alternatives)
     key, settled = f"record/{a.kit}/{n}", a.status == "proposed" and a.settled_in_pane
     frm = [f"session/{sid}/{v.uuid or f'line-{v.line_hash()[:16]}'}"] if settled else []
     record.emit(label, f"record.{a.status}", [key], frm=frm, commit=[f"{k['repo']}@{sha}"],
@@ -11205,7 +11243,7 @@ def record_status(fleet, a):
     if a.status != "proposed":
         record_card_close(fleet, label, f"{label}-design", key, f"{a.status.capitalize()} at {sha[:7]}")
     elif not settled:
-        raise_record(fleet, label, facts, card_where(dict(k, main=checkout)), f"Revised at {sha[:7]}: {subject}")
+        raise_record(fleet, label, facts, where, f"Revised at {sha[:7]}: {subject}")
 
 
 # ------------------------------------------------------------------------------- the rail's sweep of the cards
