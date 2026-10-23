@@ -100,6 +100,22 @@ def renew_ready(status, asking, unread, own):
     return True, None
 
 
+def renew_exited(holds, unread, marked, session, down):
+    """Whether a restart for an update starts an agent it finds not up, with no stop (teams.19): only one an earlier
+    restart's keys ended, from facts: whether herdr lists its pane with an agent in it (pane_holds: False for none,
+    None when unread), what crew could not read of the pane, the session an earlier restart that could not see it exit
+    typed its exit into (its mark, None when none), the session of its last start, and whether its team, main level or
+    dispatcher was taken down. An agent the user ended by hand, or one a crash took, has no mark naming its session and
+    stays crew revive's. Returns (start, why not)."""
+    if down:
+        return False, "it was taken down; it stays down"
+    if unread:
+        return False, f"crew can't tell whether its pane holds it: {unread}"
+    if holds is False and marked and marked == session:
+        return True, None
+    return False, "it is not up"
+
+
 def renew_notice(was, now, changes):
     """What an agent restarted for an update is told: the crew it started on and the one it runs now, what changed
     there for it, and that its background waits ended with the restart."""

@@ -138,6 +138,29 @@ class TestRenew:
         assert hold.renew_ready(None, False, None, []) == (False, "it is not up")
         assert hold.renew_ready("idle", False, "no transcript", []) == (False, "crew can't tell what it is doing: no transcript")
 
+    def test_an_agent_not_up_is_started_with_no_stop_only_when_an_earlier_restarts_keys_ended_it(self):
+        # swancloud-operator and fwn-1-conductor exited within a minute of their restarts giving up on deneb, and their
+        # panes stood as shells for nine hours (signal 2026-10-23-chuck-mac-studio-8d53f475/01).
+        assert hold.renew_exited(False, None, "sid-1", "sid-1", False) == (True, None)
+
+    def test_an_agent_no_restart_gave_up_on_is_not_up_and_left_to_crew_revive(self):
+        assert hold.renew_exited(False, None, None, "sid-1", False) == (False, "it is not up")
+        assert hold.renew_exited(False, None, "", "sid-1", False) == (False, "it is not up")
+
+    def test_a_mark_of_another_session_is_stale_and_read_as_not_up(self):
+        assert hold.renew_exited(False, None, "sid-0", "sid-1", False) == (False, "it is not up")
+        assert hold.renew_exited(False, None, "sid-1", None, False) == (False, "it is not up")
+
+    def test_a_pane_herdr_lists_an_agent_in_is_not_started_over(self):
+        assert hold.renew_exited(True, None, "sid-1", "sid-1", False) == (False, "it is not up")
+
+    def test_an_agent_taken_down_stays_down(self):
+        assert hold.renew_exited(False, None, "sid-1", "sid-1", True) == (False, "it was taken down; it stays down")
+
+    def test_a_pane_crew_cannot_read_starts_nothing_and_says_why(self):
+        assert hold.renew_exited(None, "herdr lists no pane w1:p2, which crew keeps for swb-1-ops", "sid-1", "sid-1", False) == (
+            False, "crew can't tell whether its pane holds it: herdr lists no pane w1:p2, which crew keeps for swb-1-ops")
+
     def test_a_restarted_agent_is_told_the_crew_it_started_on_the_one_it_runs_now_and_what_changed(self):
         said = hold.renew_notice("v0.12.1", "v0.13.0", ["feat(teams): a host is held", "fix(board): x"])
         assert said.startswith("crew restarted you on crew v0.13.0 (you started on v0.12.1), so your brief and crew's plugin are as they now stand. "
