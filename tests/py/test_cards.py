@@ -472,22 +472,17 @@ class TestSessions:
         acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None), "cancel_request": (None, "Too many requests.")}, held)
         assert plan.row_card_close(None, "wldn", "wldn-planner", "batch/3", outcome="Read; no notes", acts=acts) is None
         assert acts.ended == []
-        landing = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
-        acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None)}, landing)
-        assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="held for a fix: The zone list misses one zone.",
-                                   acts=acts) == "req_l1"
-        assert acts.ended == [("wldn", "land/b1")]
-        assert capsys.readouterr().out.splitlines()[-2:] == ["card land/b1: req_l1 withdrawn", "ended land/b1's session, plannotator pid 42"]
 
-    def test_a_landing_cards_close_releases_its_preview_whatever_became_of_the_card_and_no_other_cards_does(self, capsys):
-        """rail-cards "The bolt lands" and "A fix holds the landing": the preview crew asked for goes with the card."""
+    def test_a_landing_cards_close_ends_neither_its_reading_nor_its_preview_and_no_other_cards_releases_one(self, capsys):
+        """rail-cards "The bolt lands" and "A fix holds the landing": a bolt's reading and preview go with its row on its
+        kit's landings card (land_end), never with a card of the bolt's own closed under its key."""
         landing = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
         released = "released land/b1's preview of abc1234, preview/0123456789ab"
         for answers in ({"get_request": ({"status": "pending", "version": 1}, None)},
                         {"get_request": ({"status": "pending", "version": 1}, None), "cancel_request": (None, "Too many requests.")}):
             acts = ReadingActs(answers, landing, released=released)
             plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="held for a fix: The zone list misses one zone.", acts=acts)
-            assert acts.releases == [("wldn", "land/b1")] and capsys.readouterr().out.splitlines()[-1] == released
+            assert (acts.ended, acts.releases) == ([], []) and released not in capsys.readouterr().out
         acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None)},
                            [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}])
         plan.row_card_close(None, "wldn", "wldn-planner", "batch/3", outcome="Read; no notes", acts=acts)
@@ -948,7 +943,8 @@ class TestSessionWords:
         assert plan.land_waited("land/y", ("dismissed", None, None), True) == "land/y: closed in plannotator with no decision"
         assert plan.land_waited("land/y", None, True) is None
         assert plan.land_waited("land/y", None, True, gone=True) == "land/y: the session ended with no decision"
-        assert plan.land_waited("land/y", None, False) == "land/y: crew ended its session, as its card closed or crew card end was run"
+        assert plan.land_waited("land/y", None, False) == (
+            "land/y: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run")
 
     @pytest.mark.parametrize("recorded, held, refused, step, words", [
         (True, False, None, "wait", None),

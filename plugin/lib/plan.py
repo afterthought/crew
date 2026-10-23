@@ -2393,8 +2393,8 @@ def landing_preview(fleet, t, label, bolt, card, acts):
 
 
 def land_end(fleet, label, bolt):
-    """A bolt's reading and its preview ended on this, its team's, host, as a card's close ends them (row_card_close):
-    what each said, printed."""
+    """A bolt's reading and its preview ended on this, its team's, host, with its row on its kit's landings card, held or
+    gone, which no close of a card of the bolt's own ends (row_card_close): what each said, printed."""
     acts = CardActs(fleet)
     for said in (acts.end(label, f"land/{bolt}"), acts.release_preview(label, f"land/{bolt}")):
         if said:
@@ -10143,9 +10143,9 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     for l, _, _, plan in found:
         if not plan:
             continue
-        rowed = {r["key"] for r in rows if r["label"] == l} | {f"land/{b['bolt']}" for r in rows if r["label"] == l and r["group"] == "land"
-                                                               for b in r.get("bolts", []) if b["can"]}  # each row's reading and preview
-        judged = json.dumps(sweep_judgment(l, rowed, cards, unread.get(l), batched.get(l, {})))
+        readings = {f"land/{b['bolt']}" for r in rows if r["label"] == l and r["group"] == "land" for b in r.get("bolts", []) if b["can"]}
+        rowed = {r["key"] for r in rows if r["label"] == l} | readings  # each row's, and each landing row's reading and preview
+        judged = json.dumps(sweep_judgment(l, rowed, cards, unread.get(l), batched.get(l, {}), readings))
         for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
             if h in sv and not sv[h]["ok"]:
                 unchecked.append(dict(label=l, host=h, why=f"did not answer ({sv[h]['error']})"))
@@ -10172,13 +10172,15 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     return ended, unchecked
 
 
-def sweep_judgment(label, rowed, cards, unread, batched):
+def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
     """The rail's judgment a card sweep acts on (read.1): live, every row key of the partition less each the run record
-    holds as closed with no card open under it; blind, the key prefixes it can't judge, batch/ while the record did not
-    answer whole, when no key is taken out for being closed either."""
+    holds as closed with no card open under it, and every reading of a bolt that is a row of its kit's landings card,
+    land/<bolt> (readings), whatever card of the bolt's own was closed under that key before, which is no word on the
+    row; blind, the key prefixes it can't judge, batch/ while the record did not answer whole, when no key is taken out
+    for being closed either."""
     closed = set() if unread else batched.get("closed", set()) - {c["key"] for c in cards if c["label"] == label}
     blind = ["batch/"] if unread else []
-    return {"live": sorted(rowed - closed), "blind": sorted(blind)}
+    return {"live": sorted((rowed - closed) | set(readings)), "blind": sorted(blind)}
 
 
 def rail_read(fleet, labels, board=False, sweep=False):
@@ -10982,11 +10984,14 @@ def card_wait(fleet, a):
     made before the wait began is printed at once. A session crew ended, its card closed, is said so. A batch card's,
     batch/<n>, waits on the card and its one session together, on the main level's host (batch_wait); an old batch
     card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. A landing's, land/<bolt>, waits on
-    its reading alone, on the team's host: its decision is notes on the landing card and never the word to land
-    (land_waited), and once it is printed the session is forgotten (reading_decided), so the next crew card session
-    starts it anew; the card is left as it is. With no session of its own while the bolt's conductor holds its card,
-    the raise having failed to open it or a wait having forgotten it, it starts the reading as crew card session does
-    and waits on it (land_start). Refused for any other key with no session started."""
+    its reading alone, on the team's host: its decision is notes on the bolt's row of its kit's landings card and never
+    the word to land (land_waited), and once it is printed the session is forgotten (reading_decided), so the next crew
+    card session starts it anew; the card is left as it is. The reading stays up while the bolt is a row of that card,
+    until the row is held or leaves it (land_end) or crew card end is run, and no close of a card of the bolt's own,
+    land/<bolt> or land/<bolt>/<head> as its conductor posted one before, ends it (row_card_close, sweep_judgment).
+    With no session of its own while the bolt is a row, the raise having failed to open it or a wait having forgotten
+    it, it starts the reading as crew card session does and waits on it (land_start). Refused for any other key with no
+    session started."""
     label, d = card_of(fleet, a)
     if a.key.startswith("batch/") and not old_batch(a.key):
         return batch_wait(fleet, label, a.key, d)
@@ -11187,13 +11192,16 @@ def waited(name, decided, recorded, gone=False):
 def land_waited(name, decided, recorded, gone=False):
     """What a wait on a landing's reading says once it ends (card-sessions, briefs.9): its annotations, with the user's
     words as plannotator gives them, as notes on the landing card; an approval, with any words after it, as landing
-    nothing, the card's approval being the word to land; anything else as waited says it. None while it runs
-    undecided."""
+    nothing, the card's approval being the word to land; a reading crew ended (no longer recorded) as ended with its
+    row or by crew card end, which no card's close does (row_card_close); anything else as waited says it. None while
+    it runs undecided."""
     words = f"\n{decided[1].rstrip(chr(10))}" if decided and decided[1] else ""
     if decided and decided[0] == "annotated":
         return f"{name}: notes from its reading, as notes on the landing card:" + words
     if decided and decided[0] == "approved":
         return f"{name}: approved in its reading, which lands nothing: the card's approval is the word to land" + words
+    if not decided and not recorded:
+        return f"{name}: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run"
     return waited(name, decided, recorded, gone)
 
 
@@ -11995,19 +12003,14 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
     refusal said and recorded as the close refused, neither refusing the event. The key's reading session on this
     host ends with the card, closed, lost or held by nobody, and stays while a refused close leaves the card open
-    (card-sessions); a landing's preview crew asked for is released whatever became of the card, since the event that
-    closes it, the bolt landed or held for a fix, is over that head (rail-cards). more, fields the close's entry carries
-    beside crew's own, a kit's landings card's Rows (landings_step). The card's id, or None when none was closed."""
+    (card-sessions). A land/ key ends nothing: a kit's landings card has no reading or preview of its own, and a closed
+    card of a bolt's own, land/<bolt> or land/<bolt>/<head> as a conductor posted one before, is no word on the bolt's
+    row, whose reading and preview end with the row (land_end). more, fields the close's entry carries beside crew's
+    own, a kit's landings card's Rows (landings_step). The card's id, or None when none was closed."""
     acts = acts or CardActs(fleet)
     card = card_closed(acts, label, owner, key, outcome, reason, more)
-    if (land_key(key, acts.kits(label)) or ("",))[0] == "kit":  # a kit's landings card has no reading or preview of its own
-        return card or None
-    if card is not False and key.split("/")[0] in READING:
+    if card is not False and key.split("/")[0] in READING and not key.startswith("land/"):
         said = acts.end(label, key)
-        if said:
-            print(said)
-    if key.startswith("land/"):
-        said = acts.release_preview(label, key)
         if said:
             print(said)
     return card or None

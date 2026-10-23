@@ -452,3 +452,80 @@ def test_crew_land_row_prints_the_row_as_one_line_of_json(monkeypatch, capsys):
     plan.land_row_cmd(FLEET, argparse.Namespace(label="swancloud", bolt="y", json=True))
     out, err = capsys.readouterr()
     assert (out, err) == ('{"bolt": "y", "why": "no"}\n', "ended land/y's session\n")
+
+
+# --------------------------------------------------------------------- a row's reading ends with its row, not a card
+
+class OldCardActs(LandActs):
+    """LandActs where a reading and a preview would end: each end and release asked, recorded."""
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.ended, self.released = [], []
+
+    def end(self, label, key):
+        self.ended.append(key)
+        return f"ended {key}'s session"
+
+    def release_preview(self, label, key):
+        self.released.append(key)
+        return f"released {key}'s preview"
+
+
+@pytest.mark.parametrize("key", ["land/y", "land/y/abc1234"])
+@pytest.mark.parametrize("answers", [{"get_request": ({"status": "pending", "version": 1}, None)},
+                                     {"get_request": ({"status": "answered", "version": 2}, None)}])
+def test_an_old_card_of_a_bolts_own_closed_ends_neither_its_rows_reading_nor_its_preview(key, answers, capsys):
+    """A closed card of the old per-bolt form is no word on the bolt's row: its reading and preview end with the row
+    (land_end), whether crew withdrew the card waiting on the user or closed one they answered."""
+    acts = OldCardActs({}, entries=[dict(Act="card.post", Key=key, By="crw-1-conductor", Card="req_l1", On=["bolt/y"])], answers=answers)
+    assert plan.row_card_close(None, "swancloud", "crw-1-conductor", key, reason="y is now a row of crew's landings card", acts=acts) == "req_l1"
+    assert (acts.ended, acts.released) == ([], [])
+    assert "ended" not in capsys.readouterr().out
+
+
+def test_the_sweep_keeps_a_rows_reading_live_though_a_card_of_the_bolts_own_was_closed_under_its_key():
+    """sweep_judgment: y is a row of crew's landings card and its old land/y card was withdrawn, no card open under it;
+    a batch closed with no card open is still taken out, and so is a reading whose bolt is no row."""
+    closed = {"closed": {"land/y", "land/w", "batch/3"}}
+    assert plan.sweep_judgment("swancloud", {"land/crew", "land/y", "batch/3"}, [], None, closed, {"land/y"}) == {
+        "live": ["land/crew", "land/y"], "blind": []}
+    assert plan.sweep_judgment("swancloud", {"land/crew"}, [], None, closed, set())["live"] == ["land/crew"]
+
+
+def test_a_wait_whose_reading_crew_ended_says_it_ended_with_its_row_or_crew_card_end():
+    assert plan.land_waited("land/y", None, False) == (
+        "land/y: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run")
+
+
+class TestWaitAcrossAnOldCardsClose:
+    """crew card wait land/y while y is a row of crew's landings card, its reading recorded, and y's old land/y card is
+    withdrawn by the rail's sweep meanwhile: the wait goes on, and returns the notes the user then sends."""
+    FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio", "teams": ["crw-1"]}},
+             "teams": {"crw-1": FLEET["teams"]["crw-1"]}, "hosts": {}}
+    S = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio:19432/y", "started": "2026-10-23T10:00:00Z"}
+
+    def test_the_wait_outlasts_the_close_and_returns_the_readings_notes(self, monkeypatch, tmp_path, capsys):
+        d = tmp_path / "swancloud" / "land/y"
+        d.mkdir(parents=True)
+        (d / "session.json").write_text(json.dumps(self.S))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "plannotator_sessions", lambda: (None, "plannotator sessions did not answer in 8 seconds"))
+        acts = LandActs({}, entries=[dict(Act="card.post", Key="land/y", By="crw-1-conductor", Card="req_l1", On=["bolt/y"])],
+                        answers={"get_request": ({"status": "pending", "version": 1}, None)})
+        acts.end = lambda label, key: plan.end_session(label, key)[0]
+        acts.release_preview = lambda label, key: plan.fail(f"{key}'s preview released at its old card's close")
+        polls = []
+
+        def poll(seconds):
+            polls.append(seconds)
+            if len(polls) == 1:
+                plan.row_card_close(None, "swancloud", "crw-1-conductor", "land/y", reason="y is now a row of crew's landings card", acts=acts)
+            else:
+                (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "y: say what the zone is."}))
+        monkeypatch.setattr(plan.time, "sleep", poll)
+        plan.card_wait(self.FLEET, argparse.Namespace(key="land/y", unit=None, label="swancloud", sub="wait"))
+        assert capsys.readouterr().out.splitlines()[-2:] == [
+            "land/y: notes from its reading, as notes on the landing card:", "y: say what the zone is."]
+        assert len(polls) == 2 and not (d / "session.json").exists() and (d / "result.20261023T100000Z.json").exists()

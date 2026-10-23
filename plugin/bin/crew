@@ -173,7 +173,8 @@
 #                                      and its approval as landing nothing, leaving the card, starting the reading
 #                                      first when none runs while the bolt is a row that can land, refused naming crew
 #                                      card session land/<bolt> when it will not open; end ends it, as the card's
-#                                      close does
+#                                      close does, and a bolt's reading as its row's end does, which no close of a
+#                                      card of the bolt's own does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use
