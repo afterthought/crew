@@ -48,15 +48,15 @@ expect_ok crew unit amend b "Unit b, said again."
 has "$out" "construct on unit b is handed to $box, where it starts again: swb-1-conductor is told what started, and crew unit wait b waits for it"
 lacks "$out" "swb-1-unit-2 has b"
 until_ok eval '[[ $(told swb-1-conductor) == *"construct runs again on it in swb-1-unit-2"* ]]' || fail "the handed construct never told the conductor"
-eq "$(git --git-dir "$ws" log -2 --format=%s wldn/main)" "plan(tenant-environments): b amended, construct runs again ($me@mac-studio)
+eq "$(git --git-dir "$ws" log -2 --format=%s --invert-grep --grep='^runs(' wldn/main)" "plan(tenant-environments): b amended, construct runs again ($me@mac-studio)
 plan(tenant-environments): amend b ($me@mac-studio)"
 eq "$(plan -t Unit -e "Unit = 'b'" -P Amended)" "$(git -C "$k" rev-parse unit/b)"
 has "$(prompt_to swb-1-unit-2)" "'/opsx:propose b Unit b, said again. This unit'\"'\"'s intent was amended by the user; revise the existing change to it."
 has "$(told swb-1-conductor)" "intent was amended by the user, and construct runs again on it in swb-1-unit-2: wait for it (crew unit wait b)"
 eq "$(field $box stage.start By stage/b/construct)" "$me@mac-studio"
 eq "$(field $box stage.start Amended stage/b/construct)" "yes"
-eq "$(field $box stage.start Commit stage/b/construct)" "WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
-has "$(git --git-dir "$ws" log -1 --format=%B wldn/main)" "Crew-Entry: $(field $box stage.start Id stage/b/construct)"
+eq "$(field $box stage.start Commit stage/b/construct)" "WilldanGroup/crew-state@$(act_tip)"
+has "$(git --git-dir "$ws" log -1 --format=%B "$(act_tip)")" "Crew-Entry: $(field $box stage.start Id stage/b/construct)"
 echo "Said again." >> "$kd/places/b/openspec/changes/b/design.md"; commit_all "$kd/places/b" "docs(b): written again"
 export CREW_AGENT=swb-1-conductor
 handed=$(home_of $box)/.local/state/swb-1-team/handed/b
@@ -69,5 +69,5 @@ expect_ok crew unit wait b
 has "$out" "swb-1-unit-2 delivered construct on b"
 eq "$(plan -t Unit -e "Unit = 'b'" -P Amended)" ""
 eq "$(subject)" "plan(tenant-environments): b constructed again, its mark cleared (swb-1-conductor)"
-git --git-dir "$ws" show "wldn/main:runs/$box/$(date -u +%F).rec" | grep -q "^Act: stage.end" || fail "the write that clears the mark carries no construct end"
+git --git-dir "$ws" show "wldn/main:runs/$box/$(date -u +%F).rec" | grep -q "^Act: stage.end" || fail "the construct's end is not on the branch"
 ok "the user's amendment marks the unit and answers once its construct is handed to the team's host, which runs it again in their name and tells the conductor; a stage is refused while it starts, a wait says why it did not, and the wait that ends it clears the mark"

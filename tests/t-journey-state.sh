@@ -172,7 +172,7 @@ mv "$(home_of $box)/.local/state/crew/wldn" "$T/box-record-lost"
 emit $box --act unit.add --on unit/y --on queue/switchboard-kit --why "plan(queue): add y" >/dev/null
 HOST=$box expect_ok crew events --push
 eq "$(onbranch $box | wc -l | tr -d ' ')" "$(( $(wc -w <<<"$carried") + 1 ))"
-ok "a host that lost its run record after carrying keeps its entries on the branch, and adds new ones beside them"
+ok "a host that lost its run record after pushing it keeps its entries on the branch, and adds new ones beside them"
 
 cache=$(home_of mac-studio)/.cache/crew/git/WilldanGroup/crew-state.git
 rm -f "$cache/FETCH_HEAD"; : > "$CREW_TEST_LOG"

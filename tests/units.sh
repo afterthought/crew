@@ -29,7 +29,7 @@ slots=$(home_of $box)/.local/state/swb-1-team/slots
 stages=$(home_of $box)/.local/state/swb-1-team/stages
 reports=$(home_of $box)/.local/state/swb-1-team/reports
 plan() { git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
-subject() { git --git-dir "$ws" log -1 --format=%s wldn/main; }
+subject() { git --git-dir "$ws" log -1 --format=%s "$(act_tip)"; }
 short() { git -C "$k" rev-parse --short "$1"; }
 pane() { herdr_state $box wldn-1 ".agents | to_entries[] | select(.value.name == \"$1\") | .key"; }
 status() { as $box herdr --session wldn-1 stub status "$(pane "$1")" "$2"; }

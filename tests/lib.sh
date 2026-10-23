@@ -179,6 +179,12 @@ world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
 state_repo() { local r; r=$(remote "$1"); mkdir -p "$(dirname "$r")"; [ -d "$r" ] || git init -q --bare "$r"; }
 
 commit_all() { git -C "$1" add -A && git -C "$1" commit -qm "${2:-wip}"; }
+# act_tip [<ref>] [<git dir>]: the newest commit of a state branch, wldn/main of $ws unless named, that is an act's and
+# no run-record entry's own, which follows each act on the branch as a commit of its own (read.5)
+act_tip() { git --git-dir "${2:-$ws}" log -1 --format=%H --invert-grep --grep='^runs(' "${1:-wldn/main}"; }
+# acts_since <commit> [<ref>] [<git dir>]: how many acts' commits the state branch holds since the commit, its entries'
+# own commits left out
+acts_since() { git --git-dir "${3:-$ws}" rev-list --count --invert-grep --grep='^runs(' "$1..${2:-wldn/main}"; }
 # rewrite <file> <sed script>: the file edited in place, alike under macOS's sed and the GNU sed devenv's shell puts first
 rewrite() { sed -e "$2" "$1" > "$1.new" && mv "$1.new" "$1"; }
 

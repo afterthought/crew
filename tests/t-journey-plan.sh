@@ -18,7 +18,7 @@ export CREW_LABEL=wldn
 box=chuck-herdr-alpha
 plan() { git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
 props() { git --git-dir "$ws" show wldn/main:proposals.rec > "$T/p.rec"; recsel -C "$@" "$T/p.rec"; }
-tip() { git --git-dir "$ws" rev-parse wldn/main; }
+tip() { act_tip; }
 last() { props -t Proposal -P Proposal | tail -1; }
 prompts() { grep "^$box wldn-1 agent prompt $1-conductor " "$CREW_TEST_LOG" || true; }
 told_planner() { grep -F "agent prompt wldn-planner '[crew] $1" "$CREW_TEST_LOG" || true; }
@@ -72,7 +72,7 @@ has "$out" "card proposal/1: req_stub-1 https://www.pendingyou.com/app/r/req_stu
 eq "$(tail -1 <<<"$out")" "call get_request (requestId req_stub-1, name wldn-planner)"
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v "^runs/")" "proposals.rec"
 eq "$(props -t Proposal -P Proposal,State,By)" $'1\nopen\nwldn-planner'
-eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(proposal 1): propose: new bolt deploy-checks, add a-plan-only-deploy-is-checked to deploy-checks, move queued-one to deploy-checks (wldn-planner)"
+eq "$(git --git-dir "$ws" log -1 --format=%s "$(act_tip)")" "plan(proposal 1): propose: new bolt deploy-checks, add a-plan-only-deploy-is-checked to deploy-checks, move queued-one to deploy-checks (wldn-planner)"
 expect_ok crew plan proposed 1
 has "$out" "# Proposal 1 — open, by wldn-planner"
 has "$out" 'Runs: `crew unit move queued-one deploy-checks`'
@@ -99,14 +99,14 @@ eq "$(tail -1 <<<"$out")" "card proposal/2: req_stub-1 withdrawn"
 grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was told of its own approval"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -P Unit | head -1)" "zone-first"
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v '^runs/')" $'plan.rec\nproposals.rec'
-eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
+eq "$(acts_since "$before")" "1"
 ok "a proposal touching a held bolt tells its conductor, waits for its recorded agreement, changing its card, and is applied in one commit"
 
 before=$(tip); : > "$CREW_TEST_LOG"
 CREW_AGENT= expect_ok crew plan approve 1
 has "$(told_planner "Proposal 1 was approved by $me@mac-studio.")" "Applied: added a-plan-only-deploy-is-checked and queued-one; 1 other change."
 has "$out" "card proposal/1: req_stub-1 withdrawn"
-eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
+eq "$(acts_since "$before")" "1"
 eq "$(plan -t Unit -e "Bolt = 'deploy-checks'" -P Unit)" $'a-plan-only-deploy-is-checked\nqueued-one'
 eq "$(field $box unit.add From unit/zone-first)" "proposal/2"
 has "$(field $box unit.add Commit unit/zone-first)" "WilldanGroup/crew-state@"
@@ -164,10 +164,10 @@ crew plan propose "$(proposal 'Case: Two units replace one.' 'Do: unit drop a-dr
 n=$(last); before=$(tip)
 expect_ok crew plan approve "$n" --clear c-clear
 has "$out" "proposal $n is approved and applied, without c-clear"
-eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
+eq "$(acts_since "$before")" "1"
 eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit)" "b-keep"
 eq "$(props -t Proposal -e "Proposal = $n" -P Cleared)" "c-clear"
-has "$(git --git-dir "$ws" log -1 --format=%b wldn/main)" "Left out: c-clear"
+has "$(git --git-dir "$ws" log -1 --format=%b "$(act_tip)")" "Left out: c-clear"
 crew plan propose "$(proposal 'Case: Two more units.' 'Do: unit add f-1 "One." --bolt clears' 'Do: unit add f-2 "Two." --bolt clears')" >/dev/null
 n=$(last)
 expect_ok crew plan answer "$n" rows-1 add:f-1 --note "split f-1 in two later"
@@ -261,7 +261,7 @@ eq "$(git --git-dir "$ws" log --format='%s' "$before"..wldn/main | grep -v '^run
 eq "$(git --git-dir "$ws" rev-list --merges wldn/main | wc -l | tr -d ' ')" "0"
 race WilldanGroup/crew-state chuck-herdr-alpha "" unit drop b-keep "the portal does it"
 expect_fail "no unit b-keep in wldn/main of WilldanGroup/crew-state" crew unit move b-keep console-pages
-has "$out" "$(git --git-dir "$ws" log -1 --format='%h %s' wldn/main) removed it"
+has "$out" "$(git --git-dir "$ws" log -1 --format='%h %s' "$(act_tip)") removed it"
 eq "$(git -C "$(home_of mac-studio)/.cache/crew/git/WilldanGroup/crew-state.git" rev-parse --is-bare-repository)" "true"
 ok "two racing writes both land, one after the other, never merged; a write whose unit was dropped meanwhile is refused, naming that commit"
 
@@ -276,6 +276,6 @@ chmod +x "$as/hooks/post-receive"; : > "$T/pushes"
 race afterthought/crew-state chuck-herdr-alpha swancloud-design signal move "$greeting" drop --reason "a greeting" --label swancloud
 expect_ok crew bolt new flywheel-loop "The loop runs." --repo flywheel-next --label madswan
 [[ ! -f $T/race ]] || fail "swancloud's write never ran"
-eq "$(sort "$T/pushes" | uniq -c | awk '{print $1, $2}')" $'1 refs/heads/madswan/main\n1 refs/heads/swancloud/main'
+eq "$(sort "$T/pushes" | uniq -c | awk '{print $1, $2}')" $'2 refs/heads/madswan/main\n2 refs/heads/swancloud/main'
 eq "$(git -C "$(home_of mac-studio)/.cache/crew/git/afterthought/crew-state.git" for-each-ref --format='%(refname)' refs/crew/)" "refs/crew/madswan/main"
-ok "two flywheels in one repository write at the same moment, each pushing once, neither fetching the other's branch"
+ok "two flywheels in one repository write at the same moment, each pushing its write and then its entry, neither replayed for the other nor fetching its branch"
