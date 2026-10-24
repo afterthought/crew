@@ -245,7 +245,9 @@ for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bol
   "The bolt's branch goes too, once main holds every commit of it" "a branch holding a commit main lacks is kept and named" \
   "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" \
   "The word to land is also the word for sluice to push main to GitHub: you push nothing, and pull and level no host's checkout" \
-  "records the commit GitHub's main holds" "raises the kit's landings card, which crew closes once every bolt the user ticked has landed or been held" \
+  "records the commit GitHub's main holds" "raises the kit's landings card, which crew closes once every bolt the user ticked on it has landed or been held, or sooner as above" \
+  "or sooner, when another bolt reads proven after their send: then it closes it saying what their send still lands, and a new card follows it asking for the rest" \
+  "and first the bolts a send on an earlier card still lands, whose card closed as the one you read followed it, even while that one waits on the user" \
   "Nothing waits on a host, and no agent is told main moved" \
   "Submit every bolt the user ticked with one command, in the card's order" "bolt submit <bolt> <bolt>... --label wldn" \
   "keyed \`land/<kit>\`, which crew raises in your name" "card read land/<kit> --label wldn" \

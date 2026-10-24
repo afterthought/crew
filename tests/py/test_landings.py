@@ -302,6 +302,76 @@ def test_a_landing_on_the_users_word_in_ops_pane_closes_a_waiting_card_no_row_of
     assert step[:2] == ("change", "Landed on the user's word; y no longer waits to land")
 
 
+def test_a_bolt_proven_after_the_answer_is_no_row_of_it_and_a_new_card_follows_it_with_the_rest():
+    step = plan.landings_step([box("y"), box("z"), box("w")], answered("y@abc1234", "z@abc1234"), ["y"], {"y", "z", "w"})
+    assert step == ("follow", "Landing as you ticked: y. Left: z. Since your send, w reads proven, and the card that "
+                              "follows asks for it.", ["z"], [("y", "abc1234")])
+
+
+def test_a_ticked_bolt_proven_again_at_a_new_head_is_asked_again_rather_than_waited_for():
+    step = plan.landings_step([box("y", H2), box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"})
+    assert step == ("follow", "Landing as you ticked: z. Since your send, y's head is now def5678, and the card that "
+                              "follows asks for it.", [], [("z", "abc1234")])
+    step = plan.landings_step([box("y", H2)], answered("y@abc1234"), ["y"], {"y"})
+    assert step == ("close", "Since your send, y's head is now def5678, and the card that follows asks for it.", [])
+
+
+def test_a_bolt_left_on_the_send_is_ticked_on_the_card_that_follows_once_its_head_moved():
+    step = plan.landings_step([box("z", H2)], answered("y@abc1234", "z@abc1234"), ["y"], {"z"}, landed={"y": "1" * 40})
+    assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z. Since your send, z's head is now "
+                             "def5678, and the card that follows asks for it.", [])
+
+
+def test_the_bolts_a_followed_send_still_lands_are_no_row_of_any_card_after_it_while_their_head_stands():
+    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234"),
+              dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k2", Heads="z@def5678"),
+              dict(Act="card.close", Key="land/crew", By="crw-1-conductor", Card="req_b1", Heads="w@abc1234"),
+              dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k3", Heads="w@abc1234", Refused="x")]
+    sent = plan.landings_sent(closes, "land/crew", "swancloud-ops")
+    assert sent == {"y": "abc1234", "z": "def5678"}
+    rows = [box("y"), box("z"), hold("x"), box("w")]
+    assert plan.rows_unsent(rows, sent) == ([box("z"), hold("x"), box("w")], ["y"])
+    assert plan.rows_unsent([box("y", H2), hold("z")], sent) == ([box("y", H2), hold("z")], [])  # moved, or held
+    assert plan.landings_sent([], "land/crew", "swancloud-ops") == {}
+
+
+def test_a_send_whose_card_followed_before_ops_read_it_is_read_beside_the_card_that_followed():
+    """The card ops reads under land/<kit> is the one that followed: the send it closed still lands its bolts first."""
+    waits = {"status": "pending", "turn": "you"}
+    heads = plan.card_heads("w@abc1234")
+    assert plan.landing_lines("swancloud", waits, heads, ["y"]) == [
+        "  to land on the user's send of an earlier card: y", "  lands them: crew bolt submit y --label swancloud"]
+    sent = {"status": "answered", "turn": "agent", "answer": {"approved": True}}
+    assert plan.landing_lines("swancloud", sent, heads, ["y", "z"]) == [
+        "  to land on the user's send of an earlier card: y and z", "  to land, in the card's order: w",
+        "  lands them: crew bolt submit y z w --label swancloud"]
+    none = {"status": "answered", "turn": "agent", "answer": {"choiceIds": []}}
+    assert plan.landing_lines("swancloud", none, plan.card_heads("w@abc1234 v@abc1234"), ["y"]) == [
+        "  to land on the user's send of an earlier card: y", "  no bolt ticked on this card: nothing of it lands",
+        "  lands them: crew bolt submit y --label swancloud"]
+
+
+def test_what_an_earlier_send_still_lands_leaves_out_the_landed_the_asked_again_and_the_refused_at_its_head():
+    sent = {"y": "abc1234", "z": "abc1234", "x": "abc1234", "v": "abc1234", "u": "abc1234"}
+    refused = {"x": ("abc1234" + "0" * 33, "sluice: conflict in a.py"), "u": ("def5678", "sluice: a check failed")}
+    # v landed and left the plan, z is a row of the card read now at its new head, x was refused at the head sent;
+    # u's refusal was at another head, which holds nothing
+    assert plan.sent_left(sent, plan.card_heads("z@def5678"), {"y", "z", "x", "u"}, refused) == ["y", "u"]
+    assert plan.sent_left({}, [], {"y"}, {}) == []
+
+
+def test_the_read_of_an_earlier_send_reads_the_plan_only_when_one_stands_and_refuses_when_it_cant(monkeypatch):
+    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234")]
+    read = []
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: read.append(label))
+    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", [], []) == [] and not read
+    with pytest.raises(crew.Refusal, match="^swancloud/main could not be read, so what an earlier send on land/crew still lands"):
+        plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, [])
+    bolts = [plan.Rec("Bolt", [("Bolt", "y"), ("Repo", "crew")]), plan.Rec("Bolt", [("Bolt", "q"), ("Repo", "swancloud")])]
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: argparse.Namespace(bolts=lambda: bolts))
+    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, []) == ["y"]
+
+
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():
     step = plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), [], {"y", "z"})
     assert step == ("close", "Sent with no bolt ticked, so nothing lands. Left: y and z.", ["y", "z"])
@@ -471,6 +541,28 @@ def test_one_left_out_closes_the_card_and_a_new_one_follows_it_with_that_bolt_un
     post = next(a for t, a in acts.calls if t == "post_request")
     assert post["follows"] == "req_k1" and post["summary"].startswith("Left on your last send.")
     assert acts.emitted[-1]["Heads"] == "z@abc1234:left"
+
+
+def test_a_bolt_proven_after_the_answer_gets_a_new_card_following_it_and_the_send_still_lands_the_rest(monkeypatch, capsys):
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234")]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"approved": True}}
+    answers = dict(POSTED, get_request=(answer, None), post_request=({"requestId": "req_k2", "version": 1}, None))
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=answers)
+    assert raised(monkeypatch, acts) == "req_k2"
+    said = "Landing as you ticked: y. Since your send, z reads proven, and the card that follows asks for it."
+    assert next(a for t, a in acts.calls if t == "ack_answer")["outcome"] == said
+    assert not [t for t, _ in acts.calls if t == "update_request"]
+    close = next(e for e in acts.emitted if e["Act"] == "card.close")
+    assert (close["Card"], close["Outcome"], close["Heads"], close["Rows"]) == ("req_k1", said, "y@abc1234", "1")
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert (post["follows"], post["title"]) == ("req_k1", "Land the bolt z on crew's main")
+    assert acts.emitted[-1]["Heads"] == "z@abc1234"
+    # y still lands on that send: the card that followed is left as it is, and y joins no card while its head stands
+    again = LandActs({"y": row("y"), "z": row("z")}, acts.held,
+                     answers={"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)})
+    assert raised(monkeypatch, again) == "req_k2"
+    assert [t for t, _ in again.calls] == ["get_request"]
+    assert "card land/crew: y lands on the user's send of an earlier card, so it is no row of this one" in capsys.readouterr().out
 
 
 def test_the_raise_is_handed_to_the_main_machine_as_the_one_asking(monkeypatch, capsys):
