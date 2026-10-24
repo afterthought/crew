@@ -9,7 +9,7 @@
 
 - [x] 2.1 A decision reads, from the run record, the conflict with main recorded for a bolt at its present head, by a wait or by a raise, and none for an older head, a queued submission or an unread forecast (design, Decision 3; Task notes 2.1); passes `tests/py/test_forecast.py`, `tests/suite logic` ending with "0 failed".
 - [x] 2.2 A row forecast to conflict with main, by the card's forecast or the record, or carrying a take-main fix, is held with no box saying it takes main first, and a conflict only with a row above holds nothing (design, Decision 3; Task notes 2.2); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 2.3 The card's raise forecasts every row against main first, holds those taking main first, forecasts the rest among themselves, and keeps the revision it forecast against on the main level's host (design, Decisions 2 and 3; Task notes 2.3); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
+- [x] 2.3 The card's raise forecasts every row against main first, holds those taking main first, forecasts the rest among themselves, and keeps the revision it forecast against on the main level's host (design, Decisions 2 and 3; Task notes 2.3); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
 
 ## 3. The conductor is told the fix
 

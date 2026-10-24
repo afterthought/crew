@@ -174,10 +174,20 @@ def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():
     assert got == {"y": [], "z": [("y", ["plugin/lib/plan.py"])]}
 
 
-def test_a_bolt_behind_main_names_main_first():
-    paths = {("y", "main"): ["README.md"], ("z", "main"): ["a"], ("z", "y"): ["b"]}
-    got = plan.row_forecasts(["y", "z"], lambda ours, theirs: paths.get((ours, theirs), []))
-    assert got == {"y": [("main", ["README.md"])], "z": [("main", ["a"]), ("y", ["b"])]}
+def test_a_bolt_behind_main_names_main_first_and_alone():
+    """A bolt forecast to conflict with main takes main first (landing_rows), so it is forecast against main alone and
+    no row below is forecast against it."""
+    paths = {("y", "main"): ["README.md"], ("z", "main"): ["a"], ("z", "y"): ["b"], ("w", "y"): ["c"], ("w", "x"): ["d"]}
+    got = plan.row_forecasts(["y", "z", "x", "w"], lambda ours, theirs: paths.get((ours, theirs), []))
+    assert got == {"y": [("main", ["README.md"])], "z": [("main", ["a"])], "x": [], "w": [("x", ["d"])]}
+
+
+def test_a_bolt_the_record_holds_taking_main_first_is_forecast_against_main_alone():
+    """rail-cards "A wait found it first": a row the run record holds taking main first is no row above another."""
+    asked = []
+    got = plan.row_forecasts(["y", "z"], lambda ours, theirs: asked.append((ours, theirs)) or (["b"] if (ours, theirs) == ("z", "y") else []),
+                             held=["y"])
+    assert got == {"y": [], "z": []} and ("z", "y") not in asked
 
 
 def test_a_forecast_git_could_not_tell_is_kept_as_not_made():
@@ -464,6 +474,9 @@ PLAN = ("%rec: Bolt\n\n" + "".join(f"Bolt: {b}\nRepo: {k}\nTeam: {t}\n\n" for b,
                                     [("y", "crew", "crw-1"), ("w", "swancloud", "swc-1"), ("z", "crew", "crw-1")]) + "%rec: Unit\n\n")
 
 
+MAIN = "e4f5a6b" + "0" * 33
+
+
 def row(bolt, head=H1, **more):
     return dict(bolt=bolt, box=True, facts=dict(bolt=bolt, kit="crew", units=["a"], chores=[], batches={}, head=head, at=None,
                                                 moved=0, pr=None, team="crw-1", conductor="crw-1-conductor", preview=None,
@@ -475,17 +488,26 @@ class LandActs:
     gives it (rows, a missing one's host not answering), the forecasts, this host's run record (entries) and the
     partition's (partition), and Pending You's tools answered from answers."""
 
-    def __init__(self, rows, entries=(), partition=(), answers=None, here="mac-studio"):
+    def __init__(self, rows, entries=(), partition=(), answers=None, here="mac-studio", against_main=None, main=MAIN):
         self.rows, self.held, self.whole, self.answers, self.here = rows, list(entries), list(partition), dict(answers or {}), here
         self.calls, self.emitted, self.told, self.asked = [], [], [], []
+        # The forecast: each bolt's conflicts with main ({bolt: [("main", paths)]}) at the revision main (None, unread).
+        self.against_main, self.main, self.forecasts, self.kept = dict(against_main or {}), main, [], {}
 
     def land_row(self, label, bolt, host):
         self.asked.append((bolt, host))
         got = self.rows.get(bolt)
         return (got, None) if got else (None, "ssh: connect to host deneb: timed out")
 
-    def forecast(self, label, kit, bolts):
-        return {b: [] for b in bolts}, {}, {"main": "e4f5a6b" + "0" * 33}
+    def forecast(self, label, kit, bolts, held=()):
+        self.forecasts.append((list(bolts), list(held)))
+        return {b: self.against_main.get(b) or [] for b in bolts}, {}, self.main and {"main": self.main}
+
+    def keep_main(self, label, kit, sha):
+        self.kept[kit] = sha
+
+    def kept_main(self, label, kit):
+        return self.kept.get(kit)
 
     def entries(self, label):
         return self.held
@@ -630,6 +652,47 @@ def test_a_bolt_proven_after_the_answer_gets_a_new_card_following_it_and_the_sen
     assert raised(monkeypatch, again) == "req_k2"
     assert [t for t, _ in again.calls] == ["get_request"]
     assert "card land/crew: y lands on the user's send of an earlier card, so it is no row of this one" in capsys.readouterr().out
+
+
+WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}
+MAIN_FIRST = "takes main first: forecast to conflict with main on README.md at e4f5a6b; crw-1-conductor takes main in by a fix"
+
+
+def test_main_moving_so_one_of_two_conflicts_follows_the_card_with_the_other_as_its_one_box(monkeypatch):
+    """rail-cards "One of two": every row forecast against main first; a list of two becomes an approval of one."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=dict(POSTED, **WAITING), against_main={"z": [("main", ["README.md"])]})
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.forecasts == [(["y", "z"], [])] and acts.kept == {"crew": MAIN}
+    assert next(a for t, a in acts.calls if t == "cancel_request")["reason"] == f"z {MAIN_FIRST}"
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert (post["kind"], post["follows"]) == ("approve", "req_k1")
+    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
+    assert acts.emitted[-1]["Heads"] == "y@abc1234"
+
+
+def test_main_moving_so_one_of_three_conflicts_changes_the_card_in_place_saying_why(monkeypatch):
+    """rail-cards "One of three"."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234 w@abc1234")]
+    acts = LandActs({"y": row("y"), "z": row("z"), "w": row("w")}, held, answers=WAITING, against_main={"w": [("main", ["README.md"])]})
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(PLAN.replace("Bolt: w\nRepo: swancloud\nTeam: swc-1", "Bolt: w\nRepo: crew\nTeam: crw-1")))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert change["changeNote"] == f"w {MAIN_FIRST}"
+    assert acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234"
+
+
+def test_a_conflict_the_record_holds_at_the_rows_head_holds_it_with_no_forecast_against_it(monkeypatch):
+    """rail-cards "A wait found it first": the row is handed to the forecast as held, and held taking main first in the
+    recorded files though the card's own forecast says nothing of it."""
+    recorded = [dict(Act="forecast", On=["bolt/y"], Heads="bolt/y@abc1234 main@2222222", Paths="docs/a.md", Reached="wait")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, partition=recorded, answers=POSTED, main=None)
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.forecasts == [(["y", "z"], ["y"])] and acts.kept == {}
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [
+        "**y**: takes main first: forecast to conflict with main on docs/a.md at 2222222; crw-1-conductor takes main in by a fix"]
+    assert acts.emitted[-1]["Heads"] == "z@abc1234"
 
 
 def test_the_raise_is_handed_to_the_main_machine_as_the_one_asking(monkeypatch, capsys):

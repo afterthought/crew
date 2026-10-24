@@ -2173,15 +2173,20 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
     return ("close", " ".join(said), left if boxed else None)
 
 
-def row_forecasts(order, pairs):
+def row_forecasts(order, pairs, held=()):
     """Each row's forecast conflicts (rail-cards "The landings card forecasts each row's conflicts"), from facts alone
     (code.7): order, the bolts of the card's rows that can land, in its order; pairs(ours, theirs), the paths git
     forecasts in conflict when the bolt ours is merged onto theirs, "main" or a bolt above it on the card, from their
-    merge base: [] for none, None when git can't tell. {bolt: [(with, paths)]}, main first, then each bolt above it in
-    the card's order, a pair with no conflict left out and one git could not tell kept with paths None, a forecast not
-    made, which holds nothing; an empty list, no conflict forecast. Pairwise, as units are forecast (teams.12)."""
-    return {b: [(w, p) for w in ["main"] + list(order[:i]) for p in [pairs(b, w)] if p is None or p]
-            for i, b in enumerate(order)}
+    merge base: [] for none, None when git can't tell; held, the bolts the run record holds taking main first
+    (main_conflict). {bolt: [(with, paths)]}, main first, then each bolt above it in the card's order, a pair with no
+    conflict left out and one git could not tell kept with paths None, a forecast not made, which holds nothing; an
+    empty list, no conflict forecast. Every bolt is forecast against main first, and one forecast to conflict with it,
+    or held, takes main first (landing_rows), so it is forecast against main alone and no row is forecast against it:
+    the rest are forecast among themselves, pairwise, as units are (teams.12)."""
+    mains = {b: pairs(b, "main") for b in order}
+    rest = [b for b in order if not mains[b] and b not in held]
+    return {b: [(w, p) for w, p in [("main", mains[b])] + ([(w, pairs(b, w)) for w in rest[:rest.index(b)]] if b in rest else [])
+                if p is None or p] for b in order}
 
 
 def tree_paths(rc, out):
@@ -2194,8 +2199,9 @@ def tree_paths(rc, out):
     return list(dict.fromkeys(l for l in out.split("\n")[1:] if l))
 
 
-def forecast_rows(fleet, label, kit, bolts):
-    """The forecasts of a kit's landings card's rows (row_forecasts), made where the kit's first building team
+def forecast_rows(fleet, label, kit, bolts, held=()):
+    """The forecasts of a kit's landings card's rows (row_forecasts, held the bolts it is handed as taking main first by
+    the run record), made where the kit's first building team
     (builder) has its main checkout: GitHub's main fetched there, a kit with no origin reading its own; each bolt read
     where it lives (gather.bolt_at, plan.19), GitHub's copy when the policy in it names a remote for the bolt, else the
     host's, a bolt made before gives went through sluice; and git merge-tree of each onto main and onto each bolt above
@@ -2247,7 +2253,7 @@ def forecast_rows(fleet, label, kit, bolts):
                                        refs[theirs], refs[ours], ok=(0, 1)))
         except Refusal:
             return None
-    got = row_forecasts(bolts, pairs)
+    got = row_forecasts(bolts, pairs, held)
     for b, fs in got.items():
         for w, paths in fs:
             if paths is None and b not in why:
@@ -2486,12 +2492,19 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
             print(f"card {key}: {t['machine']} did not answer for bolt {b.name()} ({why}), so its row is left off", file=sys.stderr)
         elif "box" in row:
             got[b.name()] = row
-    entries = acts.entries(label)
+    entries, whole = acts.entries(label), acts.partition(label)
     rows, sent = rows_unsent([got[b.name()] for b in plan.bolts() if b.name() in got], landings_sent(entries, key, owner))
     for b in sent:
         print(f"card {key}: {b} lands on the user's send of an earlier card, so it is no row of this one")
+    # Every row that can land is forecast against main first, and each forecast to conflict with it, by this forecast or
+    # the run record's at its present head, takes main first; the rest are forecast among themselves (row_forecasts).
+    recorded = {r["bolt"]: c for r in rows if r["box"] for c in [main_conflict(whole, r["bolt"], r["facts"]["head"])] if c}
     boxed = [r["bolt"] for r in rows if r["box"]]
-    forecast, unmade, _ = acts.forecast(label, kit, boxed) if boxed else ({}, {}, None)
+    forecast, unmade, at = acts.forecast(label, kit, boxed, list(recorded)) if boxed else ({}, {}, None)
+    if at:
+        acts.keep_main(label, kit, at["main"])
+    takes = dict(recorded, **{b: (at["main"][:7], p) for b, fs in forecast.items() for w, p in fs if w == "main" and p})
+    rows = [landing_rows([r["bolt"]], {r["bolt"]: r["facts"]}, {}, takes)[0] if r["box"] else r for r in rows]
     for r in rows:
         if r["box"]:
             r["facts"] = dict(r["facts"], forecast=forecast.get(r["bolt"], []), forecast_why=unmade.get(r["bolt"]))
@@ -2507,7 +2520,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
         else:
             ticked = state.pop("ticked")
     landed = {next((o[5:] for o in e.get("On") or [] if o.startswith("bolt/")), None): e.get("Head") or ""
-              for e in acts.partition(label) if e.get("Act") == "bolt.land" and not e.get("Refused")}
+              for e in whole if e.get("Act") == "bolt.land" and not e.get("Refused")}
     in_plan = {b.name() for b in plan.bolts() if b.get("Repo") == kit}
     step = landings_step(rows, state, ticked, in_plan, landed, note, bool(pane))
     t = builder(fleet, label, kit)
@@ -11510,6 +11523,12 @@ def rail_view(fleet, a):
 # started, its document the files plannotator was given joined by ", "), and plannotator's result.json once the user
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
+
+
+def landings_main(label, kit):
+    """Where the main level's host keeps the revision of main a kit's landings card's rows were last forecast against
+    (CardActs.keep_main), beside the card's state: no session's, so no card's close or sweep removes it."""
+    return CARDS / label / "land" / kit / "main"
 # The rail rows' card keys, the thing's and not its version's (record 0031): a card crew keys them by, which its
 # commands name. A card under an older form, land/<bolt>/<head> or a verify report's verify/<unit>/<stamp>, is still
 # crew's (crews_key), closed by the rail's read as one whose row is gone, and none is posted.
@@ -13257,9 +13276,29 @@ class CardActs:
         the branch when it cannot be read (read.1)."""
         return partition_entries(self.fleet, label)
 
-    def forecast(self, label, kit, bolts):
+    def forecast(self, label, kit, bolts, held=()):
         """The forecasts of a kit's landings card's rows (forecast_rows)."""
-        return forecast_rows(self.fleet, label, kit, bolts)
+        return forecast_rows(self.fleet, label, kit, bolts, held)
+
+    def keep_main(self, label, kit, sha):
+        """The revision of main a kit's landings card's rows were forecast against kept on this host, the main level's,
+        beside the card's state (landings_main), crew's own note of what it read and no entry of the run record
+        (state.1); what can't be written is said, and the raise goes on."""
+        f = landings_main(label, kit)
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(sha + "\n")
+        except OSError as e:
+            print(f"card land/{kit}: crew could not keep the revision of main its rows were forecast against: {e.strerror or e}; "
+                  "the next rail read raises the card again", file=sys.stderr)
+
+    def kept_main(self, label, kit):
+        """The revision of main keep_main kept for a kit's landings card, or None when none is kept or it can't be read,
+        which costs one more raise."""
+        try:
+            return landings_main(label, kit).read_text().strip() or None
+        except OSError:
+            return None
 
     def land_row(self, label, bolt, host):
         """A bolt's row on its kit's landings card, read on its team's host (land_row): (row, None), in this process
