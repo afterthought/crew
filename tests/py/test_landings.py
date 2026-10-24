@@ -204,6 +204,63 @@ def test_a_policy_crew_cannot_read_at_githubs_copy_is_said_and_forecasts_nothing
     assert why["y"].startswith(".config/sluice.toml at origin/bolt/y is not TOML, so crew can't read bolt y: ")
 
 
+# ------------------------------------------------------------------- a bolt's own work between two heads
+
+def work_read(monkeypatch, moves, fetch=0, known=("abc1234", "d" * 40, "e" * 40), logs=None):
+    """bolt_work over moves, git answering where the kit's forecasts are made: the fetch exiting fetch, rev-parse
+    finding the commits known and each bolt on GitHub at e…, and each log its lines in logs, by (from, not); the git
+    calls made."""
+    calls = []
+
+    def git(fleet, t, where, *args, ok=(0,)):
+        calls.append(args)
+        if args[0] == "fetch" and fetch:
+            plan.fail(f"git fetch in {where} on {t['machine']} failed: fatal: unable to access GitHub")
+        if args[:2] == ("rev-parse", "--verify"):
+            rev = args[3].split("^")[0]
+            return (0, "e" * 40) if rev.startswith("refs/remotes/origin/bolt/") else (0, rev) if rev in known else (1, "")
+        if args[0] == "show":
+            return 0, '[branches."bolt/*"]\nremote = "origin"\n'
+        if args[0] == "log":
+            return 0, (logs or {}).get((args[3], args[4]), "")
+        return 0, ""
+    monkeypatch.setattr(plan, "kit_git", git)
+    return plan.bolt_work(FLEET, "swancloud", "crew", moves), calls
+
+
+def test_a_bolts_own_work_is_its_non_merge_commits_main_lacks_gained_and_lost_between_the_heads(monkeypatch):
+    """rail-cards "A ticked bolt's approval stands while its own work is unchanged", Decision 1: one fetch, main read
+    at GitHub's, each log both ways."""
+    logs = {("d" * 40, "^abc1234"): "1a2b3c4 fix: keep the lease\n", ("abc1234", "^" + "d" * 40): ""}
+    got, calls = work_read(monkeypatch, {"z": ("abc1234", "d" * 40)}, logs=logs)
+    assert got == {"z": dict(head="d" * 40, gained=[("1a2b3c4", "fix: keep the lease")], lost=[], why=None)}
+    assert calls.count(("fetch", "-q", "origin")) == 1
+    assert ("log", "--no-merges", "--format=%h %s", "d" * 40, "^abc1234", "^refs/remotes/origin/main") in calls
+    # a head now not given is read where the bolt lives, GitHub's copy, as the forecasts read it
+    got, _ = work_read(monkeypatch, {"z": ("abc1234", None)})
+    assert got == {"z": dict(head="e" * 40, gained=[], lost=[], why=None)}
+
+
+def test_a_kit_no_team_builds_reads_no_work_and_says_why(monkeypatch):
+    monkeypatch.setattr(plan, "kit_git", lambda *a, **k: plan.fail("no git"))
+    assert plan.bolt_work(FLEET, "swancloud", "flywheel", {"z": ("abc1234", "d" * 40)}) == {"z": dict(
+        head="d" * 40, gained=[], lost=[], why="no team of swancloud builds flywheel, so crew reads no checkout of it")}
+
+
+def test_a_fetch_refused_reads_no_work_in_gits_words(monkeypatch):
+    """rail-cards "crew cannot compare the heads"."""
+    got, calls = work_read(monkeypatch, {"z": ("abc1234", "d" * 40)}, fetch=1)
+    assert got["z"]["why"] == "git fetch in /c/main on mac-studio failed: fatal: unable to access GitHub"
+    assert not [c for c in calls if c[0] == "log"]
+
+
+def test_a_sent_head_that_names_no_one_commit_reads_no_work_and_says_so(monkeypatch):
+    got, calls = work_read(monkeypatch, {"z": ("0f0f0f0", "d" * 40)})
+    assert got == {"z": dict(head="d" * 40, gained=[], lost=[],
+                             why="your send's head, 0f0f0f0, names no one commit in /c/main on mac-studio")}
+    assert not [c for c in calls if c[0] == "log"]
+
+
 # ------------------------------------------------------------------------------------- what the raise does
 
 H1, H2 = "abc1234" + "0" * 33, "def5678" + "0" * 33

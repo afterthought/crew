@@ -2256,12 +2256,42 @@ def forecast_rows(fleet, label, kit, bolts):
         return {b: [("main", None)] for b in bolts}, {b: f"no team of {label} builds {kit}, so crew reads no checkout of it" for b in bolts}
     main, host = t["kit"]["main"], t["machine"]
     try:
-        origin = kit_git(fleet, t, main, "remote", "get-url", "origin", ok=(0, 2))[0] == 0
-        if origin:
-            kit_git(fleet, t, main, "fetch", "-q", "origin")
+        origin = origin_fetched(fleet, t, main)
     except Refusal as e:
         return {b: [("main", None)] for b in bolts}, {b: str(e) for b in bolts}
-    refs, why = {"main": "refs/remotes/origin/main" if origin else "refs/heads/main"}, {}
+    at, why = bolts_where(fleet, t, main, origin, bolts)
+    refs = {"main": "refs/remotes/origin/main" if origin else "refs/heads/main", **at}
+
+    def pairs(ours, theirs):
+        if ours in why or theirs in why:
+            return None
+        try:
+            return tree_paths(*kit_git(fleet, t, main, "merge-tree", "--write-tree", "--name-only", "--no-messages",
+                                       refs[theirs], refs[ours], ok=(0, 1)))
+        except Refusal:
+            return None
+    got = row_forecasts(bolts, pairs)
+    for b, fs in got.items():
+        for w, paths in fs:
+            if paths is None and b not in why:
+                why[b] = why.get(w) or f"git merge-tree could not tell in {main} on {host}"
+    return got, why
+
+
+def origin_fetched(fleet, t, main):
+    """Whether the kit's main checkout on the team's host (t) has an origin, GitHub, fetched there when it has; refused
+    in git's words when the fetch fails (plan.18)."""
+    origin = kit_git(fleet, t, main, "remote", "get-url", "origin", ok=(0, 2))[0] == 0
+    if origin:
+        kit_git(fleet, t, main, "fetch", "-q", "origin")
+    return origin
+
+
+def bolts_where(fleet, t, main, origin, bolts):
+    """Each bolt's head where it lives (gather.bolt_at, plan.19), read in the kit's main checkout on the team's host (t)
+    once fetched (origin_fetched): GitHub's copy when the policy in it names a remote for the bolt, else the host's.
+    Returns ({bolt: commit}, {bolt: why}), why for each on no ref crew can read there, or whose policy or git failed."""
+    host, refs, why = t["machine"], {}, {}
     for b in bolts:
         github, own, at = f"refs/remotes/origin/bolt/{b}", f"refs/heads/bolt/{b}", {}
         try:
@@ -2281,21 +2311,52 @@ def forecast_rows(fleet, label, kit, bolts):
             refs[b] = at[ref]
         else:
             why[b] = f"bolt/{b} is on no branch crew can read in {main} on {host}, GitHub's or the host's"
+    return refs, why
 
-    def pairs(ours, theirs):
-        if ours in why or theirs in why:
-            return None
+
+def commits_listed(out):
+    """git log --format='%h %s''s lines as [(sha, subject)], newest first."""
+    return [tuple(l.split(" ", 1)) if " " in l else (l, "") for l in out.splitlines() if l.strip()]
+
+
+def bolt_work(fleet, label, kit, moves):
+    """Each bolt's own work between the head the user sent and its head now (rail-cards "A ticked bolt's approval
+    stands while its own work is unchanged", Decision 1), read where the kit's forecasts are made (forecast_rows), in
+    the kit's first building team's main checkout, GitHub's main fetched there once: a bolt's own work at a head being
+    its non-merge commits main lacks, what it gained is `git log --no-merges <now> ^<sent> ^<main>` and what it lost
+    `<sent> ^<now> ^<main>`, main GitHub's, or a kit's own with no origin. moves, {bolt: (sent, head)}, head None for
+    one read where the bolt lives (bolts_where). Returns {bolt: {head, gained, lost, why}}, gained and lost
+    [(sha, subject)], why set when crew could not tell, the fetch, the head sent or now, or git having failed, or no
+    team building the kit (read.1)."""
+    def told(head, why):
+        return dict(head=head, gained=[], lost=[], why=why)
+    t = builder(fleet, label, kit)
+    if not t:
+        return {b: told(h, f"no team of {label} builds {kit}, so crew reads no checkout of it") for b, (_, h) in moves.items()}
+    main, host = t["kit"]["main"], t["machine"]
+    try:
+        origin = origin_fetched(fleet, t, main)
+    except Refusal as e:
+        return {b: told(h, str(e)) for b, (_, h) in moves.items()}
+    mains = "refs/remotes/origin/main" if origin else "refs/heads/main"
+    at, unread = bolts_where(fleet, t, main, origin, [b for b, (_, h) in moves.items() if not h])
+    out = {}
+    for b, (sent, head) in moves.items():
+        head = head or at.get(b)
+        if not head:
+            out[b] = told(None, unread.get(b) or f"bolt/{b} is on no branch crew can read in {main} on {host}")
+            continue
         try:
-            return tree_paths(*kit_git(fleet, t, main, "merge-tree", "--write-tree", "--name-only", "--no-messages",
-                                       refs[theirs], refs[ours], ok=(0, 1)))
-        except Refusal:
-            return None
-    got = row_forecasts(bolts, pairs)
-    for b, fs in got.items():
-        for w, paths in fs:
-            if paths is None and b not in why:
-                why[b] = why.get(w) or f"git merge-tree could not tell in {main} on {host}"
-    return got, why
+            for what, rev in (("your send's head", sent), ("its head now", head)):
+                rc, _ = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"{rev}^{{commit}}", ok=(0, 1, 128))
+                rc == 0 or fail(f"{what}, {rev[:7]}, names no one commit in {main} on {host}")
+            gained = commits_listed(kit_git(fleet, t, main, "log", "--no-merges", "--format=%h %s", head, f"^{sent}", f"^{mains}")[1])
+            lost = commits_listed(kit_git(fleet, t, main, "log", "--no-merges", "--format=%h %s", sent, f"^{head}", f"^{mains}")[1])
+        except Refusal as e:
+            out[b] = told(head, str(e))
+            continue
+        out[b] = dict(head=head, gained=gained, lost=lost, why=None)
+    return out
 
 
 def batch_waits(units, due, unanswered):
@@ -13286,6 +13347,10 @@ class CardActs:
     def forecast(self, label, kit, bolts):
         """The forecasts of a kit's landings card's rows (forecast_rows)."""
         return forecast_rows(self.fleet, label, kit, bolts)
+
+    def work(self, label, kit, moves):
+        """Each moved bolt's own work between the head the user sent and its head now (bolt_work)."""
+        return bolt_work(self.fleet, label, kit, moves)
 
     def land_row(self, label, bolt, host):
         """A bolt's row on its kit's landings card, read on its team's host (land_row): (row, None), in this process
