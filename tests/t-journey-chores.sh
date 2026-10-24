@@ -5,8 +5,8 @@
 # its merge (plan.13); verify ends at its report; a merge is refused while a commit lacks the chore's trailer, and merges
 # once its one round of fixes after its verify adds it, with no verify again (teams.5, teams.17), its wait ending once the bolt holds the trailer and rebasing the dependent onto the bolt; crew bolts
 # reads each stage from the kit; the merge's wait frees the slot and keeps the place while sluice's overview lists a
-# run in it, which the team's next read removes once none is (plan.9); crew unit run on a chore is refused naming its
-# kind; and crew trace finds it by its bare name.
+# run in it, and the team's next read once none is while sluice's release of it fails, removing it once sluice has
+# released it (plan.9); crew unit run on a chore is refused naming its kind; and crew trace finds it by its bare name.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/test_chores.py); how git reads a chore's trailer, contract cases (tests/contract/). Each step checks
 # the command's wiring once.
@@ -86,13 +86,18 @@ has "$out" "$cp is kept, and chore/bump with it: chore bump has merged into bolt
 [[ -d $cp ]] || fail "the chore's place went while sluice ran in it"
 ok "a merge is refused while a commit lacks the chore's trailer; once its one round of fixes adds it, it merges with no verify again, through sluice, and its wait ends once the bolt holds the trailer, freeing the slot and keeping the place while sluice runs in it"
 
-rm "$T/sluice-overview.json"
+rm "$T/sluice-overview.json"; touch "$T/sluice-release-fails"
+expect_ok crew status swb-1
+has "$out" "$cp is kept, and chore/bump with it: chore bump has merged into bolt/tenant-environments, and sluice's release of it failed: it exited 3: the release command of $cp ended exit status: 1: tearing down"
+[[ -d $cp ]] || fail "the chore's place went though sluice did not release it"
+rm "$T/sluice-release-fails"
 expect_ok crew status swb-1
 lacks "$out" "swb-1-unit-1 is free"
 has "$out" "$cp and chore/bump are removed; the branch was at"
 [[ ! -d $cp ]] || fail "the chore's place is still there"
+eq "$(calls | grep -c "^$box sluice release --worktree $cp --json in $(cd "$k" && pwd -P)$")" "2"
 eq "$(field $box slot.free On)" "agent/swb-1-unit-1 chore/bump"
 [[ $(record_of $box)$(record_of mac-studio) != *ZQXT* ]] || fail "a chore's words are in the run record"
 expect_ok crew trace bump
 has "$out" "chore.add"; has "$out" "stage/bump/merge chore/bump"
-ok "the team's next read, no run in the place, removes it; the record holds none of the chore's words, and crew trace finds it by its bare name"
+ok "the team's next read, no run in the place, keeps it while sluice's release of it fails and removes it once sluice released it; the record holds none of the chore's words, and crew trace finds it by its bare name"

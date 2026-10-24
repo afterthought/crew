@@ -251,19 +251,59 @@ class TestGiveThroughSluice:
         assert str(e.value) == ("a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice "
                                 f"--version on chuck-herdr-alpha said: {said}")
 
+    MADE = "c0da39bae0a5d89da0febc3f46f58607c2ad08a7"
+    OWN = "22eef8585855b2ef8feb0e08177e34d15f131182"
+    PRESENT = f"sluice did not make bolt/b for {KIT} on chuck-herdr-alpha: bolt/b is already there, at {MADE}"
+
+    def made(self, name="create-present.json", **found):
+        return plan.made_said("b", KIT, "chuck-herdr-alpha", *recorded(name), found and {"read": None, **found}, "origin")
+
+    def refused(self, **found):
+        with pytest.raises(plan.Refusal) as e:
+            self.made(**found)
+        return str(e.value)
+
     def test_sluices_create_is_the_commit_it_made_the_branch_at(self):
-        assert plan.made_said("b", KIT, "chuck-herdr-alpha", *recorded("create.json")) == "c0da39bae0a5d89da0febc3f46f58607c2ad08a7"
+        assert self.made("create.json") == (self.MADE, False)
 
     def test_a_create_sluice_refuses_is_refused_in_its_words(self):
-        with pytest.raises(plan.Refusal) as e:
-            plan.made_said("b", KIT, "chuck-herdr-alpha", *recorded("create-present.json"))
-        assert str(e.value) == (f"sluice did not make bolt/b for {KIT} on chuck-herdr-alpha: bolt/b is already there, at "
-                                "c0da39bae0a5d89da0febc3f46f58607c2ad08a7")
+        assert self.refused() == self.PRESENT
+
+    @pytest.mark.parametrize("own", [MADE, None])
+    def test_a_branch_a_give_left_at_mains_tip_with_no_commit_of_its_own_is_taken_and_the_give_goes_on(self, own):
+        """A give that failed after sluice made the branch leaves it on GitHub at main's tip, and the host's own copy
+        there too or none: the give run again takes it rather than refuse it as already there."""
+        assert self.made(own=own, there=self.MADE, main=self.MADE) == (self.MADE, True)
+
+    def test_a_branch_with_commits_of_its_own_is_still_refused_by_name(self):
+        assert self.refused(own=self.OWN, there=self.OWN, main=self.MADE) == (
+            f"{self.PRESENT}; bolt/b on origin is at 22eef85 and origin's main at c0da39b, so it is no branch a give left "
+            "empty at main, and crew gives no bolt onto it")
+
+    def test_a_branch_whose_hosts_copy_stands_elsewhere_is_refused_by_name(self):
+        assert self.refused(own=self.OWN, there=self.MADE, main=self.MADE) == (
+            f"{self.PRESENT}; chuck-herdr-alpha's own bolt/b is at 22eef85, not at origin's c0da39b, and crew gives no "
+            "bolt onto it")
+        assert self.refused(own=self.OWN, there=None, main=self.MADE) == (
+            f"{self.PRESENT}; chuck-herdr-alpha's own bolt/b is at 22eef85 and origin has none, and crew gives no bolt "
+            "onto it")
+
+    def test_a_branch_crew_cannot_read_on_its_remote_is_refused_with_gits_words(self):
+        assert self.refused(read="fatal: could not read from remote repository") == (
+            f"{self.PRESENT}; and crew could not read bolt/b on origin: fatal: could not read from remote repository")
+
+    def test_a_refusal_that_finds_no_branch_is_sluices_words_alone(self):
+        assert self.refused(own=None, there=None, main=self.MADE) == self.PRESENT
 
     def test_a_give_names_github_the_commit_and_the_teams_host(self):
-        assert plan.given_said("swb-1", "b", KIT, "origin", "c0da39bae0a5d89da0febc3f46f58607c2ad08a7", "chuck-herdr-alpha") == (
+        assert plan.given_said("swb-1", "b", KIT, "origin", self.MADE, "chuck-herdr-alpha") == (
             f"swb-1 holds b: sluice made bolt/b on GitHub (origin) from {KIT}'s main at c0da39b, built on chuck-herdr-alpha "
             "and merged into only through sluice")
+
+    def test_a_give_that_took_the_branch_says_so(self):
+        assert plan.given_said("swb-1", "b", KIT, "origin", self.MADE, "chuck-herdr-alpha", adopted=True) == (
+            "swb-1 holds b: crew took bolt/b, which sluice made on GitHub (origin) for a give that did not finish, at "
+            f"{KIT}'s main c0da39b, built on chuck-herdr-alpha and merged into only through sluice")
 
     def test_a_write_refused_after_the_create_has_sluice_delete_the_branch_again(self):
         why = "swb-1 holds bolt c since 1234567"
