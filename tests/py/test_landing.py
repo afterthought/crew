@@ -578,17 +578,36 @@ class TestTheSubmission:
         err = capsys.readouterr().err
         assert conflict in err and "bolt/b did not land: sluice refused it or found a conflict, and main is where it was. Tell" in err
 
+    def test_checks_the_host_could_not_run_are_recorded_stopped_at_the_head_and_hold_nothing(self, monkeypatch, capsys):
+        """bolt-teams "Checks the host could not run": the command fails, saying nothing of the bolt's stopped it, which
+        checks could not run and that ops submits it again with no new word; recorded with no refusal, its Outcome
+        stopped, its Why those checks and its Head, the pull request drafted and the kit's card raised all the same."""
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(1, json.dumps(dict(NOT_RUN, id=7)), "sluice: the host could not run check:dagger\n"),
+                                                   ran_as(0, said(1, new=OLD, github=OLD, held="no", level="''", sluice="sluice: the host could not run check:dagger"))])
+        cause = f"check:dagger could not run: {ENGINE}; check:image could not run: {ENGINE}"
+        assert self.emitted == [("bolt.submit", ["bolt/b"], {"why": cause, "Outcome": "stopped", "Head": TIP})]
+        assert self.handed == ["k"] and self.closed == []
+        err = capsys.readouterr().err
+        assert (f"bolt/b did not land, and nothing of the bolt's stopped it: {cause}, and main is where it was. Its row keeps its box and "
+                "the user's word stands: report what stopped it, and once it is cleared crew bolt submit b submits it again, with no "
+                "new word.") in err and "b did not land, as said above; none landed" in err
+
     def test_a_submission_sluice_refused_at_once_is_recorded_in_its_words(self, monkeypatch, capsys):
         """sluice refused the submission itself, so there is no wait: SUBMIT's last line of what it said is handed to
-        LANDED as sluice's, and recorded so."""
+        LANDED as sluice's, and, with no record of a conflict or a failed check, recorded stopped in it, holding
+        nothing (bolt-teams "A refusal at once with no record of a conflict")."""
         no_gate = "sluice: main has no gate for bolt/b"
         refused = ran_as(0, f"RC=2 TIP={TIP} OLD={OLD} ID= PULL= ANSWER= SAID={base64.b64encode(f'{no_gate}\n'.encode()).decode()}\n", f"{no_gate}\n")
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, [refused, ran_as(0, said(2, new=OLD, github=OLD, held="no", level="''", sluice=no_gate))])
         assert self.scripts() == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "LANDED", "POLICY"] and self.handed_landed() == no_gate
         (_, _, f), = self.emitted
-        assert (f["Head"], f["refused"]) == (TIP, no_gate)
-        assert "bolt/b submitted to k's main, sluice queueing nothing" in capsys.readouterr().out
+        assert (f["Head"], f["why"], f["Outcome"], "refused" in f) == (TIP, no_gate, "stopped", False)
+        out, err = capsys.readouterr()
+        assert "bolt/b submitted to k's main, sluice queueing nothing" in out
+        assert (f"bolt/b did not land, and nothing of the bolt's stopped it: {no_gate}, and main is where it was. Its row keeps its "
+                "box and the user's word stands") in err
 
     def test_a_refused_landing_leaves_its_pull_request_a_draft(self, monkeypatch):
         """bolt-teams "A refused landing leaves its pull request a draft": the one sluice's submission left ready is
@@ -609,8 +628,9 @@ class TestTheSubmission:
         with pytest.raises(plan.Stopped):
             self.submit(monkeypatch, self.BEFORE, outs, said=policy(TAKES))
         (_, _, f), = self.emitted
-        assert f["refused"].startswith("bolt/b was not submitted on box: wt submit needs sluice's wt-submit, which is not on "
-                                       "box's path. Its pull request ")
+        assert f["why"].startswith("bolt/b was not submitted on box: wt submit needs sluice's wt-submit, which is not on "
+                                   "box's path. Its pull request ")
+        assert (f["Outcome"], f.get("Head"), "refused" in f) == ("stopped", None, False)  # no tip named, so it holds nothing
         assert self.scripts()[-2:] == ["PULL", "PULL_MARK"]
 
     def test_the_next_landing_readies_its_draft_before_it_submits(self, monkeypatch, capsys):
@@ -726,8 +746,9 @@ class TestTheSubmission:
             self.submit(monkeypatch, self.BEFORE, [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=7 PULL= ANSWER= SAID=\n")] + self.failing(tip) + again * plan.AGAIN)
         assert self.scripts().count("SUBMIT") == plan.AGAIN + 1 and self.scripts().count("SUBMISSIONS") == plan.AGAIN + 2
         (_, _, f), = self.emitted
-        assert f["refused"] == (f"sluice itself failed ({FAILED}) each of the {plan.AGAIN} times crew waited on #160, which its "
-                                "record still has under test")
+        assert (f["why"], f["Outcome"], f["Head"]) == (
+            f"sluice itself failed ({FAILED}) each of the {plan.AGAIN} times crew waited on #160, which its record still has under "
+            "test", "stopped", tip)
 
     def test_a_wait_again_crew_could_not_start_is_said_and_lands_nothing(self, monkeypatch):
         tip = HEADS["testing"]
@@ -735,8 +756,8 @@ class TestTheSubmission:
             self.submit(monkeypatch, self.BEFORE, [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=7 PULL= ANSWER= SAID=\n")] + self.failing(tip)
                         + [ran_as(255, "", "ssh: connect to host box port 22: timed out\n")])
         (_, _, f), = self.emitted
-        assert f["refused"] == ("crew can't tell whether bolt/b will land on k's main: crew could not wait on #160 again on box: "
-                                "ssh: connect to host box port 22: timed out") and self.closed == []
+        assert f["why"] == ("crew can't tell whether bolt/b will land on k's main: crew could not wait on #160 again on box: "
+                            "ssh: connect to host box port 22: timed out") and f["Outcome"] == "stopped" and self.closed == []
 
     def answered(self, answer=PULLED, pull="113"):
         """SUBMIT's report of sluice's answer naming no submission: its pull request's number, or none."""
@@ -832,7 +853,8 @@ class TestTheSubmission:
             self.submit(monkeypatch, self.BEFORE, [ran_as(0, f"RC=0 TIP={tip} OLD={OLD} ID=161 PULL= ANSWER= SAID=\n")] + self.failing(tip),
                         record=ran_as(0, listing()))
         (_, _, f), = self.emitted
-        assert f["refused"] == f"sluice itself failed ({FAILED}), and sluice records no submission of {tip[:7]} to main newer than #160"
+        assert (f["why"], f["Outcome"]) == (f"sluice itself failed ({FAILED}), and sluice records no submission of {tip[:7]} to main "
+                                            "newer than #160", "stopped")
 
     def test_an_answer_crew_cant_read_is_named_and_left_standing(self, monkeypatch, capsys):
         with pytest.raises(plan.Stopped):
@@ -844,6 +866,39 @@ class TestTheSubmission:
         assert self.emitted == [("bolt.submit", ["bolt/b"], {"why": words, "Head": TIP})]
         out, err = capsys.readouterr()
         assert "bolt/b submitted to k's main, sluice's answer naming no submission crew reads" in out and words in err
+
+
+def submitted(bolt, head=TIP, **f):
+    return dict({"Act": "bolt.submit", "On": [f"bolt/{bolt}"], **({"Head": head} if head else {})}, **f)
+
+
+class TestTheStops:
+    """Decision 2: a stop is a bolt.submit marked Outcome stopped with its Head and Why and no Refused, read from each
+    bolt's last one (plan.stops), and holds nothing of a refusal (plan.refusals); at another head it says nothing
+    (plan.stopped_at)."""
+    STOP = submitted("b", Why="sluice itself failed (its lock could not be taken)", Outcome="stopped")
+
+    def test_each_bolts_last_stop_is_read(self):
+        entries = [submitted("b", Why="tests:logic could not run: no engine", Outcome="stopped"), self.STOP,
+                   submitted("c", head="d" * 40, Why="sluice's record has #9 withdrawn", Outcome="stopped")]
+        assert plan.stops(entries) == {"b": (TIP, "sluice itself failed (its lock could not be taken)"),
+                                       "c": ("d" * 40, "sluice's record has #9 withdrawn")}
+        assert plan.refusals(entries) == {}
+
+    def test_a_later_landing_or_refusal_supersedes_it(self):
+        landed = submitted("b", Why="bolt(b): landed on main at bbbbbbb")
+        refused = submitted("b", Refused="sluice: bolt/b conflicts with main")
+        assert plan.stops([self.STOP, landed]) == {} and plan.stops([self.STOP, refused]) == {}
+        assert plan.refusals([self.STOP, refused]) == {"b": (TIP, "sluice: bolt/b conflicts with main")}
+        assert plan.stops([refused, self.STOP]) == {"b": (TIP, self.STOP["Why"])} and plan.refusals([refused, self.STOP]) == {}
+
+    def test_a_stop_with_no_head_gives_none(self):
+        assert plan.stops([submitted("b", head=None, Why="bolt/b was not submitted on box: wt-submit is missing", Outcome="stopped")]) == {}
+
+    def test_a_stop_says_its_words_only_at_its_head(self):
+        got = plan.stops([self.STOP])
+        assert plan.stopped_at(got, "b", TIP[:7]) == self.STOP["Why"]
+        assert plan.stopped_at(got, "b", "e" * 40) is None and plan.stopped_at(got, "c", TIP) is None
 
 
 class TestSubmitDecisions:
