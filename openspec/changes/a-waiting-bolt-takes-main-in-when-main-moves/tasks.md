@@ -22,7 +22,7 @@
 
 ## 5. The rail and the wait
 
-- [ ] 5.1 The rail's land row says a bolt with a conflict with main recorded at its present head takes main first, and leaves it out of the tell that lands, while a conflict at an older head holds nothing (design, Decision 5; Task notes 5.1); passes `tests/py/test_rail.py`, `tests/suite logic` ending with "0 failed".
+- [x] 5.1 The rail's land row says a bolt with a conflict with main recorded at its present head takes main first, and leaves it out of the tell that lands, while a conflict at an older head holds nothing (design, Decision 5; Task notes 5.1); passes `tests/py/test_rail.py`, `tests/suite logic` ending with "0 failed".
 - [ ] 5.2 A wait that records a bolt forecast to conflict with what main has landed raises its kit's landings card at once, and one with a queued submission raises nothing (design, Decision 6; Task notes 5.2); passes `tests/py/test_forecast.py`, `tests/suite logic` ending with "0 failed".
 
 ## 6. The send stands

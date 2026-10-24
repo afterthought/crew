@@ -144,6 +144,23 @@ class TestRows:
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land"
 
+    def test_a_bolt_forecast_at_its_head_to_conflict_with_main_takes_main_first_and_is_left_out_of_the_tell(self):
+        """crew-rail "A bolt taking main first" and "A conflict forecast at an older head"."""
+        conflict = dict(Act="forecast", On=["bolt/apex-zones"], Heads="bolt/apex-zones@abc1234 main@e4f5a6b", Paths="README.md",
+                        Reached="wait")
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {}, "forecasts": [conflict]}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: takes main first: forecast to conflict with main on README.md, "
+                                   "until its team's take-main fix moves its head")
+        assert land["cmds"] == [] and land["bolts"][0]["can"] is False
+        held["wldn"]["forecasts"] = [dict(conflict, Heads="bolt/apex-zones@ccccccc main@e4f5a6b")]
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land" and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
+
+    def test_the_record_reading_keeps_the_forecasts_the_land_row_reads(self):
+        e = dict(Act="forecast", On=["bolt/b"], Heads="bolt/b@abc1234 main@e4f5a6b", Paths="README.md")
+        assert plan.record_reading("wldn", [e, dict(Act="tell", On=["agent/x"])], the_plan(), NOW)["held"]["forecasts"] == [e]
+
     def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
         sv = survey()
         sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"]["verdict"] = ""
