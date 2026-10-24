@@ -10,6 +10,7 @@ revision rather than changed, and each failure said and recorded. Then the port 
 plannotator on, plan.session_env.
 The bridge itself, and every command's wiring, are t-cards'."""
 import json
+import re
 
 import pytest
 
@@ -672,6 +673,52 @@ def test_a_close_cuts_its_outcome_and_its_reason_to_pending_yous_two_hundred_cha
     assert (tool, len(sent["reason"]), acts.emitted[0]["Outcome"]) == ("cancel_request", cards.OUTCOME, LONG)
     short = cards.close_call({"status": "pending"}, "req_p1", "wldn-planner", reason="Dropped: not now")
     assert short[1]["reason"] == "Dropped: not now"
+
+
+def test_the_close_of_a_card_the_user_answered_records_what_they_answered_in_crews_words_and_a_withdrawal_none():
+    """rail-cards "The close of an answered card records the answer": the landings card sent with land:y ticked,
+    land:z cleared and a note; a deploy declined with "not tonight"; a card still waiting, withdrawn, records none."""
+    sent = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y"], "note": "z after its fix"}}
+    held = [post("land/crew", "swancloud-ops", "req_k1")]
+    acts = Acts({"get_request": (sent, None)}, entries=held, caller="swancloud-ops")
+    plan.row_card_close(None, "swancloud", "swancloud-ops", "land/crew", outcome="Landing as you ticked: y.", acts=acts,
+                        offered=["land:y", "land:z"], Rows="1")
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Answer"], acts.emitted[0]["Rows"]) == ("closed", "ticked y, left z, with a note", "1")
+    assert "after its fix" not in repr(acts.emitted)
+    declined = {"status": "answered", "turn": "agent", "version": 3, "answer": {"approved": False, "text": "not tonight"}}
+    acts = Acts({"get_request": (declined, None)}, entries=[post("deploy/srv", "swancloud-ops", "req_d1")], caller="swancloud-ops")
+    plan.row_card_close(None, "swancloud", "swancloud-ops", "deploy/srv", outcome="Declined", acts=acts)
+    assert acts.emitted[0]["Answer"] == "declined, with a note" and "tonight" not in repr(acts.emitted)
+    acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="Held for a fix", acts=acts)
+    assert acts.emitted[0]["State"] == "withdrawn" and "Answer" not in acts.emitted[0]
+
+
+def test_a_card_closed_as_answered_in_its_owners_pane_records_the_pane_as_its_answer():
+    landed = plan.landed_words("c" * 40, "24")
+    outcome, said = plan.pane_landed(landed, "wldn-ops", "2026-10-22T21:04:00Z", "Land swb-1's bolt")
+    acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True)
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Answer"]) == ("closed", "answered in swb-1-conductor's pane")
+
+
+def test_a_card_followed_once_answered_records_the_answer_on_its_close_and_on_the_entries_its_new_card_follows(monkeypatch):
+    acts = Acts({"get_request": (dict(ANSWERED, answer={"approved": True}), None), "ack_answer": ({"version": 4}, None),
+                 "match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=HELD)
+    seen, posted = [], plan.card_posted
+    monkeypatch.setattr(plan, "card_posted", lambda *a, **kw: seen.append(a[5]) or posted(*a, **kw))
+    plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "Head is now abc1234", WHERE, acts, anew=MOVED)
+    close = acts.emitted[0]
+    assert (close["Act"], close["State"], close["Answer"]) == ("card.close", "closed", "approved")
+    (entries,) = seen
+    assert {k: entries[-1][k] for k in ("Act", "Card", "State", "Answer")} == {"Act": "card.close", "Card": "req_c1", "State": "closed",
+                                                                             "Answer": "approved"}
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", entries[-1]["At"])
+
+
+def test_a_followed_card_pending_you_picked_up_records_the_answer_its_reply_still_carries():
+    acts, card = act_follow(({"status": "resolved", "version": 4, "answer": {"approved": True}}, None))
+    assert [(e["Act"], e.get("Answer")) for e in acts.emitted] == [("card.post", None), ("card.close", "approved")]
 
 
 def test_a_close_pending_you_does_not_find_is_recorded_lost_and_a_refused_one_recorded_refused():

@@ -2492,6 +2492,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     t = builder(fleet, label, kit)
     where = card_where(t["kit"] if t else {"main": str(pathlib.Path.home()), "repo": kit})
     facts = dict(kit=kit, rows=[r["facts"] for r in rows if r["box"]], held=[dict(bolt=r["bolt"], why=r["why"]) for r in rows if not r["box"]])
+    offered = [f"land:{b}" for b, _, _ in (state or {}).get("heads") or []]  # the rows its answer ticked or left
     if step[0] == "none":
         return None
     if step[0] == "leave":
@@ -2512,12 +2513,12 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     if step[0] == "follow":  # closed with the bolts the send still lands as its Heads (landings_sent), the rest following
         _, outcome, left, landing = step
         rest = [r["facts"] for r in rows if r["box"] and r["bolt"] not in dict(landing)]
-        closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, Rows=str(len(rest)),
+        closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, offered=offered, Rows=str(len(rest)),
                                 Heads=" ".join(f"{b}@{h}" for b, h in landing))
         return closed and row_card_change(fleet, label, owner, cards.landings_card, dict(facts, rows=rest, left=left,
                                                                                          follows=closed), outcome, where, acts)
     _, outcome, then = step
-    closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, Rows=str(len(boxed)))
+    closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, offered=offered, Rows=str(len(boxed)))
     if then is None or not boxed or not closed:  # a close refused leaves the card open, and nothing follows it yet
         return closed
     return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=then, follows=closed), outcome, where, acts)
@@ -12438,7 +12439,7 @@ def batch_wait(fleet, label, key, d, acts=None):
                     return
             elif done[0] == "closed":
                 acts.emit(label, "card.close", [cards.row_object(key)], by=owner, Card=card, Key=key, State=done[2],
-                          Outcome="closed outside crew")
+                          Outcome="closed outside crew", Answer=cards.answer_said(got))
             print(acts.end(label, key) or f"no session was running for {key}")
             return
         if started and s is None:
@@ -12696,7 +12697,7 @@ def card_read(fleet, a):
     landings card, land/<kit>, the bolts they ticked in the card's order and the crew bolt submit that lands them,
     those an earlier send still lands, whose card closed as this one followed it, first (landings_earlier,
     landing_lines). An approval the user declined is then closed with their words, and the close recorded (record
-    0031 §1); nothing else is."""
+    0031 §1), with what they answered in crew's words (cards.answer_said); nothing else is."""
     import cards
     label, who = card_asker(fleet, a)
     card = card_held(label, who, a.key)
@@ -12717,7 +12718,7 @@ def card_read(fleet, a):
         print("\n".join(cards.answer_lines(a.key, card, got) + (landing_lines(label, got, heads, earlier) if kind and kind[0] == "kit" else [])))
     if words is not None:
         record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
-                    Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
+                    Key=a.key, State="declined", Outcome=cards.declined_outcome(words), Answer=cards.answer_said(got))
         print(f"card {a.key}: {card} closed, as the user declined it")
 
 
@@ -13376,17 +13377,18 @@ def followed_read(py, card, owner):
 
 def followed_closed(acts, label, owner, key, card, by, got, why):
     """The card a post followed, held open under key, once read: recorded closed when Pending You has ended it, picked
-    up by the card by that follows it when it reports it resolved; left as the run record holds it while it waits or
-    is answered, for the event that ends it to close, and when the read failed, which is said."""
+    up by the card by that follows it when it reports it resolved, with what the user answered on it when its reply
+    still carries that (cards.answer_said); left as the run record holds it while it waits or is answered, for the
+    event that ends it to close, and when the read failed, which is said."""
     if why:
         print(f"card {key}: whether {card} was picked up can't be read: {why}", file=sys.stderr)
         return
     state = cards.ended(got)
     if not state:
         return
-    picked = got.get("status") == "resolved"
+    picked, answer = got.get("status") == "resolved", cards.answer_said(got)
     acts.emit(label, "card.close", [cards.row_object(key, acts.kits(label)) or f"agent/{owner}"], by=owner, Card=card, Key=key, State=state,
-              Outcome=FOLLOWED if picked else ENDED_ELSEWHERE)
+              Outcome=FOLLOWED if picked else ENDED_ELSEWHERE, **({"Answer": answer} if answer else {}))
     print(f"card {key}: {card} picked up in Pending You by {by}, which follows it" if picked else
           f"card {key}: {card} was {state} in Pending You already")
 
@@ -13477,8 +13479,9 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     which Pending You changes no longer, it is final for what it asked (cards.revision): left as it is, the act their
     answer calls for going on, unless what it asks changed since (anew, None while it has not; else the facts that say
     so, {} for none, a landing's head moved since their approval among them, cards.head_anew), or its kind; then acked
-    with note as its outcome and closed, and build(facts and anew) posted as a new card that follows it, under the key
-    with its revision (post_key). A card whose kind changed (kind_changed), or one built again that carries questions,
+    with note as its outcome and closed, its close keeping what they answered (cards.answer_said), and build(facts and
+    anew) posted as a new card that follows it, under the key with its revision (post_key), against the run record with
+    that close in it, its state, time and answer. A card whose kind changed (kind_changed), or one built again that carries questions,
     a proposal's whose rows fill more than one list, neither of which update_request ever changes, is followed the same
     way, withdrawn with note while it waits. Posted instead when the owner holds none, and posted again, its summary
     saying the older copy is dead, when Pending You no longer finds it. A landing's card and a long proposal's are
@@ -13520,20 +13523,23 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     if how == "leave":
         print(f"card {key}: {card} is left as it is: the user has answered it")
         return card
-    closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner)]
+    answer = cards.answer_said(got) if lost is None else None
+    answered = {"Answer": answer} if answer else {}
+    at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner, State="lost" if lost is not None else state, At=at, **answered)]
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed)
     if state == "closed" and anew:  # what it asks changed since the user answered it, which the new card says
         b = card_built(acts, label, build, dict(facts, **anew))
     if how == "ended":
-        acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=ENDED_ELSEWHERE)
+        acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=ENDED_ELSEWHERE, **answered)
         print(f"card {key}: {card} was {state} in Pending You already, and its new version follows it")
         follows = {"follows": card} if state == "closed" else {}
         return card_posted(acts, label, owner, dict(b, card=dict(b["card"], **follows)), where, closed)
     if how == "follow":
         acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
-                  Outcome=REVISED if state == "closed" else RENEWED if kind_changed else REASKED)
+                  Outcome=REVISED if state == "closed" else RENEWED if kind_changed else REASKED, **answered)
         print(f"card {key}: {card} " + ("closed, the user having answered it" if state == "closed" else f"withdrawn, {why}")
               + ", and its new version follows it")
         return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
@@ -13543,7 +13549,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     return card
 
 
-def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None, said=None, here=False, **more):
+def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None, said=None, here=False, offered=(), **more):
     """The act that closes a card of crew's own at the event that ends it (record 0031 §1): the card the owner holds
     under the row's key on this host, acked with the outcome once the user answered it, else withdrawn with the
     reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
@@ -13553,10 +13559,12 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     card of a bolt's own, land/<bolt> or land/<bolt>/<head> as a conductor posted one before, is no word on the bolt's
     row, whose reading and preview end with the row (land_end). said, when given, is what Pending You is sent in place
     of the outcome, words the run record does not keep (record.3); here, that the user answered it in a conversation,
-    so a card still waiting closes as answered there (cards.close_call). more, fields the close's entry carries beside
-    crew's own, a kit's landings card's Rows (landings_step). The card's id, or None when none was closed."""
+    so a card still waiting closes as answered there (cards.close_call). A card the user answered is closed with what
+    they answered, as Answer (card_closed); offered, the ids of the boxes the card offered, a kit's landings card's
+    rows as land:<bolt>, so the answer names those they left. more, fields the close's entry carries beside crew's own,
+    a kit's landings card's Rows (landings_step). The card's id, or None when none was closed."""
     acts = acts or CardActs(fleet)
-    card = card_closed(acts, label, owner, key, outcome, reason, said, here, more)
+    card = card_closed(acts, label, owner, key, outcome, reason, said, here, more, offered)
     if card is not False and key.split("/")[0] in READING and not key.startswith("land/"):
         said = acts.end(label, key)
         if said:
@@ -13564,10 +13572,12 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     return card or None
 
 
-def card_closed(acts, label, owner, key, outcome, reason, said=None, here=False, more=None):
+def card_closed(acts, label, owner, key, outcome, reason, said=None, here=False, more=None, offered=()):
     """row_card_close's close in Pending You: the card's id once closed, None when none was held or it was lost, and
     False when the close was refused, so the card stays open. said is sent in place of the outcome, and the outcome
-    recorded; here closes a card still waiting as answered in a conversation."""
+    recorded; here closes a card still waiting as answered in a conversation. The close's entry carries what the user
+    answered, as Answer, in crew's words (cards.answer_said, offered the ids of the boxes the card offered), or that
+    they answered it in the owner's pane when it closed as answered there; a card withdrawn while it waits, none."""
     obj = cards.row_object(key, acts.kits(label)) or f"agent/{owner}"
     card = cards.card_under(acts.entries(label), key, owner)
     if not card:
@@ -13592,8 +13602,9 @@ def card_closed(acts, label, owner, key, outcome, reason, said=None, here=False,
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return None
+    answer = cards.answer_said(got, offered) or (f"answered in {owner}'s pane" if here and state == "closed" else None)
     acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=cards.close_words(got, outcome, reason),
-              **(more or {}))
+              **(more or {}), **({"Answer": answer} if answer else {}))
     print(f"card {key}: {card} {state}")
     return card
 

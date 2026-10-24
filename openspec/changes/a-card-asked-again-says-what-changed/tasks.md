@@ -1,7 +1,7 @@
 ## 1. The answer is kept
 
 - [x] 1.1 crew says what the user answered on a card in its own words, from names alone, and the run record's entries may carry it as `Answer` (design, Decision 1; Task notes 1.1); passes `tests/py/test_cards.py`.
-- [ ] 1.2 Every close of a card the user answered records its `Answer`, a close as answered in a pane recording the pane, and a waiting card's withdrawal records none (design, Decisions 1 and 6; Task notes 1.2); passes `tests/py/test_card_commands.py`.
+- [x] 1.2 Every close of a card the user answered records its `Answer`, a close as answered in a pane recording the pane, and a waiting card's withdrawal records none (design, Decisions 1 and 6; Task notes 1.2); passes `tests/py/test_card_commands.py`.
 
 ## 2. A follow-on says what was answered, or is not posted
 

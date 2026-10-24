@@ -525,7 +525,7 @@ def test_an_answered_card_whose_ticked_bolts_all_landed_is_closed_naming_where_w
     said = f"Landed on GitHub's main: y at 1111111 and z at 2222222;{TIMER}"
     assert ack["outcome"] == said
     assert acts.emitted[-1] == dict(Act="card.close", On=["kit/crew"], by="swancloud-ops", Card="req_k1", Key="land/crew",
-                                    State="closed", Outcome=said, Rows="0")
+                                    State="closed", Outcome=said, Rows="0", Answer="ticked y and z")
     assert not [t for t, _ in acts.calls if t == "post_request"]
 
 
