@@ -87,7 +87,7 @@ gh_repo=WilldanGroup/switchboard-kit
 pr=$(pull $gh_repo bolt/tenant-environments false)  # the pull request sluice's submission opens, ready for review
 : > "$CREW_TEST_LOG"
 expect_fail "bolt/tenant-environments did not land: sluice refused it or found a conflict, and main is where it was" crew bolt submit tenant-environments
-has "$out" "sluice: bolt/tenant-environments conflicts with main"
+has "$out" "sluice's verdict: #"; has "$out" " conflict: README.md. Tell the bolt's conductor why"
 eq "$(calls | grep "^$box wt submit ")" "$box wt submit main --no-wait --json --no-remove from $land as $me@mac-studio"
 has "$out" "tenant-environments did not land, as said above; none landed"
 eq "$(git -C "$k" rev-parse main)" "$main_before"
@@ -519,11 +519,12 @@ has "$out" "bolt/south did not land: sluice refused it or found a conflict; swit
 has "$out" "bolt/east landed on switchboard-kit's main at"
 eq "$(plan -t Bolt -e "Bolt = 'north' || Bolt = 'east'" -c) $(plan -t Bolt -e "Bolt = 'south'" -c)" "0 1"
 eq "$(field mac-studio bolt.submit Head bolt/south)" "$south"
-has "$(field mac-studio bolt.submit Refused bolt/south)" "sluice: bolt/south conflicts with main"
+has "$(field mac-studio bolt.submit Refused bolt/south)" " conflict: regions.txt"
 has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"Landed on GitHub's main: north at"
 closed=$(field $box card.close Outcome kit/switchboard-kit)  # whole in the run record, cut on the card
 has "$closed" "and east at"
-has "$closed" "Held: south, held: sluice refused its landing at ${south:0:7}, and it waits for its team's fix: sluice: bolt/south conflicts with main"
+has "$closed" "Held: south, held: sluice refused its landing at ${south:0:7}, and it waits for its team's fix: #"
+has "$closed" " conflict: regions.txt"
 case $closed in *"words above"*) fail "the card's close points at words above, which are in ops's terminal, not on the card" ;; esac
 calls | grep -q "^$box pendingyou post_request " && fail "a card was posted though no row can land"
 ok "one crew bolt submit lands the ticked bolts in the card's order, each queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and held on its row, the third landing all the same; it exits non-zero naming the one held, and the card closes with what landed and what was held"
