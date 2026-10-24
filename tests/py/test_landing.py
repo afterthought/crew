@@ -335,6 +335,53 @@ class TestSluiceItselfFailed:
             f"{HEADS['testing'][:7]}. That is sluice's to report; crew bolt submit b submits it again."))
 
 
+RAN = json.loads((pathlib.Path(__file__).parent / "sluice-0.36.4" / "wait-failed-ran.json").read_text())
+NOT_RUN = json.loads((pathlib.Path(__file__).parent / "sluice-0.36.4" / "wait-failed-not-run.json").read_text())
+ENGINE = "the Dagger engine did not answer: dial unix /run/dagger/engine.sock: connect: connection refused"
+
+
+class TestTheBolts:
+    """bolt-teams "A landing that did not land is the bolt's only for its own content": judged from sluice 0.36.4's
+    own record of the submission alone (plan.landing_blame, tests/py/sluice-0.36.4/wait-failed-*.json), the bolt's for
+    a conflict or a check that ran and failed or was cut off; anything else a stop, with words saying what stopped it."""
+
+    def test_a_conflict_is_the_bolts(self):
+        assert plan.landing_blame(STATUS["submissions"][0]) == ("bolt", None)
+
+    def test_a_check_that_ran_and_failed_is_the_bolts(self):
+        assert plan.landing_blame(RAN) == ("bolt", None)
+        one_ran = dict(NOT_RUN, failed=NOT_RUN["failed"] + RAN["failed"])
+        assert plan.landing_blame(one_ran) == ("bolt", None)
+
+    def test_a_run_its_time_limit_ended_is_the_bolts(self):
+        cut_off = dict(RAN, result="timed out", failed=[{"task": "t-journey-land"}])
+        assert plan.landing_blame(cut_off) == ("bolt", None)
+
+    def test_checks_that_could_not_run_are_a_stop_naming_each_and_why(self):
+        assert plan.landing_blame(NOT_RUN) == ("stop", f"check:dagger could not run: {ENGINE}; check:image could not run: {ENGINE}")
+
+    def test_checks_left_without_a_result_and_no_reason_are_a_stop(self):
+        assert plan.landing_blame(dict(NOT_RUN, failed=[{"task": "tests:logic"}])) == (
+            "stop", "every required check was left without a result")
+        no_list = {k: v for k, v in NOT_RUN.items() if k != "failed"}
+        assert plan.landing_blame(no_list) == ("stop", "every required check was left without a result")
+
+    def test_a_withdrawn_landed_or_standing_record_is_a_stop(self):
+        assert plan.landing_blame(STATUS["submissions"][1]) == ("stop", "sluice's record has #148 withdrawn")
+        assert plan.landing_blame(STATUS["submissions"][2]) == ("stop", "sluice's record has #153 landed")
+        assert plan.landing_blame(STATUS["submissions"][3]) == ("stop", "sluice's record still has #160 under test")
+
+    def test_a_record_crew_cant_read_is_a_stop_saying_so(self):
+        assert plan.landing_blame(dict(NOT_RUN, failed="check:dagger")) == (
+            "stop", "crew can't read the checks sluice's record of #216 blames: \"check:dagger\"")
+        assert plan.landing_blame(dict(NOT_RUN, failed=[{"task": "check:dagger", "hash": 7}]))[0] == "stop"
+        assert plan.landing_blame(dict(NOT_RUN, result=["timed out"]))[0] == "stop"
+        for doc in (None, {}, {"state": 1}, "failed"):
+            assert plan.landing_blame(doc) == ("stop", "crew can't read sluice's record of the submission"), doc
+        assert plan.landing_blame(dict(RAN, state="parked")) == (
+            "stop", "sluice's record has #214 in a state crew does not read: \"parked\"")
+
+
 def ran_as(code, out="", err=""):
     return type("R", (), {"returncode": code, "stdout": out, "stderr": err})()
 

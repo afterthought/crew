@@ -2,7 +2,7 @@
 
 ## 1. crew tells the bolt's refusals from stops
 
-- [ ] 1.1 crew judges a landing's end the bolt's only from sluice's record of the submission, a conflict or a check that ran and failed or was cut off, and gives any other end words saying what stopped it, against a fixture of sluice 0.36.4's failed records (design, Decision 1; Task notes 1.1). Passes `tests/py/test_landing.py`.
+- [x] 1.1 crew judges a landing's end the bolt's only from sluice's record of the submission, a conflict or a check that ran and failed or was cut off, and gives any other end words saying what stopped it, against a fixture of sluice 0.36.4's failed records (design, Decision 1; Task notes 1.1). Passes `tests/py/test_landing.py`.
 - [ ] 1.2 `crew bolt submit`'s judgment of what a landing came to reads that blame from the wait's record and from sluice's listing after exit 3, the bolt's words unchanged and a stop's telling ops to submit it again once cleared, with no new word (Decision 1 and 4; Task notes 1.2). Passes `tests/py/test_landing.py`.
 - [ ] 1.3 A stop is recorded as `bolt.submit` with its head, its words and `Outcome: stopped`, and no refusal, and crew reads each bolt's last stop from the run record (Decision 2; Task notes 1.3). Passes `tests/py/test_landing.py`.
 

@@ -3011,6 +3011,40 @@ def wait_outcome(n, code, out):
     return str(code)
 
 
+def landing_blame(doc):
+    """Whether a landing that did not land was the bolt's (plan.16 as read 2026-10-24, rail-cards "A refused landing is
+    held on its row"), from sluice's own record of its submission alone (doc, a sluice/submission@1 as sluice 0.36.4
+    writes it, records.rs Submission and FailedTask; tests/py/sluice-0.36.4/wait-failed-*.json), never from sluice's
+    exit or words (read.2): ("bolt", None) when the record has it in conflict, or failed with a check that ran (its
+    `hash` kept) or a run its time limit ended (`result` "timed out"), which its team's fix answers; else ("stop",
+    words), nothing of the bolt's: every failed check left without a result, named with why each could not run as
+    sluice words it (words.rs could_not_run) or, with none given, said so; a submission withdrawn, landed with main not
+    holding it, or still standing; or a record crew can't read, said so. A decision of facts alone (code.7)."""
+    state = doc.get("state") if isinstance(doc, dict) else None
+    if not isinstance(state, str):
+        return "stop", "crew can't read sluice's record of the submission"
+    n = f"#{doc['id']}" if type(doc.get("id")) is int else "the submission"
+    if state == "conflict":
+        return "bolt", None
+    if state == "failed":
+        failed, result = doc.get("failed", []), doc.get("result")
+        if not (isinstance(failed, list) and all(isinstance(t, dict) and isinstance(t.get("task"), str)
+                                                 and all(isinstance(t.get(k, ""), str) for k in ("hash", "not_run"))
+                                                 for t in failed) and isinstance(result, (str, type(None)))):
+            return "stop", f"crew can't read the checks sluice's record of {n} blames: {cut(json.dumps(failed), 120)}"
+        if result == "timed out" or any(t.get("hash") for t in failed):
+            return "bolt", None
+        why = [f"{t['task']} could not run: {' '.join(t['not_run'].split())}" for t in failed if t.get("not_run")]
+        return "stop", "; ".join(why) or "every required check was left without a result"
+    if state == "withdrawn":
+        return "stop", f"sluice's record has {n} withdrawn"
+    if state == "landed":
+        return "stop", f"sluice's record has {n} landed"
+    if state in STANDING:
+        return "stop", f"sluice's record still has {n} {STANDING[state]}"
+    return "stop", f"sluice's record has {n} in a state crew does not read: {cut(json.dumps(state), 60)}"
+
+
 def answered_before(f, after):
     """The submission sluice answered a landing's submission with (f, SUBMIT's assignments) when sluice had recorded it
     before the landing, its id no newer than the last sluice had recorded then (after): sluice 0.36.4 answers a pull
