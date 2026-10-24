@@ -1152,6 +1152,91 @@ def follows_of(kind, thing, entries, by):
     return None
 
 
+# ------------------------------------------------------------------------- a card asked again (record 0031)
+
+STANDS = "stands"  # the State of a follow-on crew withheld, its earlier card's answer standing (plan.card_posted)
+
+
+def standing(entries, key, owner):
+    """The card whose answer stands under a row's key (rail-cards "A follow-on with nothing changed is not posted"):
+    the one the owner's newest post under the key names when that post is a follow-on crew withheld (State stands);
+    None once a card is posted under it after, or when none was withheld. A post Pending You refused changes nothing,
+    having shown the user nothing. entries are in the order they were written."""
+    card = None
+    for e in entries:
+        if e.get("Act") != "card.post" or e.get("Key") != key or e.get("By") != owner:
+            continue
+        if e.get("State") == STANDS:
+            card = e.get("Card")
+        elif not e.get("Refused"):
+            card = None
+    return card
+
+
+def answered_before(entries, follows, key, owner):
+    """The card the user answered that a post under a row's key comes after (rail-cards "A card that follows one the
+    user answered says so first"), from the run record's entries, oldest first: the card the post follows (follows)
+    when its close shows it closed or declined, else the card whose answer stands under the key (standing). As {card,
+    posted, answered, answer}: when its last post and its close were recorded, as the run record writes them, and what
+    the user answered as its close recorded it (answer_said), None when it recorded none; None when the post follows
+    no card the user answered."""
+    def last(act, card):
+        return next((e for e in reversed(entries) if e.get("Act") == act and e.get("Card") == card and not e.get("Refused")), None)
+    shut = last("card.close", follows) if follows else None
+    card = follows if shut and (shut.get("State") or "closed") in ("closed", "declined") else standing(entries, key, owner)
+    if not card:
+        return None
+    shut, post = last("card.close", card) or {}, last("card.post", card) or {}
+    return {"card": card, "posted": post.get("At"), "answered": shut.get("At"), "answer": shut.get("Answer")}
+
+
+def said_at(at, day=None):
+    """A run record's time as a card says it, YYYY-MM-DD HH:MM UTC, its date left off when it is that of day, another
+    time of the run record's."""
+    m = re.fullmatch(r"(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(?::\d\d)?Z", at or "")
+    if not m:
+        return at
+    return f"{m.group(2)} UTC" if day and day.startswith(m.group(1)) else f"{m.group(1)} {m.group(2)} UTC"
+
+
+def sentences(said):
+    """Sentences said after a colon: each ending as a sentence ends, the first begun in lower case unless its first
+    word holds a capital past its first letter, a name as GitHub or UTC."""
+    out = [s if s[-1] in ".!?…" else s + "." for s in (x.strip() for x in said) if s]
+    if out and out[0][1:].split(" ", 1)[0] == out[0][1:].split(" ", 1)[0].lower():
+        out[0] = out[0][0].lower() + out[0][1:]
+    return " ".join(out)
+
+
+def answered_opening(earlier, since):
+    """The paragraph a card opens with when it follows one the user answered (rail-cards "A card that follows one the
+    user answered says so first"): that they answered the card before it, when that card was posted and by when crew
+    recorded their answer, what they answered, and what changed since, the event's sentences (since); None when the
+    event gives nothing changed, so the card is not posted. earlier as answered_before gives it."""
+    said = [s for s in since or [] if s and s.strip()]
+    if not said:
+        return None
+    posted, answered = earlier.get("posted"), earlier.get("answered")
+    times = (f", posted {said_at(posted)}" if posted else "") + (f", by {said_at(answered, posted)}" if answered else "")
+    what = earlier.get("answer") or "crew holds no record of what you answered"
+    return f"You answered the card before this one{times}: {what}. Since then: {sentences(said)}"
+
+
+def stands_said(earlier):
+    """What crew records and says of a follow-on it withholds, nothing having changed since the user answered the card
+    before it (earlier, as answered_before gives it), in its own words."""
+    by = f" by {said_at(earlier['answered'])}" if earlier.get("answered") else ""
+    return f"Not posted: nothing has changed since the user answered {earlier['card']}{by}, so their answer stands"
+
+
+def opened(card, opening, follows):
+    """A card that follows one the user answered, its summary opening with what they answered and what changed since
+    (answered_opening), cut again at whole sentences, and its details opening with it too; following that card,
+    follows, when its builder set none."""
+    context = dict(card["context"], background="\n\n".join(x for x in (opening, card["context"].get("background")) if x))
+    return dict(card, summary=prose(f"{opening}\n\n{card['summary']}"), context=context, follows=card.get("follows") or follows)
+
+
 # ---------------------------------------------------------------------------------------- the act's decisions
 
 ROWS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"), (re.compile(r"^batch/(\d+)$"), "batch/{}"),
