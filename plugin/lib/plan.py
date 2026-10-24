@@ -11152,6 +11152,17 @@ def reading_unread(entries, key, card, now=None):
     return (now - utc(last["At"])).total_seconds() >= CARD_RETRY
 
 
+def stood(entries, key, owner):
+    """Whether the owner's newest post under a row's key was a follow-on crew withheld, nothing having changed since the
+    user answered the card before it (rail-cards "A follow-on with nothing changed is not posted"), from the run
+    record's entries, oldest first: the rail's sweep raises no card for that row, and records nothing more."""
+    last = None
+    for e in entries:
+        if e.get("Act") == "card.post" and e.get("Key") == key and e.get("By") == owner:
+            last = e
+    return bool(last and last.get("State") == cards.STANDS)
+
+
 def last_refusal(entries, key):
     """The words of the last post under a row's key when it was refused, as the row's card line gives them; None when
     it was not, or there was none."""
@@ -11204,7 +11215,9 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, proposed, now, plan
     kind's raise; but each row whose owner runs here and whose owner's newest card under its key this host's sign-in
     can't reach, one posted from another host and not closed, or one lost to its owner on any host (cards.stranded,
     over the whole record read), to post again through its kind's raise, the older copy named, and not as a row with no
-    card. And, where the partition's design agent runs (design, its <label>-design and host), each decision record's
+    card; nor a row whose owner's newest post under its key was a follow-on crew withheld, its earlier card's answer
+    standing (stood), until an event raises it with something changed. And, where the partition's design agent runs
+    (design, its <label>-design and host), each decision record's
     key in record 0031's form under which the design agent posted a card, whose record crew record last recorded
     proposed (record_proposed) and not settled in the pane, and whose card this host's sign-in can't reach so, to post
     again through the record's raise as a row of the group records, with whether its card offered alternatives (the
@@ -11244,7 +11257,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, proposed, now, plan
         if older:
             out["again"].append((r, older))
     again = {r["key"] for r, _ in out["again"]}
-    out["none"] = [r for r in mine if r["key"] not in carded | again]
+    out["none"] = [r for r in mine if r["key"] not in carded | again and not stood(entries, r["key"], owners[r["key"]][0])]
     if design[1] == here:
         posted = (e.get("Key") for e in entries if e.get("Act") == "card.post" and e.get("By") == design[0])
         for key in dict.fromkeys(k for k in posted if re.fullmatch(r"record/[a-z0-9][a-z0-9-]*/\d{4}", k or "")):

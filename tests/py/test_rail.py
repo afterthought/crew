@@ -556,6 +556,20 @@ class TestSweepJudged:
         assert self.judged(rows=rows_)["none"] == [row("proposal/4"), row("deploy/dev", "operations")]
         assert self.judged(rows=rows_, cards_=[card("proposal/4", "req_p4", "wldn-planner", host=BOX)])["none"] == [row("deploy/dev", "operations")]
 
+    def test_a_row_whose_follow_on_crew_withheld_is_raised_by_no_sweep_until_an_event_posts_its_card(self):
+        """rail-cards "The sweep meets a withheld card": proposal 4's follow-on was withheld, the answer on req_p3
+        standing, an hour ago; the sweep raises nothing for its row, and once a card is posted under its key, or Pending
+        You refused one an event raised, the row is the sweep's again."""
+        answered = [did("card.post", 120, Key="proposal/4", Card="req_p3"), did("card.close", 90, Key="proposal/4", Card="req_p3", State="closed")]
+        stood = did("card.post", 60, Key="proposal/4", Card="req_p3", State="stands", Refused="Not posted: nothing has changed since …")
+        rows_ = [row("proposal/4"), row("deploy/dev", "operations")]
+        assert self.judged(rows=rows_, entries=answered + [stood])["none"] == [row("deploy/dev", "operations")]
+        assert self.judged(rows=rows_, entries=answered)["none"] == rows_
+        refused = did("card.post", 30, Key="proposal/4", Refused="Pending You refused post_request: x")
+        assert self.judged(rows=rows_, entries=answered + [stood, refused])["none"] == rows_
+        theirs = dict(stood, By="crw-1-conductor")
+        assert self.judged(rows=rows_, entries=answered + [theirs])["none"] == rows_
+
     def test_a_card_or_row_whose_last_close_or_post_was_refused_lately_is_left_for_a_later_read(self):
         p4 = card("proposal/4", "req_p4", "wldn-planner")
         recent = [did("card.close", 5, Card="req_p4", Refused="Pending You refused the close: Too many requests."),
