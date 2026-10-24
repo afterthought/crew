@@ -728,6 +728,38 @@ class TestAskedAgain:
             "You answered the card before this one, posted 2026-10-12 11:01 UTC, by 11:30 UTC: approved. Since then: the deploy of aaaaaaa "
             "to mac-studio ended, and this is its step 1.")
 
+    def test_a_step_card_lost_after_its_deploys_answer_is_posted_again_never_withheld(self, monkeypatch, acts):
+        """rail-cards "A row's card lost to its owner is posted again": the step's card follows its deploy's card the
+        user approved, and Pending You no longer finds it; its copy is the row's card, no follow-on with nothing
+        changed, so it is posted again following the deploy's card, saying what they answered, and the raise's note."""
+        step = e("ops.step", minutes=6, Head=S1, Key="rotate/1", State="waiting", Doer="user", Text="Rotate the vault's key.")
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: [step])
+        ran = [dict(self.DECLINED[0], Card="req_d3"), dict(Act="card.close", Key=self.KEY, By=self.OWNER, Card="req_d3", State="closed",
+                                                           At="2026-10-12T11:30:00Z", Answer="approved"),
+               dict(Act="card.post", Key="op/mac-studio/1", By=self.OWNER, Card="req_s1", At="2026-10-12T11:31:00Z")]
+        a = acts(ran)
+        a.answers["get_request"] = (None, "Not found: request:req_s1.")
+        assert ops.raise_step(FLEET, {"label": "swancloud", "key": "op/mac-studio/1"}, a) == "req_d2"
+        assert [(x["Act"], x.get("Card"), x.get("State")) for x in a.emitted] == [("card.close", "req_s1", "lost"), ("card.post", "req_d2", None)]
+        sent = a.calls[-1][1]
+        assert sent["follows"] == "req_d3" and sent["summary"].startswith(
+            "You answered the card before this one, posted 2026-10-12 11:01 UTC, by 11:30 UTC: approved. Since then: raised again.\n\n"
+            + cards.DEAD)
+
+    def test_a_deploy_card_handed_over_as_dead_at_the_head_declined_is_posted_again_never_withheld(self, monkeypatch, acts):
+        """The card offered after the decline, with other files, was lost on another host: the sweep hands it over as
+        the row's dead, and its copy, at the head the user declined, is posted again following the declined card."""
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: [OFFER])
+        lost = self.DECLINED + [dict(Act="card.post", Key=self.KEY, By=self.OWNER, Card="req_d4", Head=S1, At="2026-10-12T11:05:00Z"),
+                                dict(Act="card.close", Key=self.KEY, By=self.OWNER, Card="req_d4", State="lost")]
+        a = acts(lost)
+        assert ops.raise_deploy(FLEET, {"label": "swancloud", "key": self.KEY, "dead": "req_d4"}, a) == "req_d2"
+        assert [(x["Act"], x.get("Card"), x.get("State")) for x in a.emitted] == [("card.post", "req_d2", None)]
+        sent = a.calls[-1][1]
+        assert sent["follows"] == "req_d1" and sent["summary"].startswith(
+            "You answered the card before this one, posted 2026-10-12 11:01 UTC, by 11:02 UTC: declined, with a note. Since then: "
+            "raised again.\n\n" + cards.DEAD)
+
     def test_a_step_after_the_step_before_says_that_one_is_behind_them(self):
         assert cards.step_since("op/mac-studio/1", "mac-studio", 2) == ["Step 1 is behind you, and this is step 2."]
         assert cards.step_since(None, "mac-studio", 1) == [] and cards.step_since("deploy/box", "mac-studio", 1) == []

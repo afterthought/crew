@@ -797,6 +797,22 @@ def test_a_change_with_no_card_held_hands_what_changed_to_the_post_it_makes():
     assert acts.calls == [] and acts.emitted[0]["State"] == "stands"
 
 
+@pytest.mark.parametrize("since", [None, []])
+def test_a_card_following_one_the_user_answered_that_pending_you_no_longer_finds_is_posted_again_never_withheld(since):
+    """rail-cards "A row's card lost to its owner is posted again": the card that followed req_1 is lost to its owner,
+    and its copy is the row's card the user can no longer reach, no follow-on with nothing changed: posted again
+    following req_1, opening with what the user answered and the change's note when the event gives nothing changed."""
+    held = ANSWERED_ON + [post(RKEY, DESIGN, "req_2", at="2026-10-23T15:00:00Z")]
+    acts = Acts({"get_request": (None, "Not found: request:req_2."), "match_area": (MATCHED, None),
+                 "post_request": (dict(POSTED, requestId="req_3"), None)}, entries=held, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    assert plan.row_card_change(None, "swancloud", DESIGN, cards.record_card, dict(RECORD, follows="req_1"), "Raised again", WHERE, acts,
+                                since=since) == "req_3"
+    assert [(e["Act"], e.get("Card"), e.get("State")) for e in acts.emitted] == [("card.close", "req_2", "lost"), ("card.post", "req_3", None)]
+    sent = acts.calls[-1][1]
+    assert sent["follows"] == "req_1" and sent["summary"].startswith(OPENED + "raised again.\n\n" + cards.DEAD)
+
+
 def test_a_close_pending_you_does_not_find_is_recorded_lost_and_a_refused_one_recorded_refused():
     acts = Acts({"get_request": (None, "Not found: request:req_c1.")}, entries=HELD)
     assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome="x", acts=acts) is None

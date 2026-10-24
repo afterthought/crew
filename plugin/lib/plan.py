@@ -10802,11 +10802,15 @@ def raise_batch(fleet, row, acts=None, note=None):
 
 def built_again(build):
     """A builder whose card, posted again under its key once an older copy was lost to its owner, says so first
-    (cards.posted_again)."""
-    def again(facts):
-        b = build(facts)
-        return dict(b, card=cards.posted_again(b["card"]))
-    return again
+    (built_copy)."""
+    return lambda facts: built_copy(build(facts))
+
+
+def built_copy(b):
+    """A built card posted again under its key once an older copy was lost to its owner: its summary saying so first
+    (cards.posted_again), and marked again, since it is the row's card the user can no longer reach and never a
+    follow-on with nothing changed, so its post is never withheld (card_posted, row_card_change)."""
+    return dict(b, card=cards.posted_again(b["card"]), again=True)
 
 
 # ------------------------------------------------------------------------------------------------ crew rail
@@ -13384,19 +13388,21 @@ def card_posted(acts, label, owner, b, where, entries=None, since=None):
     details with what they answered, when, and what changed since, since being the event's sentences, and follows that
     card (cards.answered_opening, cards.opened); with nothing changed, since empty or not given, it is not posted: it is
     recorded as a post refused in crew's words, naming that card and saying its answer stands (cards.stands_said), with
-    the card and the state stands, said, and None returned, refusing nothing of the event (roles.3)."""
+    the card and the state stands, said, and None returned, refusing nothing of the event (roles.3). A card posted again
+    once an older copy was lost (built_copy) is no follow-on but the row's card, and is posted whatever since says, as
+    built when it gives nothing (rail-cards "A row's card lost to its owner is posted again")."""
     key, obj = b["key"], cards.row_object(b["key"], acts.kits(label)) or f"agent/{owner}"
     cwd, remote = where
     known = acts.entries(label) if entries is None else entries
     earlier = cards.answered_before(known, b["card"].get("follows"), key, owner)
     if earlier:
         opening = cards.answered_opening(earlier, since)
-        if not opening:
+        if not opening and not b.get("again"):
             words = cards.stands_said(earlier)
             acts.emit(label, "card.post", [obj], by=owner, refused=words, Card=earlier["card"], Key=key, State=cards.STANDS)
             print(f"card {key}: {words}", file=sys.stderr)
             return None
-        b = dict(b, card=cards.opened(b["card"], opening, earlier["card"]))
+        b = dict(b, card=cards.opened(b["card"], opening, earlier["card"])) if opening else b
     asked = cards.post_key(known, key, owner)
     follows = b["card"].get("follows")
     held = cards.followed_open(known, follows, owner) if follows else None
@@ -13552,15 +13558,17 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     anew there, so the card changed carries the new link, and its entry why it could not open when it did not
     (built_fields), and a landing's or a deploy's the head it asks about (asked_of). A new card posted after one the user
     answered opens with what they answered and what changed since, since, the event's sentences, or note when the
-    event gives none, and is not posted when since is given empty (card_posted). A refusal is said and recorded as the
-    change refused, refusing nothing of the event. The card's id, the new card's when one was posted, or None."""
+    event gives none, and is not posted when since is given empty (card_posted); a card posted again, the older copy
+    lost or one this host can't reach handed over as dead (built_copy), is the row's card and never withheld, opening
+    with note when the event gives nothing changed. A refusal is said and recorded as the change refused, refusing
+    nothing of the event. The card's id, the new card's when one was posted, or None."""
     acts = acts or CardActs(fleet)
     b = card_built(acts, label, build, facts)
     key, obj = b["key"], cards.row_object(b["key"], acts.kits(label)) or f"agent/{owner}"
     entries = acts.entries(label)
     card = cards.card_under(entries, key, owner)
     if not card:
-        return card_posted(acts, label, owner, b, where, entries, since)
+        return card_posted(acts, label, owner, b, where, entries, (since or [note]) if b.get("again") else since)
     lost, how, state = None, "change", None
     why = "its kind having changed" if kind_changed else "its questions having to be asked anew"
     try:
@@ -13594,7 +13602,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner, State="lost" if lost is not None else state, At=at, **answered)]
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
-        return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed, since)
+        return card_posted(acts, label, owner, built_copy(b), where, closed, since or [note])
     if state == "closed" and anew:  # what it asks changed since the user answered it, which the new card says
         b = card_built(acts, label, build, dict(facts, **anew))
     if how == "ended":
