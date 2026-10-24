@@ -593,8 +593,9 @@ def landing_card(f):
     A preview's addresses follow the reading in its details and links, each on its face as a link after the reading's
     and before the pull request, as many as the card's artifacts leave room for (record 0031 §3).
     As the one row of its kit's landings card (landings_card), f also holds key, land/<kit>; conductor; forecast and
-    forecast_why, as forecast_said takes them; held, [{bolt, why}], the bolts held on the card with no box; and left,
-    whether the user cleared this bolt on their last send."""
+    forecast_why, as forecast_said takes them; held, [{bolt, why}], the bolts held on the card with no box; left,
+    whether the user cleared this bolt on their last send; and stopped and ops, its last landing at its head stopped by
+    sluice or its host and the ops who submits it again, which its summary says (stopped_said)."""
     units, chores, batches = list(f["units"]), list(f.get("chores") or []), f.get("batches") or {}
     parts = ([plural(len(units), "unit")] if units else []) + ([plural(len(chores), "chore")] if chores else [])
     what = joined(parts) if parts else "nothing"
@@ -603,6 +604,8 @@ def landing_card(f):
     said = [] if approved is None else [  # the head moved after the user's answer and before the landing (plan.16)
         f"Its head moved since your approval, from {approved[:7]} to {head}: approving this lands {head}." if approved else
         f"Its head is now {head}, and crew holds no record of the head you approved: approving this lands {head}."]
+    if f.get("stopped"):  # its last landing at its head stopped by sluice or its host, which holds nothing
+        said.append(stopped_said(f))
     said.append(f"{what[0].upper()}{what[1:]} {'lands' if len(units) + len(chores) == 1 else 'land'}, every one merged"
                 + (f" and every unit read in a batch ({joined([str(b) for b in read])})." if read else "."))
     pr = f.get("pr")
@@ -691,22 +694,35 @@ def row_bits(r):
             r.get("conductor") or f"{r['team']}-conductor")
 
 
+def stopped_said(r):
+    """What a landings row says of its last landing at its head when sluice or its host stopped it, nothing of the
+    bolt's (rail-cards "A landing sluice or its host stopped keeps its box"): r's stopped, (head, words), as
+    plan.landing_rows gives it, and r's ops, the main-level ops whose card it is, who submits it again once that is
+    cleared; "" when none was stopped."""
+    if not r.get("stopped"):
+        return ""
+    head, words = r["stopped"]
+    return (f"Its last landing at {head[:7]} was stopped, nothing of the bolt's: {words.rstrip('.')}. "
+            f"{r.get('ops') or 'Main-level ops'} submits it again once that is cleared.")
+
+
 def row_counts(r):
-    """A landings row's counts, batches, verdict and conductor, the detail of its box."""
-    return "; ".join(x for x in row_bits(r) if x)
+    """A landings row's counts, batches, verdict and conductor, the detail of its box, after what stopped its last
+    landing at its head (stopped_said), first so a detail's budget keeps it."""
+    return " ".join(x for x in (stopped_said(r), "; ".join(x for x in row_bits(r) if x)) if x)
 
 
 def row_paragraph(n, r):
     """A landings row on the card's face, as Markdown: its place, bolt and conductor, its units and chores one a line,
-    its batches, sluice's verdict and when, how far main moved, what a yes frees, its forecast, and its reading,
-    preview and pull request as links."""
+    its batches, sluice's verdict and when, how far main moved, what a yes frees, its forecast, what stopped its last
+    landing at its head (stopped_said), and its reading, preview and pull request as links."""
     units, chores = list(r["units"]), list(r.get("chores") or [])
     moved = r.get("moved") or 0
     lines = [f"**{n}. {r['bolt']}** · {r.get('conductor') or r['team'] + '-conductor'}"
              + (" · *left on your last send*" if r.get("left") else ""), ""]
     lines += [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores] + [""]
     _, read, green, _ = row_bits(r)
-    said = ([f"Read in {read[8:]}."] if read else []) + [f"sluice is {green}."]
+    said = ([stopped_said(r)] if r.get("stopped") else []) + ([f"Read in {read[8:]}."] if read else []) + [f"sluice is {green}."]
     said.append(f"main has moved {plural(moved, 'landing')} since it was cut." if moved else "main has not moved since it was cut.")
     frees = r.get("frees")
     if frees:
@@ -737,15 +753,16 @@ def landings_card(f):
     since Pending You refuses a card's rationale beside questions. On its face, one Markdown artifact, a paragraph a row (row_paragraph), then
     the rows held with no box and why; in its details, every row's reading first, then its previews and pull request,
     as many as the card's artifacts leave room for. f: kit, rows (each the facts landing_card takes, with team,
-    conductor, forecast, forecast_why, link or unread and preview), held ([{bolt, why}]), left (the bolts the user
-    cleared on their last send), follows. Also handed back: heads, each row as <bolt>@<head> and :left for one the user
+    conductor, forecast, forecast_why, link or unread and preview, and stopped when sluice or its host stopped its
+    last landing at its head, which its paragraph and its box's detail say, stopped_said), held ([{bolt, why}]), left
+    (the bolts the user cleared on their last send), ops (the main-level ops whose card it is), follows. Also handed back: heads, each row as <bolt>@<head> and :left for one the user
     cleared, which the run record keeps on the card's post and change for the next raise to read (plan.landings_step),
     and linked, since each row's reading was opened with it and the card has no reading of its own."""
     kit, rows, held, left = f["kit"], [dict(r) for r in f["rows"]], list(f.get("held") or []), set(f.get("left") or [])
     key, form = f"land/{kit}", landings_form(len(rows))
     rows or fail(f"{key} has no bolt that can land, so it has no card")
     for r in rows:
-        r["left"] = r["bolt"] in left
+        r["left"], r["ops"] = r["bolt"] in left, f.get("ops")
     heads = [f"{r['bolt']}@{r['head'][:7]}" + (":left" if r["left"] else "") for r in rows]
     unread = [(r["bolt"], r["unread"]) for r in rows if r.get("unread")]
     why = unread[0][1] if len(rows) == 1 and unread else "; ".join(f"{b}: {w}" for b, w in unread)

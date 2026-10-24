@@ -2521,7 +2521,8 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     step = landings_step(rows, state, ticked, in_plan, landed, note, bool(pane))
     t = builder(fleet, label, kit)
     where = card_where(t["kit"] if t else {"main": str(pathlib.Path.home()), "repo": kit})
-    facts = dict(kit=kit, rows=[r["facts"] for r in rows if r["box"]], held=[dict(bolt=r["bolt"], why=r["why"]) for r in rows if not r["box"]])
+    facts = dict(kit=kit, rows=[r["facts"] for r in rows if r["box"]], held=[dict(bolt=r["bolt"], why=r["why"]) for r in rows if not r["box"]],
+                 ops=owner)
     if step[0] == "none":
         return None
     if step[0] == "leave":
