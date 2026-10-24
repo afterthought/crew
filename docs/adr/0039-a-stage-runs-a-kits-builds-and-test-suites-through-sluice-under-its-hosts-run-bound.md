@@ -1,7 +1,7 @@
 ---
 number: 39
 title: A stage runs a kit's builds and test suites through sluice, under its host's run bound
-status: proposed
+status: accepted
 date: 2026-10-24
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # A stage runs a kit's builds and test suites through sluice, under its host's run bound
 
-Status: proposed to the user on 2026-10-24, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-24, on their card (req_0f8936ecfbb047acadcc, "Approved").
 
 Deciders: the user, on this record's card; written by the design agent from madswan-design's reading of 2026-10-24.
 Amends: `briefs.md` (adds `briefs.18`); the coder's, verify's and conductor's words on running a kit's tests.
