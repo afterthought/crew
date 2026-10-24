@@ -12,7 +12,7 @@
 
 ## 3. A code stage with no task list
 
-- [ ] 3.1 slc-1's case is pinned: a fix round's code stage on a unit whose change is archived at its head delivers at its commit since it began, as the chore built it (design, Decision 6; Task notes 3.1). Passes `tests/py/test_stage_ends.py` (`tests/suite logic`).
+- [x] 3.1 slc-1's case is pinned: a fix round's code stage on a unit whose change is archived at its head delivers at its commit since it began, as the chore built it (design, Decision 6; Task notes 3.1). Passes `tests/py/test_stage_ends.py` (`tests/suite logic`).
 
 ## 4. The conductor and the docs
 

@@ -51,6 +51,28 @@ class TestCode:
         assert plan.delivered(owed("code"), {"head": "", "at": None, "ticks": (0, 0)}) == (None, "no commit since it began")
 
 
+    def test_a_fix_round_on_a_change_archived_at_its_head_delivers_at_its_commit(self, monkeypatch):
+        # slc-1, 2026-10-23: a unit's fix round committed its fix on a branch whose change was archived at its head, and
+        # its wait, owing it every task ticked where no task list stood, called it stuck after fifteen minutes (signal
+        # 2026-10-23-slc-1-conductor-a4b46840/01). The head is read once, git show finds no tasks.md at it,
+        # ticks reads 0 of 0, and the commit since it began delivers it (teams.4).
+        t = {"name": "slc-1", "kit": {"main": "/kit/main", "dir": "/kit"}}
+
+        def run(argv, cwd):
+            if argv[:2] == ["git", "rev-parse"]:
+                return "def5678\n"
+            if argv[:3] == ["git", "log", "-1"]:
+                return AFTER.isoformat() + "\n"
+            if argv[:2] == ["git", "show"] and argv[2] == "def5678:openspec/changes/a/tasks.md":
+                return None  # git exits 128: the path does not exist at that commit
+            raise AssertionError(f"an unexpected read: {argv}")
+        monkeypatch.setattr(plan.gather, "run", run)
+        o = owed("code", team="slc-1")
+        f = plan.deliverable_facts({}, t, o)
+        assert f == {"head": "def5678", "at": AFTER, "ticks": (0, 0)}
+        assert plan.delivered(o, f) == ("unit/a@def5678", "its branch is at def5678, with no task list at its head")
+
+
 class TestVerify:
     def test_a_report_saved_since_it_began_ends_it(self):
         report = saved("verify-a-20261012-1001.md")
