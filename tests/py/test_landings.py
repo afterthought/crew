@@ -590,9 +590,9 @@ class LandActs:
     gives it (rows, a missing one's host not answering), the forecasts, this host's run record (entries) and the
     partition's (partition), and Pending You's tools answered from answers."""
 
-    def __init__(self, rows, entries=(), partition=(), answers=None, here="mac-studio"):
+    def __init__(self, rows, entries=(), partition=(), answers=None, here="mac-studio", works=None):
         self.rows, self.held, self.whole, self.answers, self.here = rows, list(entries), list(partition), dict(answers or {}), here
-        self.calls, self.emitted, self.told, self.asked = [], [], [], []
+        self.calls, self.emitted, self.told, self.asked, self.works, self.worked = [], [], [], [], dict(works or {}), []
 
     def land_row(self, label, bolt, host):
         self.asked.append((bolt, host))
@@ -601,6 +601,10 @@ class LandActs:
 
     def forecast(self, label, kit, bolts):
         return {b: [] for b in bolts}, {}
+
+    def work(self, label, kit, moves):
+        self.worked.append(moves)
+        return {b: self.works.get(b) or work(why="git log in /c/main on mac-studio failed: fatal: bad object") for b in moves}
 
     def entries(self, label):
         return self.held
@@ -745,6 +749,57 @@ def test_a_bolt_proven_after_the_answer_gets_a_new_card_following_it_and_the_sen
     assert raised(monkeypatch, again) == "req_k2"
     assert [t for t, _ in again.calls] == ["get_request"]
     assert "card land/crew: y lands on the user's send of an earlier card, so it is no row of this one" in capsys.readouterr().out
+
+
+ONLY_Z = "%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"
+
+
+def refused_and_closed(monkeypatch):
+    """The user sent land/crew with y and z ticked, y landed and sluice refused z at abc1234: the raise closes the
+    card, keeping z's send; the run record's entries after it."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+    z = dict(row("z"), box=False, why=REFUSED)
+    acts = LandActs({"z": z}, held, [dict(Act="bolt.land", On=["bolt/y"], Head="1" * 40)], {"get_request": (answer, None)})
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(ONLY_Z))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    close = acts.emitted[-1]
+    assert (close["Act"], close["Heads"]) == ("card.close", "z@abc1234")
+    assert close["Outcome"] == f"Landed on GitHub's main: y at 1111111;{TIMER} Held: z, {REFUSED}; {STANDS}"
+    assert not [t for t, _ in acts.calls if t == "post_request"]
+    return acts.held
+
+
+def test_a_refused_bolt_whose_fix_only_took_main_in_lands_on_the_same_send_with_no_card(monkeypatch, capsys):
+    """rail-cards "A refused bolt takes main in" and "The fix merges": z reads proven at def5678, its own work the
+    same, and no card asks for it."""
+    entries = refused_and_closed(monkeypatch)
+    acts = LandActs({"z": row("z", H2)}, entries, answers=POSTED, works={"z": work()})
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) is None
+    assert acts.worked == [{"z": ("abc1234", H2)}] and not acts.calls
+    assert "card land/crew: z lands on the user's send of an earlier card, so it is no row of this one" in capsys.readouterr().out
+
+
+def test_a_refused_bolt_whose_fix_committed_a_change_is_asked_again_on_a_card_naming_it(monkeypatch):
+    """rail-cards "A fix that changes the bolt's work merges": z has a box again, the card naming the fix's commit."""
+    entries = refused_and_closed(monkeypatch)
+    acts = LandActs({"z": row("z", H2)}, entries, answers=POSTED, works={"z": work([LEASE])})
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["title"] == "Land the bolt z on crew's main"
+    assert post["summary"].startswith("z's head is now def5678, with work of its own since your send at abc1234: fix: "
+                                      "keep the lease.\n\n")
+    assert acts.emitted[-1]["Heads"] == "z@def5678"
+
+
+def test_a_ticked_bolt_whose_head_moved_on_an_answered_card_is_read_once_and_waited_for_when_its_work_stands(monkeypatch, capsys):
+    """rail-cards "The head moves by taking main in before the landing": the card the user answered is left."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+    acts = LandActs({"y": row("y"), "z": row("z", H2)}, held, answers={"get_request": (answer, None)}, works={"z": work()})
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.worked == [{"z": ("abc1234", H2)}] and [t for t, _ in acts.calls] == ["get_request"]
+    assert "card land/crew: req_k1 is left as it is, the user having answered it" in capsys.readouterr().out
 
 
 def test_the_raise_is_handed_to_the_main_machine_as_the_one_asking(monkeypatch, capsys):
