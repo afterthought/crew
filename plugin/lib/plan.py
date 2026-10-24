@@ -2117,7 +2117,8 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
     ("change", note, kind_changed, left) when a waiting card is held and its rows, their heads or the event changed
     it, its form changed or not (cards.landings_form), followed then rather than changed; ("leave",) when nothing did;
     ("leave",) when an answered card is held while any bolt the user ticked is still to land on their send, in the
-    plan, not held and at the head they ticked, one landed and not yet closed among them, and no row reads proven since;
+    plan, not held, or held only taking main first (landing_rows' takes_main), whose send stands while it takes main in,
+    and at the head they ticked, one landed and not yet closed among them, and no row reads proven since;
     ("follow", outcome, left, landing) when one does, a bolt on no row of the card or at a head the card did not show,
     which is never added to the card they answered: it is closed saying what landed, what their send still lands, what
     was held and what was left, and a new card follows it with every row that can land but those their send still
@@ -2150,7 +2151,8 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
     was = {b: h for b, h, _ in heads}
     anew = [(b, h) for b, h in now if was.get(b) != h]  # proven since the send: on no row of the card, or at a new head
     moved = {b for b, _ in anew}
-    landing = [b for b in ticked if b in in_plan and b not in held and b not in moved]  # in flight or not yet submitted
+    main_first = {r["bolt"] for r in rows if not r["box"] and r.get("takes_main")}  # its send stands while it takes main in
+    landing = [b for b in ticked if b in in_plan and (b not in held or b in main_first) and b not in moved]  # in flight or not yet submitted
     if landing and not anew:
         return ("leave",)
     on = [b for b, _, _ in heads]
@@ -2159,8 +2161,10 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
              + "; every host's folder follows by swancloud's timer within minutes."]
             if gone and all(b in (landed or {}) for b in gone) else
             [f"Landed or left the plan: {joined(gone)}."] if gone else [])
-    said += [f"Landing as you ticked: {joined(landing)}."] if landing else []
-    said += [f"Held: {b}, {held[b]}." for b in ticked if b in held]
+    lands = [b for b in landing if b not in main_first]
+    said += [f"Landing as you ticked: {joined(lands)}."] if lands else []
+    said += [f"Taking main in first, your send standing for it: {joined([b for b in landing if b in main_first])}."] if len(lands) < len(landing) else []
+    said += [f"Held: {b}, {held[b]}." for b in ticked if b in held and b not in main_first]
     cleared = [b for b in on if b not in ticked]
     said += [f"Left: {joined(cleared)}."] if cleared else []
     said += ["Since your send, " + "; ".join(f"{b}'s head is now {h}" if b in was else f"{b} reads proven" for b, h in anew)

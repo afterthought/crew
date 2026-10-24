@@ -27,7 +27,7 @@
 
 ## 6. The send stands
 
-- [ ] 6.1 After the user's send, a ticked bolt held only to take main in keeps the send standing and the card is left, while a ticked bolt held for any other fix or for sluice's refusal is held as before (design, Decision 7; Task notes 6.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
+- [x] 6.1 After the user's send, a ticked bolt held only to take main in keeps the send standing and the card is left, while a ticked bolt held for any other fix or for sluice's refusal is held as before (design, Decision 7; Task notes 6.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
 
 ## 7. The command's wiring
 

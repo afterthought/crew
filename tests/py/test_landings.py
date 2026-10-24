@@ -400,6 +400,28 @@ def test_a_ticked_bolt_sluice_refused_is_held_and_the_rest_close_the_card():
                              "refused its landing at abc1234, and it waits for its team's fix: x.", None)
 
 
+def taking_main(bolt):
+    return dict(hold(bolt, MAIN_FIRST), takes_main=True)
+
+
+def test_a_ticked_bolt_then_taking_main_first_leaves_the_card_its_send_standing():
+    """rail-cards "Ticked, then forecast to conflict" and "Ticked beside one that lands"."""
+    assert plan.landings_step([taking_main("y")], answered("y@abc1234"), ["y"], {"y"}) == ("leave",)
+    assert plan.landings_step([taking_main("y")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y"},
+                              landed={"z": "2" * 40}) == ("leave",)
+
+
+def test_a_ticked_bolt_taking_main_first_is_kept_on_the_send_when_a_new_card_follows():
+    step = plan.landings_step([taking_main("y"), box("w")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z", "w"})
+    assert step == ("follow", "Landing as you ticked: z. Taking main in first, your send standing for it: y. Since your "
+                              "send, w reads proven, and the card that follows asks for it.", [], [("y", "abc1234"), ("z", "abc1234")])
+
+
+def test_a_ticked_bolt_held_for_any_other_fix_is_held_as_before():
+    step = plan.landings_step([hold("y")], answered("y@abc1234"), ["y"], {"y"})
+    assert step == ("close", "Held: y, held for a fix: one zone is missing (fix/y/gap).", None)
+
+
 def test_a_landing_on_the_users_word_in_ops_pane_closes_a_waiting_card_no_row_of_which_can_land_as_answered_there():
     """main-level "A landing said in ops's pane closes its card naming the user's words": the word answers the card."""
     assert plan.landings_step([], waiting("y@abc1234"), None, set(), here=True) == ("answered", "no bolt waits to land on its main")
