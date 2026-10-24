@@ -282,9 +282,9 @@ def test_the_plan_as_it_stands_shows_a_chain_applied_or_dropped_and_nothing_whil
     assert plan.chain_closed(chain(*closes), first) == said
 
 
-class TestSweptOnThePlanAsItStands:
-    """plan.raise_proposal at the sweep, on a stand-in for the act and the branch: the chain read at the tip fetched
-    anew, a card raised only while a proposal of it stands open there."""
+class OnTheTip:
+    """A stand-in for the act and the branch a proposal's card is raised from: the branch as a command first read it,
+    and as it stands once fetched anew."""
 
     class Acts:
         def __init__(self, held=()):
@@ -313,6 +313,11 @@ class TestSweptOnThePlanAsItStands:
         for name in ("row_card_post", "row_card_change", "row_card_close"):
             monkeypatch.setattr(plan, name, lambda *a, name=name, **kw: self.called.append((name, a, kw)) or "req_2")
 
+
+class TestSweptOnThePlanAsItStands(OnTheTip):
+    """plan.raise_proposal at the sweep: the chain read at the tip fetched anew, a card raised only while a proposal of
+    it stands open there."""
+
     def swept(self, held=(), event="sweep"):
         acts = self.Acts([{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": c} for c in held])
         return plan.raise_proposal(SWEPT_FLEET, {"label": "wldn", "key": "proposal/1", "group": "proposals"}, acts, event), acts
@@ -338,3 +343,33 @@ class TestSweptOnThePlanAsItStands:
         self.now = chain((1, "approved"))
         got, _ = self.swept(event="relink")
         assert (got, self.fetched, [n for n, *_ in self.called]) == ("req_2", [False], ["row_card_change"])
+
+
+# An agreement raises its proposal's card on the plan as it stands, not on its own write: wldn's proposal 553 was agreed
+# by swb-1 at 35d07471 and dropped by the planner at bc2c3b1 four seconds on, and the agreement then posted its card
+# again in the planner's name until the rail's sweep withdrew it (signal 2026-10-24-swancloud-planner-04891322/01).
+@pytest.mark.parametrize("closes, said", [
+    ((), None), (((1, "approved"),), "proposal 1 is approved. It is closed, so crew raises no card for it and changes none."),
+    (((1, "dropped"),), "proposal 1 is dropped: Not now. It is closed, so crew raises no card for it and changes none."),
+    (((1, "rewritten"),), "proposal 1 is dropped: replaced by proposal 2. It is closed, so crew raises no card for it and changes none.")])
+def test_an_agreement_to_a_proposal_the_plan_shows_closed_answers_that_it_is_closed_and_how(closes, said):
+    assert plan.agree_closed(plan.proposal(chain(*closes), 1, "wldn"), 1) == said
+
+
+class TestAgreedOnThePlanAsItStands(OnTheTip):
+    """plan.raise_agreed once swb-1's agreement to proposal 1 is written: the proposal read at the tip fetched anew, its
+    card raised only while it stands open there."""
+
+    def agreed(self):
+        return plan.raise_agreed(SWEPT_FLEET, "wldn", 1, ["swb-1"], self.Acts())
+
+    @pytest.mark.parametrize("state", ["approved", "dropped"])
+    def test_a_proposal_closed_since_the_agreements_write_raises_no_card_changes_none_and_says_how(self, capsys, state):
+        self.now = chain((1, state))
+        assert (self.agreed(), self.fetched, self.called) == (None, [True], [])
+        assert capsys.readouterr().out == plan.agree_closed(plan.proposal(self.now, 1, "wldn"), 1) + "\n"
+
+    def test_a_proposal_still_open_as_the_plan_stands_has_its_card_changed_to_wait_on_the_agreement_no_longer(self):
+        assert (self.agreed(), self.fetched) == ("req_2", [True])
+        (name, args, _), = self.called
+        assert (name, args[5]) == ("row_card_change", "No longer waits on swb-1-conductor")
