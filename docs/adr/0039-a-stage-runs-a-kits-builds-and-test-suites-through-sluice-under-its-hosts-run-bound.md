@@ -33,5 +33,6 @@ A stage runs a kit's compile and any tier of its test suite through `sluice exec
 ## Consequences
 
 - A stage's build or suite waits for room on a loaded host as a check does, and its agent sees the wait.
+- Bounded is not cached: in a run sluice starts, `sluice exec`'s included, a compile runs with no shared cache until sluice's record 0049 (proposed, on the user's card) brings a policy-declared compilation cache into sluice's runs; the sccache chores in sluice, tailrace and flywheel-next cover a session's own shell only. The two records read together, this one bounding and 0049 caching, and 0049's unit is the one to place first once both are accepted (madswan-design, 2026-10-24).
 - Every kit crew builds already has a sluice policy for its bolt branches (`teams.5`), so `sluice exec` is at hand wherever a stage runs; a kit whose CLAUDE.md names no light checks runs everything through it.
 - A crew unit on the yes, `a-stage-runs-builds-and-suites-through-sluice`: the briefs' words and the phrases `tests/t-briefs.sh` pins.
