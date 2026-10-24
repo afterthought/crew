@@ -8301,13 +8301,25 @@ def reach(fleet, t):
                                 Heads=heads, Reached="wait")
                     done.add(heads)
             continue
-        told = bolt_forecast(t["name"], label, b.name(), doc, done, len(bolts) > 1)
-        if told:
-            heads, paths, words = told
-            say(words)
-            record.emit(label, "forecast", [f"bolt/{b.name()}"], why=f"bolt({b.name()}): forecast to conflict with main",
-                        Heads=heads, Paths=" ".join(paths), Reached="wait")
-            done.add(heads)
+        bolt_said(fleet, t, b, doc, done, len(bolts) > 1, say)
+
+
+def bolt_said(fleet, t, b, doc, done, two, say):
+    """What a conductor's wait does with sluice's forecast of a bolt against main (teams.21), doc as bolt_forecast_read
+    gives it: said once (bolt_forecast) and recorded on bolt/<bolt> with its Heads and Paths; and a conflict with what
+    main has landed, meeting no submission queued there, changes the kit's landings card at once (land_hand), so the
+    bolt's row takes main first without waiting for main to move again (bolt-teams "A wait's forecast conflict with main
+    changes the kit's landings card"); one with a queued submission hands nothing."""
+    told = bolt_forecast(t["name"], t["label"], b.name(), doc, done, two)
+    if not told:
+        return
+    heads, paths, words = told
+    say(words)
+    record.emit(t["label"], "forecast", [f"bolt/{b.name()}"], why=f"bolt({b.name()}): forecast to conflict with main",
+                Heads=heads, Paths=" ".join(paths), Reached="wait")
+    done.add(heads)
+    if "#" not in heads:  # with no note of its own: the card changes only when the bolt's row does
+        land_hand(fleet, t["label"], b.get("Repo") or t["kit"]["name"])
 
 
 def sluice_check(main, bolt):

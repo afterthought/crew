@@ -6,7 +6,8 @@ dependent took its head, plan.waiting_for for what the unit's next prompt carrie
 whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
 amendment_words for what it is told; and a bolt against its kit's main (teams.21), plan.bolt_forecast_read for sluice's
 answer, plan.bolt_forecast for what it tells the conductor once and plan.unread_said for a forecast sluice can't give,
-plan.main_conflict for the conflict with main the record holds at the bolt's head,
+plan.main_conflict for the conflict with main the record holds at the bolt's head, plan.bolt_said for what the wait does
+with sluice's forecast, the kit's landings card raised for a conflict with what main landed,
 with plan.forecast_way for a legacy bolt forecast from a place on it (plan.19) and plan.place_checked for what that came to.
 That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
 rebase replays its commits, are contract cases (tests/contract/test_git.py); the wait that tells, starts a settle or
@@ -452,6 +453,35 @@ class TestBoltAgainstMain:
             f"bolt/t@{self.H[:7]}", "no forecast of bolt/t against main: it exited 1")
         assert plan.unread_said("t", self.H, "it exited 1", {f"bolt/t@{self.H[:7]}"}) is None
         assert plan.unread_said("t", None, "it exited 1", set()) == (None, "no forecast of bolt/t against main: it exited 1")
+
+
+class TestWaitChangesTheCard:
+    """bolt-teams "A wait's forecast conflict with main changes the kit's landings card": plan.bolt_said, with the run
+    record's write and the card's raise stood in for."""
+    LANDED, QUEUED = TestBoltAgainstMain.LANDED, TestBoltAgainstMain.QUEUED
+    T = {"name": "swb-1", "label": "wldn", "kit": {"name": "switchboard-kit"}}
+
+    def said(self, monkeypatch, out, done=()):
+        import record
+        emitted, handed, words = [], [], []
+        monkeypatch.setattr(record, "emit", lambda label, act, on, **f: emitted.append((label, act, on, f)))
+        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None, pane=None: handed.append((label, kit, note)))
+        b = plan.Plan("%rec: Bolt\n\nBolt: tenant-environments\nRepo: switchboard-kit\nTeam: swb-1\n\n%rec: Unit\n\n").bolt("tenant-environments")
+        plan.bolt_said({}, self.T, b, plan.bolt_forecast_read(2, out, "")[0], set(done), False, words.append)
+        return emitted, handed, words
+
+    def test_a_conflict_with_what_main_landed_raises_the_kits_card_at_once(self, monkeypatch):
+        emitted, handed, words = self.said(monkeypatch, self.LANDED)
+        assert [(a, f["Reached"]) for _, a, _, f in emitted] == [("forecast", "wait")]
+        assert handed == [("wldn", "switchboard-kit", None)] and len(words) == 1
+
+    def test_one_with_a_submission_queued_on_main_raises_nothing(self, monkeypatch):
+        emitted, handed, _ = self.said(monkeypatch, self.QUEUED)
+        assert emitted and handed == []
+
+    def test_one_said_already_raises_nothing_again(self, monkeypatch):
+        emitted, handed, words = self.said(monkeypatch, self.LANDED, done=["bolt/tenant-environments@1111111 main@2222222"])
+        assert (emitted, handed, words) == ([], [], [])
 
 
 class TestMainConflict:
