@@ -554,6 +554,51 @@ def test_the_read_of_an_earlier_send_reads_the_plan_only_when_one_stands_and_ref
                                  plan.card_heads("y@def5678"), acts) == ([], [])
 
 
+def read_unopened(monkeypatch, capsys, closes, works, json=False):
+    """crew card read land/crew as swancloud-ops, who holds no card under it on this host, after closes, the plan
+    holding y and z of crew, each bolt's head now and own work as works gives them: what it printed."""
+    bolts = [plan.Rec("Bolt", [("Bolt", b), ("Repo", "crew")]) for b in ("y", "z")]
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: argparse.Namespace(bolts=lambda: bolts))
+    monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", "swancloud-ops"))
+    monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+    monkeypatch.setattr(cards, "host_entries", lambda record, label, host: closes)
+    monkeypatch.setattr(plan, "bolt_work", lambda fleet, label, kit, moves: WorkActs(works).work(label, kit, moves))
+    plan.card_read(FLEET, argparse.Namespace(key="land/crew", label=None, json=json, sub="read"))
+    return capsys.readouterr().out
+
+
+def test_with_no_card_open_ops_reads_what_an_earlier_send_still_lands_and_the_command_that_lands_it(monkeypatch, capsys):
+    """main-level "Ops lands a bolt on a send that still stands", "No card open": refuses nothing."""
+    closes = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234"),
+              dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="z@abc1234")]
+    assert read_unopened(monkeypatch, capsys, closes, {"z": work()}) == (
+        "card land/crew: no landings card of crew is open\n"
+        "  to land on the user's send of an earlier card: z\n"
+        "  lands them: crew bolt submit z --label swancloud\n")
+
+
+def test_with_no_card_open_a_sent_bolt_whose_head_crew_cant_read_is_named_and_left_out_of_the_command(monkeypatch, capsys):
+    """main-level "A head crew cannot read"."""
+    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    assert read_unopened(monkeypatch, capsys, closes, {"y": work(head=H1)}) == (
+        "card land/crew: no landings card of crew is open\n"
+        "  can't tell whether the user's earlier send still lands z: bolt/z is on no branch crew can read\n"
+        "  to land on the user's send of an earlier card: y\n"
+        "  lands them: crew bolt submit y --label swancloud\n")
+    assert json.loads(read_unopened(monkeypatch, capsys, closes, {"y": work(head=H1)}, json=True)) == {
+        "key": "land/crew", "card": None, "earlier": ["y"], "unknown": {"z": "bolt/z is on no branch crew can read"}}
+    # with no send standing, it says only that no card is open
+    assert read_unopened(monkeypatch, capsys, [], {}) == "card land/crew: no landings card of crew is open\n"
+
+
+def test_a_key_that_is_no_kits_still_refuses_when_no_card_is_held(monkeypatch):
+    monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", "crw-1-conductor"))
+    monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+    monkeypatch.setattr(cards, "host_entries", lambda record, label, host: [])
+    with pytest.raises(crew.Refusal, match="^crw-1-conductor holds no open card under land/y on mac-studio"):
+        plan.card_read(FLEET, argparse.Namespace(key="land/y", label=None, json=False, sub="read"))
+
+
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():
     step = plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), [], {"y", "z"})
     assert step == ("close", "Sent with no bolt ticked, so nothing lands. Left: y and z.", ["y", "z"], [])

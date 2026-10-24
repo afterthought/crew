@@ -11,7 +11,7 @@
 
 - [x] 2.1 `bolt_work` reads each bolt's gained and lost commits of its own between two heads where the forecasts are made, naming why when it can't, and the git behaviour it rests on is pinned (design, Decisions 1 to 3; Task notes 2.1); passes `tests/py/test_landings.py` in `tests/suite logic` and `tests/contract/test_git.py` in `tests/suite contract`.
 - [x] 2.2 `raise_landings` reads the card before its rows, makes one work read for the bolts that moved, posts no card for a bolt whose send stands, says what changed on a card that asks again, and keeps a held bolt's send on its close (design, Decision 5; Task notes 2.2); passes `tests/py/test_landings.py` in `tests/suite logic`.
-- [ ] 2.3 `crew card read land/<kit>` prints what an earlier send still lands at each bolt's head now, with or without an open card, leaving out and naming a bolt it can't tell of (design, Decision 6; Task notes 2.3); passes `tests/py/test_landings.py` in `tests/suite logic`.
+- [x] 2.3 `crew card read land/<kit>` prints what an earlier send still lands at each bolt's head now, with or without an open card, leaving out and naming a bolt it can't tell of (design, Decision 6; Task notes 2.3); passes `tests/py/test_landings.py` in `tests/suite logic`.
 
 ## 3. The briefs and docs
 
