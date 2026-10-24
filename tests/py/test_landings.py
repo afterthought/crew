@@ -156,10 +156,10 @@ def test_a_bolt_branch_crew_cannot_read_is_said_and_its_box_kept(monkeypatch):
     def git(fleet, t, where, *args, ok=(0,)):
         calls.append(args)
         if args[:2] == ("rev-parse", "--verify"):
-            return (0, "f" * 40) if "bolt/z" in args[3] else (1, "")
+            return (0, "f" * 40) if "bolt/z" in args[3] or "/main^" in args[3] else (1, "")
         return (0, "tree\n") if args[0] == "merge-tree" else (0, "")
     monkeypatch.setattr(plan, "kit_git", git)
-    got, why = plan.forecast_rows(FLEET, "swancloud", "crew", ["y", "z"])
+    got, why, at = plan.forecast_rows(FLEET, "swancloud", "crew", ["y", "z"])
     assert got == {"y": [("main", None)], "z": [("y", None)]}
     assert why == {"y": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's",
                    "z": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's"}
@@ -187,21 +187,45 @@ def where_read(monkeypatch, policy):
 def test_a_bolt_on_github_is_forecast_where_it_lives(monkeypatch):
     """bolt-plan "A bolt on GitHub is read where it lives": GitHub's copy, whose policy names origin for the bolt, not
     the host's lagging copy."""
-    (got, why), trees = where_read(monkeypatch, '[branches."bolt/*"]\nremote = "origin"\n')
+    (got, why, at), trees = where_read(monkeypatch, '[branches."bolt/*"]\nremote = "origin"\n')
     assert why == {} and trees == ["1" * 40]
 
 
 def test_a_bolt_kept_on_its_host_is_forecast_at_the_hosts_branch(monkeypatch):
     """bolt-plan "A bolt kept on its host": GitHub's copy names no remote for the bolt, or has no policy."""
     for policy in ("[branches.main]\nremote = \"origin\"\n", None):
-        (got, why), trees = where_read(monkeypatch, policy)
+        (got, why, at), trees = where_read(monkeypatch, policy)
         assert why == {} and trees == ["2" * 40]
 
 
 def test_a_policy_crew_cannot_read_at_githubs_copy_is_said_and_forecasts_nothing(monkeypatch):
-    (got, why), trees = where_read(monkeypatch, "[branches\n")
+    (got, why, at), trees = where_read(monkeypatch, "[branches\n")
     assert got == {"y": [("main", None)]} and trees == []
     assert why["y"].startswith(".config/sluice.toml at origin/bolt/y is not TOML, so crew can't read bolt y: ")
+
+
+def test_the_forecast_hands_back_the_revision_of_main_it_forecast_against(monkeypatch):
+    """rail-cards "Main moves under an open card": the commit origin/main names after the fetch, which the merge-trees
+    are made onto and the raise keeps."""
+    (got, why, at), trees = where_read(monkeypatch, None)
+    assert at == {"main": "1" * 40}
+
+
+def test_a_forecast_whose_fetch_or_read_of_main_failed_hands_back_no_revision(monkeypatch):
+    def fetch_refused(fleet, t, where, *args, ok=(0,)):
+        if args[0] == "fetch":
+            raise crew.Refusal("git fetch in /c/main on mac-studio failed: could not read from remote")
+        return 0, ""
+    monkeypatch.setattr(plan, "kit_git", fetch_refused)
+    got, why, at = plan.forecast_rows(FLEET, "swancloud", "crew", ["y"])
+    assert at is None and got == {"y": [("main", None)]} and why["y"].endswith("could not read from remote")
+
+    def no_main(fleet, t, where, *args, ok=(0,)):
+        return (1, "") if args[0] == "rev-parse" else (0, "")
+    monkeypatch.setattr(plan, "kit_git", no_main)
+    got, why, at = plan.forecast_rows(FLEET, "swancloud", "crew", ["y"])
+    assert at is None and why == {"y": "/c/main on mac-studio has no origin/main to forecast against"}
+    assert plan.forecast_rows(FLEET, "swancloud", "atlas-kit", ["y"])[2] is None
 
 
 # ------------------------------------------------------------------------------------- what the raise does
@@ -418,7 +442,7 @@ class LandActs:
         return (got, None) if got else (None, "ssh: connect to host deneb: timed out")
 
     def forecast(self, label, kit, bolts):
-        return {b: [] for b in bolts}, {}
+        return {b: [] for b in bolts}, {}, {"main": "e4f5a6b" + "0" * 33}
 
     def entries(self, label):
         return self.held

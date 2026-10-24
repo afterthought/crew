@@ -2183,21 +2183,26 @@ def forecast_rows(fleet, label, kit, bolts):
     (builder) has its main checkout: GitHub's main fetched there, a kit with no origin reading its own; each bolt read
     where it lives (gather.bolt_at, plan.19), GitHub's copy when the policy in it names a remote for the bolt, else the
     host's, a bolt made before gives went through sluice; and git merge-tree of each onto main and onto each bolt above
-    it. Returns ({bolt: [(with, paths)]}, {bolt: why}),
+    it. Returns ({bolt: [(with, paths)]}, {bolt: why}, at),
     why for each bolt whose forecast crew could not make, or that has one not made against another it could not read:
     a branch on no ref it can read, a fetch or a git that failed, or no team building the kit, said and holding nothing
-    (read.1)."""
+    (read.1); at, the revision of main forecast against, {"main": <sha>}, the commit origin/main names after the fetch or
+    main for a kit with no origin, or None when the fetch or the read of it failed."""
     t = builder(fleet, label, kit)
     if not t:
-        return {b: [("main", None)] for b in bolts}, {b: f"no team of {label} builds {kit}, so crew reads no checkout of it" for b in bolts}
+        return ({b: [("main", None)] for b in bolts}, {b: f"no team of {label} builds {kit}, so crew reads no checkout of it" for b in bolts},
+                None)
     main, host = t["kit"]["main"], t["machine"]
     try:
         origin = kit_git(fleet, t, main, "remote", "get-url", "origin", ok=(0, 2))[0] == 0
         if origin:
             kit_git(fleet, t, main, "fetch", "-q", "origin")
+        name = "refs/remotes/origin/main" if origin else "refs/heads/main"
+        rc, sha = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"{name}^{{commit}}", ok=(0, 1))
+        rc == 0 and sha or fail(f"{main} on {host} has no {'origin/main' if origin else 'branch main'} to forecast against")
     except Refusal as e:
-        return {b: [("main", None)] for b in bolts}, {b: str(e) for b in bolts}
-    refs, why = {"main": "refs/remotes/origin/main" if origin else "refs/heads/main"}, {}
+        return {b: [("main", None)] for b in bolts}, {b: str(e) for b in bolts}, None
+    refs, why = {"main": sha}, {}
     for b in bolts:
         github, own, at = f"refs/remotes/origin/bolt/{b}", f"refs/heads/bolt/{b}", {}
         try:
@@ -2231,7 +2236,7 @@ def forecast_rows(fleet, label, kit, bolts):
         for w, paths in fs:
             if paths is None and b not in why:
                 why[b] = why.get(w) or f"git merge-tree could not tell in {main} on {host}"
-    return got, why
+    return got, why, {"main": sha}
 
 
 def batch_waits(units, due, unanswered):
@@ -2470,7 +2475,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     for b in sent:
         print(f"card {key}: {b} lands on the user's send of an earlier card, so it is no row of this one")
     boxed = [r["bolt"] for r in rows if r["box"]]
-    forecast, unmade = acts.forecast(label, kit, boxed) if boxed else ({}, {})
+    forecast, unmade, _ = acts.forecast(label, kit, boxed) if boxed else ({}, {}, None)
     for r in rows:
         if r["box"]:
             r["facts"] = dict(r["facts"], forecast=forecast.get(r["bolt"], []), forecast_why=unmade.get(r["bolt"]))
