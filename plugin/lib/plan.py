@@ -2969,7 +2969,8 @@ def submission_of(tip, code, out, err, pull=None, after=0):
     sluice had recorded before the landing (after, landing_submitted), so that no submission made before it is ever
     read as its own; with pull, the pull request sluice answered the landing's submission with (SUBMIT's PULL), the
     last of those sluice made from its place, `pull/<n>` in the record's from.worktree, as sluice's own wait on a pull
-    request finds it (lib.rs submit_pull, pulls.rs follow). Returns {"id", "state"}, or the words why crew has none:
+    request finds it (lib.rs submit_pull, pulls.rs follow). Returns {"id", "state"}, with the record's failed, result
+    and conflict beside them where it holds them, for landing_blame to judge it by; or the words why crew has none:
     sluice records no such submission, holds it in a state crew does not read, did not answer, or printed what crew
     can't read."""
     subs = submissions_listed(code, out, err)
@@ -2983,7 +2984,7 @@ def submission_of(tip, code, out, err, pull=None, after=0):
     s = max(mine, key=lambda s: s["id"])
     if s.get("state") not in STANDING and s.get("state") not in OUT:
         return f"sluice records #{s['id']} in a state crew does not read: {cut(json.dumps(s.get('state')), 60)}"
-    return {"id": s["id"], "state": s["state"]}
+    return dict({"id": s["id"], "state": s["state"]}, **{k: s[k] for k in ("failed", "result", "conflict") if k in s})
 
 
 def wait_again(sub, again):
@@ -3001,14 +3002,26 @@ def wait_outcome(n, code, out):
     """A landing's outcome from sluice's wait on its submission, #n (WAIT), read from the submission's state: sluice
     0.36.4's `sluice wait <n> --json` prints the submission's record, decided or not (lib.rs await_submission), and
     the state it is out in is its outcome, as sluice's exit for it (EXITS); a wait that printed no record of #n out in
-    a state crew reads, as when sluice itself failed and printed its error, is its exit (read.2)."""
+    a state crew reads, as when sluice itself failed and printed its error, is its exit (read.2). (the outcome, the
+    record of #n the wait printed, which landing_blame judges, or None when it printed none)."""
     try:
         doc = json.loads(out)
     except ValueError:
         doc = None
-    if isinstance(doc, dict) and doc.get("schema") == SUBMISSION and doc.get("id") == n and doc.get("state") in EXITS:
-        return EXITS[doc["state"]]
-    return str(code)
+    doc = doc if isinstance(doc, dict) and doc.get("schema") == SUBMISSION and doc.get("id") == n else None
+    return (EXITS[doc["state"]] if doc and doc.get("state") in EXITS else str(code)), doc
+
+
+def answer_record(f):
+    """sluice's record of the submission it made for a landing, as its answer to SUBMIT printed it (f, SUBMIT's
+    assignments, ANSWER base64), when that answer is the record of the submission it names (ID): what sluice refused at
+    once is judged by (landing_blame); None for an answer that is no such record, sluice's error among them."""
+    try:
+        doc = json.loads(base64.b64decode(f.get("ANSWER") or "").decode(errors="replace"))
+    except ValueError:
+        return None
+    ok = isinstance(doc, dict) and doc.get("schema") == SUBMISSION and f.get("ID") and doc.get("id") == int(f["ID"])
+    return doc if ok else None
 
 
 def landing_blame(doc):
@@ -3114,37 +3127,57 @@ def left_standing(bolt, name, path, f, why=None, was=None):
             f"queued stands, its place {path} kept, and sluice status main says where it is.")
 
 
-def landing_said(bolt, name, host, said, before, marked="", sub=None, again=0, recorded=False):
+def landing_said(bolt, name, host, said, before, marked="", sub=None, again=0, recorded=False, doc=None):
+    """What a landing's submission came to, as landing_end judges it: (landed, the words crew says to ops), or with
+    recorded, (landed, the words its bolt.submit is recorded with)."""
+    landed, words, kept_as, _ = landing_end(bolt, name, host, said, before, marked, sub, again, doc)
+    return landed, kept_as if recorded else words
+
+
+def submit_again(bolt):
+    """What crew tells ops of a landing nothing of the bolt's stopped (bolt-teams, main-level, Decision 4)."""
+    return (f" Its row keeps its box and the user's word stands: report what stopped it, and once it is cleared crew bolt "
+            f"submit {bolt} submits it again, with no new word.")
+
+
+def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, doc=None):
     """What a landing's submission came to, from LANDED's report on the team's host and the commit main now was at
-    before it (code.7): (landed, the words crew says). Main now is GitHub's after the landing's fetch for a kit with an
-    origin, its own main for one with none (kit.main_now, plan.18). Landed when main now moved and holds the bolt's tip
-    that was submitted, whatever sluice exited, sluice having pushed it, so what comes next is crew bolt land and no
-    push (plan.16); a non-zero exit is named with sluice's last words as what came after its push, sluice's to report
-    apart; a main checkout not brought level is named with the command that levels it, and a detached one, which the
-    fleet's timer moves, is said nothing of (plan.18); a mark of landed crew could not set on the bolt's branch is named
-    (marked, mark_said), and lands it all the same. Not landed when main now did not move, "main is where it was", or
-    moved without the bolt's tip, named where it is; a conflict or a refusal is the team's to resolve by taking main
-    into the bolt by a submission to the bolt (plan.8). When sluice itself failed, exiting 3, with the bolt's tip not
-    on main now, what comes next is sluice's own record of the submission's (sub, submission_of; again, the times crew
-    has waited on it again): while it stands queued or under test, crew says so and waits on it again (wait_again); it
-    did not land only when the record has it out, blamed, in conflict or withdrawn; and crew can't tell when the record
-    has it landed, has none, or can't be read, or when it still stands after AGAIN waits, each failing. A main now crew
-    can't read after the submission says it can't tell, naming why and sluice's exit, and words crew can't read land
-    nothing (read.1, read.2). A worktree git could not remove is named with git's words, and goes with the bolt at crew
-    bolt land or is named there (tidy_over). With recorded, the words of one that did not land are those its bolt.submit
-    is recorded refused with, which its row on its kit's landings card, its line on the rail and the card's close say
-    (refused_at): sluice's own last words when it exited non-zero and said any (rail-cards "A refused landing is held on
-    its row"), else crew's for why it did not land and where main is, or why crew can't tell; never what it tells ops,
-    which is for ops's terminal."""
+    before it (code.7): (landed, the words crew says to ops, the words its bolt.submit is recorded with, stopped).
+    Main now is GitHub's after the landing's fetch for a kit with an origin, its own main for one with none
+    (kit.main_now, plan.18). Landed when main now moved and holds the bolt's tip that was submitted, whatever sluice
+    exited, sluice having pushed it, so what comes next is crew bolt land and no push (plan.16); a non-zero exit is
+    named with sluice's last words as what came after its push, sluice's to report apart; a main checkout not brought
+    level is named with the command that levels it, and a detached one, which the fleet's timer moves, is said nothing
+    of (plan.18); a mark of landed crew could not set on the bolt's branch is named (marked, mark_said), and lands it
+    all the same. Not landed when main now did not move, "main is where it was", or moved without the bolt's tip, named
+    where it is. It is the bolt's, refused, only when sluice's record of the submission says so (landing_blame): the
+    record the wait printed or sluice answered with at once (doc, wait_outcome, answer_record), or, when sluice itself
+    failed, exiting 3, with the bolt's tip not on main now, its record in sluice's listing (sub, submission_of; again,
+    the times crew has waited on it again): a conflict or a check that ran is the team's to resolve by taking main into
+    the bolt by a submission to the bolt (plan.8), told to the bolt's conductor in sluice's words, and recorded in
+    sluice's own last words when it exited non-zero and said any (rail-cards "A refused landing is held on its row"),
+    else crew's for why it did not land and where main is. Anything else is stopped, nothing of the bolt's (rail-cards
+    "A landing sluice or its host stopped keeps its box"): recorded with what stopped it, the record's words for it
+    (landing_blame), sluice's own when it gave no record, or crew's for what it can't tell, and ops told to report it
+    and submit the bolt again once it is cleared, with no new word (submit_again, main-level). While sluice's record
+    has a submission sluice itself failed on standing queued or under test, crew says so and waits on it again
+    (wait_again); crew can't tell when the record has it landed, has none, or can't be read, or when it still stands
+    after AGAIN waits, each stopped. A main now crew can't read after the submission says it can't tell, naming why
+    and sluice's exit, and words crew can't read land nothing, each stopped (read.1, read.2). A worktree git could not
+    remove is named with git's words to ops, and goes with the bolt at crew bolt land or is named there (tidy_over).
+    The recorded words are what its row on its kit's landings card, its line on the rail and the card's close say
+    (refused_at, stopped_at), never what crew tells ops, which is for ops's terminal."""
     r = landing_report(said)
     if r is None:
-        return False, f"crew can't read what the submission of bolt/{bolt} to {name}'s main came to: {said.strip()[-200:] or 'nothing'}"
+        why = f"crew can't read what the submission of bolt/{bolt} to {name}'s main came to: {said.strip()[-200:] or 'nothing'}"
+        return False, why + "." + submit_again(bolt), why, True
     f, words, held = r
     kept = (f" Its worktree {f['KEPT']} is kept, git refusing to remove it: {' '.join(f.get('WHY', '').split()) or 'git said nothing'}. "
-            "crew bolt land removes it with the bolt, or names it with why it stays." if f.get("KEPT") and not recorded else "")
+            "crew bolt land removes it with the bolt, or names it with why it stays." if f.get("KEPT") else "")
     ref, now, why = kit.main_now(said, name, host)
     if why:
-        return False, f"crew can't tell whether bolt/{bolt} landed on {name}'s main: {why}; the submission exited {f['RC']}.{kept}"
+        why = f"crew can't tell whether bolt/{bolt} landed on {name}'s main: {why}; the submission exited {f['RC']}"
+        return False, f"{why}.{submit_again(bolt)}{kept}", why + ".", True
     if now != before and held["HELD_GITHUB" if ref == "origin/main" else "HELD_OWN"] == "yes":
         after = ("" if f["RC"] == "0" else
                  f" sluice exited {f['RC']} after its push: {words or 'sluice said nothing'}. That is sluice's to report, apart from the landing.")
@@ -3152,32 +3185,47 @@ def landing_said(bolt, name, host, said, before, marked="", sub=None, again=0, r
                  f" {name}'s main checkout was not brought level ({f['LEVEL']}): git read-tree -m -u {f['OLD'][:7]} main there.")
         why = "its branch carries no mark of crew's" if marked == "no" else marked
         mark = f" crew could not mark bolt/{bolt} landed: {why}." if why and why != "yes" else ""
-        return True, f"bolt/{bolt} landed on {name}'s main at {now[:7]}: now crew bolt land {bolt}.{after}{level}{mark}{kept}"
+        said_ = f"bolt/{bolt} landed on {name}'s main at {now[:7]}: now crew bolt land {bolt}.{after}{level}{mark}{kept}"
+        return True, said_, said_, False
     where = ", and main is where it was" if now == before else f"; {name}'s main moved to {now[:7]} without it"
     if f["RC"] == "3":  # sluice itself failed, the bolt not on main now: sluice's record says what comes next
         failed = f"sluice itself failed ({words or 'it said nothing'})"
         tip = f"{name}'s main now, {now[:7]}, does not hold bolt/{bolt}'s tip {f['TIP'][:7]}"
         if not isinstance(sub, dict):
             unread = sub or "crew has not read sluice's record of the submission"
-            return False, f"crew can't tell whether bolt/{bolt} will land on {name}'s main: {failed}, {tip}, and {unread}.{kept}"
+            return (False, f"crew can't tell whether bolt/{bolt} will land on {name}'s main: {failed}, {tip}, and {unread}."
+                    f"{submit_again(bolt)}{kept}", f"{failed}, and {unread}", True)
         n, state = sub["id"], sub["state"]
         if wait_again(sub, again) is not None:
             return False, (f"{failed}, but its record has bolt/{bolt}'s submission, #{n}, {STANDING[state]} on {name}'s main, "
-                           f"which does not hold it yet: crew waits on it again (sluice wait {n}).{kept}")
+                           f"which does not hold it yet: crew waits on it again (sluice wait {n}).{kept}"), None, False
         if state in STANDING:
             return False, (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: sluice itself failed again each of the "
-                           f"{again} times crew waited on #{n}, which its record still has {STANDING[state]}, and {tip}. That is "
-                           f"sluice's to report; crew bolt submit {bolt} submits it again.{kept}")
+                           f"{again} times crew waited on #{n}, which its record still has {STANDING[state]}, and {tip}."
+                           f"{submit_again(bolt)}{kept}"), (f"sluice itself failed ({words or 'it said nothing'}) each of the "
+                                                            f"{again} times crew waited on #{n}, which its record still has "
+                                                            f"{STANDING[state]}"), True
         if state == "landed":
-            return False, f"crew can't tell whether bolt/{bolt} landed: {failed}, its record has #{n} landed, and {tip}.{kept}"
-        why = f"sluice itself failed, and its record has #{n} {OUT[state]}"
+            why = f"{failed}, its record has #{n} landed, and {tip}"
+            return False, f"crew can't tell whether bolt/{bolt} landed: {why}.{submit_again(bolt)}{kept}", why, True
+        blame, cause = landing_blame(sub)
+        why, cause = f"sluice itself failed, and its record has #{n} {OUT[state]}", cause and f"{failed}, and {cause}"
     else:
+        blame, cause = landing_blame(doc) if doc is not None else ("stop", None)
         why = {"1": "main's checks failed on it", "2": "sluice refused it or found a conflict", "4": "it was withdrawn while it waited",
                "64": "sluice could not read its command line", "130": "the submission was stopped"}.get(f["RC"], f"the submission exited {f['RC']}")
-    if recorded:
-        return False, words if f["RC"] != "0" and words else f"bolt/{bolt} did not land: {why}{where}."
-    return False, (f"bolt/{bolt} did not land: {why}{where}. Tell the bolt's conductor sluice's words above: a conflict is the "
-                   f"bolt's, and the team takes main into it by a submission to the bolt, then you submit again.{kept}")
+    sluices = words if f["RC"] != "0" and words else None
+    if blame == "bolt":
+        return False, (f"bolt/{bolt} did not land: {why}{where}. Tell the bolt's conductor sluice's words above: a conflict is the "
+                       f"bolt's, and the team takes main into it by a submission to the bolt, then you submit again.{kept}"), (
+            sluices or f"bolt/{bolt} did not land: {why}{where}."), False
+    if cause:  # sluice's record says what stopped it
+        told, kept_as = f"{cause.rstrip('.')}{where}", cause
+    else:  # sluice gave no record crew reads: in its own words, else crew's
+        crews = {"0": "the submission exited 0", "64": "sluice could not read its command line", "130": "the submission was stopped"
+                 }.get(f["RC"], f"the submission exited {f['RC']}, and sluice gave no record of it crew reads")
+        told, kept_as = f"{(sluices or crews).rstrip('.')}{where}", sluices or f"{crews}{where}"
+    return False, f"bolt/{bolt} did not land, and nothing of the bolt's stopped it: {told}.{submit_again(bolt)}{kept}", kept_as, True
 
 
 def mark_said(code, out, err):
@@ -3429,6 +3477,7 @@ def landing_ended(fleet, label, p, a):
     again = 0
     while True:
         rc, said = p["RC"], p["said"]
+        doc = answer_record(p) if rc != "0" else None  # what sluice refused at once is judged by its answer's record
         if rc == "0":
             while True:
                 w = crew.on_machine(fleet, host, ["bash", "-c", WAIT, "crew", main, p["ID"]])
@@ -3436,7 +3485,7 @@ def landing_ended(fleet, label, p, a):
                     break
             if w.stderr.strip():
                 print(w.stderr.rstrip(), file=sys.stderr)
-            rc = wait_outcome(int(p["ID"]), w.returncode, w.stdout)
+            rc, doc = wait_outcome(int(p["ID"]), w.returncode, w.stdout)
             said = next((l.strip() for l in reversed((w.stderr or "").splitlines()) if l.strip()), "")
         r = crew.on_machine(fleet, host, ["bash", "-c", LANDED, "crew", main, p["path"], bolt, p["TIP"], p["OLD"], rc,
                                           base64.b64encode(said.encode()).decode()])
@@ -3444,24 +3493,24 @@ def landing_ended(fleet, label, p, a):
         if r.stderr.strip():
             print(r.stderr.rstrip(), file=sys.stderr)
         if r.returncode:
-            words = f"crew can't tell whether bolt/{bolt} landed on {name}'s main: on {host}: " + (
+            refused = f"crew can't tell whether bolt/{bolt} landed on {name}'s main: on {host}: " + (
                 (r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
-            landed, refused = False, words
+            landed, words, stopped = False, refused.rstrip(".") + "." + submit_again(bolt), True
             break
         tip, sub = sluice_failed(r.stdout, p["before"]), None
         if tip:  # sluice itself failed, the bolt not on main now: its record of the submission says what comes next
             s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
             sub = submission_of(tip, s.returncode, s.stdout, s.stderr, after=p["last"])
-        landed, words = landing_said(bolt, name, host, r.stdout, p["before"], sub=sub, again=again)
-        refused = landing_said(bolt, name, host, r.stdout, p["before"], sub=sub, again=again, recorded=True)[1]
+        landed, words, refused, stopped = landing_end(bolt, name, host, r.stdout, p["before"], sub=sub, again=again, doc=doc)
         n = wait_again(sub, again) if tip else None
         if n is None:
             break
         print(words, flush=True)
         f, told = submit_ran(fleet, host, main, p["path"], bolt, str(n), tip)
         if f is None:
-            words = refused = (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: crew could not wait on #{n} "
-                               f"again on {host}: {told}")
+            refused = (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: crew could not wait on #{n} "
+                       f"again on {host}: {told}")
+            words, stopped = refused + "." + submit_again(bolt), True
             break
         p, again = dict(p, **f, said=told), again + 1
     if not landed:
