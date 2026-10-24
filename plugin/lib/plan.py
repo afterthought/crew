@@ -2005,6 +2005,43 @@ def held_at(refused, bolt, head):
     return words if at and head and (at.startswith(head) or head.startswith(at)) else None
 
 
+def send_stands(sent, head, work):
+    """Whether the user's send on a kit's landings card still stands for a bolt they ticked at sent, now at head
+    (rail-cards "A ticked bolt's approval stands while its own work is unchanged", record 0031 as amended 2026-10-24):
+    the heads one by prefix, or the bolt's own work, its non-merge commits main lacks, read between them (work,
+    bolt_work's {head, gained, lost, why}) with nothing gained and nothing lost. Work not read, or read with why, holds
+    no send at another head (read.1). A decision of facts alone (code.7)."""
+    if sent and head and (head.startswith(sent) or sent.startswith(head)):
+        return True
+    return bool(work) and not work.get("why") and not work.get("gained") and not work.get("lost")
+
+
+SAID_COMMITS = 5  # the subjects a bolt asked again names of each list, before how many more
+
+
+def work_said(bolt, sent, head, work):
+    """The words for a bolt the user ticked at sent and asked for again at head, whose send does not stand
+    (send_stands, rail-cards "A ticked bolt whose own work changed is asked again, saying what changed"): its head now,
+    then the subjects of its own commits it gained since the send and those it no longer holds, SAID_COMMITS of each
+    at most and how many more; or why crew could not tell, in git's words (read.1)."""
+    work, now = work or {"why": "crew read none of its work"}, f"{bolt}'s head is now {head[:7]}" if head else None
+
+    def listed(commits):
+        more = len(commits) - SAID_COMMITS
+        return "; ".join([s for _, s in commits[:SAID_COMMITS]] + ([f"and {more} more"] if more > 0 else []))
+    if work.get("why"):
+        return ", but ".join(([now] if now else []) + [
+            f"crew could not tell whether {bolt}'s own work changed since your send at {sent[:7]}: {work['why']}"])
+    gained, lost = list(work.get("gained") or []), list(work.get("lost") or [])
+    said = [now or f"{bolt}'s head has moved"]
+    if gained:
+        said.append(f"with work of its own since your send at {sent[:7]}: {listed(gained)}")
+    if lost:
+        said.append(f"and no longer holding: {listed(lost)}" if gained else
+                    f"no longer holding work of its own your send at {sent[:7]} held: {listed(lost)}")
+    return ", ".join(said)
+
+
 def landing_rows(order, rows, held):
     """The rows of a kit's landings card (rail-cards, record 0031 as amended 2026-10-23), from facts alone: order, the
     plan's bolts of the kit by name, in its order; rows, {bolt: facts} for each that reads proven as a fix in flight on

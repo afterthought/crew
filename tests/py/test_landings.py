@@ -226,6 +226,45 @@ def answered(*heads):
     return {"status": "answered", "heads": plan.card_heads(" ".join(heads))}
 
 
+def work(gained=(), lost=(), why=None, head=H2):
+    """A bolt's own work between the head sent and its head now, as bolt_work reads it."""
+    return dict(head=head, gained=list(gained), lost=list(lost), why=why)
+
+
+LEASE = ("1a2b3c4", "fix: keep the lease")
+
+
+def test_a_send_stands_at_the_head_sent_or_where_the_bolts_own_work_is_the_same():
+    """rail-cards "A ticked bolt's approval stands while its own work is unchanged"."""
+    assert plan.send_stands("abc1234", H1, None)
+    assert plan.send_stands("abc1234", H2, work())
+    assert not plan.send_stands("abc1234", H2, work([LEASE]))
+    assert not plan.send_stands("abc1234", H2, work(lost=[LEASE]))
+    assert not plan.send_stands("abc1234", H2, work(why="git log in /c/main on mac-studio failed: fatal: bad object"))
+    assert not plan.send_stands("abc1234", H2, None)
+
+
+def test_a_bolt_asked_again_is_said_with_the_work_it_gained_or_lost_or_why_crew_cant_tell():
+    """rail-cards "A ticked bolt whose own work changed is asked again, saying what changed"."""
+    assert plan.work_said("z", "abc1234", H2, work([LEASE])) == (
+        "z's head is now def5678, with work of its own since your send at abc1234: fix: keep the lease")
+    assert plan.work_said("z", "abc1234", H2, work(lost=[LEASE])) == (
+        "z's head is now def5678, no longer holding work of its own your send at abc1234 held: fix: keep the lease")
+    assert plan.work_said("z", "abc1234", H2, work([LEASE], [("9f8e7d6", "test: wait for the lock")])) == (
+        "z's head is now def5678, with work of its own since your send at abc1234: fix: keep the lease, and no longer "
+        "holding: test: wait for the lock")
+    assert plan.work_said("z", "abc1234", H2, work(why="git fetch in /c/main on mac-studio failed: fatal: no route")) == (
+        "z's head is now def5678, but crew could not tell whether z's own work changed since your send at abc1234: "
+        "git fetch in /c/main on mac-studio failed: fatal: no route")
+
+
+def test_a_bolt_asked_again_names_five_commits_of_each_list_and_how_many_more():
+    six = [(f"{n}000000", f"fix: part {n}") for n in range(1, 7)]
+    assert plan.work_said("z", "abc1234", H2, work(six)) == (
+        "z's head is now def5678, with work of its own since your send at abc1234: fix: part 1; fix: part 2; "
+        "fix: part 3; fix: part 4; fix: part 5; and 1 more")
+
+
 def test_no_row_that_can_land_and_no_card_is_nothing():
     assert plan.landings_step([hold("y")], None, None, {"y"}) == ("none",)
     assert plan.landings_step([], None, None, set()) == ("none",)
