@@ -35,7 +35,7 @@
 
 ## 8. The words
 
-- [ ] 8.1 The conductor's and main-level ops's briefs, README and the crew skill say a waiting bolt is forecast again when main moves and a row conflicting with main takes main first, its conductor told the fix (design, Decision 4; Task notes 8.1); verify `tests/suite t-docs` ends with "0 failed".
+- [x] 8.1 The conductor's and main-level ops's briefs, README and the crew skill say a waiting bolt is forecast again when main moves and a row conflicting with main takes main first, its conductor told the fix (design, Decision 4; Task notes 8.1); verify `tests/suite t-docs` ends with "0 failed".
 
 ## 9. The change as a whole
 
