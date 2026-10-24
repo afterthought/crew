@@ -345,6 +345,12 @@ class TestRecord:
         r = self.read([post("req_1", "proposal/1"), post("req_1", "proposal/1", act="card.close", minutes=1)])
         assert (r["cards"], r["held"]["closed"]) == ([], {"proposal/1"})
 
+    def test_a_follow_on_crew_withheld_opens_no_card_though_it_names_the_card_whose_answer_stands(self):
+        """rail-cards "A follow-on with nothing changed is not posted": the withheld post names req_1, which stays closed."""
+        stood = dict(post("req_1", "proposal/1", minutes=2), State="stands", Refused="Not posted: nothing has changed since …")
+        r = self.read([post("req_1", "proposal/1"), post("req_1", "proposal/1", act="card.close", minutes=1), stood])
+        assert r["cards"] == []
+
     def test_a_refused_close_leaves_its_card_open_and_a_lost_cards_close_leaves_its_row_for_its_card_posted_again(self):
         refused = dict(post("req_1", "batch/1", act="card.close", minutes=1), Refused="Pending You refused the close: x")
         r = self.read([post("req_1", "batch/1"), refused])

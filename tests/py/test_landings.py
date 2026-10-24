@@ -539,7 +539,10 @@ def test_one_left_out_closes_the_card_and_a_new_one_follows_it_with_that_bolt_un
     close = next(e for e in acts.emitted if e["Act"] == "card.close")
     assert (close["Outcome"], close["Rows"]) == (f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z.", "1")
     post = next(a for t, a in acts.calls if t == "post_request")
-    assert post["follows"] == "req_k1" and post["summary"].startswith("Left on your last send.")
+    opening, said = post["summary"].split("\n\n")[:2]
+    assert post["follows"] == "req_k1" and said.startswith("Left on your last send.")
+    assert opening.startswith("You answered the card before this one") and opening.endswith(
+        f": ticked y, left z. Since then: landed on GitHub's main: y at 1111111;{TIMER} Left: z.")
     assert acts.emitted[-1]["Heads"] == "z@abc1234:left"
 
 

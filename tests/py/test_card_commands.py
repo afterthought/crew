@@ -400,7 +400,10 @@ def test_a_change_to_a_card_the_user_answered_asking_anew_acks_it_with_the_note_
     assert acts.calls[1][1] == {"requestId": "req_c1", "name": "swb-1-conductor", "expectedVersion": 3, "outcome": "Head is now abc1234"}
     sent = acts.calls[3][1]
     assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("land/b1:2", "req_c1", "approve")
-    assert sent["summary"].startswith("Its head moved since your approval, from 0123abc to abc1234: approving this lands abc1234.")
+    opening, _, rest = sent["summary"].partition("\n\n")
+    assert re.fullmatch(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you "
+                        r"answered\. Since then: head is now abc1234\.", opening)
+    assert rest.startswith("Its head moved since your approval, from 0123abc to abc1234: approving this lands abc1234.")
     assert [(e["Act"], e.get("Card"), e["Key"], e.get("State"), e.get("Outcome"), e.get("Head")) for e in acts.emitted] == [
         ("card.close", "req_c1", "land/b1", "closed", plan.REVISED, None), ("card.post", "req_c2", "land/b1", None, None, "abc1234")]
     out = capsys.readouterr().out
@@ -456,7 +459,8 @@ def test_a_card_pending_you_ended_after_the_users_answer_asking_anew_is_recorded
                                 anew={"approved": ""}) == "req_c2"
     assert [t for t, _ in acts.calls] == ["get_request", "match_area", "post_request"]
     sent = acts.calls[2][1]
-    assert sent["follows"] == "req_c1" and sent["summary"].startswith(
+    assert sent["follows"] == "req_c1" and sent["summary"].startswith("You answered the card before this one, by ")
+    assert sent["summary"].split("\n\n")[1].startswith(
         "Its head is now abc1234, and crew holds no record of the head you approved: approving this lands abc1234.")
     assert [(e["Act"], e.get("Card"), e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
         ("card.close", "req_c1", "closed", plan.ENDED_ELSEWHERE), ("card.post", "req_c2", None, None)]
@@ -522,11 +526,11 @@ def test_a_post_pending_you_answers_with_the_card_the_record_already_holds_open_
 DEPLOY_HELD = [post("deploy/srv", "swancloud-ops", "req_d1")]
 
 
-def act_follow(get_request, entries=DEPLOY_HELD, follows="req_d1"):
+def act_follow(get_request, entries=DEPLOY_HELD, follows="req_d1", since=None):
     acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s1"), None), "get_request": get_request},
                 entries=entries, caller="swancloud-ops")
     facts = dict(STEP, follows=follows) if follows else STEP
-    return acts, plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, facts, WHERE, acts)
+    return acts, plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, facts, WHERE, acts, since)
 
 
 def test_a_post_following_a_card_pending_you_then_reports_resolved_records_the_post_and_then_that_card_closed(capsys):
@@ -564,7 +568,7 @@ def test_a_post_whose_read_of_the_card_it_follows_fails_stands_and_says_so(capsy
     (DEPLOY_HELD + [dict(Act="card.close", Card="req_d1", Key="deploy/srv", By="swancloud-ops", State="closed")], "req_d1"),
     ([post("deploy/srv", "swb-1-conductor", "req_d1")], "req_d1")])
 def test_a_post_following_nothing_or_a_card_the_record_holds_closed_reads_nothing(entries, follows):
-    acts, card = act_follow(({"status": "resolved", "version": 4}, None), entries, follows)
+    acts, card = act_follow(({"status": "resolved", "version": 4}, None), entries, follows, ["The deploy ended, and this is its step 1"])
     assert card == "req_s1" and [t for t, _ in acts.calls] == ["match_area", "post_request"]
     assert [e["Act"] for e in acts.emitted] == ["card.post"]
 
@@ -719,6 +723,78 @@ def test_a_card_followed_once_answered_records_the_answer_on_its_close_and_on_th
 def test_a_followed_card_pending_you_picked_up_records_the_answer_its_reply_still_carries():
     acts, card = act_follow(({"status": "resolved", "version": 4, "answer": {"approved": True}}, None))
     assert [(e["Act"], e.get("Answer")) for e in acts.emitted] == [("card.post", None), ("card.close", "approved")]
+
+
+# A record's card the user answered with a note, and the design agent's revision of the record after it (rail-cards
+# "A card that follows one the user answered says so first", "A follow-on with nothing changed is not posted").
+DESIGN, RKEY = "swancloud-design", "record/crew/0019"
+RECORD = dict(kit="crew", number=19, title="One card per thing", opening="A card asked again says what changed.", quoted=[],
+              text="# 19. One card per thing\n\nBody.", alternatives=None)
+ANSWERED_ON = [post(RKEY, DESIGN, "req_1", at="2026-10-23T13:10:04Z"),
+               dict(Act="card.close", Key=RKEY, By=DESIGN, Card="req_1", State="closed", At="2026-10-23T14:02:41Z",
+                    Answer="declined, with a note")]
+OPENED = "You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: declined, with a note. Since then: "
+
+
+def record_post(entries, since, follows="req_1"):
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_2"), None)}, entries=entries, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    b = cards.record_card(dict(RECORD, follows=follows))
+    return acts, plan.card_posted(acts, "swancloud", DESIGN, b, WHERE, since=since)
+
+
+def test_a_post_following_a_card_the_user_answered_opens_with_what_they_answered_and_what_changed_and_follows_it():
+    acts, card = record_post(ANSWERED_ON, ["Revised at 4be21c0: docs(adr): 0019 takes the user's note"])
+    assert card == "req_2"
+    sent = acts.calls[-1][1]
+    said = OPENED + "revised at 4be21c0: docs(adr): 0019 takes the user's note."
+    assert sent["summary"].startswith(said + "\n\nA card asked again says what changed.")
+    assert sent["context"]["background"].startswith(said) and sent["follows"] == "req_1"
+    assert [(e["Act"], e.get("Card"), e.get("State")) for e in acts.emitted] == [("card.post", "req_2", None)]
+
+
+@pytest.mark.parametrize("since", [None, []])
+def test_a_post_following_a_card_the_user_answered_with_nothing_changed_is_recorded_standing_and_not_posted(capsys, since):
+    acts, card = record_post(ANSWERED_ON, since)
+    assert card is None and acts.calls == [] and acts.names == []
+    words = "Not posted: nothing has changed since the user answered req_1 by 2026-10-23 14:02 UTC, so their answer stands"
+    assert acts.emitted == [dict(Act="card.post", On=["record/crew/0019"], by=DESIGN, refused=words, Card="req_1", Key=RKEY,
+                                 State="stands", label="swancloud")]
+    assert capsys.readouterr().err == f"card {RKEY}: {words}\n"
+    stood = ANSWERED_ON + [dict(acts.emitted[0], By=DESIGN, Refused=words)]
+    assert cards.card_under(stood, RKEY, DESIGN) is None and plan.last_refusal(stood, RKEY) == words
+
+
+def test_a_later_post_with_something_changed_follows_the_card_whose_answer_stands():
+    stood = ANSWERED_ON + [dict(Act="card.post", Key=RKEY, By=DESIGN, Card="req_1", State="stands", Refused="Not posted: …")]
+    acts, card = record_post(stood, ["Revised at 9c0ffee: docs(adr): 0019 names the key"], follows=None)
+    sent = acts.calls[-1][1]
+    assert card == "req_2" and sent["follows"] == "req_1" and sent["summary"].startswith(OPENED + "revised at 9c0ffee")
+    assert sent["idempotencyKey"] == "record/crew/0019:2"
+
+
+def test_a_post_following_no_card_the_user_answered_is_posted_as_built():
+    acts, card = record_post([], None, follows=None)
+    sent = acts.calls[-1][1]
+    assert sent["summary"] == cards.record_card(RECORD)["card"]["summary"] and "follows" not in sent
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)})
+    act_post(acts)
+    assert acts.calls[-1][1]["summary"] == cards.landing_card(FACTS)["card"]["summary"]
+
+
+def test_a_change_with_no_card_held_hands_what_changed_to_the_post_it_makes():
+    """The record's card was withheld once, its answer standing: the change holds no card, and posts the next revision
+    following req_1, saying what changed, or withholds it again when the event gives nothing changed."""
+    stood = ANSWERED_ON + [dict(Act="card.post", Key=RKEY, By=DESIGN, Card="req_1", State="stands", Refused="Not posted: …")]
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_2"), None)}, entries=stood, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    assert plan.row_card_change(None, "swancloud", DESIGN, cards.record_card, RECORD, "Revised at 4be21c0: x", WHERE, acts,
+                                since=["Revised at 4be21c0: x"]) == "req_2"
+    assert acts.calls[-1][1]["summary"].startswith(OPENED + "revised at 4be21c0: x.") and acts.calls[-1][1]["follows"] == "req_1"
+    acts = Acts(entries=stood, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    assert plan.row_card_change(None, "swancloud", DESIGN, cards.record_card, RECORD, "x", WHERE, acts, since=[]) is None
+    assert acts.calls == [] and acts.emitted[0]["State"] == "stands"
 
 
 def test_a_close_pending_you_does_not_find_is_recorded_lost_and_a_refused_one_recorded_refused():

@@ -2516,12 +2516,14 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
         closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, offered=offered, Rows=str(len(rest)),
                                 Heads=" ".join(f"{b}@{h}" for b, h in landing))
         return closed and row_card_change(fleet, label, owner, cards.landings_card, dict(facts, rows=rest, left=left,
-                                                                                         follows=closed), outcome, where, acts)
+                                                                                         follows=closed), outcome, where, acts,
+                                          since=[outcome])
     _, outcome, then = step
     closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, offered=offered, Rows=str(len(boxed)))
     if then is None or not boxed or not closed:  # a close refused leaves the card open, and nothing follows it yet
         return closed
-    return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=then, follows=closed), outcome, where, acts)
+    return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=then, follows=closed), outcome, where, acts,
+                           since=[outcome])
 
 
 def raise_landings_row(fleet, row, acts=None):
@@ -10870,7 +10872,7 @@ def record_reading(l, entries, plan, fresh, missing=None):
             for o in e["On"]:
                 if o.startswith("proposal/"):
                     times.setdefault((l, o), utc(e["At"]))
-        elif act == "card.post" and e.get("Card") and utc(e["At"]) >= fresh:
+        elif act == "card.post" and e.get("Card") and not e.get("Refused") and utc(e["At"]) >= fresh:
             if e.get("Key"):  # the same owner's card under the same key, but another, is the older copy, lost to it
                 for c in [c for c, d in posted.items() if (d["key"], d["by"]) == (e["Key"], e.get("By")) and c != e["Card"]]:
                     del posted[c]
@@ -13320,7 +13322,7 @@ def asked_of(b):
     return {"Head": b["head"]} if b.get("head") else {}
 
 
-def card_posted(acts, label, owner, b, where, entries=None):
+def card_posted(acts, label, owner, b, where, entries=None, since=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
     posted under the row's key, or the key with its revision once a card of the owner's under it closed, either filled
     out to Pending You's eight characters when shorter (post_key, from entries, this host's run record unless given),
@@ -13332,10 +13334,26 @@ def card_posted(acts, label, owner, b, where, entries=None):
     that card, printed with the line that adopts it and recorded once, by the command that recorded it first. A post
     that follows a card of the owner's those entries still hold open reads that card once it is made, and records it
     closed when Pending You has ended it, as it picks up an answered card a new card follows (followed_closed); one
-    given back as recorded already reads nothing, the command that recorded it having read it."""
+    given back as recorded already reads nothing, the command that recorded it having read it.
+
+    A post that comes after a card the user answered, the card it follows closed or declined, or the card whose answer
+    stands under the row's key (cards.answered_before, record 0031 as amended 2026-10-24), opens its summary and its
+    details with what they answered, when, and what changed since, since being the event's sentences, and follows that
+    card (cards.answered_opening, cards.opened); with nothing changed, since empty or not given, it is not posted: it is
+    recorded as a post refused in crew's words, naming that card and saying its answer stands (cards.stands_said), with
+    the card and the state stands, said, and None returned, refusing nothing of the event (roles.3)."""
     key, obj = b["key"], cards.row_object(b["key"], acts.kits(label)) or f"agent/{owner}"
     cwd, remote = where
     known = acts.entries(label) if entries is None else entries
+    earlier = cards.answered_before(known, b["card"].get("follows"), key, owner)
+    if earlier:
+        opening = cards.answered_opening(earlier, since)
+        if not opening:
+            words = cards.stands_said(earlier)
+            acts.emit(label, "card.post", [obj], by=owner, refused=words, Card=earlier["card"], Key=key, State=cards.STANDS)
+            print(f"card {key}: {words}", file=sys.stderr)
+            return None
+        b = dict(b, card=cards.opened(b["card"], opening, earlier["card"]))
     asked = cards.post_key(known, key, owner)
     follows = b["card"].get("follows")
     held = cards.followed_open(known, follows, owner) if follows else None
@@ -13451,7 +13469,7 @@ def card_built(acts, label, build, facts):
     return unopened(b, why)
 
 
-def row_card_post(fleet, label, owner, build, facts, where, acts=None):
+def row_card_post(fleet, label, owner, build, facts, where, acts=None, since=None):
     """The act that posts a card of crew's own (briefs.16, record 0031 §1): build(facts), one of cards.py's six
     builders, posted through the fleet's `pendingyou mcp` under the host's sign-in, asked in the name of owner, the
     role whose row it is, under the row's key, from where, the kit's (checkout, remote) as card_where gives it, and
@@ -13460,9 +13478,11 @@ def row_card_post(fleet, label, owner, build, facts, where, acts=None):
     landing's and a long proposal's have their reading session started first, its link handed to the builder
     (card_built). Pending
     You's refusal, a host not signed in, no answer within a minute or a reply naming no card is said and recorded as
-    the post refused, and refuses nothing of the event it was raised for. The card's id, or None."""
+    the post refused, and refuses nothing of the event it was raised for. A card that follows one the user answered
+    says first what they answered and what changed since, since, or is not posted when nothing did (card_posted). The
+    card's id, or None."""
     acts = acts or CardActs(fleet)
-    return card_posted(acts, label, owner, card_built(acts, label, build, facts), where)
+    return card_posted(acts, label, owner, card_built(acts, label, build, facts), where, since=since)
 
 
 def card_lost(acts, label, owner, key, card, words):
@@ -13472,7 +13492,7 @@ def card_lost(acts, label, owner, key, card, words):
     print(f"card {key}: {card} is lost to {owner} (Pending You: \"{words}\")", file=sys.stderr)
 
 
-def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False, anew=None):
+def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False, anew=None, since=None):
     """The act that changes a card of crew's own when its thing changes (record 0031 §3): build(facts) sent as
     update_request takes it, with note as the change note the user sees, at the version Pending You reports, to the
     card the owner holds under the row's key on this host, while it waits on the user. Once they have answered it,
@@ -13487,7 +13507,9 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     saying the older copy is dead, when Pending You no longer finds it. A landing's card and a long proposal's are
     built with their reading session's link, as a post's is (card_built), a landing's session on a moved head started
     anew there, so the card changed carries the new link, and its entry why it could not open when it did not
-    (built_fields), and a landing's or a deploy's the head it asks about (asked_of). A refusal is said and recorded as the
+    (built_fields), and a landing's or a deploy's the head it asks about (asked_of). A new card posted after one the user
+    answered opens with what they answered and what changed since, since, the event's sentences, or note when the
+    event gives none, and is not posted when since is given empty (card_posted). A refusal is said and recorded as the
     change refused, refusing nothing of the event. The card's id, the new card's when one was posted, or None."""
     acts = acts or CardActs(fleet)
     b = card_built(acts, label, build, facts)
@@ -13495,7 +13517,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     entries = acts.entries(label)
     card = cards.card_under(entries, key, owner)
     if not card:
-        return card_posted(acts, label, owner, b, where, entries)
+        return card_posted(acts, label, owner, b, where, entries, since)
     lost, how, state = None, "change", None
     why = "its kind having changed" if kind_changed else "its questions having to be asked anew"
     try:
@@ -13529,20 +13551,20 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner, State="lost" if lost is not None else state, At=at, **answered)]
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
-        return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed)
+        return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed, since)
     if state == "closed" and anew:  # what it asks changed since the user answered it, which the new card says
         b = card_built(acts, label, build, dict(facts, **anew))
     if how == "ended":
         acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=ENDED_ELSEWHERE, **answered)
         print(f"card {key}: {card} was {state} in Pending You already, and its new version follows it")
         follows = {"follows": card} if state == "closed" else {}
-        return card_posted(acts, label, owner, dict(b, card=dict(b["card"], **follows)), where, closed)
+        return card_posted(acts, label, owner, dict(b, card=dict(b["card"], **follows)), where, closed, [note] if since is None else since)
     if how == "follow":
         acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
                   Outcome=REVISED if state == "closed" else RENEWED if kind_changed else REASKED, **answered)
         print(f"card {key}: {card} " + ("closed, the user having answered it" if state == "closed" else f"withdrawn, {why}")
               + ", and its new version follows it")
-        return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
+        return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed, [note] if since is None else since)
     acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key, **built_fields(b), **asked_of(b))
     v = got.get("version")
     print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
