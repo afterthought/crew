@@ -12,7 +12,9 @@
 # ref, which stays at the tip the fetch read, and the local branch is not set, the host's copy left where it was.
 # <n> counts the kit's submissions, in its git common dir.
 # It exits as sluice does: 0 landed; 1 the checks failed, while $CREW_TEST_ROOT/sluice-fails exists, its words the
-# failure; 2 refused or in conflict; nothing moved but on 0. It removes no worktree: crew always passes --no-remove,
+# failure, or the host could not run them, while $CREW_TEST_ROOT/sluice-could-not-run exists, a line `<task>: <why>`
+# a check, said as sluice 0.36.4 says it (lib.rs, "the host could not run ...: once it can, submit again"); 2 refused
+# or in conflict; nothing moved but on 0. It removes no worktree: crew always passes --no-remove,
 # and a call without it is refused. With --no-wait --json, as crew's landing submits, it is the stub sluice's `submit
 # <branch> --no-wait --json`, which lands at once through this stub and answers {id, branch, ahead}, its outcome
 # waiting for `sluice wait`. Every call is logged to $CREW_TEST_LOG as `<host> wt submit <args> from <worktree> as
@@ -37,7 +39,11 @@ else
   old=$(git rev-parse --verify -q "refs/heads/$target") || { echo "sluice: no branch $target" >&2; exit 2; }
 fi
 head=$(git rev-parse HEAD)
-if [[ -e ${CREW_TEST_ROOT:?}/sluice-fails ]]; then echo "sluice: $from failed $target's checks: $(cat "$CREW_TEST_ROOT/sluice-fails")" >&2; exit 1; fi
+if [[ -e ${CREW_TEST_ROOT:?}/sluice-could-not-run ]]; then
+  echo "sluice: the host could not run $(sed -n 's/^\([^:]*\): .*/\1/p' "$CREW_TEST_ROOT/sluice-could-not-run" | paste -sd, - | sed 's/,/, /g'): once it can, submit again" >&2
+  exit 1
+fi
+if [[ -e $CREW_TEST_ROOT/sluice-fails ]]; then echo "sluice: $from failed $target's checks: $(cat "$CREW_TEST_ROOT/sluice-fails")" >&2; exit 1; fi
 tree=$(git merge-tree --write-tree "$old" "$head" 2>/dev/null) || { echo "sluice: $from conflicts with $target" >&2; exit 2; }
 count=$(git rev-parse --git-common-dir)/stub-sluice-submissions
 n=$(( $(cat "$count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$count"

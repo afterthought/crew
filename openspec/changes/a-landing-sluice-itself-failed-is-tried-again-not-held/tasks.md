@@ -14,7 +14,7 @@
 
 ## 3. End to end, the brief and the docs
 
-- [ ] 3.1 The stub sluice records a failed check's result, checks it could not run and a conflict's paths as sluice 0.36.4 does, and a landing whose checks could not run keeps its box and lands on a second `crew bolt submit` with no new word (Decision 6; Task notes 3.1). Verify `tests/suite t-journey-land` ends with "0 failed".
+- [x] 3.1 The stub sluice records a failed check's result, checks it could not run and a conflict's paths as sluice 0.36.4 does, and a landing whose checks could not run keeps its box and lands on a second `crew bolt submit` with no new word (Decision 6; Task notes 3.1). Verify `tests/suite t-journey-land` ends with "0 failed".
 - [ ] 3.2 Main-ops's brief, README, the crew skill and `crew`'s usage header say a stop keeps its box and is submitted again once cleared, and only the bolt's own refusals are held (Decision 5; Task notes 3.2, `docs.2`). Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 4. The affected tests

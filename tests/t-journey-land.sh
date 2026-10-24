@@ -14,8 +14,10 @@
 # bolt, a new card is posted, following nothing, with a preview of the new head, raised without its reading when both
 # its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's wait then
 # starts, changing the card to carry its link, and waits on until the landing ends it; the bolt read proven, its team
-# is given its next bolt beside it and refused a third (teams.16); on the user's send the submission then readies the
-# bolt's pull request and lands it, sluice answering with the pull request and crew waiting on the submission it made
+# is given its next bolt beside it and refused a third (teams.16); on the user's send a landing whose checks the host
+# could not run is stopped, nothing of the bolt's, recorded with no refusal, its row keeping its box, the card the
+# user answered left as it is and crew card read naming it with what stopped it beside the command that lands it; once
+# the host runs them, the next submission on the same send readies the bolt's pull request and lands it, sluice answering with the pull request and crew waiting on the submission it made
 # from it, taking up the place a stopped landing left on it and leaving the kit's detached main
 # checkout as it was, and closes it as it lands, recording the commit main holds, sluice deleting its branch from GitHub
 # (plan.19), the kit's landings card closed with where GitHub's main holds it, the row's reading ended and its preview
@@ -272,6 +274,29 @@ ok "a give beside a waiting bolt restarts its conductor and ops at their next st
 # bolt's branch, its process gone, which the submission takes up and removes.
 mkdir -p "$(home_of $box)/.stub-pendingyou/answered"
 echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answered/$again.json"
+# The host can't run main's checks: the landing is stopped, nothing of the bolt's, recorded with its head and no
+# refusal; its row keeps its box, the card the user answered is left as it is, and crew card read names the bolt with
+# what stopped it beside the command that lands it (rail-cards "Checks that never ran").
+echo "check-full: the Dagger engine did not answer" > "$CREW_TEST_ROOT/sluice-could-not-run"
+stop="check-full could not run: the Dagger engine did not answer"
+: > "$CREW_TEST_LOG"
+out=$(on_box bolt submit tenant-environments 2>&1) && fail "a landing whose checks could not run landed:"$'\n'"$out"
+has "$out" "sluice: the host could not run check-full: once it can, submit again"
+has "$out" "bolt/tenant-environments did not land, and nothing of the bolt's stopped it: $stop, and main is where it was. Its row keeps its box and the user's word stands: report what stopped it, and once it is cleared crew bolt submit tenant-environments submits it again, with no new word."
+has "$out" "card land/switchboard-kit: $again is left as it is, the user having answered it"
+eq "$(field $box bolt.submit Outcome bolt/tenant-environments)|$(field $box bolt.submit Refused bolt/tenant-environments)" "stopped|"
+eq "$(field $box bolt.submit Head bolt/tenant-environments)" "$(git -C "$k" rev-parse bolt/tenant-environments)"
+has "$(field $box bolt.submit Why bolt/tenant-environments)" "$stop. Its pull request https://github.com/$gh_repo/pull/$pr is a draft"
+eq "$(drafted "$pr")" true
+row=$(on_box _land-row wldn tenant-environments --json 2>/dev/null | tail -1)
+eq "$(jq -r '.box' <<<"$row") $(jq -r '.facts.stopped[1]' <<<"$row" | cut -c1-${#stop})" "true $stop"
+out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
+has "$out" "  to land, in the card's order: tenant-environments"
+has "$out" "  tenant-environments's last landing at $(short bolt/tenant-environments) was stopped, nothing of the bolt's: $stop"
+has "$out" "lands them: crew bolt submit tenant-environments --label wldn"
+rm "$CREW_TEST_ROOT/sluice-could-not-run"
+ok "a landing whose checks the host could not run is stopped, nothing of the bolt's: recorded with no refusal, its row keeps its box, the card the user answered is left as it is, and crew card read names it with what stopped it"
+# Once the host runs them, the next submission lands it on the same send, with no new word.
 git -C "$k" worktree add -q "$land" bolt/tenant-environments
 sh -c 'echo $$' > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
 git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)

@@ -24,7 +24,11 @@
 # conflict, and refuses a detached worktree as sluice does, exiting 2. `sluice submit <branch>
 # --no-wait --json` lands this worktree's head at once, as the stub wt-submit does, and prints {id, branch, ahead}; its
 # outcome waits for `sluice wait <id> --timeout <duration> --json`, which prints the submission's record, its state
-# landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; `sluice wait` of an id it never gave exits 1
+# landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; a failed record carries `result` "failed"
+# and `failed`, as sluice 0.36.4's records.rs Submission and FailedTask have them, one check-full with a hash, a check
+# that ran, while $CREW_TEST_ROOT/sluice-fails exists, or each check $CREW_TEST_ROOT/sluice-could-not-run names, a
+# line `<task>: <why>`, with no hash and its why as `not_run`; a conflict's carries `conflict`, its paths as git
+# merge-tree names them against the branch's tip and `with` empty, the record listed by `sluice status` the same; `sluice wait` of an id it never gave exits 1
 # with sluice's not-found error. To a branch whose policy takes pull requests (route.py --pulls) it answers as sluice
 # 0.36.4 does once intake has queued the pull request (crates/sluice/src/lib.rs submit_pull): the open one from this
 # worktree's branch into it, the stub gh's, opened when there is none, its number and no submission,
@@ -114,15 +118,28 @@ print(p["number"], "draft" if p["isDraft"] else "ready")' "$CREW_TEST_ROOT/gh-pu
     count=$common/stub-sluice-submissions
     if (( rc == 0 )); then n=$(cat "$count"); else n=$(( $(cat "$count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$count"; fi
     state=landed; (( rc == 1 )) && state=failed; (( rc == 2 )) && state=conflict
+    blame='{}'  # what sluice's record says of a submission it blamed or found in conflict
+    if (( rc == 1 )) && [[ -e ${CREW_TEST_ROOT:?}/sluice-could-not-run ]]; then
+      blame=$(jq -Rn '{result: "failed", failed: [inputs | select(length > 0) | capture("^(?<task>[^:]+): (?<not_run>.*)$")]}' \
+        < "$CREW_TEST_ROOT/sluice-could-not-run")
+    elif (( rc == 1 )); then
+      blame=$(jq -nc --arg hash "$(printf '%s check-full\n' "$head" | git hash-object --stdin)" '{result: "failed", failed: [{task: "check-full", hash: $hash}]}')
+    elif (( rc == 2 )); then
+      remote=$(python3 "$(dirname "$0")/route.py" "$target")
+      if [[ -n $remote ]]; then tip=$(git rev-parse --verify -q "refs/remotes/$remote/$target"); else tip=$(git rev-parse --verify -q "refs/heads/$target"); fi
+      blame=$(git merge-tree --write-tree --name-only --no-messages "$tip" "$head" 2>/dev/null | tail -n +2 \
+        | jq -Rn '{conflict: {paths: [inputs | select(length > 0)], with: []}}')
+    fi
     jq -n --argjson id "$n" --arg branch "$target" --arg state "$state" --arg path "$here" --arg said "$said" --argjson rc "$rc" \
-      '{schema: "sluice/submission@1", id: $id, branch: $branch, state: $state, from: {path: $path}, said: $said, rc: $rc}' \
+      --argjson blame "$blame" \
+      '{schema: "sluice/submission@1", id: $id, branch: $branch, state: $state, from: {path: $path}, said: $said, rc: $rc} + $blame' \
       > "$common/stub-sluice-wait-$n.json"
     records=$common/stub-sluice-records-${target//\//-}.json
     [[ -e $records ]] || echo '[]' > "$records"
     jq --argjson id "$n" --arg branch "$target" --arg state "$state" --arg head "$head" --arg from "$from" --arg place "$place" \
-      --arg agent "${SLUICE_AGENT:-}" \
+      --arg agent "${SLUICE_AGENT:-}" --argjson blame "$blame" \
       '. + [{schema: "sluice/submission@1", id: $id, branch: $branch, head: $head, state: $state,
-             from: {agent: $agent, head: $from, worktree: $place}}]' "$records" > "$records.new" && mv "$records.new" "$records"
+             from: {agent: $agent, head: $from, worktree: $place}} + $blame]' "$records" > "$records.new" && mv "$records.new" "$records"
     if [[ -n $pr ]]; then
       (( rc == 0 )) && pulls merged >/dev/null
       jq -nc --arg branch "$target" --argjson pr "$pr" '{branch: $branch, pull_request: $pr, state: "queued: next on \($branch)"}'
