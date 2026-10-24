@@ -35,7 +35,7 @@ Reading
 - **[read.2]** crew reads another tool's output only by facts checked against the tool as it is now, and guards an absent field so a missing value never becomes text.
 - **[read.3]** A command that reads several hosts names each host that does not answer and still shows everything else.
 - **[read.4]** crew never takes over something it did not make for the work in hand: an existing place or branch, a pane whose agent still runs, or a worktree outside its own layout is refused or left alone.
-- **[read.5]** The run record is read from the flywheel's branch alone: every entry reaches the branch as it is written, as its own commit from the host that wrote it, and no decision reads a host over ssh for the record; a host is read over ssh only for the stages of its own kits' worktrees, and a host that does not answer hides only the work on it, never another host's landing nor the partition's batch clock. (Record 0029, accepted by the user on its card 2026-10-14; built by `the-run-record-reaches-the-branch-as-it-is-written`.)
+- **[read.5]** The run record is read from the flywheel's branch alone: every entry reaches the branch as it is written, as its own commit from the host that wrote it, and no decision reads a host over ssh for the record; a host is read over ssh only for the stages of its own kits' worktrees, and a host that does not answer hides only the work on it, never another host's landing nor the partition's batch clock. (Record 0029, accepted by the user on its card 2026-10-14; built by `the-run-record-reaches-the-branch-as-it-is-written`, landed 2026-10-23, with which `plan.2`'s carry clause went.)
 
 Code
 
