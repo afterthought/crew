@@ -14,7 +14,7 @@ refusal is a result marked isError, whose first text block is Pending You's word
 
 Everything here but Bridge and the reads named so is a decision: a function of plain facts that starts no process
 (code.7)."""
-import json, os, re, select, subprocess, time
+import json, os, re, select, struct, subprocess, time
 
 import picture
 from crew import fail
@@ -24,6 +24,8 @@ BRIDGE = ("pendingyou", "mcp", "--app", "claude-code")
 PROTOCOL = "2025-06-18"  # the MCP revision Pending You's CLI opens its sessions with
 CALL = 60  # seconds a call waits for its reply: what Claude Code's own transport waited on 2026-10-09
 AGENT = "crew"  # the User-Agent a picture is put with (put)
+IMAGE_BYTES = 5_000_000  # the most an image put to a card may weigh: "up to 5 MB", Pending You's guide, read 2026-10-23
+IMAGE_PIXELS = 8_000_000  # and its most pixels, "and 8 megapixels": a proposal of 20 rows or so is past it
 CLOSE = 5  # seconds the bridge is given to end once its input is closed
 SIGNED_OUT = -32001  # the bridge's code when this computer has no sign-in, or its sign-in has ended
 WORDS = 300  # the most of Pending You's words a refusal carries, as its CLI cuts them
@@ -504,12 +506,29 @@ def context(background="", links=()):
             "links": [{"label": label, "url": url} for label, url in links]}
 
 
+def unfit(png):
+    """Why a card's PNG is past what Pending You takes for an image put to a card, in the words its card says; None
+    when it fits."""
+    w, h = struct.unpack(">II", png[16:24])
+    if w * h > IMAGE_PIXELS:
+        return f"at {w} by {h} pixels it is past the {IMAGE_PIXELS // 10 ** 6} megapixels Pending You takes for an image"
+    if len(png) > IMAGE_BYTES:
+        return f"at {len(png) / 10 ** 6:.1f} MB it is past the {IMAGE_BYTES // 10 ** 6} MB Pending You takes for an image"
+    return None
+
+
 def built(key, title, summary, background="", links=(), artifacts=(), follows=None, urgency="today", picture=None,
           head=None, **form):
     """A card of crew's as a builder hands it to the act: its row's key, post_request's arguments but the area and the
     session, which the act sets, the picture's PNG when it has one, and the head it asks about, a landing's or a
     deploy's, which the act records with each post and change of it (head_anew). Its title cut to Pending You's
-    budget, its summary prose cut at whole sentences, never blocking, following the card its thing follows."""
+    budget, its summary prose cut at whole sentences, never blocking, following the card its thing follows. A picture
+    past what Pending You takes (unfit) is left off with the artifact it was to be put to, and why said once, at the
+    end of its background."""
+    why = unfit(picture) if picture else None
+    if why:
+        artifacts, picture = [a for a in artifacts if not a.get("upload")], None
+        background = "\n\n".join(x for x in (background, f"Its picture is left off the card: {why}.") if x)
     card = {"title": cut(title, TITLE), "summary": prose(summary), "context": context(background, links),
             "blocking": False, "urgency": urgency, **form}
     if artifacts:
