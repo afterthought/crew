@@ -17,7 +17,7 @@
 ## 4. The conductor and the docs
 
 - [x] 4.1 The conductor's brief has it read a stuck report's words and commits first, act on what they settle, and ask the user, running the stage again or waiting again on their word, only when the report settles nothing, a stuck fix round read the same way (design, Decision 5; Task notes 4.1). Verify `tests/suite t-briefs` ends with "0 failed".
-- [ ] 4.2 README, the crew skill and `crew`'s usage header say what a stuck answer carries, that a code stage whose head has no task list ends at its commit, and that the conductor reads the report before it asks (design, Decisions 3, 5 and 6; Task notes 4.2; `docs.2`). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 4.2 README, the crew skill and `crew`'s usage header say what a stuck answer carries, that a code stage whose head has no task list ends at its commit, and that the conductor reads the report before it asks (design, Decisions 3, 5 and 6; Task notes 4.2; `docs.2`). Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 5. The change's tests
 
