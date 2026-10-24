@@ -13,7 +13,7 @@
 
 ## 3. The conductor is told the fix
 
-- [ ] 3.1 A row newly taking main first by the raise's forecast tells its conductor the take-main fix once for the same bolt head and revision of main, whichever forecast recorded it first, with `--bolt` while the team holds two, and records the forecast only once the tell went through (design, Decision 4; Task notes 3.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
+- [x] 3.1 A row newly taking main first by the raise's forecast tells its conductor the take-main fix once for the same bolt head and revision of main, whichever forecast recorded it first, with `--bolt` while the team holds two, and records the forecast only once the tell went through (design, Decision 4; Task notes 3.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
 
 ## 4. Main moving raises the card
 

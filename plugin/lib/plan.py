@@ -2461,6 +2461,31 @@ def kit_card_state(acts, label, key, owner, card, entries):
     return {"status": "answered" if got.get("status") == "answered" else "waiting", "heads": heads, "ticked": ticked_of(got, heads)}, None
 
 
+def main_told(acts, label, plan, rows, found, at, entries):
+    """Each bolt the landings card's forecast found newly in conflict with main told to its conductor (bolt-teams "A
+    waiting bolt's conflict with main tells its conductor the take-main fix"): rows, {bolt: facts} of each whose
+    forecast against main names files (found, {bolt: paths}), at main's revision (at); told the take-main fix in the
+    words a conductor's wait gives (bolt_forecast), with --bolt while its team holds two bolts (teams.16), once for the
+    same bolt head and revision of main, whichever forecast recorded it first, read from the partition's run record and
+    this host's (entries); recorded as the wait's forecast is, on bolt/<bolt> with its Heads and Paths, only once the tell
+    went through, so a tell that fails records nothing and the next raise tells it again (roles.4, read.1)."""
+    done = {e.get("Heads") for e in entries if e.get("Act") == "forecast" and not e.get("Refused") and e.get("Heads")}
+    for b, f in rows.items():
+        team = f["team"]
+        told = bolt_forecast(team, label, b, {"conflict": {"paths": found[b], "with": []}, "head": f["head"], "onto": at["main"]},
+                             done, len(held_by(plan, team)) > 1)
+        if not told:
+            continue
+        heads, paths, words = told
+        if not acts.tell(f"{team}-conductor", words):
+            print(f"card land/{f.get('kit', '')}: {team}-conductor was not told {b} takes main first, so it is told at the next raise",
+                  file=sys.stderr)
+            continue
+        acts.emit(label, "forecast", [f"bolt/{b}"], why=f"bolt({b}): forecast to conflict with main", Heads=heads,
+                  Paths=" ".join(paths), Reached="told")
+        done.add(heads)
+
+
 def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=None):
     """crew _land-card <label> <kit>: a kit's landings card raised, changed, followed or closed (rail-cards, record 0031
     as amended 2026-10-23, Decisions 2 and 8), on the partition's main machine in main-level ops's name, refused
@@ -2503,8 +2528,10 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     forecast, unmade, at = acts.forecast(label, kit, boxed, list(recorded)) if boxed else ({}, {}, None)
     if at:
         acts.keep_main(label, kit, at["main"])
-    takes = dict(recorded, **{b: (at["main"][:7], p) for b, fs in forecast.items() for w, p in fs if w == "main" and p})
+    found = {b: p for b, fs in forecast.items() for w, p in fs if w == "main" and p}
+    takes = dict(recorded, **{b: (at["main"][:7], p) for b, p in found.items()})
     rows = [landing_rows([r["bolt"]], {r["bolt"]: r["facts"]}, {}, takes)[0] if r["box"] else r for r in rows]
+    main_told(acts, label, plan, {r["bolt"]: r["facts"] for r in rows if r["bolt"] in found}, found, at, whole + entries)
     for r in rows:
         if r["box"]:
             r["facts"] = dict(r["facts"], forecast=forecast.get(r["bolt"], []), forecast_why=unmade.get(r["bolt"]))

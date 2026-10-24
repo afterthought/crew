@@ -695,6 +695,51 @@ def test_a_conflict_the_record_holds_at_the_rows_head_holds_it_with_no_forecast_
     assert acts.emitted[-1]["Heads"] == "z@abc1234"
 
 
+FIX = ('crew fix crw-1 take-main-e4f5a6b "Take main into the bolt: it is forecast to conflict on README.md"')
+TOLD = dict(Act="forecast", On=["bolt/z"], why="bolt(z): forecast to conflict with main", Heads="bolt/z@abc1234 main@e4f5a6b",
+            Paths="README.md", Reached="told")
+
+
+def test_a_row_newly_taking_main_first_tells_its_conductor_the_fix_once_and_records_it(monkeypatch):
+    """bolt-teams "Main moves under a waiting bolt", "Told once" and "The team holds two bolts": crw-1 holds y and z."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, acts)
+    conductor = [w for n, w in acts.told if n == "crw-1-conductor"]
+    assert conductor == [f"bolt/z is forecast to conflict with main on README.md: main has landed work on them since the bolt "
+                         f"took it. Take main into the bolt now, while the conflict is small, by a fix as when swancloud-ops "
+                         f"says a landing conflicts: {FIX} --bolt z"]
+    assert [e for e in acts.emitted if e["Act"] == "forecast"] == [TOLD]
+    again = LandActs({"y": row("y"), "z": row("z")}, partition=[TOLD],
+                     answers=dict(POSTED, get_request=({"status": "pending", "turn": "you", "version": 2}, None)),
+                     against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, again)
+    assert [n for n, _ in again.told if n == "crw-1-conductor"] == [] and not [e for e in again.emitted if e["Act"] == "forecast"]
+    assert again.forecasts == [(["y", "z"], ["z"])]  # still held, by the record and the forecast
+
+
+def test_a_forecast_the_wait_said_first_is_not_told_again_and_one_bolt_names_no_bolt(monkeypatch):
+    """bolt-teams "The wait said it first": the wait's entry, at the same heads, on the partition's record."""
+    waited = dict(TOLD, Reached="wait")
+    acts = LandActs({"y": row("y"), "z": row("z")}, partition=[waited], answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, acts)
+    assert [n for n, _ in acts.told if n == "crw-1-conductor"] == []
+    alone = LandActs({"z": row("z")}, answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan("%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"))
+    plan.raise_landings(FLEET, "swancloud", "crew", alone)
+    assert [w for n, w in alone.told if n == "crw-1-conductor"][0].endswith(FIX)
+
+
+def test_a_conductor_that_cannot_be_told_has_nothing_recorded_and_its_row_stays_held(monkeypatch, capsys):
+    """bolt-teams "The conductor cannot be told"."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    acts.tell = lambda name, text: name != "crw-1-conductor" and LandActs.tell(acts, name, text)
+    raised(monkeypatch, acts)
+    assert not [e for e in acts.emitted if e["Act"] == "forecast"]
+    assert "crw-1-conductor was not told z takes main first, so it is told at the next raise" in capsys.readouterr().err
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
+
+
 def test_the_raise_is_handed_to_the_main_machine_as_the_one_asking(monkeypatch, capsys):
     ran = []
     monkeypatch.setattr(crew, "this_host", lambda: "deneb")
