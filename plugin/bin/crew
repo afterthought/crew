@@ -204,7 +204,9 @@
 #                                      where the asker's card stands: its status, whose turn, the user's answer and words;
 #                                      an approval the user declined is closed with their words; for a kit's landings
 #                                      card (land/<kit>), the bolts the user ticked in its order and the crew bolt
-#                                      submit that lands them
+#                                      submit that lands them, after those an earlier send still lands at their head
+#                                      now; what an earlier send still lands, with or without a card open, naming a
+#                                      bolt it can't tell of
 #   crew card  answer batch/<n> --excerpt "<words>" [--label L]
 #                                      the planner's or the operator's: the user's answer to a batch in their own words
 #                                      in its pane, recorded once crew reads the words in that agent's own session
