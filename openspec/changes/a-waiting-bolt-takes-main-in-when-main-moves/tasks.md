@@ -17,7 +17,7 @@
 
 ## 4. Main moving raises the card
 
-- [ ] 4.1 A decision names the kits whose open landings card was forecast at a revision of main other than the one the survey read, and says a kit whose read names none (design, Decision 2; Task notes 4.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
+- [x] 4.1 A decision names the kits whose open landings card was forecast at a revision of main other than the one the survey read, and says a kit whose read names none (design, Decision 2; Task notes 4.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
 - [ ] 4.2 The rail's read with its sweep, on the partition's main machine, raises each such kit's card again and says so, fetching and raising nothing for a kit whose main has not moved (design, Decision 2; Task notes 4.2); passes `tests/py/test_rail.py`, `tests/suite logic` ending with "0 failed".
 
 ## 5. The rail and the wait

@@ -281,6 +281,35 @@ def test_a_forecast_whose_fetch_or_read_of_main_failed_hands_back_no_revision(mo
     assert plan.forecast_rows(FLEET, "swancloud", "atlas-kit", ["y"])[2] is None
 
 
+# ------------------------------------------------------------------------------------ when main moved under a card
+
+M1, M2 = "a1b2c3d" + "0" * 33, "e4f5a6b" + "0" * 33
+
+
+def test_a_card_main_moved_under_is_due_a_raise_and_one_it_did_not_is_not():
+    """rail-cards "Main moves under an open card" and "Main has not moved"."""
+    cards_ = [("swancloud", "crew"), ("swancloud", "swancloud")]
+    mains = {("swancloud", "crew"): M2, ("swancloud", "swancloud"): M1}
+    assert plan.landings_moved(cards_, mains, {("swancloud", "crew"): M1, ("swancloud", "swancloud"): M1}) == (
+        [("swancloud", "crew")], [])
+
+
+def test_a_card_with_no_revision_kept_is_due_a_raise():
+    """A lost note costs one more raise."""
+    assert plan.landings_moved([("swancloud", "crew")], {("swancloud", "crew"): M1}, {}) == ([("swancloud", "crew")], [])
+
+
+def test_a_kit_whose_read_names_no_revision_is_unread_and_not_judged_moved():
+    """read.2: an older gather leaves main_at out, and a kit not read has none."""
+    cards_ = [("swancloud", "crew"), ("swancloud", "swancloud")]
+    assert plan.landings_moved(cards_, {("swancloud", "crew"): None}, {("swancloud", "crew"): M1}) == (
+        [], [("swancloud", "crew"), ("swancloud", "swancloud")])
+
+
+def test_no_open_card_is_nothing_due():
+    assert plan.landings_moved([], {("swancloud", "crew"): M2}, {("swancloud", "crew"): M1}) == ([], [])
+
+
 # ------------------------------------------------------------------------------------- what the raise does
 
 H1, H2 = "abc1234" + "0" * 33, "def5678" + "0" * 33

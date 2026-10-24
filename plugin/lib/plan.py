@@ -11406,6 +11406,24 @@ def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
     return {"live": sorted((rowed - closed) | set(readings)), "blind": sorted(blind)}
 
 
+def landings_moved(cards_, mains, kept):
+    """Which kits' landings cards main moved under (rail-cards "Main moves under an open card", "Main has not moved"),
+    from facts alone (code.7): cards_, each open landings card as (label, kit); mains, the revision of main the survey
+    read each kit at in its builder's main checkout, {(label, kit): main_at}, as last fetched (gather.kit, plan.18);
+    kept, the revision its rows were last forecast against, {(label, kit): sha}, none when none is kept. Returns (due,
+    unread): the cards due a raise, whose kit's main is at another revision than the kept one, or with none kept; and
+    those whose kit's read names no revision, an older gather's or a read that failed, which are not judged moved
+    (read.2)."""
+    due, unread = [], []
+    for c in dict.fromkeys(cards_):
+        now, was = mains.get(c), kept.get(c)
+        if not now:
+            unread.append(c)
+        elif not was or not (now.startswith(was) or was.startswith(now)):
+            due.append(c)
+    return due, unread
+
+
 def rail_read(fleet, labels, board=False, sweep=False):
     """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
     found and the errors of those that could not be read, the survey, the open proposals, the cards, the branches whose
