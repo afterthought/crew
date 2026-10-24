@@ -4698,6 +4698,19 @@ def closed_refusal(p, n):
     return state + (f": {p.get('Reason')}" if p.get("Reason") else ""), state
 
 
+def agree_closed(p, n):
+    """What crew answers an agreement to proposal n with when the plan as it stands once the agreement is written
+    shows the proposal (p) closed: that it is closed and how, approved or dropped with its reason, and that crew raises
+    no card for it and changes none, since the agreement's write still showed it open and a card raised from that
+    would reach the user in the planner's name for a closed proposal (wldn's proposal 553 on 2026-10-24: swb-1 agreed
+    at 35d07471, the planner dropped it at bc2c3b1 four seconds on, and the agreement then posted its card again until
+    the rail's sweep withdrew it; signal 2026-10-24-swancloud-planner-04891322/01). None while it is open."""
+    why = closed_refusal(p, n)
+    if why is None:
+        return None
+    return why[0] + ("" if why[0][-1:] in ".!?" else ".") + " It is closed, so crew raises no card for it and changes none."
+
+
 def close(p, state, today, reason=None, cleared=()):
     """A proposal closed: approved, with each new unit the user left out of the change as Cleared, or dropped with its
     reason; one that is not open is refused, saying what it is (plan.4)."""
@@ -4740,7 +4753,21 @@ def plan_agree(fleet, a):
         return []
     write(fleet, label, change, "plan: agree", act="plan.agree")
     tell_planner(fleet, label, f"{', '.join(seen['new'])} agree{'s' if len(seen['new']) == 1 else ''} to proposal {a.n}.")
-    raise_proposal_at(fleet, label, seen["w"], a.n, "agree", agreed=seen["new"])
+    raise_agreed(fleet, label, a.n, seen["new"])
+
+
+def raise_agreed(fleet, label, n, agreed, acts=None):
+    """Proposal n's card once the agreements of the teams agreed are written (raise_proposal_at, agree), raised on the
+    plan as it stands, the branch's tip fetched anew: an approval or a drop can land between the agreement's write and
+    its raise, so a proposal the tip shows closed raises no card and changes none, and the agreement answers that it is
+    closed and how (agree_closed). The fetch is the one past the command's first (plan.12), as the sweep's raise makes
+    (raise_proposal). The card's id, or None."""
+    w = tip_write(fleet, label, fresh=True)
+    closed = agree_closed(proposal(proposals(w), n, label), n)
+    if closed:
+        print(closed)
+        return None
+    return raise_proposal_at(fleet, label, w, n, "agree", acts, agreed=agreed)
 
 
 def plan_approve(fleet, a):
