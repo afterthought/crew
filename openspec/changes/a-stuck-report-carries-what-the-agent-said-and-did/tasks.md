@@ -2,7 +2,7 @@
 
 ## 1. What crew reads
 
-- [ ] 1.1 `transcript.last_words` gives the text of the agent's own last message since a time, read across the records that share its message id, a subagent's never, a message before the time never, and None for a transcript it cannot read, its format fact named in the module's docstring (design, Decision 1; Task notes 1.1). Passes `tests/py/test_transcript.py` (`tests/suite logic`).
+- [x] 1.1 `transcript.last_words` gives the text of the agent's own last message since a time, read across the records that share its message id, a subagent's never, a message before the time never, and None for a transcript it cannot read, its format fact named in the module's docstring (design, Decision 1; Task notes 1.1). Passes `tests/py/test_transcript.py` (`tests/suite logic`).
 - [ ] 1.2 `gather.since` gives the commits along a branch's first parent from its head, beyond a base when given, as short sha, committer time and subject, newest first, or None when git refuses (design, Decision 2; Task notes 1.2). Passes `tests/contract/test_gather.py` (`tests/suite contract`).
 
 ## 2. The stuck report
