@@ -16,7 +16,7 @@
 ## 3. The briefs and docs
 
 - [x] 3.1 Main-level ops's brief says a send stands for a bolt that only took main in, read with `crew card read` with or without a card, and so do the user's words in its pane; the conductor's says a take-main fix on a ticked bolt leads to its landing (design, Decision 7; Task notes 3.1); passes `tests/suite t-briefs`.
-- [ ] 3.2 README, the crew skill and `crew`'s usage say `crew card read land/<kit>` prints what an earlier send still lands with no card open (design, Decision 6; Task notes 3.2; `docs.2`); passes `tests/suite t-docs`.
+- [x] 3.2 README, the crew skill and `crew`'s usage say `crew card read land/<kit>` prints what an earlier send still lands with no card open (design, Decision 6; Task notes 3.2; `docs.2`); passes `tests/suite t-docs`.
 
 ## 4. The journey
 
