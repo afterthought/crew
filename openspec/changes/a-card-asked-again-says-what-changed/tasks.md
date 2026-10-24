@@ -17,4 +17,4 @@
 
 ## 4. The affected tests
 
-- [ ] 4.1 The tests this change affects pass (design, Task notes 4.1); Verify `tests/suite --affected` ends with "0 failed".
+- [x] 4.1 The tests this change affects pass (design, Task notes 4.1); Verify `tests/suite --affected` ends with "0 failed".
