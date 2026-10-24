@@ -8,7 +8,7 @@
 
 ## 2. A stopped bolt keeps its row and its word
 
-- [ ] 2.1 A bolt stopped at its head keeps its box on its kit's landings row and the rail's line says what stopped it and that ops submits it again, the tell naming it (Decision 3; Task notes 2.1). Passes `tests/py/test_landings.py` and `tests/py/test_rail.py`.
+- [x] 2.1 A bolt stopped at its head keeps its box on its kit's landings row and the rail's line says what stopped it and that ops submits it again, the tell naming it (Decision 3; Task notes 2.1). Passes `tests/py/test_landings.py` and `tests/py/test_rail.py`.
 - [ ] 2.2 The landings card's row says the stop on its face and in its box's detail (Decision 3; Task notes 2.2). Passes `tests/py/test_cards.py`.
 - [ ] 2.3 An answered landings card is left while a ticked bolt is stopped, a card that follows names it as still landing with what stopped it, and `crew card read` prints the stop beside it (Decision 3; Task notes 2.3). Passes `tests/py/test_landings.py`.
 

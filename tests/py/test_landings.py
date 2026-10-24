@@ -123,6 +123,19 @@ def test_a_landing_left_standing_in_sluice_holds_its_row_for_no_fix():
     assert row["box"] and plan.refused_at([standing], "y", head) is None
 
 
+def test_a_landing_stopped_at_the_bolts_present_head_keeps_its_box_saying_what_stopped_it():
+    """rail-cards "A landing sluice or its host stopped keeps its box": recorded stopped, its row a box whose facts
+    carry the head it was stopped at and what stopped it; once its head moves, its row says nothing of it."""
+    head = "d" * 40
+    stop = dict(submitted("y", head), Why="check:dagger could not run: the Dagger engine did not answer", Outcome="stopped")
+    entries = [submitted("y", "c" * 40, "bolt/y did not land: sluice found a conflict"), stop]
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, plan.refusals(entries), plan.stops(entries))
+    assert (row["box"], row["facts"]["stopped"]) == (True, (head, "check:dagger could not run: the Dagger engine did not answer"))
+    moved, = plan.landing_rows(["y"], {"y": facts("y", "e" * 40)}, plan.refusals(entries), plan.stops(entries))
+    assert moved["box"] and "stopped" not in moved["facts"]
+    assert "stopped" not in plan.landing_rows(["y"], {"y": facts("y", head)}, {})[0]["facts"]
+
+
 # ---------------------------------------------------------------------------------------------- the forecasts
 
 def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():

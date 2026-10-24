@@ -143,6 +143,20 @@ class TestRows:
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land"
 
+    def test_a_landing_sluice_stopped_at_the_bolts_head_can_land_saying_what_stopped_it(self):
+        """crew-rail "A stopped landing": the line says it can land, what stopped it at that head in sluice's words, and
+        that wldn-ops submits it again once that is cleared; the row's tell names it; at another head it says nothing."""
+        stop = "sluice itself failed (sluice: could not release try/1a2b3c4, whose worktree no longer exists)"
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {}, "refused": {},
+                         "stopped": {"apex-zones": ("abc1234" + "0" * 33, stop)}}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: can land; its last landing at abc1234 was stopped, nothing of the "
+                                   f"bolt's: {stop}; wldn-ops submits it again once that is cleared")
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')] and land["bolts"][0]["can"] is True
+        held["wldn"]["stopped"] = {"apex-zones": ("c" * 40, "an older head's")}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land"
+
     def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
         sv = survey()
         sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"]["verdict"] = ""

@@ -2027,15 +2027,18 @@ def held_at(refused, bolt, head):
     return words if at and head and (at.startswith(head) or head.startswith(at)) else None
 
 
-def landing_rows(order, rows, held):
+def landing_rows(order, rows, held, stopped=None):
     """The rows of a kit's landings card (rail-cards, record 0031 as amended 2026-10-23), from facts alone: order, the
     plan's bolts of the kit by name, in its order; rows, {bolt: facts} for each that reads proven as a fix in flight on
     it leaves it (land_row), its facts carrying its head and its fixes in flight, {fix: the words it started with or
-    None}; held, each bolt's last landing sluice did not land, {bolt: (head, words)} (refusals). In the plan's order,
-    each {bolt, box: True, facts}, a row the user ticks; or {bolt, box: False, why, facts}, held with no box: for a fix
-    in flight on it, in the fix's words, or for sluice's refusal of its landing at its present head, until its team's
-    fix moves the head. A bolt not in rows is no row."""
-    out = []
+    None}; held, each bolt's last landing sluice refused for its own content, {bolt: (head, words)} (refusals);
+    stopped, each bolt's last landing sluice or its host stopped, nothing of the bolt's, the same (stops). In the plan's
+    order, each {bolt, box: True, facts}, a row the user ticks, its facts carrying stopped, (head, words), when its last
+    landing was stopped at its present head (stopped_at), which holds nothing (rail-cards "A landing sluice or its host
+    stopped keeps its box"); or {bolt, box: False, why, facts}, held with no box: for a fix in flight on it, in the
+    fix's words, or for sluice's refusal of its landing at its present head, until its team's fix moves the head. A
+    bolt not in rows is no row."""
+    out, stopped = [], stopped or {}
     for b in [b for b in order if b in rows]:
         f = rows[b]
         fixes = f.get("fixes") or {}
@@ -2046,7 +2049,8 @@ def landing_rows(order, rows, held):
         elif at and (at.startswith(f["head"]) or f["head"].startswith(at)):
             why = f"held: sluice refused its landing at {f['head'][:7]}, and it waits for its team's fix: {words}"
         else:
-            out.append(dict(bolt=b, box=True, facts=f))
+            stop = stopped_at(stopped, b, f["head"])
+            out.append(dict(bolt=b, box=True, facts=dict(f, stopped=(stopped[b][0], stop)) if stop else f))
             continue
         out.append(dict(bolt=b, box=False, why=why, facts=f))
     return out
@@ -2281,8 +2285,9 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
     landing_facts), the row's facts as cards.landings_card takes them with what the reading's writer needs beside them,
     the team, its conductor, its host and where the bolt last met main (base); (None, why) while it does not. With
     fixes_hold False, a fix in flight on it does not keep it from reading proven, and the facts hold each such fix with
-    the words it started with ({fix: words or None}, fix_words) and the bolt's last landing sluice did not land
-    ((head, words), refusals) or None, for landing_rows to hold its row by. Refused when its kit can't be read (read.1)."""
+    the words it started with ({fix: words or None}, fix_words), the bolt's last landing sluice refused ((head, words),
+    refusals) or None, for landing_rows to hold its row by, and its last one sluice or its host stopped ((head, words),
+    stops) or None, for its row to say. Refused when its kit can't be read (read.1)."""
     bolt = b.name()
     st = stages_for(fleet, plan, held_by(plan, t["name"]) or [b])
     k, why = st.kit(b)
@@ -2311,7 +2316,8 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
                          dict(team=t["name"], next=frees[1]) if frees and frees[0] == "frees" else None)
     if not card:
         return None, batch_waits([n for n, kind, _ in work if kind == "unit"], due, unanswered)
-    held = {} if fixes_hold else dict(fixes={f: fix_words(t, f) for f in fixes}, refusal=refusals(entries).get(bolt))
+    held = {} if fixes_hold else dict(fixes={f: fix_words(t, f) for f in fixes}, refusal=refusals(entries).get(bolt),
+                                      stop=stops(entries).get(bolt))
     return dict(card, team=t["name"], conductor=f"{t['name']}-conductor", host=t["machine"], base=base, **held), None
 
 
@@ -2390,12 +2396,14 @@ def landing_opened(fleet, label, plan, b, t, card, acts):
 def land_read(fleet, label, plan, b, t):
     """A held bolt's row on its kit's landings card, read on its team's host (t) as land_facts reads it, a fix in flight
     on it holding its row rather than keeping it off the card: (row, None), the row as landing_rows gives it, a box,
-    or held for a fix or for sluice's refusal of its landing at its present head (rail-cards, Decision 7); (None, why)
-    while it is no row. Refused when its kit can't be read (read.1)."""
+    or held for a fix or for sluice's refusal of its landing at its present head (rail-cards, Decision 7), a box saying
+    what stopped its last landing at that head; (None, why) while it is no row. Refused when its kit can't be read
+    (read.1)."""
     facts, why = land_facts(fleet, label, plan, b, t, fixes_hold=False)
     if why:
         return None, why
-    return landing_rows([b.name()], {b.name(): facts}, {b.name(): facts["refusal"]} if facts.get("refusal") else {})[0], None
+    return landing_rows([b.name()], {b.name(): facts}, {b.name(): facts["refusal"]} if facts.get("refusal") else {},
+                        {b.name(): facts["stop"]} if facts.get("stop") else {})[0], None
 
 
 def land_row(fleet, label, bolt, acts=None):
@@ -11007,7 +11015,7 @@ def record_reading(l, entries, plan, fresh, missing=None):
     closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries) | set(settled)  # a batch card posted again reopens its row
     held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
                 due=None if missing else {u for u, *_ in due_changes(plan, entries)},
-                unanswered=None if missing else awaiting_answer(entries), refused=refusals(entries))
+                unanswered=None if missing else awaiting_answer(entries), refused=refusals(entries), stopped=stops(entries))
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
 
 
@@ -11087,13 +11095,16 @@ def rail_rows(fleet, found, sv, props, times, held=None):
                                                  f"{joined([str(n) for n in unread])}"] if unread else [])
             fixes = fixes_in_flight(k.get("fixes", []), b.name())
             refused = held_at(held.get(l, {}).get("refused") or {}, b.name(), head)
+            stop = stopped_at(held.get(l, {}).get("stopped") or {}, b.name(), head)
             if not lands and fixes:  # a fix started on the bolt holds its landing (landing_held)
                 lands = [f"lands once {either(sorted(fixes))} has merged or been dropped"]
             elif not lands and refused:  # sluice refused its landing at this head (refused_at)
                 lands = [f"held: sluice refused its landing at {head[:7]}, until its team's fix moves its head: {refused}"]
+            can = ["can land"] + ([f"its last landing at {head[:7]} was stopped, nothing of the bolt's: {stop.rstrip('.')}; "
+                                   f"{l}-ops submits it again once that is cleared"] if stop else [])  # stopped_at, holding nothing
             kits.setdefault(b.get("Repo") or k["kit"]["name"], []).append(
                 dict(bolt=b.name(), team=team, host=host, at=at, can=not lands, line=f"{b.name()}, {team} on {host}: "
-                     + "; ".join(said + (lands or ["can land"]))))
+                     + "; ".join(said + (lands or can))))
         for kit_name, bolts in kits.items():
             can = [x["bolt"] for x in bolts if x["can"]]
             what = [f"{kit_name} ({l}): {plural_of(len(bolts), 'bolt waits', 'bolts wait')} to land on its main, in the plan's order; "
