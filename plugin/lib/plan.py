@@ -11431,7 +11431,8 @@ def rail_read(fleet, labels, board=False, sweep=False):
     is of each host holding a bolt; with board, of every team of the labels, with the bolt it holds or none, and its
     dev servers, slots and explorations too, for the board (board.py), from which the rail's text is made as well.
     With sweep, once the rows are made, the cards on this host are swept under its sign-in (sweep_cards), against the
-    proposals the plans read hold (proposals_held), the cards read then being those open once it acted, and the card sessions whose card is closed or whose row is gone are
+    proposals the plans read hold (proposals_held), the cards read then being those open once it acted, each kit's
+    landings card main moved under is raised again (sweep_moved), and the card sessions whose card is closed or whose row is gone are
     ended on every host of the labels read; what the sweeps did, and which hosts were not checked, are in the read
     (sweep_sessions). No state is written but by those sweeps' acts."""
     errors = {}
@@ -11449,6 +11450,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
         read["swept"] = sweep_cards(fleet, read)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
                                     {l: partition_kits(fleet, l) for l, *_ in found})
+        read["moved"] = sweep_moved(fleet, read)
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
         reckon_batches(fleet, found)
     return read
@@ -11474,7 +11476,8 @@ def rail_text(fleet, labels, read, now):
     agent's open card for one, with when it was asked and by whom, and no command, since the card is where it is
     answered; then any open card whose row is gone that the sweep did not close, with the host whose rail read closes
     it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, and each batch it
-    closed or left with no card, named so, each partition it changed nothing for and why, each card session ended,
+    closed or left with no card, named so, each partition it changed nothing for and why, each landings card raised
+    again as main moved under it and each whose kit's revision of main can't be read (sweep_moved), each card session ended,
     with its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
     (the board's) gives the same text."""
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
@@ -11529,6 +11532,15 @@ def rail_text(fleet, labels, read, now):
             + f": {d['did']}: {d['words']}" for d in swept["done"]]
     lines += (["", "cards swept:"] + done if done else []) + (
         ["", "cards not swept:"] + [f"  {u['label']}: {u['why']}" for u in swept["unswept"]] if swept["unswept"] else [])
+    moved = read.get("moved") or {"raised": [], "unread": []}
+    lines += (["", "landings cards forecast again, main having moved:"] + [
+        f"  land/{m['kit']} ({m['label']}): main is at {m['now'][:7]}, its rows forecast at "
+        + (m["was"][:7] if m["was"] else "no revision crew kept") + ": "
+        + (f"its raise refused: {m['said']}" if m["said"] else f"raised again ({m['card']})" if m["card"] else "raised again, no card left open")
+        for m in moved["raised"]] if moved["raised"] else []) + (
+        ["", "landings cards whose main can't be read:"] + [
+            f"  land/{u['kit']} ({u['label']}): whether main moved under it can't be told: {u['why']}" for u in moved["unread"]]
+        if moved["unread"] else [])
     ended = [f"  {e['key']}{' ' + e['unit'] if e['unit'] else ''} ({e['label']}) on {e['host']}: {e['why']}; {e['said']}"
              for e in read.get("ended") or []]
     unended = [f"  {u['host']} ({u['label']}): {u['why']}" for u in read.get("unchecked") or []]
@@ -13972,6 +13984,31 @@ class SweepActs(CardActs):
     def now(self):
         return datetime.datetime.now(datetime.timezone.utc)
 
+    def main_at(self, label, kit, sv):
+        """The revision of main the rail's survey (sv) read a kit at in its builder's main checkout (gather.kit's
+        main_at), as last fetched (plan.18): (sha, None), or (None, why) when no team builds it, its host did not
+        answer or its read names none. A builder holding no bolt is not in the rail's survey, and is surveyed alone."""
+        t = builder(self.fleet, label, kit)
+        if not t:
+            return None, f"no team of {label} builds {kit}"
+        host, main = t["machine"], t["kit"]["main"]
+        v = sv.get(host)
+        if v is None or (v["ok"] and main not in v["kits"]):
+            v = survey(self.fleet, [(t["name"], None, kit)]).get(host) or {"ok": False, "error": "it was not read"}
+        if not v["ok"]:
+            return None, f"{host} did not answer ({v['error']})"
+        k = v["kits"].get(main) or {}
+        if not k.get("ok"):
+            return None, f"{main} on {host} could not be read: {k.get('error') or 'it was not read'}"
+        return (k["main_at"], None) if k.get("main_at") else (
+            None, f"crew on {host} names no revision of main it read {main} at, as a crew older than the read of it does")
+
+    def raise_kit(self, label, kit):
+        """A kit's landings card raised again as main moved under it (raise_landings, with no note of its own), what it
+        says going to standard error, the rail's text saying what it did: the card's id, or None."""
+        with contextlib.redirect_stdout(sys.stderr):
+            return raise_landings(self.fleet, label, kit, self)
+
     def reading_again(self, label, key):
         """A card's reading opened again and its card changed to carry the link: a kit's landings card's, land/<kit>,
         by its raise with RELINKED as its note (raise_landings), which tries each row's reading on its team's host as
@@ -14163,6 +14200,38 @@ def sweep_cards(fleet, read, acts=None):
             new, _ = raised(l, row, owner)
             if new:
                 did(l, row["key"], None, owner, "posted", "its row had none open", new)
+    return out
+
+
+def sweep_moved(fleet, read, acts=None):
+    """The rail read's raise of each kit's landings card main moved under (rail-cards "Main moves under an open card"),
+    once its sweep acted, on the partition's main machine alone, where main-level ops's cards are: for each partition
+    whose plan was read, each landings card open on this host in ops's name (land/<kit>), the revision of main the
+    survey read its kit at in its builder's checkout, as last fetched with no fetch of its own (SweepActs.main_at,
+    plan.18), and the one its rows were last forecast against (CardActs.kept_main) are compared (landings_moved), and
+    each card main moved under is raised again (SweepActs.raise_kit), which fetches GitHub's main and forecasts its
+    rows there; a card main has not moved under is fetched for and raised by none. A raise refused is said, and the read
+    goes on. Returns {raised: [{label, kit, was, now, card, said}], unread: [{label, kit, why}]}, said the refusal's
+    words or None."""
+    acts = acts or SweepActs(fleet)
+    here, out = acts.host(), {"raised": [], "unread": []}
+    for l, _, _, pl in read["found"]:
+        if not pl or crew.partition_of(fleet, l)["machine"] != here:
+            continue
+        kits = partition_kits(fleet, l)
+        open_ = [(l, kit) for c in read["cards"] if c["label"] == l and c["host"] == here and c["by"] == f"{l}-ops"
+                 for kind, kit in [land_key(c["key"], kits) or (None, None)] if kind == "kit"]
+        mains = {c: acts.main_at(l, c[1], read["sv"]) for c in dict.fromkeys(open_)}
+        kept = {c: acts.kept_main(*c) for c in mains}
+        due, unread = landings_moved(open_, {c: m for c, (m, _) in mains.items()}, kept)
+        out["unread"] += [dict(label=l, kit=c[1], why=mains[c][1]) for c in unread]
+        for c in due:
+            moved = dict(label=l, kit=c[1], was=kept[c], now=mains[c][0], card=None, said=None)
+            try:
+                moved["card"] = acts.raise_kit(l, c[1])
+            except Refusal as e:
+                moved["said"] = str(e)
+            out["raised"].append(moved)
     return out
 
 
