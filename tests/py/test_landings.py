@@ -369,9 +369,21 @@ def test_the_bolts_a_followed_send_still_lands_are_no_row_of_any_card_after_it_w
     sent = plan.landings_sent(closes, "land/crew", "swancloud-ops")
     assert sent == {"y": "abc1234", "z": "def5678"}
     rows = [box("y"), box("z"), hold("x"), box("w")]
-    assert plan.rows_unsent(rows, sent) == ([box("z"), hold("x"), box("w")], ["y"])
-    assert plan.rows_unsent([box("y", H2), hold("z")], sent) == ([box("y", H2), hold("z")], [])  # moved, or held
+    # z moved from the head sent with its own work unread, which holds no send (read.1); x is held, a row with no box
+    unread = "but crew could not tell whether {b}'s own work changed since your send at {at}: crew read none of its work"
+    assert plan.rows_unsent(rows, sent) == ([box("z"), hold("x"), box("w")], ["y"], [
+        ("z", "z's head is now abc1234, " + unread.format(b="z", at="def5678"))])
+    assert plan.rows_unsent([box("y", H2), hold("z")], sent) == ([box("y", H2), hold("z")], [], [
+        ("y", "y's head is now def5678, " + unread.format(b="y", at="abc1234"))])
     assert plan.landings_sent([], "land/crew", "swancloud-ops") == {}
+
+
+def test_a_sent_bolt_that_only_took_main_in_is_no_row_and_one_whose_work_changed_is_a_row_saying_so():
+    """rail-cards "A refused bolt takes main in" and "A fix adds a commit"."""
+    sent = {"y": "abc1234", "z": "abc1234"}
+    rows = [box("y", H2), box("z", H2)]
+    assert plan.rows_unsent(rows, sent, {"y": work(), "z": work([LEASE])}) == ([box("z", H2)], ["y"], [
+        ("z", "z's head is now def5678, with work of its own since your send at abc1234: fix: keep the lease")])
 
 
 def test_a_send_whose_card_followed_before_ops_read_it_is_read_beside_the_card_that_followed():

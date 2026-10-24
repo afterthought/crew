@@ -2089,13 +2089,23 @@ def landings_sent(entries, key, owner):
     return out
 
 
-def rows_unsent(rows, sent):
-    """A kit's landings card's rows (landing_rows) less each that can land at the head an earlier send still lands it
-    at (landings_sent), which is no row of a card that follows that send's, nor of any after it; and those bolts."""
-    def landing(r):
-        at, head = sent.get(r["bolt"]), r["facts"]["head"]
-        return r["box"] and bool(at) and (head.startswith(at) or at.startswith(head))
-    return [r for r in rows if not landing(r)], [r["bolt"] for r in rows if landing(r)]
+def rows_unsent(rows, sent, work=None):
+    """A kit's landings card's rows (landing_rows) less each that can land on an earlier send that still stands for it
+    (landings_sent, send_stands), at the head sent or at a head whose own work is the same (work, bolt_work's for each
+    bolt whose head moved), which is no row of a card that follows that send's, nor of any after it; those bolts; and
+    each that can land whose send does not stand, a row again, with the words that say what changed (work_said):
+    (rows, [bolt], [(bolt, words)]). A decision of facts alone (code.7)."""
+    work, out, landing, asked = work or {}, [], [], []
+    for r in rows:
+        b, head = r["bolt"], r["facts"]["head"]
+        at = sent.get(b)
+        if r["box"] and at and send_stands(at, head, work.get(b)):
+            landing.append(b)
+            continue
+        out.append(r)
+        if r["box"] and at:
+            asked.append((b, work_said(b, at, head, work.get(b))))
+    return out, landing, asked
 
 
 def sent_left(sent, heads, in_plan, refused):
@@ -2503,7 +2513,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
         elif "box" in row:
             got[b.name()] = row
     entries = acts.entries(label)
-    rows, sent = rows_unsent([got[b.name()] for b in plan.bolts() if b.name() in got], landings_sent(entries, key, owner))
+    rows, sent, _ = rows_unsent([got[b.name()] for b in plan.bolts() if b.name() in got], landings_sent(entries, key, owner))
     for b in sent:
         print(f"card {key}: {b} lands on the user's send of an earlier card, so it is no row of this one")
     boxed = [r["bolt"] for r in rows if r["box"]]
