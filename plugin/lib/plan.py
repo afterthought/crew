@@ -59,7 +59,10 @@ five times. A write that changes several files is one commit; its run-record ent
                                              main-level ops's landing of one kit's bolts through sluice, in order; with
                                              --excerpt, on the user's words in ops's pane, submitted only once crew
                                              reads them in ops's own transcript as the user's, no words in the run
-                                             record, and the landing cards closed with them at crew bolt land
+                                             record, and the landing cards closed with them at crew bolt land. One
+                                             that did not land for its own content, a conflict or a check that ran
+                                             and failed, is held on its row; one sluice or its host stopped keeps its
+                                             box and the user's word, and is submitted again once that is cleared
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]

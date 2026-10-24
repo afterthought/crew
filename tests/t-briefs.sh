@@ -422,11 +422,15 @@ has "$out" "Save the report every run, one that found nothing to do as well"; ha
 ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor; verify saves its report every run, and a verify with none has not ended"
 
 # A landing that conflicts lands nothing and goes back to the team as a fix that takes main into the bolt (plan.8,
-# teams.5, record 0026): main-ops submits the bolt with crew bolt submit and passes on sluice's words, the conductor
+# teams.5, record 0026), and one sluice or its host stopped is submitted again on the word that stands (plan.16 as
+# read 2026-10-24): main-ops submits the bolt with crew bolt submit and passes on sluice's words, the conductor
 # starts the fix and merges it as any fix, its agent merges main in, and nothing but sluice moves a bolt's branch or
 # main; the bolt's proof is its verification (record 0025), and ops proves and deploys nothing.
 expect_ok crewpy brief wldn main-ops
 for want in "tell the bolt's conductor and the user sluice's words" "its row has its box again on the kit's landings card once the fix has merged" \
+  "When it did not land for its own content, a conflict or a check that ran and failed" \
+  "its row keeps its box and the user's word stands for it: tell no conductor" \
+  "once it is cleared, submit that bolt again with the same command, on the send that still stands" "asking the user nothing" \
   "never merge, rebase, reset or fast-forward main or a bolt's branch by git" "A host's own main lagging GitHub's stops nothing" \
   "shows every unit merged and the bolt's verification green" \
   "every kit's main checkout is an anchor the fleet's timer moves to GitHub's main within minutes" \
