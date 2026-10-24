@@ -341,20 +341,22 @@ def split_remote(said, bolt):
 
 def bolt_split(said, bolt):
     """What BOLT_SPLIT printed of a bolt's branch on its remote (plan.19), as {"local", "there", "held", "merges",
-    "read"}: read, git's words when the remote could not be asked or fetched, the rest None; there "-" when the remote
-    has no bolt/<bolt>; else both commits, held "yes" or "no", whether the remote's holds the host's, and merges, how
-    many the host holds beyond it. Refused, naming what was printed, on anything else (read.2)."""
+    "carried", "read"}: read, git's words when the remote could not be asked or fetched, the rest None; there "-" when
+    the remote has no bolt/<bolt>; else both commits, held "yes" or "no", whether the remote's holds the host's, merges,
+    how many the host holds beyond it, and carried "yes" or "no", whether the work to merge holds the host's tip, None
+    when no work was named. Refused, naming what was printed, on anything else (read.2)."""
     f = said_of(said)
-    none = dict(local=None, there=None, held=None, merges=None, read=None)
+    none = dict(local=None, there=None, held=None, merges=None, carried=None, read=None)
     if "READ" in f:
         return {**none, "read": f["READ"].strip() or "git said nothing"}
     if f.get("THERE") == "-":
         return {**none, "there": "-"}
     sha = re.compile(r"[0-9a-f]{40,64}")
     if not (all(sha.fullmatch(f.get(k) or "") for k in ("LOCAL", "THERE")) and f.get("HELD") in ("yes", "no")
-            and (f.get("MERGES") or "").isdigit()):
+            and (f.get("MERGES") or "").isdigit() and f.get("CARRIED", "no") in ("yes", "no")):
         crew.fail(f"crew can't read whether bolt/{bolt} is split from: {(said or '').strip()[:200] or 'nothing'}")
-    return {**none, "local": f["LOCAL"], "there": f["THERE"], "held": f["HELD"], "merges": int(f["MERGES"])}
+    return {**none, "local": f["LOCAL"], "there": f["THERE"], "held": f["HELD"], "merges": int(f["MERGES"]),
+            "carried": f.get("CARRIED")}
 
 
 def land_copies(said, bolt):

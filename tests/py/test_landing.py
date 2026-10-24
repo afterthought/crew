@@ -737,7 +737,10 @@ class TestTheSubmission:
             self.submit(monkeypatch, self.BEFORE, [], said=policy(TAKES), copies=self.copies(HOSTS, "no", "no", 1, 2))
         assert self.scripts() == ["MAIN", "COPIES"] and self.closed == [] and self.handed == []
         words = ("bolt/b was not submitted: its two copies have diverged: box's 1111111 holds 1 merge GitHub's 2222222 lacks, "
-                 "and GitHub's holds 2 merges box's lacks, so either submission would drop merges")
+                 "and GitHub's holds 2 merges box's lacks, so either submission would drop merges. The bolt is its branch "
+                 "on GitHub, so the way on is its team's: its conductor starts a fix (crew fix), whose place is cut from "
+                 "GitHub's head, that takes box's merges in (git merge bolt/b) and merges into the bolt through sluice; the "
+                 "landing then submits GitHub's head, levelling box's copy to it")
         assert self.emitted == [("bolt.submit", ["bolt/b"], {"refused": words})]
         assert words in capsys.readouterr().err
 
@@ -825,11 +828,16 @@ class TestTheHeadALandingSubmits:
             head=HOSTS, level=False, said=("bolt/b is split: box's tip 1111111 holds 1 merge GitHub's 2222222 lacks; the "
                                            "landing submits that tip, its push moving GitHub's branch forward"))
 
-    def test_two_copies_that_have_diverged_submit_nothing(self):
-        """bolt-teams "The two copies have diverged"."""
+    def test_two_copies_that_have_diverged_submit_nothing_and_name_the_fix_as_the_way_on(self):
+        """bolt-teams "The two copies have diverged", and plan.19 as read for batch 34's reviewer: the bolt is its branch
+        on GitHub, so the host copy's merges are carried by the team's fix, cut from GitHub's head, and the landing then
+        submits GitHub's head."""
         assert plan.landing_head("b", "box", copies(held="no", ahead="no", lacks=1, beyond=2)) == (
             "bolt/b was not submitted: its two copies have diverged: box's 1111111 holds 1 merge GitHub's 2222222 lacks, "
-            "and GitHub's holds 2 merges box's lacks, so either submission would drop merges")
+            "and GitHub's holds 2 merges box's lacks, so either submission would drop merges. The bolt is its branch "
+            "on GitHub, so the way on is its team's: its conductor starts a fix (crew fix), whose place is cut from "
+            "GitHub's head, that takes box's merges in (git merge bolt/b) and merges into the bolt through sluice; the "
+            "landing then submits GitHub's head, levelling box's copy to it")
 
     def test_a_bolt_that_lives_on_its_host_is_submitted_from_its_copy(self):
         """bolt-teams "A bolt that lives on its host": no origin, GitHub without the branch, or GitHub's copy naming no

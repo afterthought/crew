@@ -212,10 +212,11 @@ def split_kit(repo, tmp_path, merges):
     return repo.git("rev-parse", "bolt/b")
 
 
-def split_of(repo, remote="origin"):
-    """plan.BOLT_SPLIT in the kit's main checkout, as bolt_split_check runs it, and kit.bolt_split's reading of it."""
+def split_of(repo, remote="origin", *work):
+    """plan.BOLT_SPLIT in the kit's main checkout, as bolt_split_check runs it, given the ref of the work to merge as a
+    fix's merge gives it, and kit.bolt_split's reading of it."""
     import kit
-    r = script("BOLT_SPLIT", str(repo.path), "b", remote)
+    r = script("BOLT_SPLIT", str(repo.path), "b", remote, *work)
     assert r.returncode == 0, r.stderr
     return r.stdout, kit.bolt_split(r.stdout, "b")
 
@@ -227,8 +228,35 @@ def test_a_bolt_whose_host_tip_github_lacks_is_split_by_the_merges_it_lacks(repo
     out, f = split_of(repo)
     there = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "bolt/b"], capture_output=True, text=True).stdout.strip()
     assert "HELD=no" in out and "MERGES=2" in out
-    assert f == dict(local=tip, there=there, held="no", merges=2, read=None)
+    assert f == dict(local=tip, there=there, held="no", merges=2, carried=None, read=None)
     assert repo.git("rev-parse", "origin/bolt/b") == there
+
+
+def test_a_fix_that_takes_a_diverged_hosts_merges_in_carries_them_and_merges(repo, tmp_path):
+    """plan.split_refusal through BOLT_SPLIT, plan.19 as read for batch 34's reviewer: GitHub's bolt/b took a merge the
+    host's lacks while the host's took two GitHub's lacks, so the landing refuses both; a fix cut from GitHub's head
+    that merges the host's bolt/b in holds the host's tip, and its merge is let through, since sluice's merge on
+    GitHub's copy drops none of the host's; a fix that did not take them in is refused, naming the carry."""
+    import plan
+    tip = split_kit(repo, tmp_path, 2)
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "bolt/b", str(tmp_path / "github.git"), str(other)], check=True)
+    subprocess.run(["git", "-C", str(other), "commit", "-q", "--allow-empty", "-m", "chore(land): #9 unit/x"], check=True)
+    subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "bolt/b"], check=True)
+    repo.git("fetch", "-q", "origin", "+refs/heads/bolt/b:refs/remotes/origin/bolt/b")
+    repo.git("branch", "fix/b/bare", "origin/bolt/b")
+    repo.git("checkout", "-q", "-b", "fix/b/carry", "origin/bolt/b")
+    repo.git("merge", "-q", "--no-ff", "-m", "chore(merge): the host's bolt/b into the fix", "bolt/b")
+    repo.git("checkout", "-q", "main")
+    out, f = split_of(repo, "origin", "refs/heads/fix/b/carry")
+    assert "HELD=no" in out and "CARRIED=yes" in out and f["local"] == tip and f["carried"] == "yes"
+    assert plan.split_refusal("fix", "carry", "b", "h", "origin", f) is None
+    out, f = split_of(repo, "origin", "refs/heads/fix/b/bare")
+    assert "CARRIED=no" in out and f["carried"] == "no"
+    assert plan.split_refusal("fix", "bare", "b", "h", "origin", f).endswith(
+        "a fix that takes h's merges in first (git merge bolt/b in its place) carries them, and merges")
+    out, f = split_of(repo)
+    assert "CARRIED" not in out and f["carried"] is None and plan.split_refusal("unit", "u", "b", "h", "origin", f)
 
 
 def test_a_bolt_github_holds_at_the_hosts_tip_or_beyond_is_not_split(repo, tmp_path):
