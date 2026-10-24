@@ -1104,3 +1104,82 @@ def test_a_dependent_rebases_onto_and_takes_beside_the_bolt_where_it_is_read_on_
     assert (took.returncode, took.stdout) == (0, ""), "read at the host's copy, GitHub's own commit counts as the place's"
     took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", github, "unit/d"], capture_output=True, text=True)
     assert (took.returncode, took.stdout.split()) == (0, ["d", repo.git("rev-parse", "--short=7", "unit/d")])
+
+
+def work_kit(repo, monkeypatch):
+    """A kit whose main checkout is repo, built by one team on this host, and bolt/z cut from main holding its own
+    commit; bolt_work reads the bolt there, a kit with no origin reading its own main (plan.bolt_work)."""
+    import crew
+    monkeypatch.setattr(crew, "this_host", lambda: "here")
+    kit = {"name": "k", "repo": "o/k", "main": str(repo.path), "dir": str(repo.path.parent)}
+    fleet = {"partitions": {"p": {"label": "p", "machine": "here", "teams": ["k-1"]}},
+             "teams": {"k-1": {"name": "k-1", "label": "p", "machine": "here", "kit": kit}}, "hosts": {}}
+    repo.commit("chore: start", {"a.txt": "one\n"})
+    repo.git("switch", "-q", "-c", "bolt/z")
+    repo.commit("feat: the bolt's own", {"a.txt": "one, as the bolt has it\n"})
+    repo.git("switch", "-q", "main")
+    return fleet
+
+
+def own_work(fleet, sent):
+    import plan
+    got = plan.bolt_work(fleet, "p", "k", {"z": (sent[:7], None)})["z"]
+    assert got["why"] is None, got["why"]
+    return [s for _, s in got["gained"]], [s for _, s in got["lost"]]
+
+
+def merged_in(repo, branch, message, resolved=None):
+    """branch merged into the branch checked out with --no-ff, a conflict resolved in the merge commit as resolved
+    says, {path: text}."""
+    r = subprocess.run(["git", "-C", str(repo.path), "merge", "-q", "--no-ff", branch, "-m", message], capture_output=True, text=True)
+    if r.returncode:
+        assert resolved, r.stdout + r.stderr
+        for name, text in resolved.items():
+            (repo.path / name).write_text(text)
+            repo.git("add", "--", name)
+        repo.git("commit", "-q", "--no-edit")
+    return repo.git("rev-parse", "HEAD")
+
+
+def test_a_bolt_that_took_main_in_with_a_conflict_resolved_holds_the_same_work_of_its_own(repo, monkeypatch):
+    """plan.bolt_work (rail-cards, Decision 1): a take-main fix merges main, resolving a conflict in its merge commit,
+    and sluice merges the fix into the bolt with --no-ff: git log --no-merges both ways, main excluded, lists nothing,
+    so the user's send at the bolt's old head stands."""
+    fleet = work_kit(repo, monkeypatch)
+    sent = repo.git("rev-parse", "bolt/z")
+    repo.commit("feat: main's own", {"a.txt": "one, as main has it\n"})
+    repo.git("switch", "-q", "-c", "fix/z/take-main", "bolt/z")
+    merged_in(repo, "main", "Merge main", {"a.txt": "one, as both have it\n"})
+    repo.git("switch", "-q", "bolt/z")
+    merged_in(repo, "fix/z/take-main", "Merge fix/z/take-main")
+    assert repo.git("rev-parse", "bolt/z") != sent
+    assert own_work(fleet, sent) == ([], [])
+
+
+def test_a_fix_that_commits_a_change_is_work_the_bolt_gained(repo, monkeypatch):
+    """plan.bolt_work (rail-cards "A fix adds a commit"): the fix's own commit is listed as gained, by its subject."""
+    fleet = work_kit(repo, monkeypatch)
+    sent = repo.git("rev-parse", "bolt/z")
+    repo.git("switch", "-q", "-c", "fix/z/lease", "bolt/z")
+    repo.commit("fix: keep the lease", {"lease.txt": "kept\n"})
+    repo.git("switch", "-q", "bolt/z")
+    merged_in(repo, "fix/z/lease", "Merge fix/z/lease")
+    assert own_work(fleet, sent) == (["fix: keep the lease"], [])
+
+
+def test_two_take_main_merges_from_one_tip_neither_an_ancestor_of_the_other_hold_the_same_work(repo, monkeypatch):
+    """plan.bolt_work (rail-cards "The host's copy is brought level", plan.19's e104bcf and d64278b): the host's copy
+    took main in at one commit and GitHub's at a later one, from the same tip, so neither head is an ancestor of the
+    other; neither holds a non-merge commit of its own the other and main lack."""
+    fleet = work_kit(repo, monkeypatch)
+    tip = repo.git("rev-parse", "bolt/z")
+    repo.commit("feat: main's first", {"b.txt": "b\n"})
+    repo.git("switch", "-q", "--detach", tip)
+    host = merged_in(repo, "main", "Merge main into the host's copy")
+    repo.git("switch", "-q", "main")
+    repo.commit("feat: main's second", {"c.txt": "c\n"})
+    repo.git("switch", "-q", "bolt/z")
+    github = merged_in(repo, "main", "Merge main into GitHub's copy")
+    for one, other in ((host, github), (github, host)):
+        assert subprocess.run(["git", "-C", str(repo.path), "merge-base", "--is-ancestor", one, other]).returncode == 1
+    assert own_work(fleet, host) == ([], [])

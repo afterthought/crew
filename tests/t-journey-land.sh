@@ -33,7 +33,9 @@
 # head moves and when a third joins it; and one crew bolt submit lands the three the user ticked in that order, each
 # queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and
 # held, the third landing all the same, the command exiting non-zero naming the held one, and the card closed with
-# what landed and what was held.
+# what landed and what was held, keeping the user's send for the held one; its team's fix takes main into it, and once
+# that merges no card asks for it, ops reads it under the earlier send with no card open, and the command that read
+# prints lands it on that send (record 0031 as amended 2026-10-24).
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -514,3 +516,36 @@ has "$closed" "Held: south, held: sluice refused its landing at ${south:0:7}, an
 case $closed in *"words above"*) fail "the card's close points at words above, which are in ops's terminal, not on the card" ;; esac
 calls | grep -q "^$box pendingyou post_request " && fail "a card was posted though no row can land"
 ok "one crew bolt submit lands the ticked bolts in the card's order, each queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and held on its row, the third landing all the same; it exits non-zero naming the one held, and the card closes with what landed and what was held"
+
+# The send stands for south's work (record 0031 as amended 2026-10-24): the close kept it, south's team takes main in by
+# a fix that only merges main, and once that merges no landings card asks for south; ops reads it with no card open,
+# under the earlier send, with the crew bolt submit that lands it, and that command lands it, nothing asked again.
+eq "$(field $box card.close Heads kit/switchboard-kit)" "south@${south:0:7}"
+has "$closed" "your send stands for it: it lands once its team's fix has only taken main in and sluice has proven it"
+sp=$kd/places/fix-south--take-main
+export CREW_AGENT=swb-2-conductor
+expect_ok crew fix swb-2 take-main "Take main into the bolt: the landing conflicts on regions.txt." --bolt south
+git -C "$sp" fetch -q origin
+git -C "$sp" merge -q origin/main >/dev/null 2>&1 && fail "taking main into south did not stop on regions.txt"
+printf 'north\nsouth\n' > "$sp/regions.txt"; git -C "$sp" add regions.txt
+GIT_EDITOR=true git -C "$sp" commit -q --no-edit || fail "the merge of main into south did not commit"
+expect_ok crew fix swb-2 take-main --wait --bolt south
+expect_ok crew fix swb-2 take-main --merge --bolt south
+merge_as swb-2-unit-1 "$sp" bolt/south || fail "south's take-main submission failed"
+: > "$CREW_TEST_LOG"
+expect_ok crew fix swb-2 take-main --wait --bolt south
+unset CREW_AGENT
+moved=$(grep -o "delivered merge of fix/south/take-main: bolt/south holds it at [0-9a-f]*" <<<"$out")
+[[ -n $moved && ${moved##* } != "${south:0:7}" ]] || fail "south's head did not move with its fix's merge:"$'\n'"$out"
+has "$out" "card land/switchboard-kit: south lands on the user's send of an earlier card, so it is no row of this one"
+calls | grep -q "^$box pendingyou post_request " && fail "a landings card asked for south again though its own work is unchanged"
+out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read the earlier send:"$'\n'"$out"
+eq "$out" "card land/switchboard-kit: no landings card of switchboard-kit is open
+  to land on the user's send of an earlier card: south
+  lands them: crew bolt submit south --label wldn"
+expect_ok crew bolt submit south
+has "$out" "bolt/south landed on switchboard-kit's main at"
+eq "$(plan -t Bolt -e "Bolt = 'south'" -c)" "0"
+eq "$(field mac-studio bolt.land Repo bolt/south)" "switchboard-kit"
+calls | grep -q "^$box pendingyou post_request " && fail "a landings card was posted for south's landing"
+ok "a ticked bolt sluice refused keeps the user's send through a fix that only takes main in: no card asks for it, ops reads it with no card open under the earlier send, and the command it prints lands it"
