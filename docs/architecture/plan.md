@@ -12,7 +12,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 ## Rules
 
 - **[plan.1]** Every write runs `recfix --check` on each `.rec` file it changed and crew's own rules (a unit's bolt in the same repo, `After` within one bolt, no cycle) before committing, and its change function re-checks every precondition against the tip it is applied to, since it replays.
-- **[plan.2]** Every commit on a flywheel's branch has a subject ending ` (<agent>)` and a `Crew-Entry:` trailer naming its run-record entry, and carries the host's uncarried run record; a carry-only commit names no entry.
+- **[plan.2]** Every commit on a flywheel's branch has a subject ending ` (<agent>)` and a `Crew-Entry:` trailer naming its run-record entry.
 - **[plan.3]** A proposal holds only the plan commands a proposal may hold, parsed by the command line's own grammar and applied by the same functions as a direct run; it is checked by applying each `Do` in order to a copy at the tip, one refusal refuses the whole, and approval applies every `Do` the user read and kept in order at the tip and closes the proposal in one commit, or changes nothing; a unit new to the bolt the user cleared on the card is left out with every command that only concerns it, a kept command that names it refuses the whole, and the approval records what was cleared.
 - **[plan.4]** A proposal is numbered once, never removed, its `Do` lines never changed; it closes only as approved or dropped, and one that touches a held bolt is approved only after that bolt's conductor has agreed.
 - **[plan.5]** Work a held bolt needs before it can be proven or land is placed in that bolt ahead of its first unmerged unit, marked `--unblocks`; a proposal that marks a unit so and places it elsewhere is refused.
@@ -35,7 +35,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 **[plan.1]** Rules out: a write that skips `recfix`; a precondition checked once before the replay loop. Source: `plan.py` 263–328, 390–406, 488–500. `land` checks every file a commit holds, the carried `runs/<host>/` files among them; a signal's or capture's markdown is checked by its frontmatter, read as one record.
 
-**[plan.2]** Rules out: a commit with no trailer; two acts in one commit with one entry. Source: `flywheel-state` spec "A commit names its run-record entry"; `plan.py` 449–535.
+**[plan.2]** Rules out: a commit with no trailer; two acts in one commit with one entry. Amended 2026-10-24: the carry clause (a commit carries the host's uncarried run record; a carry-only commit names no entry) went with `the-run-record-reaches-the-branch-as-it-is-written` (landed 2026-10-23), as record 0029 said it would: every entry is its own commit from the host that wrote it (`read.5`), so no commit has anything to carry. Source: `flywheel-state` spec "A commit names its run-record entry"; `plan.py` 449–535.
 
 **[plan.3]** Rules out: a proposal as prose; `bolt give` in a `Do`; a half-applied approval; a cleared unit's `--after` left standing. Not ruled out: the approval of a subset the user chose on the card, unit by unit (ADR 0018). Not built: `_open.md`. Source: `plan-proposals` spec; design "Each plan command becomes three parts"; `plan.py` 1122–1165, 1797–1845.
 
