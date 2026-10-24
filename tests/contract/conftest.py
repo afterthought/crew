@@ -1,13 +1,21 @@
 """The contract tier (tests.11): git, recutils, worktrunk and moon run for real in a scratch directory, each case pinning a
 behaviour crew's code assumes and naming what assumes it. Every git here runs with no global or system config, so
 the host's own settings and hooks reach nothing."""
+import atexit
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
+# crew's modules read the home at import, the teams file and crew's caches among them, and record.emit pushes each
+# entry to its partition's branch: they are imported under a scratch home, so no case reaches the host's own fleet,
+# its state repositories or GitHub (tests.11).
+os.environ["HOME"] = tempfile.mkdtemp(prefix="crew-contract-home-")
+atexit.register(shutil.rmtree, os.environ["HOME"], True)
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "plugin" / "lib"))
 
 

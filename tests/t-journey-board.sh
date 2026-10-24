@@ -7,10 +7,10 @@
 # deploys, a dock for each item with its history as crew trace walks it, and its partition links in the layout of its
 # file, saying so when that names no partition, and nothing when the branch can't be read; crew page --fleet writes
 # every partition on one page beside the partitions' folders, its links in the layout of its file, and a partition's
-# page served as <label>.html links back to it; every view names a host that does not answer and shows the rest; and a
-# plan a hand edit broke is refused, named by its commit. What each lane, line, URL and node says are logic cases
-# (tests/py/test_board.py, test_page.py, test_fleet.py, test_rail.py), and what the kit reader takes from git, contract
-# cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
+# page served as <label>.html links back to it; every view names a host that does not answer, for its kits alone, and
+# shows the rest; and a plan a hand edit broke is refused, named by its commit. What each lane, line, URL and node says
+# are logic cases (tests/py/test_board.py, test_page.py, test_fleet.py, test_rail.py), and what the kit reader takes
+# from git, contract cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
 # Reads: tests/stubs-sites/ plugin/lib/board.py plugin/lib/sites.py plugin/lib/page.py plugin/lib/page.html plugin/lib/fleet.html
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 export PATH="$TESTS/stubs-sites:$PATH"
@@ -241,14 +241,14 @@ ok "crew page --fleet shows the use each host published by subscription, and nam
 echo $box > "$T/down"
 expect_ok crew bolts; has "$out" "$box did not answer"; has "$out" "  map-one"
 expect_ok crew board --label wldn
-has "$(lane "$out" attention)" "! $box did not answer (its kits: "
+has "$(lane "$out" attention)" "! $box did not answer (its kits: "; lacks "$(lane "$out" attention)" "run record"
 eq "$(line_of "$(lane "$out" Construction)" "  a  ")" "    a  unknown"
 expect_ok crew sites wldn; has "$out" "$box  did not answer"; has "$out" "unit-map-one--atlas-kit.local"
 expect_ok crew page wldn; has "$(sed -n 3p <<<"$out")" "$box did not answer"
 expect_ok crew page --fleet; has "$out" "wldn: $box did not answer (its kits: "
 eq "$(block "$fleet" | jq -r --arg h $box '.partitions[0].hosts[] | select(.host == $h) | .answered')" "false"
 rm "$T/down"
-ok "a host that does not answer is named by crew bolts, board, sites, page and the fleet page, and the rest is shown"
+ok "a host that does not answer is named by crew bolts, board, sites, page and the fleet page, for its kits alone, and the rest is shown"
 
 cp "$mine/page.html" "$T/earlier.html"
 mv "$ws" "$ws.away"
@@ -260,7 +260,7 @@ ok "when the branch cannot be read crew page writes nothing and names the branch
 # A hand edit that leaves a duplicated key: crew bolts refuses to read the plan, naming the commit and recfix's
 # message; crew board names it in the attention line and exits non-zero.
 h=$T/hand; git clone -q -b wldn/main "$ws" "$h"
-printf '\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n' >> "$h/plan.rec"; commit_all "$h" "plan: a hand edit"; git -C "$h" push -q origin wldn/main
+printf '\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n' >> "$h/plan.rec"; commit_all "$h" "plan: a hand edit"; push_state "$h"
 expect_fail "wldn/main of WilldanGroup/crew-state at $(git -C "$h" rev-parse --short HEAD): plan.rec fails recfix --check" crew bolts
 has "$out" "duplicated key"
 expect_fail "wldn/main of WilldanGroup/crew-state" crew board --label wldn
