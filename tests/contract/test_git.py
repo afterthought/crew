@@ -800,8 +800,9 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
     after sluice's outcome reads GitHub's main moved and holding the bolt's tip, so the bolt landed there, sluice's exit
     and its last line named as what came after the push, nothing said of levelling a main that did not move, and the
     branch is then marked landed. A stand-in that pushes nothing and exits 2 lands nothing, and main is where it was,
-    its refusal recorded in sluice's words, from its wait's or, when sluice refused the submission at once, from what
-    SUBMIT says it said (rail-cards "A refused landing is held on its row")."""
+    recorded in sluice's words, from its wait's or, when sluice refused the submission at once, from what SUBMIT says it
+    said: refused when sluice's record has it in conflict (rail-cards "A refused landing is held on its row"), and
+    stopped when sluice gave none (plan.landing_blame)."""
     import plan
     pushed = kit_with_github(repo, tmp_path)
     pushed("from-a-mac")
@@ -813,9 +814,11 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
     _, _, stand_in = landing(repo, tmp_path)
     r, before = stand_in(refused=True)()
     assert before == repo.git("rev-parse", "origin/main") and "RC=2 " in r.stdout, r.stdout + r.stderr
-    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
+    conflict = {"schema": plan.SUBMISSION, "id": 1, "state": "conflict", "conflict": {"paths": ["README.md"], "with": []}}
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before, doc=conflict)
     assert not landed and words.startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was."), words
-    assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True) == (False, "sluice: bolt/b conflicts with main")
+    assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True, doc=conflict) == (False, "sluice: bolt/b conflicts with main")
+    assert plan.landing_end("b", "kit", "h", r.stdout, before)[2:] == ("sluice: bolt/b conflicts with main", True)
     r, before = stand_in(at_once=True)()
     assert "RC=2 " in r.stdout and "sluice: main has no gate for bolt/b" in r.stderr, r.stdout + r.stderr
     assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True) == (False, "sluice: main has no gate for bolt/b")
