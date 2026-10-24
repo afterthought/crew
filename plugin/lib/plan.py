@@ -2005,28 +2005,43 @@ def held_at(refused, bolt, head):
     return words if at and head and (at.startswith(head) or head.startswith(at)) else None
 
 
-def landing_rows(order, rows, held):
+# The words a take-main fix starts with (bolt_forecast's, and main-level ops's for a landing that conflicts): a fix in
+# flight with them holds its bolt's row as taking main first (rail-cards "A take-main fix holds its row as taking main
+# first").
+TAKE_MAIN = "Take main into the bolt"
+
+
+def landing_rows(order, rows, held, takes_main=None):
     """The rows of a kit's landings card (rail-cards, record 0031 as amended 2026-10-23), from facts alone: order, the
     plan's bolts of the kit by name, in its order; rows, {bolt: facts} for each that reads proven as a fix in flight on
     it leaves it (land_row), its facts carrying its head and its fixes in flight, {fix: the words it started with or
-    None}; held, each bolt's last landing sluice did not land, {bolt: (head, words)} (refusals). In the plan's order,
-    each {bolt, box: True, facts}, a row the user ticks; or {bolt, box: False, why, facts}, held with no box: for a fix
-    in flight on it, in the fix's words, or for sluice's refusal of its landing at its present head, until its team's
-    fix moves the head. A bolt not in rows is no row."""
-    out = []
+    None}; held, each bolt's last landing sluice did not land, {bolt: (head, words)} (refusals); takes_main, each bolt
+    forecast to conflict with what main holds at its present head, {bolt: (main's short sha, [paths])}, by the card's
+    forecast or the run record's (main_conflict). In the plan's order, each {bolt, box: True, facts}, a row the user
+    ticks; or {bolt, box: False, why, facts}, held with no box: for a fix in flight on it, in the fix's words, or for
+    sluice's refusal of its landing at its present head, until its team's fix moves the head; or, marked takes_main,
+    taking main first, forecast to conflict with main, or with only take-main fixes in flight (TAKE_MAIN), each named
+    with its words. A bolt not in rows is no row."""
+    out, takes_main = [], takes_main or {}
     for b in [b for b in order if b in rows]:
         f = rows[b]
         fixes = f.get("fixes") or {}
         at, words = held.get(b, (None, None))
+        main_first = bool(fixes) and all((note or "").startswith(TAKE_MAIN) for note in fixes.values())
         if fixes:
-            why = "; ".join(f"held for a fix: {note} ({fix})" if note else f"held for {fix} until it merges or is dropped"
+            why = "; ".join(f'takes main first: {fix.rsplit("/", 1)[-1]} taking main in: "{note}"' if (note or "").startswith(TAKE_MAIN)
+                            else f"held for a fix: {note} ({fix})" if note else f"held for {fix} until it merges or is dropped"
                             for fix, note in sorted(fixes.items()))
         elif at and (at.startswith(f["head"]) or f["head"].startswith(at)):
             why = f"held: sluice refused its landing at {f['head'][:7]}, and it waits for its team's fix: {words}"
+        elif b in takes_main:
+            main, paths = takes_main[b]
+            why, main_first = (f"takes main first: forecast to conflict with main on {joined(list(paths))} at {main[:7]}; "
+                               f"{f.get('conductor') or 'its team'} takes main in by a fix"), True
         else:
             out.append(dict(bolt=b, box=True, facts=f))
             continue
-        out.append(dict(bolt=b, box=False, why=why, facts=f))
+        out.append(dict(bolt=b, box=False, why=why, facts=f, **({"takes_main": True} if main_first else {})))
     return out
 
 
@@ -2125,7 +2140,8 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
         left = [b for b, h in now if b in was and was[b][1] and was[b][0] == h]
         said = [f"{b} reads proven and joins the card" for b, _ in now if b not in was]
         said += [f"{b}'s head is now {h}" for b, h in now if b in was and was[b][0] != h]
-        said += [f"{b} is {held[b]}" if b in held else f"{b} no longer waits to land" for b, _, _ in heads if b not in dict(now)]
+        said += [(f"{b} {held[b]}" if held[b].startswith("takes main first") else f"{b} is {held[b]}") if b in held
+                 else f"{b} no longer waits to land" for b, _, _ in heads if b not in dict(now)]
         said = ([note] if note else []) + said
         if not said:
             return ("leave",)

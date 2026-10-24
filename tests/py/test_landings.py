@@ -123,6 +123,49 @@ def test_a_landing_left_standing_in_sluice_holds_its_row_for_no_fix():
     assert row["box"] and plan.refused_at([standing], "y", head) is None
 
 
+def test_a_bolt_forecast_to_conflict_with_main_takes_main_first_with_no_box():
+    """rail-cards "Main landed a change the bolt also made"."""
+    rows = plan.landing_rows(["y", "z"], {"y": dict(facts("y"), conductor="crw-1-conductor"), "z": facts("z")}, {},
+                             {"y": ("e4f5a6b", ["openspec/specs/artifact-buckets/spec.md"])})
+    assert [(r["bolt"], r["box"], r.get("why"), r.get("takes_main")) for r in rows] == [
+        ("y", False, "takes main first: forecast to conflict with main on openspec/specs/artifact-buckets/spec.md at "
+                     "e4f5a6b; crw-1-conductor takes main in by a fix", True),
+        ("z", True, None, None)]
+
+
+def test_a_conflict_a_wait_recorded_holds_the_row_when_the_cards_own_forecast_was_not_made():
+    """rail-cards "A wait found it first": the record's conflict at the bolt's present head (main_conflict)."""
+    head = "d" * 40
+    recorded = [dict(Act="forecast", On=["bolt/y"], Heads=f"bolt/y@{head[:7]} main@2222222", Paths="README.md", Reached="wait")]
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, {}, {"y": plan.main_conflict(recorded, "y", head)})
+    assert (row["box"], row["why"], row["takes_main"]) == (
+        False, "takes main first: forecast to conflict with main on README.md at 2222222; its team takes main in by a fix", True)
+
+
+def test_a_conflict_only_with_a_row_above_holds_nothing():
+    """rail-cards "Only a bolt above it": a forecast against a row above is said on the row, not held."""
+    rows = plan.landing_rows(["y", "z"], {"y": facts("y"), "z": dict(facts("z"), forecast=[("y", ["plan.py"])])}, {}, {})
+    assert [r["box"] for r in rows] == [True, True]
+
+
+def test_a_take_main_fix_in_flight_holds_its_row_as_taking_main_first_in_its_words():
+    """rail-cards "The conductor started the fix"; any other fix holds the row in its words as ever."""
+    words = "Take main into the bolt: it is forecast to conflict on README.md"
+    y, z = plan.landing_rows(["y", "z"], {"y": facts("y", fixes={"fix/y/take-main-e4f5a6b": words}),
+                                          "z": facts("z", fixes={"fix/z/take-main-e4f5a6b": words, "fix/z/gap": "A zone is missing."})}, {})
+    assert (y["box"], y["why"], y["takes_main"]) == (False, f'takes main first: take-main-e4f5a6b taking main in: "{words}"', True)
+    assert (z["box"], z.get("takes_main")) == (False, None)
+    assert z["why"] == f'held for a fix: A zone is missing. (fix/z/gap); takes main first: take-main-e4f5a6b taking main in: "{words}"'
+
+
+def test_a_new_head_with_no_conflict_forecast_has_its_box_again():
+    """rail-cards "The fix merges": the record's conflict was at the head the fix moved the bolt from."""
+    recorded = [dict(Act="forecast", On=["bolt/y"], Heads="bolt/y@ccccccc main@2222222", Paths="README.md", Reached="told")]
+    takes = {b: c for b in ["y"] for c in [plan.main_conflict(recorded, b, "d" * 40)] if c}
+    row, = plan.landing_rows(["y"], {"y": facts("y", "d" * 40)}, {}, takes)
+    assert row["box"] and "takes_main" not in row
+
+
 # ---------------------------------------------------------------------------------------------- the forecasts
 
 def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():
