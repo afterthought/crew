@@ -42,7 +42,7 @@ ok "crew up starts a team's conductor and ops on its host, in one workspace with
 crew bolt new smoke "Prove the loop." --repo switchboard-kit >/dev/null
 # A give is refused, the plan unchanged and no branch made anywhere, while the kit's policy on GitHub's main names no
 # remote for its bolts, and while the host's sluice has no `branch create`.
-plan_at=$(git --git-dir "$ws" rev-parse wldn/main)
+plan_at=$(act_tip)
 policy=$(cat "$other/.config/sluice.toml")
 printf '[branches."bolt/*"]\nrequired = ["#check-full"]\n\n[branches.main]\nrequired = ["#check-full"]\nremote = "origin"\n' > "$other/.config/sluice.toml"
 commit_all "$other" "chore: bolts kept on the host"; git -C "$other" push -q origin main
@@ -53,7 +53,7 @@ echo "sluice 0.18.0" > "$T/sluice-version"
 expect_fail "a bolt is given through sluice 0.20.0 or later, which has \`branch create\`, and sluice --version on $box said: sluice 0.18.0" \
   crew bolt give swb-1 smoke
 rm "$T/sluice-version"
-eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$plan_at"
+eq "$(act_tip)" "$plan_at"
 git -C "$k" rev-parse --verify -q bolt/smoke >/dev/null && fail "a refused give made bolt/smoke on the host"
 git --git-dir "$r" rev-parse --verify -q bolt/smoke >/dev/null && fail "a refused give made bolt/smoke on GitHub"
 calls | grep -q " sluice branch create " && fail "a refused give ran sluice's create"
@@ -165,7 +165,7 @@ f = sys.argv[2]; p = plan.Plan(open(f).read())
 p.unit("amended-one").set("Amended", "intent")
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: by hand"; push_state "$w"
 : > "$CREW_TEST_LOG"
 expect_ok crew up swb-2
 has "$(grep "agent prompt swb-2-conductor '" "$CREW_TEST_LOG")" "'[crew] Unit amended-one was amended and no construct runs on it: run construct on it now (crew unit run amended-one construct). Read where your bolt stands with"
@@ -198,7 +198,7 @@ p.insert(plan.Rec("Bolt", [("Bolt", "made-before"), ("Repo", "switchboard-kit"),
 p.insert(plan.Rec("Unit", [("Unit", "mb"), ("Repo", "switchboard-kit"), ("Bolt", "made-before"), ("Intent", "Unit mb.")]))
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: a bolt made before"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: a bolt made before"; push_state "$w"
 git -C "$k" branch -q --no-track bolt/made-before main; git -C "$k" config branch.bolt/made-before.crew given
 on_branch "$k" bolt/made-before "chore: bolts kept on the host" .config/sluice.toml $'[branches."bolt/*"]\nrequired = ["#check-full"]\n'
 : > "$CREW_TEST_LOG"

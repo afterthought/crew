@@ -854,6 +854,20 @@ class TestTheHeadALandingSubmits:
             "bolt/b was not submitted: crew can't read bolt/b on GitHub: fatal: Could not read from remote repository.")
 
 
+def test_a_landing_while_the_laptop_is_off_reads_the_branch_alone_and_names_no_host(monkeypatch):
+    """review-batches, "A landing while the laptop is off": crew bolt land's guard reads which changes have been in a
+    batch from the partition's branch, asking no host, so a host off the tailnet holds back no landing."""
+    from facts import FLEET, constructed, plan_of, reviewed
+    fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], state="WilldanGroup/crew-state")})
+    entries = [dict(constructed("a", "aaa1"), Id="20261012T100000Z-000000-chuck-herdr-alpha-1-1"),
+               dict(reviewed(4, [("a", "swb-1", "aaa1")], 5), Id="20261012T100500Z-000000-mac-studio-1-1")]
+    monkeypatch.setattr(plan.crew, "on_machine", lambda *a, **k: pytest.fail(f"a host was asked for the run record: {a}"))
+    monkeypatch.setattr(plan.record, "on_branch", lambda fleet, label, since, tips=None: entries)
+    p = plan_of(bolts={"y": "swb-1"}, units={"a": "y"})
+    outside = [u for u, *_ in plan.due_changes(p, plan.partition_entries(fleet, "wldn")) if u in ["a"]]
+    assert outside == [] and plan.land_refusal("y", ["a"], lambda u: {"stage": "landed"}, outside, "wldn") is None
+
+
 def test_what_the_mark_said_is_its_value_or_the_hosts_words():
     assert [plan.mark_said(0, f"MARKED={v}\n", "") for v in ("yes", "no", "'git config could not set it'")] == [
         "yes", "no", "git config could not set it"]

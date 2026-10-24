@@ -213,6 +213,26 @@ class TestText:
         assert f"  switchboard-kit tenant-environments  swb-1 on {BOX}  unknown" in con and "    a  unknown" in con
         assert out.splitlines()[0].endswith("read from mac-studio")
 
+    def test_an_operator_host_with_no_team_is_never_named_for_its_run_record(self):
+        """crew-board, "An operator host asleep": the run record is read from the branch, so a host that runs no team
+        is asked for nothing and named for nothing, and the landings and cards read from wldn/main are drawn whole."""
+        fleet = dict(FLEET, hosts=dict(FLEET["hosts"], **{"macbook-pro": {"kind": "darwin", "ssh": "macbook-pro",
+                                                                           "sessions": {"wldn": {"partition": "clients/willdan"}}}}))
+        sv = dict(kits(), **{"macbook-pro": {"ok": False, "error": "ssh: connect to host macbook-pro port 22: Operation timed out"}})
+        landed = [dict(label="wldn", bolt="tenant-environments", units=["a", "b"], at=plan.utc(ago(5)), by="wldn-ops", host="macbook-pro")]
+        d = board.board_data(fleet, ["wldn"], read(sv=sv, unread={"wldn": {}}, landings=landed), NOW)
+        p = d["partitions"][0]
+        assert "macbook-pro" not in p["hosts"] and "macbook-pro" not in json.dumps(p["attention"])
+        assert [a for a in p["attention"] if a["what"] in ("host", "plan")] == []
+
+    def test_a_branch_whose_run_record_cannot_be_read_is_named_as_the_plans(self):
+        d = data(unread={"wldn": {"wldn/main": "could not fetch wldn/main of WilldanGroup/crew-state over https: timed out"}})
+        assert [a for a in d["partitions"][0]["attention"] if a["what"] in ("host", "plan")] == [
+            {"what": "plan", "name": "wldn/main", "why": "its run record: could not fetch wldn/main of WilldanGroup/crew-state over https: timed out"}]
+        assert ("! the plan, wldn/main: its run record: could not fetch wldn/main of WilldanGroup/crew-state over https: timed out"
+                in lane(board.board_text(d), "attention"))
+        assert sorted(d["partitions"][0]["hosts"]) == [BOX, "mac-studio"]
+
     def test_a_plan_that_cannot_be_read_is_named_for_attention(self):
         d = board.board_data(FLEET, ["wldn"], read(pl=False, errors={"wldn/main of WilldanGroup/crew-state": "plan.rec fails recfix --check"}), NOW)
         assert "! the plan, wldn/main of WilldanGroup/crew-state: plan.rec fails recfix --check" in lane(board.board_text(d), "attention")

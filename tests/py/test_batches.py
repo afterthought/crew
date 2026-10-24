@@ -286,6 +286,33 @@ class TestBatchDue:
         assert plan.batch_due(due(1), [], EVERY_5, START, [("b1", False, ["u0"]), ("b2", True, [])]) == []
 
 
+class TestTheBranchAlone:
+    """review-batches, "A batch is reckoned from the partition's branch alone": the batch clock, a review and a landing
+    read the run record from the partition's branch, asking no host for it, and are refused naming the branch when it
+    cannot be read."""
+    FLEET = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], state="WilldanGroup/crew-state")})
+    ENTRIES = [dict(constructed(u, f"{i:04x}", i), Id=f"2026101210{i:02d}00Z-000000-chuck-herdr-alpha-1-{i}") for i, u in enumerate(["x1", "x2", "y1", "z1", "w1"])]
+
+    def test_the_laptop_asleep_at_a_conductors_wait_hides_no_change_due(self, monkeypatch):
+        """review-batches, "The laptop asleep at a conductor's wait"."""
+        monkeypatch.setattr(plan.crew, "on_machine", lambda *a, **k: pytest.fail(f"a host was asked for the run record: {a}"))
+        monkeypatch.setattr(plan.record, "on_branch", lambda fleet, label, since, tips=None: list(reversed(self.ENTRIES)))
+        entries = plan.partition_entries(self.FLEET, "wldn")
+        assert entries == self.ENTRIES
+        five = plan_of(bolts={"b1": "swb-1"}, units={u: "b1" for u in ("x1", "x2", "y1", "z1", "w1")})
+        assert plan.batch_due(plan.due_changes(five, entries), entries, EVERY_5, START, []) == ["5 changes are due, and a batch is every 5"]
+
+    def test_a_branch_that_cannot_be_read_refuses_naming_it(self, monkeypatch):
+        """review-batches, "The branch cannot be read"."""
+        def refused(fleet, label, since, tips=None):
+            raise plan.Refusal("could not fetch wldn/main of WilldanGroup/crew-state over https: timed out")
+        monkeypatch.setattr(plan.record, "on_branch", refused)
+        with pytest.raises(plan.Refusal) as e:
+            plan.partition_entries(self.FLEET, "wldn")
+        assert str(e.value) == ("crew can't tell which changes have been in a batch: wldn/main of WilldanGroup/crew-state could not be read "
+                                "(could not fetch wldn/main of WilldanGroup/crew-state over https: timed out)")
+
+
 class TestCards:
     UNITS = [(f"u{i}", "swb-1", "aaaa") for i in range(7)]
 
