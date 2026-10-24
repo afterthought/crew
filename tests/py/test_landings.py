@@ -508,22 +508,50 @@ def test_a_send_whose_card_followed_before_ops_read_it_is_read_beside_the_card_t
 def test_what_an_earlier_send_still_lands_leaves_out_the_landed_the_asked_again_and_the_refused_at_its_head():
     sent = {"y": "abc1234", "z": "abc1234", "x": "abc1234", "v": "abc1234", "u": "abc1234"}
     refused = {"x": ("abc1234" + "0" * 33, "sluice: conflict in a.py"), "u": ("def5678", "sluice: a check failed")}
-    # v landed and left the plan, z is a row of the card read now at its new head, x was refused at the head sent;
+    # v landed and left the plan, z's own work changed at its new head, x was refused at its head now, the head sent;
     # u's refusal was at another head, which holds nothing
-    assert plan.sent_left(sent, plan.card_heads("z@def5678"), {"y", "z", "x", "u"}, refused) == ["y", "u"]
-    assert plan.sent_left({}, [], {"y"}, {}) == []
+    now = {"y": H1, "z": H2, "x": H1, "u": H1}
+    assert plan.sent_left(sent, now, {"y", "z", "x", "u"}, refused, {"z": work([LEASE])}) == (["y", "u"], [])
+    assert plan.sent_left({}, {}, {"y"}, {}) == ([], [])
+
+
+def test_an_earlier_send_lands_a_refused_bolt_once_its_fix_only_took_main_in_and_names_one_it_cant_tell_of():
+    """main-level "Ops lands a bolt on a send that still stands": "No card open" and "A head crew cannot read"."""
+    sent = {"z": "abc1234", "w": "abc1234", "q": "abc1234"}
+    refused = {"z": ("abc1234" + "0" * 33, "sluice: conflict in plugin/lib/plan.py")}
+    unread = "bolt/w is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's"
+    fetch = "git fetch -q origin in /c/main on mac-studio failed: fatal: unable to access GitHub"
+    got = plan.sent_left(sent, {"z": H2, "w": None, "q": H2}, {"z", "w", "q"}, refused,
+                         {"z": work(), "w": work(why=unread, head=None), "q": work(why=fetch)})
+    assert got == (["z"], [("w", unread), ("q", fetch)])
+
+
+class WorkActs:
+    """A stand-in for the work read (CardActs.work): each bolt's head now and its own work as heads gives them, the
+    moves it was asked for recorded."""
+
+    def __init__(self, heads):
+        self.heads, self.asked = heads, []
+
+    def work(self, label, kit, moves):
+        self.asked.append(moves)
+        return {b: self.heads.get(b) or work(why=f"bolt/{b} is on no branch crew can read", head=None) for b in moves}
 
 
 def test_the_read_of_an_earlier_send_reads_the_plan_only_when_one_stands_and_refuses_when_it_cant(monkeypatch):
-    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234")]
-    read = []
+    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 q@abc1234")]
+    read, acts = [], WorkActs({"y": work(head=H1)})
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: read.append(label))
-    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", [], []) == [] and not read
+    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", [], [], acts) == ([], []) and not read
     with pytest.raises(crew.Refusal, match="^swancloud/main could not be read, so what an earlier send on land/crew still lands"):
-        plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, [])
+        plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, [], acts)
     bolts = [plan.Rec("Bolt", [("Bolt", "y"), ("Repo", "crew")]), plan.Rec("Bolt", [("Bolt", "q"), ("Repo", "swancloud")])]
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: argparse.Namespace(bolts=lambda: bolts))
-    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, []) == ["y"]
+    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, [], acts) == (["y"], [])
+    assert acts.asked == [{"y": ("abc1234", None)}]  # one read, of the sent bolts the plan holds of the kit
+    # a bolt on a row of the card read now is that card's to ask for
+    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes,
+                                 plan.card_heads("y@def5678"), acts) == ([], [])
 
 
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():

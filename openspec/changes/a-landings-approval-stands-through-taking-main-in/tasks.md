@@ -5,7 +5,7 @@
 - [x] 1.1 `send_stands` holds a send when the heads match or the bolt's own commits are the same at both, and `work_said` says what a bolt gained or lost, or why crew can't tell (design, Decision 4; Task notes 1.1); passes `tests/py/test_landings.py` in `tests/suite logic`.
 - [x] 1.2 `rows_unsent` keeps off the card a moved bolt whose send stands and returns, with its words, one whose work changed (design, Decision 4; Task notes 1.2); passes `tests/py/test_landings.py` in `tests/suite logic`.
 - [x] 1.3 `landings_step` leaves an answered card for a ticked bolt that only took main in, keeps a held ticked bolt's send in its close or follow, saying so, and asks again with what changed for one whose work changed (design, Decision 4; Task notes 1.3); passes `tests/py/test_landings.py` in `tests/suite logic`.
-- [ ] 1.4 `sent_left` lists a sent bolt at its head now when its send stands and sluice did not refuse it there, and names those whose head it can't read (design, Decision 4; Task notes 1.4); passes `tests/py/test_landings.py` in `tests/suite logic`.
+- [x] 1.4 `sent_left` lists a sent bolt at its head now when its send stands and sluice did not refuse it there, and names those whose head it can't read (design, Decision 4; Task notes 1.4); passes `tests/py/test_landings.py` in `tests/suite logic`.
 
 ## 2. The reads and acts
 
