@@ -6,6 +6,7 @@ dependent took its head, plan.waiting_for for what the unit's next prompt carrie
 whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
 amendment_words for what it is told; and a bolt against its kit's main (teams.21), plan.bolt_forecast_read for sluice's
 answer, plan.bolt_forecast for what it tells the conductor once and plan.unread_said for a forecast sluice can't give,
+plan.main_conflict for the conflict with main the record holds at the bolt's head,
 with plan.forecast_way for a legacy bolt forecast from a place on it (plan.19) and plan.place_checked for what that came to.
 That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
 rebase replays its commits, are contract cases (tests/contract/test_git.py); the wait that tells, starts a settle or
@@ -451,6 +452,40 @@ class TestBoltAgainstMain:
             f"bolt/t@{self.H[:7]}", "no forecast of bolt/t against main: it exited 1")
         assert plan.unread_said("t", self.H, "it exited 1", {f"bolt/t@{self.H[:7]}"}) is None
         assert plan.unread_said("t", None, "it exited 1", set()) == (None, "no forecast of bolt/t against main: it exited 1")
+
+
+class TestMainConflict:
+    """What the run record holds of a bolt's conflict with main at its present head (rail-cards "A row forecast to
+    conflict with main takes main first"), as a conductor's wait or a landings card's raise recorded it."""
+    H, OLD = "1" * 40, "9" * 40
+
+    def entry(self, heads, paths="docs/builds.md", on=("bolt/t",), **more):
+        return dict(Act="forecast", On=list(on), Heads=heads, **({"Paths": paths} if paths else {}), **more)
+
+    def test_a_waits_forecast_at_the_present_head_is_read(self):
+        got = plan.main_conflict([self.entry(f"bolt/t@{self.H[:7]} main@2222222", Reached="wait")], "t", self.H)
+        assert got == ("2222222", ["docs/builds.md"])
+
+    def test_a_raises_forecast_is_read_the_same_way_the_latest_first(self):
+        entries = [self.entry(f"bolt/t@{self.H[:7]} main@2222222", Reached="wait"),
+                   self.entry(f"bolt/t@{self.H[:7]} main@3333333", "README.md docs/builds.md", Reached="told")]
+        assert plan.main_conflict(entries, "t", self.H) == ("3333333", ["README.md", "docs/builds.md"])
+
+    def test_one_at_a_head_the_bolt_has_moved_from_holds_nothing(self):
+        assert plan.main_conflict([self.entry(f"bolt/t@{self.OLD[:7]} main@2222222")], "t", self.H) is None
+
+    def test_one_met_only_queued_on_main_holds_nothing(self):
+        assert plan.main_conflict([self.entry(f"bolt/t@{self.H[:7]} main@2222222 #7")], "t", self.H) is None
+
+    def test_the_form_a_wait_records_when_sluice_could_not_forecast_holds_nothing(self):
+        assert plan.main_conflict([self.entry(f"bolt/t@{self.H[:7]}", paths=None)], "t", self.H) is None
+
+    def test_a_units_forecast_against_the_bolt_another_bolts_and_a_refused_one_hold_nothing(self):
+        heads = f"bolt/t@{self.H[:7]} main@2222222"
+        assert plan.main_conflict([self.entry(f"u@aaaaaaa bolt/t@{self.H[:7]}", on=("unit/u", "bolt/t")),
+                                   self.entry(heads.replace("bolt/t@", "bolt/s@"), on=("bolt/s",)),
+                                   self.entry(heads, Refused="no")], "t", self.H) is None
+        assert plan.main_conflict([self.entry(heads)], "t", None) is None
 
 
 class TestLegacyBolt:

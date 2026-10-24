@@ -8457,6 +8457,24 @@ def unread_said(bolt, bolt_head, why, done):
     return heads, f"no forecast of bolt/{bolt} against main: {why}"
 
 
+def main_conflict(entries, bolt, head):
+    """The conflict with what main has landed the run record holds for a bolt at its present head (rail-cards "A row
+    forecast to conflict with main takes main first", teams.21), from the entries, oldest first: the latest forecast,
+    not refused, on bolt/<bolt> alone, at the head (its Heads beginning bolt/<bolt>@<head7> main@), meeting no submission
+    queued on main (no #<n> in its Heads) and naming its Paths, a conductor's wait's or a landings card's raise's: (main's
+    short sha, [paths]); None for none, one at a head the bolt has moved from, one met only queued, and the form a wait
+    records when sluice could not forecast (unread_said), which names no paths."""
+    if not head:
+        return None
+    at = f"bolt/{bolt}@{head[:7]} main@"
+    for e in reversed(entries):
+        words = (e.get("Heads") or "").split()
+        if (e.get("Act") == "forecast" and not e.get("Refused") and e.get("On") == [f"bolt/{bolt}"] and len(words) == 2
+                and (e.get("Heads") or "").startswith(at) and (e.get("Paths") or "").split()):
+            return words[1][len("main@"):], e["Paths"].split()
+    return None
+
+
 def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
     """The forecasts a conductor's wait makes for a bolt (teams.12): live is each unmerged unit with a place, in the
     plan's order, as (name, head, its After units); conflicts(theirs, ours, base) the paths git merge-tree forecasts in
