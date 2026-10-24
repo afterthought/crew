@@ -321,6 +321,48 @@ def test_a_bolt_proven_after_the_answer_is_no_row_of_it_and_a_new_card_follows_i
                               "follows asks for it.", ["z"], [("y", "abc1234")])
 
 
+STOP = "check:dagger could not run: the Dagger engine did not answer"
+
+
+def stopped_box(bolt, head=H1, words=STOP):
+    """A row that can land whose last landing at its head sluice or its host stopped (landing_rows)."""
+    return dict(bolt=bolt, box=True, facts=dict(facts(bolt, head), stopped=(head, words)))
+
+
+def test_an_answered_card_is_left_while_a_ticked_bolt_whose_landing_was_stopped_still_lands_on_the_send():
+    """rail-cards "Checks that never ran": the stop holds nothing, so the user's send still lands it, and the card
+    they answered is left as it is."""
+    assert plan.landings_step([stopped_box("z")], answered("z@abc1234"), ["z"], {"z"}) == ("leave",)
+
+
+def test_a_card_that_follows_names_a_stopped_bolt_as_still_landing_with_what_stopped_it_and_has_no_row_for_it():
+    """rail-cards "A new card while it is stopped": the closed card's outcome names z as still landing on the send,
+    with what stopped it, and the card that follows does not ask for z again."""
+    step = plan.landings_step([stopped_box("z"), box("w")], answered("z@abc1234"), ["z"], {"z", "w"})
+    assert step == ("follow", f"Landing as you ticked: z. z's last landing at abc1234 was stopped, nothing of the bolt's: {STOP}; "
+                              "it lands on your send once that is cleared. Since your send, w reads proven, and the card that "
+                              "follows asks for it.", [], [("z", "abc1234")])
+    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="z@abc1234")]
+    assert plan.rows_unsent([stopped_box("z"), box("w")], plan.landings_sent(closes, "land/crew", "swancloud-ops")) == (
+        [box("w")], ["z"])
+
+
+def test_crew_card_read_says_what_stopped_a_bolt_the_send_lands_beside_the_command_that_lands_it():
+    """rail-cards "Checks that never ran": crew card read land/crew names z as still landing on the send, saying what
+    stopped it, with the command that lands it; a stop at another head than the one sent says nothing."""
+    sent = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:y", "land:z"]}}
+    heads = plan.card_heads("y@abc1234 z@abc1234")
+    stopped = plan.stops([dict(submitted("z", H1), Why=STOP, Outcome="stopped"), dict(submitted("y", H2), Why="x", Outcome="stopped")])
+    at = plan.stops_sent(stopped, {b: h for b, h, _ in heads})
+    assert at == {"z": (H1, STOP)}
+    assert plan.landing_lines("swancloud", sent, heads, [], at) == [
+        "  to land, in the card's order: y and z",
+        f"  z's last landing at abc1234 was stopped, nothing of the bolt's: {STOP}; once that is cleared, the submit below "
+        "lands it on this send",
+        "  lands them: crew bolt submit y z --label swancloud"]
+    assert plan.landing_lines("swancloud", sent, heads) == plan.landing_lines("swancloud", sent, heads, [], {})
+
+
 def test_a_ticked_bolt_proven_again_at_a_new_head_is_asked_again_rather_than_waited_for():
     step = plan.landings_step([box("y", H2), box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"})
     assert step == ("follow", "Landing as you ticked: z. Since your send, y's head is now def5678, and the card that "

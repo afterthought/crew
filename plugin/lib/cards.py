@@ -755,9 +755,10 @@ def landings_card(f):
     as many as the card's artifacts leave room for. f: kit, rows (each the facts landing_card takes, with team,
     conductor, forecast, forecast_why, link or unread and preview, and stopped when sluice or its host stopped its
     last landing at its head, which its paragraph and its box's detail say, stopped_said), held ([{bolt, why}]), left
-    (the bolts the user cleared on their last send), ops (the main-level ops whose card it is), follows. Also handed back: heads, each row as <bolt>@<head> and :left for one the user
-    cleared, which the run record keeps on the card's post and change for the next raise to read (plan.landings_step),
-    and linked, since each row's reading was opened with it and the card has no reading of its own."""
+    (the bolts the user cleared on their last send), ops (the main-level ops whose card it is), follows. Also handed
+    back: heads, each row as <bolt>@<head> and :left for one the user cleared, which the run record keeps on the card's
+    post and change for the next raise to read (plan.landings_step), and linked, since each row's reading was opened
+    with it and the card has no reading of its own."""
     kit, rows, held, left = f["kit"], [dict(r) for r in f["rows"]], list(f.get("held") or []), set(f.get("left") or [])
     key, form = f"land/{kit}", landings_form(len(rows))
     rows or fail(f"{key} has no bolt that can land, so it has no card")

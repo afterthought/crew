@@ -2130,9 +2130,10 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
     ("leave",) when an answered card is held while any bolt the user ticked is still to land on their send, in the
     plan, not held and at the head they ticked, one landed and not yet closed among them, and no row reads proven since;
     ("follow", outcome, left, landing) when one does, a bolt on no row of the card or at a head the card did not show,
-    which is never added to the card they answered: it is closed saying what landed, what their send still lands, what
-    was held and what was left, and a new card follows it with every row that can land but those their send still
-    lands (landing, each (bolt, the head they ticked));
+    which is never added to the card they answered: it is closed saying what landed, what their send still lands, each
+    whose last landing at its head sluice or its host stopped with what stopped it (its row's stopped, landing_rows),
+    which holds nothing, what was held and what was left, and a new card follows it with every row that can land but
+    those their send still lands (landing, each (bolt, the head they ticked));
     ("close", outcome, then) once none is still to land, the outcome saying what landed and where GitHub's main holds
     it, what was held and why, what was left and what reads proven since, then the bolts left when rows can land, for a
     new card that follows it, else None; a send ticking none closes it at once, landing nothing. A bolt left on the
@@ -2170,6 +2171,9 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
             if gone and all(b in (landed or {}) for b in gone) else
             [f"Landed or left the plan: {joined(gone)}."] if gone else [])
     said += [f"Landing as you ticked: {joined(landing)}."] if landing else []
+    stopped = {r["bolt"]: r["facts"]["stopped"] for r in boxed if r["facts"].get("stopped")}
+    said += [f"{b}'s last landing at {stopped[b][0][:7]} was stopped, nothing of the bolt's: {stopped[b][1].rstrip('.')}; it "
+             "lands on your send once that is cleared." for b in landing if b in stopped]
     said += [f"Held: {b}, {held[b]}." for b in ticked if b in held]
     cleared = [b for b in on if b not in ticked]
     said += [f"Left: {joined(cleared)}."] if cleared else []
@@ -3476,9 +3480,9 @@ def submit_ran(fleet, host, main, path, bolt, *again):
 
 def landing_ended(fleet, label, p, a):
     """A submitted landing's end (Decision 6): sluice's outcome waited on a call at a time (WAIT) while it exits 5, read
-    from the state of the submission's record the wait printed (wait_outcome), what sluice said passed through; a landing
-    whose submission sluice answered with nothing crew can wait on (standing, left_standing) said so, recorded with
-    the head submitted and no refusal, so no row is held for a fix, and nothing drafted, its place kept, since what
+    from the state of the submission's record the wait printed (wait_outcome), what sluice said passed through; a
+    landing whose submission sluice answered with nothing crew can wait on (standing, left_standing) said so, recorded
+    with the head submitted and no refusal, so no row is held for a fix, and nothing drafted, its place kept, since what
     sluice queued stands; the landing's worktree removed and the mains read (LANDED), and what it came to judged
     (landing_said). A landed bolt marked landed on its branch (LANDED_MARK), recorded (bolt.submit, with the head
     submitted) and closed at once by crew bolt land's own code (bolt_land), as its caller may close it (may_write), a
@@ -3486,16 +3490,16 @@ def landing_ended(fleet, label, p, a):
     pull request drafted first, so no merge into the bolt lands it (landing_unheld), and is recorded so with the head
     that was submitted, and the kit's card raised so (land_hand): refused, when sluice's record of the submission has it
     for the bolt's own content (landing_end), in sluice's words when it gave any, from its wait or from SUBMIT when it
-    refused the submission at once, which holds its row on its kit's landings card (refused_at); else stopped, with
-    what stopped it as Why, Outcome stopped and no refusal, so its row keeps its box and says so (stopped_at), as is
-    one whose submission ran and failed, with no head when it never named its tip (attempted). When sluice itself failed with the bolt's tip not on main now, sluice's own record of the
-    submission is read on the team's host (SUBMISSIONS, submission_of, among those made since the landing began, newer
-    than its last), and while it has the submission standing crew
-    says so and waits on it again (wait_again), SUBMIT given the submission's id and the tip it submitted, then its
-    outcome waited on and its end read as before. A landing on the user's words in the caller's pane (p's frm, the
-    transcript record bolt_submit read them from, a's excerpt) is recorded naming that record and the words' length, and
-    the words kept on this host (landing_word_keep) before it is closed. Its words printed, standard error for one that
-    did not land. Returns (bolt, landed)."""
+    refused the submission at once, which holds its row on its kit's landings card (refused_at); else stopped, with what
+    stopped it as Why, Outcome stopped and no refusal, so its row keeps its box and says so (stopped_at), as is one
+    whose submission ran and failed, with no head when it never named its tip (attempted). When sluice itself failed
+    with the bolt's tip not on main now, sluice's own record of the submission is read on the team's host (SUBMISSIONS,
+    submission_of, among those made since the landing began, newer than its last), and while it has the submission
+    standing crew says so and waits on it again (wait_again), SUBMIT given the submission's id and the tip it submitted,
+    then its outcome waited on and its end read as before. A landing on the user's words in the caller's pane (p's frm,
+    the transcript record bolt_submit read them from, a's excerpt) is recorded naming that record and the words' length,
+    and the words kept on this host (landing_word_keep) before it is closed. Its words printed, standard error for one
+    that did not land. Returns (bolt, landed)."""
     bolt, t = p["bolt"], p["t"]
     if p.get("refused") and p.get("attempted"):  # its submission ran and failed: drafted, and stopped, nothing of the bolt's
         words, why = landing_unheld(fleet, t, bolt, p["refused"] + "." + submit_again(bolt), p["refused"])
@@ -12788,20 +12792,31 @@ def card_held(label, who, key):
         f"{who} holds no open card under {key} on {crew.this_host()}")
 
 
-def landing_lines(label, got, heads, earlier=()):
+def landing_lines(label, got, heads, earlier=(), stopped=None):
     """What crew card read land/<kit> prints beside the answer once the user sent the kit's landings card (rail-cards
     "An answer wakes the owner"): the bolts they ticked in the card's order (ticked_of, heads its rows as card_heads
     gives them), and the one crew bolt submit that lands them in that order, or that none was ticked, so nothing lands;
     nothing while it waits on them. The bolts an earlier send still lands (earlier, sent_left), its card closed as a new
-    one followed it, come first, said while this one waits too, and the submit lands them before this card's."""
-    ticked, earlier = ticked_of(got, heads), list(earlier)
+    one followed it, come first, said while this one waits too, and the submit lands them before this card's. Each of
+    them whose last landing at the head sent sluice or its host stopped (stopped, {bolt: (head, words)}, stops_sent) is
+    said with what stopped it, the same submit landing it once that is cleared (rail-cards "Checks that never ran")."""
+    ticked, earlier, stopped = ticked_of(got, heads), list(earlier), stopped or {}
     lines = [f"  to land on the user's send of an earlier card: {joined(earlier)}"] if earlier else []
     if ticked == []:
         lines += ["  no bolt ticked on this card: nothing of it lands" if earlier else "  no bolt ticked: nothing lands"]
     elif ticked:
         lines += [f"  to land, in the card's order: {joined(ticked)}"]
     both = earlier + (ticked or [])
+    lines += [f"  {b}'s last landing at {stopped[b][0][:7]} was stopped, nothing of the bolt's: {stopped[b][1].rstrip('.')}; "
+              "once that is cleared, the submit below lands it on this send" for b in both if b in stopped]
     return lines + ([f"  lands them: crew bolt submit {' '.join(both)} --label {label}"] if both else [])
+
+
+def stops_sent(stopped, at):
+    """Each bolt whose last landing was stopped at the head the user's send lands it at (at, {bolt: head}, the card's
+    heads and an earlier send's, landings_sent), from the stops (stops): {bolt: (head, words)}; a stop at another head
+    is left out (stopped_at). A decision of facts alone (code.7)."""
+    return {b: (stopped[b][0], w) for b, h in at.items() for w in [stopped_at(stopped, b, h)] if w}
 
 
 def landings_earlier(fleet, label, kit, key, who, entries, heads):
@@ -12821,8 +12836,9 @@ def card_read(fleet, a):
     Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words; for a kit's
     landings card, land/<kit>, the bolts they ticked in the card's order and the crew bolt submit that lands them,
     those an earlier send still lands, whose card closed as this one followed it, first (landings_earlier,
-    landing_lines). An approval the user declined is then closed with their words, and the close recorded (record
-    0031 §1); nothing else is."""
+    landing_lines), each whose last landing at the head sent was stopped said with what stopped it (stops_sent). An
+    approval the user declined is then closed with their words, and the close recorded (record 0031 §1); nothing else
+    is."""
     import cards
     label, who = card_asker(fleet, a)
     card = card_held(label, who, a.key)
@@ -12840,7 +12856,9 @@ def card_read(fleet, a):
         heads = card_heads(next((e.get("Heads") for e in reversed(entries) if e.get("Card") == card and e.get("Heads")
                                  and not e.get("Refused")), None))
         earlier = landings_earlier(fleet, label, kind[1], a.key, who, entries, heads) if kind and kind[0] == "kit" else []
-        print("\n".join(cards.answer_lines(a.key, card, got) + (landing_lines(label, got, heads, earlier) if kind and kind[0] == "kit" else [])))
+        stopped = stops_sent(stops(entries), dict(landings_sent(entries, a.key, who), **{b: h for b, h, _ in heads}))
+        print("\n".join(cards.answer_lines(a.key, card, got) + (landing_lines(label, got, heads, earlier, stopped)
+                                                                 if kind and kind[0] == "kit" else [])))
     if words is not None:
         record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
