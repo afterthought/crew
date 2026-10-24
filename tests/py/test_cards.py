@@ -2108,6 +2108,9 @@ class TestRecordCommand:
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
         assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
+        # rail-cards "A record revised after the user's note": the card that follows says first what they answered
+        assert re.match(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you answered\. "
+                        r"Since then: revised at 9ab0123: ops\.7 loosened\.\n\n", acts.calls[3][1]["summary"])
 
     def test_the_sweeps_raise_of_a_record_posts_it_again_from_its_record_saying_an_older_copy_was_lost(self, monkeypatch):
         """rail-cards, "A record's card left on the host the main level left": the record read with status proposed on

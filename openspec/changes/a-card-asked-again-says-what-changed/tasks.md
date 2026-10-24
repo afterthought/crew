@@ -11,7 +11,7 @@
 
 ## 3. Each raise says what changed
 
-- [ ] 3.1 A record revised and a proposal rewritten after the user's answer say what changed, a rewrite with the same commands and case withheld (design, Decision 4; Task notes 3.1); passes `tests/py/test_proposal_card.py` and `tests/py/test_proposal_life.py`.
+- [x] 3.1 A record revised and a proposal rewritten after the user's answer say what changed, a rewrite with the same commands and case withheld (design, Decision 4; Task notes 3.1); passes `tests/py/test_proposal_card.py` and `tests/py/test_proposal_life.py`.
 - [ ] 3.2 A deploy offered again after a decline and a step after its deploy or the step before say what changed, an offer at the declined head with the same files withheld (design, Decision 4; Task notes 3.2); passes `tests/py/test_ops.py`.
 - [ ] 3.3 A kit's landings card that follows the user's send says what the send landed, held and left and what moved since, a left bolt still shown (design, Decision 4; Task notes 3.3); passes `tests/py/test_landings.py`.
 

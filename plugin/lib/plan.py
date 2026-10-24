@@ -5294,7 +5294,9 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
     takes another form than the replaced proposal's (cards.proposal_form: a hold-to-approve, a choice, one list or
     lists), which update_request never changes, has the card followed as a card whose kind changed; a rewrite asks
     anew, and follows a card the user answered, where an agreement or the sweep's raise leaves it as it is, its answer
-    going on to the approval (row_card_change). With dead, an older copy this host can't reach standing, the card is
+    going on to the approval (row_card_change); the card that follows says what the rewrite changed against the
+    proposal it replaces (cards.proposal_since), and one that changes neither its commands nor its case is withheld,
+    the user's answer standing (card_posted). With dead, an older copy this host can't reach standing, the card is
     built saying first that it was lost (built_again). A card crew cannot build, or Pending You refuses, refuses
     nothing of the proposal: it is said, and the rail shows the row with no card. The card's id, or None."""
     acts = acts or CardActs(fleet)
@@ -5322,10 +5324,12 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
         build = built_again(cards.proposal_card) if dead else cards.proposal_card
         if act[0] == "post":
             return row_card_post(fleet, label, owner, build, facts, where, acts)
-        moved = event == "replace" and replaced is not None and (
-            cards.proposal_form([do_args(label, d) for d in replaced.all("Do")]) != cards.proposal_form(facts["argvs"]))
+        old = [do_args(label, d) for d in replaced.all("Do")] if event == "replace" and replaced is not None else None
+        moved = old is not None and cards.proposal_form(old) != cards.proposal_form(facts["argvs"])
+        since = cards.proposal_since(old, replaced.get("Case"), facts["argvs"], facts["case"]) if old is not None else None
         return row_card_change(fleet, label, owner, build, facts, act[1], where, acts, kind_changed=moved,
-                               anew={} if event == "replace" else None)
+                               anew={} if event == "replace" else None,
+                               since=[f"The planner rewrote it as proposal {n}."] + since if since else since)
     except Refusal as e:
         print(f"card {key} not raised: {e}", file=sys.stderr)
         return None
@@ -13721,12 +13725,13 @@ def raise_record(fleet, label, facts, where, note, acts=None, dead=False):
     """A decision record's card raised in its design agent's name (record 0031 §1, briefs.15), record/<kit>/<number>,
     from the record's facts (record_facts), from where, the kit's checkout on this host and its remote: posted the
     first time, and while the design agent holds it open, changed in place with note, naming the new commit, or once the
-    user has answered it, closed with note and followed by a new card, since a revision asks anew (row_card_change).
+    user has answered it, closed with note and followed by a new card, since a revision asks anew (row_card_change),
+    which opens saying what they answered and that the record was revised, note.
     With dead, an older copy this host can't reach standing, the card is built saying first that it was lost
     (built_again). A refusal is said and recorded and refuses nothing of the status, already recorded. The card's id,
     or None."""
     build = built_again(cards.record_card) if dead else cards.record_card
-    return row_card_change(fleet, label, f"{label}-design", build, facts, note, where, acts, anew={})
+    return row_card_change(fleet, label, f"{label}-design", build, facts, note, where, acts, anew={}, since=[note])
 
 
 def raise_record_again(fleet, row, acts=None):

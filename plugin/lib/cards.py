@@ -1007,6 +1007,39 @@ def proposal_form(argvs):
     return "choice" if k == 1 else "multi" if k <= BOXES else "lists"
 
 
+def proposal_since(old_argvs, old_case, new_argvs, new_case):
+    """What a proposal's rewrite changed, read against the proposal it replaces, as the card that follows the one the
+    user answered says it (rail-cards "A card that follows one the user answered says so first"), from both
+    proposals' commands, parsed, and cases: each unit or chore it makes new that the old did not, and each the old made
+    new that it no longer does (new_units); each whose intent it words otherwise; each it newly drops, or no longer
+    drops; how many of its other commands changed; and that its case is rewritten. Sentences, [] when its commands and
+    its case are the old's."""
+    def intents(argvs):
+        return {a.unit: " ".join(a.intent.split()) for a in argvs
+                if a.cmd in ("unit", "chore") and a.sub in ("add", "amend", "split") and getattr(a, "intent", None)}
+
+    def drops(argvs):
+        return [a.unit for a in argvs if a.cmd in ("unit", "chore") and a.sub == "drop"]
+    was, now = new_units(old_argvs), new_units(new_argvs)
+    added, gone = [u for u in now if u not in was], [u for u in was if u not in now]
+    dropping, undropped = [u for u in drops(new_argvs) if u not in drops(old_argvs)], [u for u in drops(old_argvs) if u not in drops(new_argvs)]
+    old_i, new_i = intents(old_argvs), intents(new_argvs)
+    worded = [u for u in new_i if u in old_i and new_i[u] != old_i[u]]
+    named = set(added + gone + dropping + undropped)
+
+    def others(argvs):  # every other command, its words of intent left to worded
+        return [tuple(sorted((k, repr(v)) for k, v in vars(a).items() if k not in ("do", "label", "intent")))
+                for a in argvs if getattr(a, "unit", None) not in named]
+    o, n = others(old_argvs), others(new_argvs)
+    changed = max(sum(max(n.count(k) - o.count(k), 0) for k in set(n)), sum(max(o.count(k) - n.count(k), 0) for k in set(o)))
+    said = ([f"It adds {joined(added)}."] if added else []) + ([f"It no longer adds {joined(gone)}."] if gone else [])
+    said += ([f"It words {worded[0]}'s intent otherwise." if len(worded) == 1 else f"It words the intents of {joined(worded)} otherwise."]
+             if worded else [])
+    said += ([f"It drops {joined(dropping)}."] if dropping else []) + ([f"It no longer drops {joined(undropped)}."] if undropped else [])
+    said += [f"It changes {plural(changed, 'other command' if said else 'command')}."] if changed else []
+    return said + (["Its case is rewritten."] if " ".join((old_case or "").split()) != " ".join((new_case or "").split()) else [])
+
+
 def proposal_card(f):
     """A proposal's card (record 0031 §5, plan-proposals): titled "Plan change to <bolt>: <counts>", with no number and
     no question; a sentence of what the planner proposes and why, from its case, and what the user does with it; one
