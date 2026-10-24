@@ -1678,6 +1678,44 @@ class TestFollows:
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
 
 
+def replied(answer, turn="agent", status="answered"):
+    return {"status": status, "turn": turn, "version": 3, "answer": answer}
+
+
+class TestAnswerSaid:
+    """rail-cards "The close of an answered card records the answer": what the user answered, in crew's words made from
+    names alone (cards.answer_said), which the close of the card keeps as Answer for the card that follows it, and none
+    of the words they typed (record.3)."""
+
+    @pytest.mark.parametrize("answer, offered, said", [
+        ({"approved": True}, (), "approved"),
+        ({"approved": False, "note": {"text": "not tonight"}}, (), "declined, with a note"),
+        ({"approved": False, "text": "not tonight"}, (), "declined, with a note"),
+        ({"choiceIds": ["land:y"], "note": "y first, z after the fix"}, ("land:y", "land:z"), "ticked y, left z, with a note"),
+        ({"choiceIds": ["land:y", "land:z"]}, ("land:y", "land:z", "land:w"), "ticked y and z, left w"),
+        ({"answers": {"rows-1": {"choiceIds": ["land:y"]}, "rows-2": {"choiceIds": []}}}, ("land:y", "land:z"), "ticked y, left z"),
+        ({"choiceIds": []}, ("land:y", "land:z"), "ticked none, left y and z"),
+        ({"choiceIds": ["add:a-1", "add:a-2"]}, (), "ticked a-1 and a-2"),
+        ({"choiceIds": ["quiet"]}, (), "picked quiet"),
+        ({"choiceIds": ["unticked"]}, (), "left it out"),
+        ({"done": True}, (), "done"),
+        ({"failedStep": 2, "note": "the key was refused"}, (), "said step 2 did not work, with a note"),
+        ({"handled": True}, (), "said you will handle it yourself"),
+        ({"note": "why this one?"}, (), "answered with a note")])
+    def test_the_answer_is_said_in_crews_words_from_names_alone(self, answer, offered, said):
+        got = built.answer_said(replied(answer), offered)
+        assert got == said
+        assert not any(w in got for w in ("tonight", "first", "refused", "why"))
+
+    @pytest.mark.parametrize("got", [replied({}), replied({"choiceIds": ["land:y"]}, turn="you", status="pending"),
+                                     {"status": "pending", "turn": "you"}, {}, None])
+    def test_a_reply_holding_no_answer_says_none(self, got):
+        assert built.answer_said(got, ("land:y",)) is None
+
+    def test_a_card_picked_up_in_pending_you_still_says_the_answer_its_reply_carries(self):
+        assert built.answer_said({"status": "resolved", "answer": {"approved": True}}) == "approved"
+
+
 class TestStranded:
     """rail-cards, "A batch's card the main level's host can't reach is raised again there": which of the planner's
     cards under a batch's key the main level's host, deneb, can't reach (cards.stranded), from the run record alone."""

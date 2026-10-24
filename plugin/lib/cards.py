@@ -244,6 +244,49 @@ def answer_lines(key, card, got):
     return lines
 
 
+BOX = re.compile(r"^(?:land|add):([a-z0-9][a-z0-9-]*)$")  # a box crew minted, named by the bolt or unit it names
+
+
+def answer_said(got, offered=()):
+    """What the user answered on a card, in crew's own words made from names alone, as a card's close keeps it for the
+    card that follows (rail-cards "The close of an answered card records the answer"; record.3): from get_request's
+    reply, read as answer_lines reads it, off the user's turn: approved or declined; the boxes they ticked, each of
+    crew's named by the bolt or unit it names (land:<bolt>, add:<unit>), and those of offered, the ids the card
+    offered, they left; a lone unit's unticked as left it out, and any other option picked as it is; done, a failed
+    step, or that they will handle it themselves; and "with a note" when they wrote one, never its words. None when
+    the reply holds no answer."""
+    answer = got.get("answer") if isinstance(got, dict) and got.get("turn") != "you" else None
+    if not isinstance(answer, dict):
+        return None
+    said, picked, lists = [], [], isinstance(answer.get("choiceIds"), list)
+    wrote = bool(text_of(answer.get("note")) or text_of(answer.get("text")))
+    if isinstance(answer.get("approved"), bool):
+        said.append("approved" if answer["approved"] else "declined")
+    picked += [c for c in answer.get("choiceIds") or [] if isinstance(c, str)]
+    for a in (answer.get("answers") or {}).values() if isinstance(answer.get("answers"), dict) else []:
+        if isinstance(a, dict):
+            lists = lists or isinstance(a.get("choiceIds"), list)
+            picked += [c for c in a.get("choiceIds") or [] if isinstance(c, str)]
+            if isinstance(a.get("approved"), bool) and ("approved" if a["approved"] else "declined") not in said:
+                said.append("approved" if a["approved"] else "declined")
+        wrote = wrote or bool(text_of(a))
+    ticked = [BOX.match(c).group(1) for c in picked if BOX.match(c)]
+    boxes = [BOX.match(c).group(1) for c in offered if BOX.match(c)]
+    if ticked or lists and not [c for c in picked if not BOX.match(c)]:
+        left = [b for b in boxes if b not in ticked]
+        said.append(f"ticked {joined(ticked) if ticked else 'none'}" + (f", left {joined(left)}" if left else ""))
+    said += ["left it out" if c == "unticked" else f"picked {c}" for c in picked if not BOX.match(c)]
+    if answer.get("done") is True:
+        said.append("done")
+    if isinstance(answer.get("failedStep"), int) and not isinstance(answer.get("failedStep"), bool):
+        said.append(f"said step {answer['failedStep']} did not work")
+    if answer.get("handled") is True:
+        said.append("said you will handle it yourself")
+    if not said:
+        return "answered with a note" if wrote else None
+    return ", ".join(said) + (", with a note" if wrote else "")
+
+
 # ------------------------------------------------------------------------------- a proposal's change, drawn
 
 TEXT, SAYS = 40, 33  # the card's text, monospace lines of at most forty characters; what a block says, indented seven
