@@ -648,7 +648,7 @@ class TestRaisedAgain:
         import plan
         got = []
 
-        def change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False, anew=None):
+        def change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False, anew=None, since=None):
             got.append((owner, build(facts)["card"]["summary"]))
             return "req_new"
         monkeypatch.setattr(plan, "row_card_change", change)
@@ -672,3 +672,64 @@ class TestRaisedAgain:
         assert ops.raise_step(FLEET, row, self.Acts()) == "req_new"
         (owner, dead), (_, plain) = built
         assert owner == "swancloud-ops" and dead.startswith(cards.DEAD) and not plain.startswith(cards.DEAD)
+
+
+class TestAskedAgain:
+    """rail-cards "A deploy offered again after the user declined it", "A deploy offered again at the head the user
+    declined" and a step's card after its deploy's: the deploy's and the step's raises through the act on its stand-in
+    for Pending You (test_card_commands.Acts), the card that follows one the user answered saying first what they
+    answered and what changed, or withheld when nothing did."""
+    OWNER, KEY = "swancloud-ops", "deploy/mac-studio"
+    DECLINED = [dict(Act="card.post", Key=KEY, By=OWNER, Card="req_d1", Head=S1, At="2026-10-12T11:01:00Z"),
+                dict(Act="card.close", Key=KEY, By=OWNER, Card="req_d1", State="declined", At="2026-10-12T11:02:00Z",
+                     Answer="declined, with a note")]
+
+    @pytest.fixture
+    def acts(self, monkeypatch, tmp_path):
+        from test_card_commands import Acts, MATCHED, POSTED
+        monkeypatch.setattr(ops, "ops_where", lambda fleet, label: ("/b/main", "github.com/o/b"))
+        monkeypatch.setattr(ops, "kept", lambda label, env, to: tmp_path)
+        monkeypatch.setattr(ops.record, "gather", lambda fleet, labels, since: (self.DECLINED, {}))
+
+        def made(entries):
+            a = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_d2"), None)}, entries=entries,
+                     caller=self.OWNER)
+            a.kits = lambda label: ()
+            return a
+        return made
+
+    def test_a_deploy_offered_again_at_a_newer_head_after_a_decline_opens_saying_what_they_declined_and_the_head_now(self, monkeypatch, acts):
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: [OFFER, e("ops.offer", minutes=5, Head=S2, Base="none")])
+        a = acts(self.DECLINED)
+        assert ops.raise_deploy(FLEET, {"label": "swancloud", "key": self.KEY}, a) == "req_d2"
+        sent = a.calls[-1][1]
+        assert sent["follows"] == "req_d1" and sent["summary"].startswith(
+            "You answered the card before this one, posted 2026-10-12 11:01 UTC, by 11:02 UTC: declined, with a note. Since then: "
+            "the offer is now bbbbbbb, where you answered on aaaaaaa.\n\n")
+
+    def test_a_deploy_offered_again_at_the_head_declined_with_the_same_files_is_withheld_and_with_other_files_says_so(self, monkeypatch, acts):
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: [OFFER])
+        a = acts(self.DECLINED)
+        assert ops.raise_deploy(FLEET, {"label": "swancloud", "key": self.KEY}, a) is None
+        assert a.calls == [] and [(x["Act"], x["Card"], x["State"]) for x in a.emitted] == [("card.post", "req_d1", "stands")]
+        a = acts(self.DECLINED)
+        assert ops.raise_deploy(FLEET, {"label": "swancloud", "key": self.KEY}, a, note="Offered again: its release notes changed") == "req_d2"
+        assert "Since then: offered again: its release notes changed." in a.calls[-1][1]["summary"]
+
+    def test_a_step_following_its_deploys_card_opens_with_the_deploys_answer_and_its_place(self, monkeypatch, acts):
+        step = e("ops.step", minutes=6, Head=S1, Key="rotate/1", State="waiting", Doer="user", Text="Rotate the vault's key.")
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: [step])
+        ran = [dict(self.DECLINED[0], Card="req_d3"), dict(Act="card.close", Key=self.KEY, By=self.OWNER, Card="req_d3", State="closed",
+                                                           At="2026-10-12T11:30:00Z", Answer="approved")]
+        a = acts(ran)
+        assert ops.raise_step(FLEET, {"label": "swancloud", "key": "op/mac-studio/1"}, a) == "req_d2"
+        sent = a.calls[-1][1]
+        assert sent["follows"] == "req_d3" and sent["summary"].startswith(
+            "You answered the card before this one, posted 2026-10-12 11:01 UTC, by 11:30 UTC: approved. Since then: the deploy of aaaaaaa "
+            "to mac-studio ended, and this is its step 1.")
+
+    def test_a_step_after_the_step_before_says_that_one_is_behind_them(self):
+        assert cards.step_since("op/mac-studio/1", "mac-studio", 2) == ["Step 1 is behind you, and this is step 2."]
+        assert cards.step_since(None, "mac-studio", 1) == [] and cards.step_since("deploy/box", "mac-studio", 1) == []
+        assert cards.deploy_since(S1, S1[:7]) == [] and cards.deploy_since("", S2) == [
+            "The offer is now bbbbbbb, and crew holds no record of the head you answered on."]

@@ -1262,6 +1262,28 @@ def stands_said(earlier):
     return f"Not posted: nothing has changed since the user answered {earlier['card']}{by}, so their answer stands"
 
 
+def deploy_since(earlier, head):
+    """What changed since the user answered a deploy's card, as the card offered again says it: the head offered now
+    and the one they answered on (earlier, the followed card's recorded head or the one they approved), or that crew
+    holds no record of that one; nothing when the head is the one they answered on."""
+    if earlier and (head.startswith(earlier) or earlier.startswith(head)):
+        return []
+    return [f"The offer is now {head[:7]}, where you answered on {earlier[:7]}." if earlier else
+            f"The offer is now {head[:7]}, and crew holds no record of the head you answered on."]
+
+
+def step_since(followed, env, n, to=None):
+    """What changed since the user answered the card a step's card follows, from that card's key (followed): its
+    deploy's, deploy/<env>, ended, and this is its step n; a step's before it, op/<env>/<m>, is behind them, and this
+    is step n; nothing for any other key, or none."""
+    m = re.fullmatch(r"op/[a-z0-9][a-z0-9-]*/(\d+)", followed or "")
+    if m:
+        return [f"Step {m.group(1)} is behind you, and this is step {n}."]
+    if followed == f"deploy/{env}":
+        return [f"The deploy{f' of {to[:7]}' if to else ''} to {env} ended, and this is its step {n}."]
+    return []
+
+
 def opened(card, opening, follows):
     """A card that follows one the user answered, its summary opening with what they answered and what changed since
     (answered_opening), cut again at whole sentences, and its details opening with it too; following that card,
