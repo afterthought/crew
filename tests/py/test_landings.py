@@ -214,8 +214,8 @@ def box(bolt, head=H1):
     return dict(bolt=bolt, box=True, facts=facts(bolt, head))
 
 
-def hold(bolt, why="held for a fix: one zone is missing (fix/y/gap)"):
-    return dict(bolt=bolt, box=False, why=why, facts=facts(bolt))
+def hold(bolt, why="held for a fix: one zone is missing (fix/y/gap)", head=H1):
+    return dict(bolt=bolt, box=False, why=why, facts=facts(bolt, head))
 
 
 def waiting(*heads):
@@ -317,20 +317,41 @@ def test_an_answered_card_is_left_while_a_ticked_bolt_is_still_in_the_plan_and_n
 def test_once_every_ticked_bolt_landed_it_is_closed_naming_where_and_nothing_follows():
     step = plan.landings_step([], answered("y@abc1234", "z@abc1234"), ["y", "z"], set(), landed={"y": "1" * 40, "z": "2" * 40})
     assert step == ("close", "Landed on GitHub's main: y at 1111111 and z at 2222222; every host's folder follows by "
-                             "swancloud's timer within minutes.", None)
+                             "swancloud's timer within minutes.", None, [])
 
 
 def test_one_left_out_is_closed_saying_so_and_a_new_card_follows_with_it_unticked():
     step = plan.landings_step([box("z")], answered("y@abc1234", "z@abc1234"), ["y"], {"z"}, landed={"y": "1" * 40})
-    assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z.", ["z"])
+    assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z.", ["z"], [])
+
+
+STANDS = ("your send stands for it: it lands once its team's fix has only taken main in and sluice has proven it, with "
+          "nothing asked.")
+REFUSED = "held: sluice refused its landing at abc1234, and it waits for its team's fix: x"
 
 
 def test_a_ticked_bolt_sluice_refused_is_held_and_the_rest_close_the_card():
-    step = plan.landings_step([hold("z", "held: sluice refused its landing at abc1234, and it waits for its team's fix: x")],
-                              answered("y@abc1234", "z@abc1234", "w@abc1234"), ["y", "z", "w"], {"z"},
+    """rail-cards "A ticked bolt held at the close": the close keeps the send for z, saying so."""
+    step = plan.landings_step([hold("z", REFUSED)], answered("y@abc1234", "z@abc1234", "w@abc1234"), ["y", "z", "w"], {"z"},
                               landed={"y": "1" * 40, "w": "3" * 40})
-    assert step == ("close", f"Landed on GitHub's main: y at 1111111 and w at 3333333;{TIMER} Held: z, held: sluice "
-                             "refused its landing at abc1234, and it waits for its team's fix: x.", None)
+    assert step == ("close", f"Landed on GitHub's main: y at 1111111 and w at 3333333;{TIMER} Held: z, {REFUSED}; {STANDS}",
+                    None, [("z", "abc1234")])
+
+
+def test_a_send_holding_only_a_held_bolt_closes_keeping_it_and_one_whose_work_changed_is_not_kept():
+    step = plan.landings_step([hold("z", REFUSED)], answered("z@abc1234"), ["z"], {"z"})
+    assert step == ("close", f"Held: z, {REFUSED}; {STANDS}", None, [("z", "abc1234")])
+    held = "held for a fix: the lease (fix/z/lease)"
+    step = plan.landings_step([hold("z", held, H2)], answered("z@abc1234"), ["z"], {"z"}, work={"z": work([LEASE])})
+    assert step == ("close", f"Held: z, {held}; z's head is now def5678, with work of its own since your send at abc1234: "
+                             "fix: keep the lease, so a card asks for it again once it reads proven.", None, [])
+    # held at a new head its own work is the same at: kept
+    step = plan.landings_step([hold("z", held, H2)], answered("z@abc1234"), ["z"], {"z"}, work={"z": work()})
+    assert step[3] == [("z", "abc1234")]
+    # followed while y still lands: the follow's send keeps the held z beside y
+    step = plan.landings_step([box("y"), hold("z", REFUSED), box("w")], answered("y@abc1234", "z@abc1234"), ["y", "z"],
+                              {"y", "z", "w"})
+    assert (step[0], step[3]) == ("follow", [("y", "abc1234"), ("z", "abc1234")]) and f"Held: z, {REFUSED}; {STANDS}" in step[1]
 
 
 def test_a_landing_on_the_users_word_in_ops_pane_closes_a_waiting_card_no_row_of_which_can_land_as_answered_there():
@@ -348,17 +369,42 @@ def test_a_bolt_proven_after_the_answer_is_no_row_of_it_and_a_new_card_follows_i
 
 
 def test_a_ticked_bolt_proven_again_at_a_new_head_is_asked_again_rather_than_waited_for():
-    step = plan.landings_step([box("y", H2), box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"})
-    assert step == ("follow", "Landing as you ticked: z. Since your send, y's head is now def5678, and the card that "
-                              "follows asks for it.", [], [("z", "abc1234")])
-    step = plan.landings_step([box("y", H2)], answered("y@abc1234"), ["y"], {"y"})
-    assert step == ("close", "Since your send, y's head is now def5678, and the card that follows asks for it.", [])
+    """rail-cards "A fix adds a commit": the card that follows asks for y, saying what it gained."""
+    gained = {"y": work([LEASE])}
+    step = plan.landings_step([box("y", H2), box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"}, work=gained)
+    assert step == ("follow", "Landing as you ticked: z. Since your send, y's head is now def5678, with work of its own "
+                              "since your send at abc1234: fix: keep the lease, and the card that follows asks for it.",
+                    [], [("z", "abc1234")])
+    step = plan.landings_step([box("y", H2)], answered("y@abc1234"), ["y"], {"y"}, work=gained)
+    assert step == ("close", "Since your send, y's head is now def5678, with work of its own since your send at abc1234: "
+                             "fix: keep the lease, and the card that follows asks for it.", [], [])
+
+
+def test_a_ticked_bolt_that_only_took_main_in_is_waited_for_on_the_same_send():
+    """rail-cards "The head moves by taking main in before the landing": the card is left as it is."""
+    step = plan.landings_step([box("y"), box("z", H2)], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"},
+                              work={"z": work()})
+    assert step == ("leave",)
+    # once y has landed and z is still to be submitted, the send still lands z: left too
+    assert plan.landings_step([box("z", H2)], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"z"},
+                              work={"z": work()}) == ("leave",)
+    # and once z lands too, the card closes, nothing asked again
+    assert plan.landings_step([], answered("y@abc1234", "z@abc1234"), ["y", "z"], set(),
+                              landed={"y": "1" * 40, "z": "2" * 40})[0] == "close"
+
+
+def test_a_ticked_bolt_whose_work_crew_cannot_read_is_asked_again_saying_why():
+    """rail-cards "crew cannot compare the heads"."""
+    why = "git fetch -q origin in /c/main on mac-studio failed: fatal: unable to access GitHub"
+    step = plan.landings_step([box("z", H2)], answered("z@abc1234"), ["z"], {"z"}, work={"z": work(why=why)})
+    assert step == ("close", f"Since your send, z's head is now def5678, but crew could not tell whether z's own work "
+                             f"changed since your send at abc1234: {why}, and the card that follows asks for it.", [], [])
 
 
 def test_a_bolt_left_on_the_send_is_ticked_on_the_card_that_follows_once_its_head_moved():
     step = plan.landings_step([box("z", H2)], answered("y@abc1234", "z@abc1234"), ["y"], {"z"}, landed={"y": "1" * 40})
     assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z. Since your send, z's head is now "
-                             "def5678, and the card that follows asks for it.", [])
+                             "def5678, and the card that follows asks for it.", [], [])
 
 
 def test_the_bolts_a_followed_send_still_lands_are_no_row_of_any_card_after_it_while_their_head_stands():
@@ -425,7 +471,7 @@ def test_the_read_of_an_earlier_send_reads_the_plan_only_when_one_stands_and_ref
 
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():
     step = plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), [], {"y", "z"})
-    assert step == ("close", "Sent with no bolt ticked, so nothing lands. Left: y and z.", ["y", "z"])
+    assert step == ("close", "Sent with no bolt ticked, so nothing lands. Left: y and z.", ["y", "z"], [])
 
 
 def test_the_ticked_bolts_are_read_in_the_cards_order_from_each_form_of_answer():

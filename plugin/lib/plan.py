@@ -2133,14 +2133,17 @@ def ticked_of(got, heads):
     return [b for b, _, _ in heads if f"land:{b}" in picked]
 
 
-def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=False):
+def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=False, work=None):
     """What the raise of a kit's landings card does with it (rail-cards, record 0031 as amended 2026-10-23), from facts
     alone (code.7): rows, its rows as landing_rows gives them; card, None when ops holds none, else {status, heads},
     status "waiting" or "answered" and heads its rows as its last post or change recorded them (card_heads); ticked,
     the bolts the user ticked on it once answered (ticked_of); in_plan, the kit's bolts the plan still holds; landed,
     {bolt: the commit GitHub's main holds} for each that landed (the bolt.land entries); note, the event's own change
     note; here, that the event is a landing on the user's word in ops's pane (pane_landed), a word that answers the
-    card. Each act with the bolts the user cleared on their last send (left), which its card shows unticked:
+    card; work, each ticked bolt's own work between the head the card showed and its head now, for those whose head
+    moved (bolt_work), by which the user's send still stands for a bolt that only took main in (send_stands, record
+    0031 as amended 2026-10-24). Each act with the bolts the user cleared on their last send (left), which its card
+    shows unticked:
     ("none",) when no row can land and no card is held;
     ("withdraw", why) when no row can land and a waiting card is held, each row held or none proven; ("answered", why)
     then for a landing on the user's word in ops's pane (here), closed as answered there;
@@ -2149,15 +2152,19 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
     ("change", note, kind_changed, left) when a waiting card is held and its rows, their heads or the event changed
     it, its form changed or not (cards.landings_form), followed then rather than changed; ("leave",) when nothing did;
     ("leave",) when an answered card is held while any bolt the user ticked is still to land on their send, in the
-    plan, not held and at the head they ticked, one landed and not yet closed among them, and no row reads proven since;
-    ("follow", outcome, left, landing) when one does, a bolt on no row of the card or at a head the card did not show,
-    which is never added to the card they answered: it is closed saying what landed, what their send still lands, what
-    was held and what was left, and a new card follows it with every row that can land but those their send still
-    lands (landing, each (bolt, the head they ticked));
-    ("close", outcome, then) once none is still to land, the outcome saying what landed and where GitHub's main holds
-    it, what was held and why, what was left and what reads proven since, then the bolts left when rows can land, for a
-    new card that follows it, else None; a send ticking none closes it at once, landing nothing. A bolt left on the
-    last send is shown unticked on the card that follows only while its head stands."""
+    plan, not held and its send standing at its head now, one landed and not yet closed among them, and no row reads
+    proven since but at a head their send still stands at;
+    ("follow", outcome, left, landing) when one does, a bolt on no row of the card or at a head the card did not show
+    whose send does not stand, which is never added to the card they answered: it is closed saying what landed, what
+    their send still lands, what was held and what was left, and what changed of a ticked bolt asked again (work_said),
+    and a new card follows it with every row that can land but those their send still lands (landing, each (bolt, the
+    head they ticked), a held one whose send stands among them);
+    ("close", outcome, then, standing) once none is still to land, the outcome saying what landed and where GitHub's
+    main holds it, what was held and why, what was left and what reads proven since, then the bolts left when rows can
+    land, for a new card that follows it, else None, then each ticked bolt held whose send still stands, (bolt, the
+    head they ticked), which the close keeps, saying so, for it to land on that send once its team's fix has only
+    taken main in; a send ticking none closes it at once, landing nothing. A bolt left on the last send is shown
+    unticked on the card that follows only while its head stands."""
     boxed = [r for r in rows if r["box"]]
     now = [(r["bolt"], r["facts"]["head"][:7]) for r in boxed]
     held = {r["bolt"]: r["why"] for r in rows if not r["box"]}
@@ -2177,11 +2184,17 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
         if not said:
             return ("leave",)
         return ("change", "; ".join(said), cards.landings_form(len(heads)) != cards.landings_form(len(now)), left)
-    ticked = list(ticked or [])
+    ticked, work = list(ticked or []), work or {}
     was = {b: h for b, h, _ in heads}
-    anew = [(b, h) for b, h in now if was.get(b) != h]  # proven since the send: on no row of the card, or at a new head
+    at = {r["bolt"]: r["facts"]["head"] for r in rows}
+
+    def stands(b):  # the user's send still stands for a bolt they ticked, at its head now
+        return b in ticked and b in was and send_stands(was[b], at[b], work.get(b))
+    # proven since the send: on no row of the card, or at a new head their send does not stand at
+    anew = [(b, h) for b, h in now if was.get(b) != h and not stands(b)]
     moved = {b for b, _ in anew}
     landing = [b for b in ticked if b in in_plan and b not in held and b not in moved]  # in flight or not yet submitted
+    standing = [b for b in ticked if b in in_plan and b in held and stands(b)]
     if landing and not anew:
         return ("leave",)
     on = [b for b, _, _ in heads]
@@ -2191,17 +2204,21 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
             if gone and all(b in (landed or {}) for b in gone) else
             [f"Landed or left the plan: {joined(gone)}."] if gone else [])
     said += [f"Landing as you ticked: {joined(landing)}."] if landing else []
-    said += [f"Held: {b}, {held[b]}." for b in ticked if b in held]
+    said += [f"Held: {b}, {held[b]}; your send stands for it: it lands once its team's fix has only taken main in and "
+             "sluice has proven it, with nothing asked." if b in standing else
+             f"Held: {b}, {held[b]}; {work_said(b, was[b], at[b], work.get(b))}, so a card asks for it again once it reads "
+             "proven." for b in ticked if b in held]
     cleared = [b for b in on if b not in ticked]
     said += [f"Left: {joined(cleared)}."] if cleared else []
-    said += ["Since your send, " + "; ".join(f"{b}'s head is now {h}" if b in was else f"{b} reads proven" for b, h in anew)
+    said += ["Since your send, " + "; ".join(work_said(b, was[b], at[b], work.get(b)) if b in was and b in ticked else
+                                             f"{b}'s head is now {h}" if b in was else f"{b} reads proven" for b, h in anew)
              + f", and the card that follows asks for {'it' if len(anew) == 1 else 'them'}."] if anew else []
     if not ticked:
         said = ["Sent with no bolt ticked, so nothing lands."] + said
     left = [b for b in cleared if b in dict(now) and b not in moved]
     if landing:
-        return ("follow", " ".join(said), left, [(b, was[b]) for b in landing])
-    return ("close", " ".join(said), left if boxed else None)
+        return ("follow", " ".join(said), left, [(b, was[b]) for b in ticked if b in landing or b in standing])
+    return ("close", " ".join(said), left if boxed else None, [(b, was[b]) for b in standing])
 
 
 def row_forecasts(order, pairs):
@@ -2563,8 +2580,9 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
                                 Heads=" ".join(f"{b}@{h}" for b, h in landing))
         return closed and row_card_change(fleet, label, owner, cards.landings_card, dict(facts, rows=rest, left=left,
                                                                                          follows=closed), outcome, where, acts)
-    _, outcome, then = step
-    closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, Rows=str(len(boxed)))
+    _, outcome, then, standing = step  # the bolts held whose send stands kept as its close's Heads (landings_sent)
+    closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, Rows=str(len(boxed)),
+                            **({"Heads": " ".join(f"{b}@{h}" for b, h in standing)} if standing else {}))
     if then is None or not boxed or not closed:  # a close refused leaves the card open, and nothing follows it yet
         return closed
     return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=then, follows=closed), outcome, where, acts)
