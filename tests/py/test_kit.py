@@ -262,14 +262,21 @@ class TestASplitBolt:
 
     def test_a_split_is_read_with_its_commits_and_the_merges_lacked(self):
         said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=no\nMERGES=2\n"
-        assert kit.bolt_split(said, "b") == dict(local=self.LOCAL, there=self.THERE, held="no", merges=2, read=None)
+        assert kit.bolt_split(said, "b") == dict(local=self.LOCAL, there=self.THERE, held="no", merges=2, carried=None,
+                                                 read=None)
+
+    def test_the_work_to_merge_is_read_as_carrying_the_hosts_tip_or_not(self):
+        said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=no\nMERGES=2\n"
+        assert kit.bolt_split(said + "CARRIED=yes\n", "b")["carried"] == "yes"
+        assert kit.bolt_split(said + "CARRIED=no\n", "b")["carried"] == "no"
 
     def test_a_held_copy_is_read_as_held(self):
         said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=yes\nMERGES=0\n"
         assert kit.bolt_split(said, "b")["held"] == "yes"
 
     def test_an_absent_copy_is_read_as_absent(self):
-        assert kit.bolt_split("THERE=-\n", "b") == dict(local=None, there="-", held=None, merges=None, read=None)
+        assert kit.bolt_split("THERE=-\n", "b") == dict(local=None, there="-", held=None, merges=None, carried=None,
+                                                         read=None)
 
     def test_a_copy_git_could_not_read_is_read_with_gits_words(self):
         said = "READ=fatal: '/gone.git' does not appear to be a git repository fatal: Could not read from remote repository. \n"
@@ -284,10 +291,87 @@ class TestASplitBolt:
         f"LOCAL=\nTHERE={THERE}\nHELD=no\nMERGES=2\n",
         f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=maybe\nMERGES=2\n",
         f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=no\nMERGES=\n",
+        f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=no\nMERGES=2\nCARRIED=\n",
     ])
     def test_an_output_that_is_none_of_these_is_refused(self, said):
         with pytest.raises(Refusal, match=r"^crew can't read whether bolt/b is split from: "):
             kit.bolt_split(said, "b")
+
+
+def copies(own, there, at_there, held, ahead, lacks, beyond):
+    """What LAND_COPIES prints once it has fetched the bolt from origin."""
+    return (f"OWN={own}\nTHERE={there}\nAT_THERE={at_there}\nHELD={held}\nAHEAD={ahead}\nLACKS={lacks}\n"
+            f"BEYOND={beyond}\n")
+
+
+class TestALandingsCopies:
+    """What a landing reads of a bolt's two copies after one fetch from origin (plan.19, design Decision 1): the
+    host's own bolt/<bolt> and GitHub's, the policy at GitHub's, and which holds the other."""
+    OWN, THERE = "1" * 40, "2" * 40
+
+    def facts(self, **kw):
+        return dict(dict(own=self.OWN, there=self.THERE, remote="origin", held="yes", ahead="no", lacks=0, beyond=2,
+                         read=None), **kw)
+
+    def test_a_kit_with_no_origin_or_an_origin_with_no_bolt_reads_no_copy_there(self):
+        assert kit.land_copies("THERE=-\n", "b") == dict(own=None, there="-", remote=None, held=None, ahead=None,
+                                                          lacks=None, beyond=None, read=None)
+
+    def test_a_copy_git_could_not_read_is_read_with_gits_words(self):
+        said = "READ=fatal: '/gone.git' does not appear to be a git repository fatal: Could not read from remote repository. \n"
+        assert kit.land_copies(said, "b")["read"] == ("fatal: '/gone.git' does not appear to be a git repository fatal: "
+                                                      "Could not read from remote repository.")
+        assert kit.land_copies("READ=\n", "b")["read"] == "git said nothing"
+
+    def test_a_host_copy_behind_githubs(self):
+        said = copies(self.OWN, self.THERE, b64(ON_GITHUB), "yes", "no", 0, 2)
+        assert kit.land_copies(said, "b") == self.facts()
+
+    def test_a_host_copy_level_with_githubs(self):
+        said = copies(self.THERE, self.THERE, b64(ON_GITHUB), "yes", "yes", 0, 0)
+        assert kit.land_copies(said, "b") == self.facts(own=self.THERE, ahead="yes", beyond=0)
+
+    def test_a_host_copy_ahead_of_githubs(self):
+        said = copies(self.OWN, self.THERE, b64(ON_GITHUB), "no", "yes", 1, 0)
+        assert kit.land_copies(said, "b") == self.facts(held="no", ahead="yes", lacks=1, beyond=0)
+
+    def test_two_copies_that_have_diverged(self):
+        said = copies(self.OWN, self.THERE, b64(ON_GITHUB), "no", "no", 1, 2)
+        assert kit.land_copies(said, "b") == self.facts(held="no", lacks=1)
+
+    def test_a_host_with_no_copy(self):
+        said = copies("-", self.THERE, b64(ON_GITHUB), "yes", "-", "-", "-")
+        assert kit.land_copies(said, "b") == self.facts(own="-", ahead=None, lacks=None, beyond=None)
+
+    def test_a_copy_there_whose_policy_names_no_remote_or_holds_none(self):
+        assert kit.land_copies(copies(self.OWN, self.THERE, b64(POLICY), "yes", "no", 0, 2), "b")["remote"] is None
+        assert kit.land_copies(copies(self.OWN, self.THERE, "-", "yes", "no", 0, 2), "b")["remote"] is None
+
+    def test_a_policy_there_that_is_not_toml_is_refused_naming_it(self):
+        with pytest.raises(Refusal, match=r"^\.config/sluice\.toml at origin/bolt/b is not TOML"):
+            kit.land_copies(copies(self.OWN, self.THERE, b64("[branches\n"), "yes", "no", 0, 2), "b")
+
+    @pytest.mark.parametrize("said", [
+        "",
+        "fatal: bad\n",
+        copies(OWN, "", b64(ON_GITHUB), "yes", "no", 0, 2),
+        copies("", THERE, b64(ON_GITHUB), "yes", "no", 0, 2),
+        copies(OWN, THERE, "", "yes", "no", 0, 2),
+        copies(OWN, THERE, b64(ON_GITHUB), "maybe", "no", 0, 2),
+        copies(OWN, THERE, b64(ON_GITHUB), "yes", "", 0, 2),
+        copies(OWN, THERE, b64(ON_GITHUB), "yes", "no", "", 2),
+        copies(OWN, THERE, b64(ON_GITHUB), "yes", "no", 0, "-"),
+        copies("-", THERE, b64(ON_GITHUB), "no", "-", "-", "-"),
+        copies("-", THERE, b64(ON_GITHUB), "yes", "no", 0, 2),
+        f"OWN={OWN}\nTHERE={THERE}\nAT_THERE={b64(ON_GITHUB)}\nHELD=yes\n",
+    ])
+    def test_an_output_that_is_none_of_these_is_refused_naming_it(self, said):
+        with pytest.raises(Refusal, match=r"^crew can't read bolt/b's copies for its landing from: "):
+            kit.land_copies(said, "b")
+
+    def test_a_policy_sent_badly_is_refused(self):
+        with pytest.raises(Refusal, match=r"^crew can't read origin/bolt/b's \.config/sluice\.toml as it was sent"):
+            kit.land_copies(copies(self.OWN, self.THERE, "%%%", "yes", "no", 0, 2), "b")
 
 
 GITHUB, OWN = "a" * 40, "b" * 40
