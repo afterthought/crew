@@ -69,7 +69,7 @@ p.insert(plan.Rec("Bolt", [("Bolt", "b2"), ("Repo", "switchboard-kit"), ("Goal",
 p.insert(plan.Rec("Unit", [("Unit", "w1"), ("Repo", "switchboard-kit"), ("Bolt", "b2"), ("Intent", "Unit w1.")]))
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: by hand"; push_state "$w"
 crew bolt give swb-1 b1 >/dev/null 2>&1
 crew bolt give swb-2 b2 >/dev/null 2>&1
 
@@ -635,6 +635,15 @@ eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempote
   "An older copy of this card was lost: dismiss it in the app."
 ok "a row's card Pending You no longer finds is recorded lost by the rail read and raised again through its kind's raise, saying its older copy is dead"
 
+# aged <id> <time>: the box's entry set back to the time, in its own file and on wldn/main, where the rail reads it (read.5)
+aged() {
+  local f w=$T/aged
+  for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $1\$/,/^\$/s/^At: .*/At: $2/"; done
+  rm -rf "$w"; git clone -q -b wldn/main "$ws" "$w"
+  for f in "$w/runs/$box"/*.rec; do rewrite "$f" "/^Id: $1\$/,/^\$/s/^At: .*/At: $2/"; done
+  commit_all "$w" "runs($box): an entry set back by hand"; push_state "$w"
+}
+
 # A proposal whose card Pending You refused at its raise: the row shows the refusal, and the rail read leaves it while
 # the refusal is under ten minutes old (CARD_RETRY), so a refusal that stands is not tried at the rail tab's pace; once
 # it is older, the read raises the card through the proposal's raise, in the planner's name.
@@ -649,7 +658,7 @@ has "$out" "    card:   $k, none open; its last post was refused: Pending You re
 lacks "$(py_calls)" "post_request"
 id=$(entries card.post | jq -r "select(.Key == \"$k\" and .Refused) | .Id" | tail -1)
 old=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=11)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
-for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $id\$/,/^\$/s/^At: .*/At: $old/"; done
+aged "$id" "$old"
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew rail --label wldn; r=$out
 pc=$(sed -n "s|^card $k: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
@@ -667,7 +676,7 @@ op=$(grep -o 'op/mac-studio/[0-9]*' <<<"$out" | head -1); [[ -n $op ]] || fail "
 has "$out" "card $op not posted: Pending You refused post_request: Too many requests."
 : > "$stub/refuse"
 id=$(entries card.post | jq -r "select(.Key == \"$op\" and .Refused) | .Id" | tail -1)
-for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $id\$/,/^\$/s/^At: .*/At: $old/"; done
+aged "$id" "$old"
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew rail --label wldn; r=$out
 sc=$(sed -n "s|^card $op: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")

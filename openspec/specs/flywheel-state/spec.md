@@ -32,11 +32,15 @@ Every write to a flywheel's branch SHALL be made by a crew command. It SHALL fet
 - **THEN** nothing is pushed, and the command says which file and why
 
 ### Requirement: A commit names its run-record entry
-Each commit crew makes on a flywheel's branch SHALL carry, in its message, the id of the run-record entry that describes it, as a `Crew-Entry:` trailer, and that entry SHALL name the commit.
+Each commit crew makes on a flywheel's branch SHALL carry, in its message, the id of a run-record entry as a `Crew-Entry:` trailer. A commit that is an act's, such as a plan write, SHALL name the entry that describes it, and that entry SHALL name the commit. A commit that adds an entry to the run record SHALL name the entry it adds, and SHALL change nothing but that entry's day file.
 
 #### Scenario: From a commit to its entry
-- **WHEN** a commit on `wldn/main` is read
+- **WHEN** a plan write's commit on `wldn/main` is read
 - **THEN** its `Crew-Entry` id is the `Id` of one run-record entry, whose `Commit` is that commit
+
+#### Scenario: An entry's own commit
+- **WHEN** the commit that follows a plan write on `wldn/main` is read
+- **THEN** its `Crew-Entry` id is the `Id` of the entry it adds to `runs/<host>/<day>.rec`, its subject ends with ` (<agent>)`, and it changes no other file
 
 ### Requirement: Flywheels in one repository never meet
 crew SHALL fetch and push only the branch of the flywheel a command acts for. A write to one flywheel SHALL never be refused, delayed or replayed because another flywheel wrote.

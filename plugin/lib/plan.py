@@ -10,7 +10,7 @@ by a proposal (proposals.rec) the user approves; who else writes it directly is 
 over https, applies itself to the tip, checks each file it changed with recfix (the plan with crew's own rules
 too), commits through a temporary index in crew's own bare cache of the repo (no working tree is touched), and
 pushes without force. A push that is refused because someone wrote first is applied again to the new tip, up to
-five times. A write that changes several files is one commit, and it carries the host's uncarried run record.
+five times. A write that changes several files is one commit; its run-record entry follows it as a commit of its own.
 
   crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
                                              the moves where the partition's blueprints repos have them
@@ -106,6 +106,10 @@ import argparse, base64, contextlib, datetime, fcntl, io, json, os, pathlib, re,
 # getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
 # module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
+# Run as the command, this module is the plan the modules it imports import, so the command holds one reading of the
+# branch, its entries' pushes among its steps, and fetches it once (plan.12), rather than a second copy fetching anew.
+if __name__ == "__main__":
+    sys.modules.setdefault("plan", sys.modules[__name__])
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -120,6 +124,10 @@ from crew import Refusal, Stopped, fail  # noqa: E402
 from picture import cut  # noqa: E402
 
 REPLAYS = 5
+# How many times a fetch is made again when another command on this host moved crew's cache's ref of the branch while it
+# fetched, which git refuses as a ref that is at another commit than it read: every act pushes its entry (read.5), so
+# commands on one host fetch and push side by side.
+LOCK_TRIES = 5
 # What a command found out before it wrote or was refused: the partition whose run record its entry goes in.
 CONTEXT = {}
 CACHE = pathlib.Path.home() / ".cache/crew/git"
@@ -516,7 +524,11 @@ def fetch(repo, ref, fresh=False):
     held = None if fresh else READ.tip(repo, ref)
     if held:
         return held
-    r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
+    for n in range(LOCK_TRIES):
+        r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
+        if not (r.returncode and "cannot lock ref" in r.stderr):
+            break
+        time.sleep(0.1 * (n + 1))
     if r.returncode:
         if "couldn't find remote ref" in r.stderr:
             return None
@@ -550,20 +562,25 @@ def commit(repo, parent, files, message):
 
 
 def land(repo, ref, path, make):
-    """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses. Every
-    file the commit holds is checked first, the carried run record among them. The first attempt starts from the tip
-    the command holds; the commit is pushed without force, and when the push is refused because the branch moved, the
-    branch is fetched afresh and make runs again on the new tip, up to five times (plan.1, state.1). The command then
-    holds the commit it pushed, so its later steps see its own write."""
+    """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses; or a
+    chain of them, a list, each committed on the one before, as the run record's entries are, one commit each. Every
+    file a commit holds is checked first. The first attempt starts from the tip the command holds; the last commit is
+    pushed without force, and when the push is refused because the branch moved, the branch is fetched afresh and make
+    runs again on the new tip, the whole chain made again, up to five times (plan.1, state.1). The command then holds
+    the commit it pushed, so its later steps see its own write."""
     tip = fetch(repo, ref)
     for _ in range(1 + REPLAYS):
-        text, message = make(tip)
-        files = text if path is None else {path: text}
-        checked(files)
-        sha = commit(repo, tip, files, message)
+        made = make(tip)
+        sha = tip
+        for text, message in made if isinstance(made, list) else [made]:
+            files = text if path is None else {path: text}
+            checked(files)
+            sha = commit(repo, sha, files, message)
         r = git(repo, "push", "--quiet", url(repo), f"{sha}:refs/heads/{ref}", check=False)
         if r.returncode == 0:
-            git(repo, "update-ref", f"refs/crew/{ref}", sha)
+            # The cache's own mark of the tip: another command on this host moving it at the same moment refuses
+            # nothing the push made, and the next fetch sets it.
+            git(repo, "update-ref", f"refs/crew/{ref}", sha, check=False)
             READ.keep_tip(repo, ref, sha)
             return sha
         moved = fetch(repo, ref, fresh=True)
@@ -647,19 +664,12 @@ def message(subject, body, eid):
     return subject + (f"\n\n{body}" if body else "") + (f"\n\nCrew-Entry: {eid}" if eid else "") + "\n"
 
 
-def carried(label, repo, tip, files):
-    """Add the host's uncarried run record of the label to a commit's files; the newest id it carries."""
-    runs, newest = record.carry(label, lambda path: show(repo, tip, path))
-    files.update(runs)
-    return newest
-
-
 def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None):
     """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
-    with crew's, commit every file it changed with the host's uncarried run record, each file checked first, and push,
-    replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
+    with crew's, commit every file it changed, each checked first, and push, replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
-    the change added to them, with the act's own fields. Returns the commit."""
+    the change added to them, with the act's own fields, and reaches the branch as the commit after it (read.5).
+    Returns the commit."""
     repo, ref = state_of(fleet, label)
     seen = {"eid": record.new_id()}
     CONTEXT.update(label=label, eid=seen["eid"])
@@ -674,10 +684,8 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         files = {"plan.rec": w.plan.text(), **w.files}
         seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
-        seen["newest"] = carried(label, repo, tip, files)
         return files, message(seen["subject"], body, seen["eid"])
     sha = land(repo, ref, None, make)
-    record.mark_carried(label, seen["newest"])
     print(f"{ref} {sha[:7]}: {seen['subject']}")
     if act:
         record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]), eid=seen["eid"], **(fields or {}))
@@ -728,24 +736,12 @@ def notices(teams, seen, me, subject):
     return tells, shown, bool(added or freed)
 
 
-def carry_now(fleet, label):
-    """crew events --push: the host's uncarried run record of the label, carried to its branch in a commit of its
-    own; nothing at all when there is nothing to carry. Such a commit records no act, so it names no entry: an entry
-    of its own would be left uncarried by every push."""
-    repo, ref = state_of(fleet, label)
-    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
-    if not record.carry(label, lambda path: show(repo, tip, path))[0]:
-        print(f"{ref}: nothing of {crew.this_host()}'s run record left to carry")
-        return
-    seen = {}
-
-    def make(tip):
-        files = {}
-        seen["newest"] = carried(label, repo, tip, files)
-        return files, message(f"runs({crew.this_host()}): carry the run record ({agent()})", "", None)
-    sha = land(repo, ref, None, make)
-    record.mark_carried(label, seen["newest"])
-    print(f"{ref} {sha[:7]}: carried {crew.this_host()}'s run record")
+def push_now(fleet, label):
+    """crew events --push: each entry of the host's run record of the label that its branch lacks, which a push that
+    was refused left in the host's file, pushed now, each as its own commit (record.reach); said when there is none."""
+    ref, host = state_of(fleet, label)[1], crew.this_host()
+    n = record.reach(label)
+    print(f"{ref}: pushed {n} of {host}'s entries" if n else f"{ref}: nothing of {host}'s run record left to push")
 
 
 # --------------------------------------------------------------------------------------------- crew state init
@@ -10326,12 +10322,16 @@ def units_of_batch(e):
 
 
 def partition_entries(fleet, label, days=BATCH_DAYS):
-    """The partition's run record from days back, from its branch and every host it runs on, refused naming what did not
-    answer (read.1): what is due can't be told from part of it."""
+    """The partition's run record from days back, read from its branch alone, no host asked for it (read.5); refused
+    naming the branch when it cannot be read (read.1), since what is due can't be told without it."""
     since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=days)).isoformat()
     entries, missing = record.gather(fleet, [label], since)
-    not missing or fail("crew can't tell which changes have been in a batch: " + "; ".join(f"{k} did not answer ({v})" for k, v in missing.items()))
-    return entries
+    return entries if not missing else fail(unread_batches(state_of(fleet, label)[0], missing))
+
+
+def unread_batches(repo, missing):
+    """Why crew can't tell what a batch holds or is due, the branch named that could not be read, {<label>/main: why}."""
+    return "crew can't tell which changes have been in a batch: " + "; ".join(f"{k} of {repo} could not be read ({v})" for k, v in missing.items())
 
 
 def batches(entries):
@@ -10820,13 +10820,13 @@ def rail_record(fleet, found, props):
     proposal whose entry isn't found is left out); the cards open, each {label, card, key, on, by, host, at}, from each
     card.post of the last 14 days with a Card that no later card.close of that Card closes, and that no later card.post
     by the same agent under the same Key names another Card for: within one Pending You sign-in a key gives its card
-    back, so a second card under it from its owner means the first was lost to it, and the newer is the row's; the hosts
-    whose record did not answer, {label: {host: why}}; the landings, each {label, bolt, units, at, by, host}, from each
+    back, so a second card under it from its owner means the first was lost to it, and the newer is the row's; the
+    branch whose record could not be read, {label: {<label>/main: why}}, no host being asked for it (read.5); the landings, each {label, bolt, units, at, by, host}, from each
     bolt.land entry not refused, oldest first; the team each bolt was given to, {(label, bolt): team}, from the newest
     bolt.give entry naming it that was not refused; what the batches hold, {label: {"batches": [(n, at, units)],
     "closed": card keys closed, "posts": batch card keys posted, "due": units whose latest change no batch has held,
     "unanswered": {unit: the batch} whose card the user has not answered that holds its latest change}}, the last two
-    None for a partition whose record did not all answer, since then they can't be told; the rail's rows for the
+    None for a partition whose branch could not be read, since then they can't be told; the rail's rows for the
     operations; the entries the operations are read from, {label: entries}, the ops entries of the main level's host
     and the landings, oldest first, which the board's Operation lane reads (ops.environments); and every entry read,
     {label: entries}, oldest first, which the sweep (sweep_cards) and the board's design band read."""
@@ -10857,7 +10857,7 @@ def record_reading(l, entries, plan, fresh, missing=None):
     """What the rail reads of one partition's run record entries, as rail_record gives it: when each proposal was
     proposed, the cards open (posted since fresh and not closed, the same owner's newer card under a key replacing its
     older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
-    None while a host of the record did not answer (missing), as are the units whose latest change waits on the user's
+    None while its branch could not be read (missing), as are the units whose latest change waits on the user's
     answer to its batch's card (awaiting_answer). A close refused leaves its card open; a card's close as lost to its
     owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed while
     its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row, or once its
@@ -10966,7 +10966,7 @@ def rail_rows(fleet, found, sv, props, times, held=None):
             if state != "green":  # a bolt's proof is its verification (record 0025, tests.5)
                 lands = [f"lands once its verification is green; now {verdict}"]
             elif due is None and l in held:
-                lands = ["whether every unit's latest change has been in a batch can't be told: a host did not answer"]
+                lands = [f"whether every unit's latest change has been in a batch can't be told: {l}/main could not be read"]
             else:  # in a batch whose card the user has answered (briefs.12)
                 lands = ([f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have") + " been in a batch, which is due for them"]
                          if outside else []) + ([f"lands once you have answered batch{'' if len(unread) == 1 else 'es'} "
@@ -11003,35 +11003,36 @@ def card_kind(key):
     return "record" if kind == "record" else "row" if kind else "question"
 
 
-def unjudged(sv, unread, c):
-    """Whether it can't be told that an open card is still open: its own host's record did not answer, so its close
-    may not have been read (read.1)."""
-    return c["host"] in {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
+def unjudged(unread, c):
+    """Whether it can't be told that an open card is still open: its partition's run record could not be read from its
+    branch, so its close may not have been read (read.1). A host that does not answer hides no card's close, which is
+    on the branch whatever host recorded it (read.5)."""
+    return bool(unread.get(c["label"]))
 
 
-def record_cards(sv, cards, unread):
+def record_cards(cards, unread):
     """The open cards under a decision record's key, oldest first: no row's, so never among the cards with no row. A
-    card is left out when its own host's record did not answer, as stray_cards leaves one out, since its close may not
-    have been read."""
-    return sorted((c for c in cards if card_kind(c["key"]) == "record" and not unjudged(sv, unread, c)), key=lambda c: (c["at"], c["card"]))
+    card is left out while its partition's record could not be read, as stray_cards leaves one out, since its close may
+    not have been read."""
+    return sorted((c for c in cards if card_kind(c["key"]) == "record" and not unjudged(unread, c)), key=lambda c: (c["at"], c["card"]))
 
 
-def question_cards(sv, cards, unread):
-    """The open questions the four asking roles posted in their own name, oldest first (briefs.11), but one whose own
-    host's record did not answer, as record_cards leaves one out."""
-    return sorted((c for c in cards if card_kind(c["key"]) == "question" and not unjudged(sv, unread, c)), key=lambda c: (c["at"], c["card"]))
+def question_cards(cards, unread):
+    """The open questions the four asking roles posted in their own name, oldest first (briefs.11), but one whose
+    partition's record could not be read, as record_cards leaves one out."""
+    return sorted((c for c in cards if card_kind(c["key"]) == "question" and not unjudged(unread, c)), key=lambda c: (c["at"], c["card"]))
 
 
 def stray_cards(fleet, found, sv, rows, cards, unread, logs=None):
     """The open cards under a row's key that match no row, oldest first: never a decision record's (record_cards) nor
     a question (question_cards), nor a deploy's whose word stands, from each partition's entries (logs), which the
-    deploy's end closes (ops.word_stands). A card is left out when whether it has a row can't be known: its own host's
-    record did not answer, so its close may not have been read, or it is a land card of a bolt whose team's host did
-    not answer. A verify report's card, posted before its row went (teams.17), matches none."""
+    deploy's end closes (ops.word_stands). A card is left out when whether it has a row can't be known: its partition's
+    record could not be read from its branch, so its close may not have been read, or it is a land card of a bolt whose
+    team's host did not answer. A verify report's card, posted before its row went (teams.17), matches none."""
     import ops  # its decision of a deploy's card alone
     plans_, rowed, out = {l: p for l, _, _, p in found if p}, {(r["label"], r["key"]) for r in rows}, []
     for c in cards:
-        if (c["label"], c["key"]) in rowed or card_kind(c["key"]) != "row" or unjudged(sv, unread, c):
+        if (c["label"], c["key"]) in rowed or card_kind(c["key"]) != "row" or unjudged(unread, c):
             continue
         if ops.word_stands(c["key"], (logs or {}).get(c["label"], [])):
             continue
@@ -11279,7 +11280,7 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
     as live every row key less each the record holds as closed with no card open under it (batched, what the batches
     hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge, batch/
-    while the record did not answer whole, when no key is taken out for being closed either (read.1). A host the survey
+    while the record could not be read from its branch, when no key is taken out for being closed either (read.1). A host the survey
     found not answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why
     "its row is gone" or "its card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
     ended, unchecked = [], []
@@ -11319,8 +11320,8 @@ def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
     """The rail's judgment a card sweep acts on (read.1): live, every row key of the partition less each the run record
     holds as closed with no card open under it, and every reading of a bolt that is a row of its kit's landings card,
     land/<bolt> (readings), whatever card of the bolt's own was closed under that key before, which is no word on the
-    row; blind, the key prefixes it can't judge, batch/ while the record did not answer whole, when no key is taken out
-    for being closed either."""
+    row; blind, the key prefixes it can't judge, batch/ while the record could not be read from its branch, when no key
+    is taken out for being closed either."""
     closed = set() if unread else batched.get("closed", set()) - {c["key"] for c in cards if c["label"] == label}
     blind = ["batch/"] if unread else []
     return {"live": sorted((rowed - closed) | set(readings)), "blind": sorted(blind)}
@@ -11328,8 +11329,8 @@ def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
 
 def rail_read(fleet, labels, board=False, sweep=False):
     """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
-    found and the errors of those that could not be read, the survey, the open proposals, the cards, the hosts whose
-    record did not answer, the landings and gives, the operations' entries, every entry read, and the rows. The survey
+    found and the errors of those that could not be read, the survey, the open proposals, the cards, the branches whose
+    record could not be read, the landings and gives, the operations' entries, every entry read, and the rows. The survey
     is of each host holding a bolt; with board, of every team of the labels, with the bolt it holds or none, and its
     dev servers, slots and explorations too, for the board (board.py), from which the rail's text is made as well.
     With sweep, once the rows are made, the cards on this host are swept under its sign-in (sweep_cards), against the
@@ -11403,7 +11404,7 @@ def rail_text(fleet, labels, read, now):
             lines += [f"    {'card:':<8}{r['key']}, open, asked by {c['by']} ({c['card']})" for c in cards_
                       if (c["label"], c["key"]) == (r["label"], r["key"])] or [
                 f"    {'card:':<8}{r['key']}, none open" + (f"; its last post was refused: {refused}" if refused else "")]
-    questions = question_cards(sv, cards_, read["unread"])
+    questions = question_cards(cards_, read["unread"])
     if questions:
         lines += ["", "questions waiting on you:"]
     for c in questions:
@@ -11415,7 +11416,7 @@ def rail_text(fleet, labels, read, now):
         lines.append(f"  {utc(e['At']).astimezone():%Y-%m-%d %H:%M}  {age(utc(e['At']), now):<7}  {e['Act']} by {e.get('By')} "
                      f"on {e.get('Host')} ({label})" + (f", under {e['Key']}" if e.get("Key") else "")
                      + ": Pending You's reply named no card")
-    records = record_cards(sv, cards_, read["unread"])
+    records = record_cards(cards_, read["unread"])
     if records:
         lines += ["", "decision records waiting on you:"]
     for c in records:
@@ -13213,8 +13214,8 @@ class CardActs:
         return partition_kits(self.fleet, label)
 
     def partition(self, label):
-        """The partition's run record, its branch's and every host's, from BATCH_DAYS back (partition_entries),
-        refused naming what did not answer (read.1)."""
+        """The partition's run record from BATCH_DAYS back, read from its branch (partition_entries), refused naming
+        the branch when it cannot be read (read.1)."""
         return partition_entries(self.fleet, label)
 
     def forecast(self, label, kit, bolts):
@@ -13803,7 +13804,8 @@ def record_status(fleet, a):
 def record_stranded(fleet, label, key):
     """Whether the design agent's newest card under a record's key is one this host's sign-in can't reach, posted from
     another host and not closed, or lost to it (cards.stranded), from the partition's run record of the last cards.DAYS
-    days (record.gather); False, said, when that record did not answer whole, so the card is posted as it would be."""
+    days, read from its branch (record.gather); False, said, when the branch could not be read, so the card is posted
+    as it would be."""
     since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=cards.DAYS)).isoformat()
     entries, missing = record.gather(fleet, [label], since)
     if missing:
@@ -13897,11 +13899,10 @@ def question_close(acts, label, c, words):
 
 def sweep_cards(fleet, read, acts=None):
     """The rail read's sweep of the cards on this host, under its sign-in (record 0031 §1, §2, read.4): for each
-    partition whose plan was read, and whose run record answered on its branch, on this host and on its main level's
-    host, where its cards and rows are written, it closes each card of a row that is gone with why
-    (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"], proposals_held),
-    at or past the commit its card was raised at (older_than_card), and each decision record's card, under either key
-    form, at the record's status
+    partition whose plan was read, and whose run record was read from its branch, it closes each card of a row that
+    is gone with why (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"],
+    proposals_held), at or past the commit its card was raised at (older_than_card), and each decision record's card,
+    under either key form, at the record's status
     (record_settled), withdraws each question whose asker's pane herdr lists with no agent in it, naming the asker,
     and leaves one whose asker's pane it can't read, saying why (SweepActs.listed, read.1), posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
@@ -13916,8 +13917,8 @@ def sweep_cards(fleet, read, acts=None):
     posted again through its kind's raise, its summary saying the older copy is dead, the older copy reported lost and
     never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again, briefs.11,
     briefs.12, read.1). A host not signed in,
-    or a bridge that fails, changes nothing more, and is said, as is a partition whose record did not answer there,
-    which records no close either (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
+    or a bridge that fails, changes nothing more, and is said, as is a partition whose record could not be read from its
+    branch, which records no close either (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
     card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left, a batch's close
     by crew with card and new None."""
     acts = acts or SweepActs(fleet)
@@ -13927,10 +13928,10 @@ def sweep_cards(fleet, read, acts=None):
     for l, _, _, pl in read["found"]:
         if not pl:
             continue
-        unread = {h: v for h, v in read["unread"].get(l, {}).items() if h in (f"{l}/main", here, fleet["partitions"][l]["machine"])}
+        unread = read["unread"].get(l, {})
         if unread:
-            out["unswept"].append(dict(label=l, why="its run record did not answer whole, so which cards are open can't be told: "
-                                                    + "; ".join(f"{h}: {v}" for h, v in sorted(unread.items()))))
+            out["unswept"].append(dict(label=l, why="; ".join(f"its run record could not be read from {b}, so which cards are open can't be told: {v}"
+                                                              for b, v in sorted(unread.items()))))
             continue
         rows = [r for r in read["rows"] if r["label"] == l]
         owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}

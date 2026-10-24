@@ -319,7 +319,7 @@ grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land t
   "$CREW_TEST_LOG" || fail "the conductor was not told of the landing:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
-eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
+eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(act_tip)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
 ok "a drop frees the last slot and closes the units workspace; the bolt, submitted on the user's word, lands, its worktree, a stopped landing's taken up, removed and the detached main checkout left as it was, and is closed as it lands, recording the commit main holds, sluice deleting its branch from GitHub and the host, closing the kit's landings card with where GitHub's main holds it and the timer, ending its row's reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
 
@@ -417,7 +417,7 @@ has "$out" "sluice deleted bolt/console-pages from GitHub at $console"
 has "$out" "$kd/places/c and unit/c are removed; the branch was at"
 github bolt/console-pages && fail "bolt/console-pages is still on GitHub"
 git -C "$k" rev-parse --verify -q bolt/console-pages >/dev/null && fail "bolt/console-pages is still on the host"
-eq "$(git --git-dir "$ws" log -1 --format=%b wldn/main | head -1)" "the portal lists them"
+eq "$(git --git-dir "$ws" log -1 --format=%b "$(act_tip)" | head -1)" "the portal lists them"
 ok "dropping a held bolt removes its units' places and has sluice delete its branch from GitHub and the host, with the reason in the commit"
 
 # A dropped bolt holding a merge main lacks: sluice refuses its delete, and the branch is kept on GitHub and the host,
