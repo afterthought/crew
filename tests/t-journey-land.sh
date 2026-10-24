@@ -33,7 +33,9 @@
 # head moves and when a third joins it; and one crew bolt submit lands the three the user ticked in that order, each
 # queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and
 # held, the third landing all the same, the command exiting non-zero naming the held one, and the card closed with
-# what landed and what was held.
+# what landed and what was held. Last, main moving under a proven row makes crew rail on the main level's host raise
+# the kit's landings card again, holding the row taking main first and telling its conductor the take-main fix,
+# recorded once, and a second crew rail, main not having moved, tells and raises nothing.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -514,3 +516,43 @@ has "$closed" "Held: south, held: sluice refused its landing at ${south:0:7}, an
 case $closed in *"words above"*) fail "the card's close points at words above, which are in ops's terminal, not on the card" ;; esac
 calls | grep -q "^$box pendingyou post_request " && fail "a card was posted though no row can land"
 ok "one crew bolt submit lands the ticked bolts in the card's order, each queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and held on its row, the third landing all the same; it exits non-zero naming the one held, and the card closes with what landed and what was held"
+
+# Main moving under a proven row: GitHub's main lands a change to the file far's unit added, and the builder's host
+# has it as origin/main, as the fleet's timer fetches it; crew rail on the main level's host, the partition's main
+# machine, raises the kit's landings card again, which forecasts far against main after a fetch, holds far taking main
+# first, so a list of two becomes an approval of west alone, followed, and tells swb-1-conductor the take-main fix,
+# naming far while swb-1 holds two bolts, recorded on far; a second crew rail, main not having moved, tells nothing,
+# raises nothing and records nothing.
+crew bolt new west "The west regions." --repo switchboard-kit >/dev/null; crew bolt give swb-1 west >/dev/null 2>&1
+crew unit add west-files "West's files." --bolt west >/dev/null
+proven west west-files west.txt west || fail "west's unit did not merge"
+crew bolt new far "The far regions." --repo switchboard-kit >/dev/null; crew bolt give swb-1 far >/dev/null 2>&1
+crew unit add far-files "Far's files." --bolt far >/dev/null
+proven far far-files far.txt far || fail "far's unit did not merge"
+expect_ok on_box _land-card wldn switchboard-kit
+kit=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
+[[ -n $kit ]] || fail "no landings card was raised for west and far:"$'\n'"$out"
+kept=$(home_of $box)/.local/state/crew/cards/wldn/land/switchboard-kit/main
+eq "$(cat "$kept")" "$(git -C "$k" rev-parse origin/main)"
+was=$(cat "$kept")
+echo "main's far" > "$k/far.txt"; commit_all "$k" "feat: main's own far"; push "$k"
+: > "$CREW_TEST_LOG"
+expect_ok on_box rail --label wldn
+has "$out" "land/switchboard-kit (wldn): main is at $(short origin/main), its rows forecast at ${was:0:7}: raised again"
+eq "$(cat "$kept")" "$(git -C "$k" rev-parse origin/main)"
+has "$(calls | grep "^$box pendingyou cancel_request ")" "far takes main first: forecast to conflict with main on far.txt at $(short origin/main); swb-1-conductor takes main in by a fix"
+posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
+eq "$(jq -c '[.kind, .follows, .title]' <<<"${posted#* post_request }")" "[\"approve\",\"$kit\",\"Land the bolt west on switchboard-kit's main\"]"
+has "$posted" "**far**: takes main first: forecast to conflict with main on far.txt at $(short origin/main)"
+has "$(told swb-1-conductor)" "bolt/far is forecast to conflict with main on far.txt"
+has "$(told swb-1-conductor)" "take-main-$(short origin/main)"
+has "$(told swb-1-conductor)" "--bolt far"
+eq "$(field $box forecast Heads bolt/far) | $(field $box forecast Paths bolt/far) | $(field $box forecast Reached bolt/far)" \
+  "bolt/far@$(short bolt/far) main@$(short origin/main) | far.txt | told"
+: > "$CREW_TEST_LOG"
+expect_ok on_box rail --label wldn
+lacks "$out" "landings cards forecast again"
+eq "$(told swb-1-conductor)" ""
+calls | grep -q "^$box pendingyou \(post\|update\|cancel\)_request " && fail "a second rail read changed the landings card:"$'\n'"$(calls)"
+eq "$(record_of $box | grep -c "^Reached: told")" "1"
+ok "main moving under a proven row makes crew rail on the main level's host raise the kit's landings card again, holding the row taking main first and telling its conductor the take-main fix, recorded once; a second crew rail tells and raises nothing"

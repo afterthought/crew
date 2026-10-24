@@ -31,7 +31,7 @@
 
 ## 7. The command's wiring
 
-- [ ] 7.1 On the stubs, main moving under a proven row makes `crew rail` on the main level's host raise the kit's card holding the row as taking main first and tell its conductor the take-main fix, and a second `crew rail` tells and raises nothing, with `tests/moon.yml` in step with the test's reads (design, Decisions 2 to 4; Task notes 7.1); verify `tests/suite t-journey-land` ends with "0 failed".
+- [x] 7.1 On the stubs, main moving under a proven row makes `crew rail` on the main level's host raise the kit's card holding the row as taking main first and tell its conductor the take-main fix, and a second `crew rail` tells and raises nothing, with `tests/moon.yml` in step with the test's reads (design, Decisions 2 to 4; Task notes 7.1); verify `tests/suite t-journey-land` ends with "0 failed".
 
 ## 8. The words
 
