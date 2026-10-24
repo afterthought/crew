@@ -542,8 +542,40 @@ def test_one_left_out_closes_the_card_and_a_new_one_follows_it_with_that_bolt_un
     opening, said = post["summary"].split("\n\n")[:2]
     assert post["follows"] == "req_k1" and said.startswith("Left on your last send.")
     assert opening.startswith("You answered the card before this one") and opening.endswith(
-        f": ticked y, left z. Since then: landed on GitHub's main: y at 1111111;{TIMER} Left: z.")
+        f": ticked y, left z. Since then: landed on GitHub's main: y at 1111111;{TIMER} Left: z. z, which you left, waits on this card.")
     assert acts.emitted[-1]["Heads"] == "z@abc1234:left"
+
+
+def test_a_send_ticking_none_closes_the_card_and_the_card_that_follows_says_every_row_was_left(monkeypatch):
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": []}}
+    answers = dict(POSTED, get_request=(answer, None), post_request=({"requestId": "req_k2", "version": 1}, None))
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=answers)
+    assert raised(monkeypatch, acts) == "req_k2"
+    assert next(e for e in acts.emitted if e["Act"] == "card.close")["Answer"] == "ticked none, left y and z"
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["follows"] == "req_k1" and post["summary"].startswith(
+        "You answered the card before this one: ticked none, left y and z. Since then: sent with no bolt ticked, so nothing lands. "
+        "Left: y and z. y and z, which you left, wait on this card.")
+
+
+def test_a_card_posted_after_the_kits_last_one_says_which_bolts_joined_moved_or_still_wait_since_the_send(monkeypatch):
+    """The send's follow-on was refused by Pending You, so the next raise posts the kit's card afresh, following the
+    card the user sent: y landed, z they left still waits, w reads proven since."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234", At="2026-10-23T13:10:00Z"),
+            dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", State="closed", Rows="1", At="2026-10-23T14:02:00Z",
+                 Answer="ticked y, left z")]
+    acts = LandActs({"z": row("z"), "w": row("w", H2)}, held, [dict(Act="bolt.land", On=["bolt/y"], Head="1" * 40)], POSTED)
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(
+        "%rec: Bolt\n\n" + "".join(f"Bolt: {b}\nRepo: crew\nTeam: crw-1\n\n" for b in ("z", "w")) + "%rec: Unit\n\n"))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["follows"] == "req_k1" and post["summary"].startswith(
+        "You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: ticked y, left z. Since then: w reads proven and "
+        "joins the card. z, which you left, waits on this card.\n\n")
+    assert plan.landings_since(plan.card_heads("y@abc1234 z@abc1234"), [box("z"), box("w", H2)]) == [
+        "w reads proven and joins the card.", "z, which you left, waits on this card."]
+    assert plan.landings_since(plan.card_heads("z@abc1234"), [box("z", H2)]) == ["z's head is now def5678."]
 
 
 def test_a_bolt_proven_after_the_answer_gets_a_new_card_following_it_and_the_send_still_lands_the_rest(monkeypatch, capsys):
