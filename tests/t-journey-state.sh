@@ -1,13 +1,15 @@
 # A flywheel's state and its run record, through the crew command on the stubs (tests.11, record 0022): a plan command
 # names recutils when it is missing; crew state init starts a branch, adopts a partition's old plans with their history
 # and its moves, finishes a run stopped partway, and keeps two flywheels' branches apart; a record that can't be written
-# changes nothing else; a write's commit names its entry and carries what the host has not, crew events --push carries
-# the rest, and a carried file that fails recfix refuses its write; an agent's entry names its session as herdr has it;
-# a refused write is an entry and a read none; crew events and crew trace read the branch, then each host, naming a host
-# that does not answer, and --follow prints what another host writes. What an entry holds, how a day is carried, how a
+# changes nothing else; a write's commit changes its own files and names its entry, which follows as a commit of its
+# own, and every entry is on the branch when the command that wrote it returns; a push the branch refuses is said and
+# goes with the host's next entry, crew events --push pushes what is left, and an entry cut short stops the record's
+# push, not the write; an agent's entry names its session as herdr has it; a refused write is an entry and a read none;
+# crew events and crew trace read the branch alone, a host that does not answer hiding nothing it pushed, and --follow
+# prints what another host pushes; none of them asks a host. What an entry holds, which entries a push takes and how their commits are worded, how a
 # trace walks and what events shows, the act and objects of each plan write, and how plans are joined are logic cases
-# (tests/py/test_record.py); two processes appending at once, a contract case (tests/contract/test_record.py); each
-# step here checks a command's wiring once.
+# (tests/py/test_record.py); two processes appending at once, and a chain of entries landing on a moved branch, contract
+# cases (tests/contract/test_record.py); each step here checks a command's wiring once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 box=chuck-herdr-alpha
@@ -81,7 +83,7 @@ exit 0
 HOOK
 chmod +x "$as/hooks/pre-receive"; touch "$T/refuse-once"
 expect_fail "the push of swancloud/main to afterthought/crew-state failed" crew state init swancloud
-eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" "plan.rec"
+eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" $'plan.rec\nruns'
 expect_ok crew state init swancloud
 has "$out" "added moves.rec"; lacks "$out" "started an empty plan"
 git --git-dir "$as" merge-base madswan/main swancloud/main >/dev/null 2>&1 && fail "madswan's and swancloud's branches share history"
@@ -90,18 +92,54 @@ ok "state init adopts a partition's first old plan with its history, joins anoth
 export CREW_LABEL=wldn
 crew bolt new tenants "Tenants." --repo switchboard-kit >/dev/null
 rec=$(home_of mac-studio)/.local/state/crew/wldn/runs/mac-studio/$day.rec
-eid=$(git --git-dir "$ws" log -1 --format='%(trailers:key=Crew-Entry,valueonly)' wldn/main | head -1)
-eq "$(recsel -t Entry -e "Id = '$eid'" -P Act,Commit "$rec")" $'bolt.new\n'"WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
-tell=$(emit mac-studio --act tell --on agent/wldn-planner --field Chars=5)
-crew bolt new consoles "Consoles." --repo switchboard-kit >/dev/null
-has "$(onbranch mac-studio)" "$tell"; has "$(onbranch mac-studio)" "$eid"
-eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" $'plan.rec\n'"runs/mac-studio/$day.rec"
+eid=$(git --git-dir "$ws" log -1 --format='%(trailers:key=Crew-Entry,valueonly)' wldn/main~1 | head -1)
+eq "$(recsel -t Entry -e "Id = '$eid'" -P Act,Commit "$rec")" $'bolt.new\n'"WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main~1)"
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main~1)" "plan.rec"
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" "runs/mac-studio/$day.rec"
+eq "$(git --git-dir "$ws" log -1 --format='%(trailers:key=Crew-Entry,valueonly)' wldn/main | head -1)" "$eid"
+has "$(onbranch mac-studio)" "$eid"
+ok "a plan write's commit changes its own files alone, and its entry, which names it, follows as the next commit"
 n=$(commits)
-emit mac-studio --act tell --on agent/wldn-planner --field Chars=7 >/dev/null
-expect_ok crew events --push; has "$out" "carried mac-studio's run record"
-expect_ok crew events --push; has "$out" "nothing of mac-studio's run record left to carry"
-eq "$(commits)" "$((n + 1))"
-ok "a write's commit names its entry and carries the host's uncarried record; crew events --push carries the rest in a commit of its own, and nothing when nothing is left"
+tell=$(emit mac-studio --act tell --on agent/wldn-planner --field Chars=5)
+has "$(onbranch mac-studio)" "$tell"; eq "$(commits)" "$((n + 1))"
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" "runs/mac-studio/$day.rec"
+eq "$(git --git-dir "$ws" log -1 --format='%s%n%(trailers:key=Crew-Entry,valueonly)' wldn/main | sed '/^$/d')" "runs(mac-studio): tell agent/wldn-planner ($me@mac-studio)"$'\n'"$tell"
+ok "an entry is on the branch when the command that wrote it returns, in a commit of its own changing its day's file alone and naming it"
+
+# The state repository refuses a push of the run record while refuse-runs is there, as GitHub out of reach would.
+cat > "$ws/hooks/pre-receive" <<'HOOK'
+#!/usr/bin/env bash
+while read -r old new ref; do
+  if [ -f "$CREW_TEST_ROOT/refuse-runs" ] && git log -1 --format=%s "$new" | grep -q '^runs('; then
+    echo "github.com could not be reached" >&2; exit 1
+  fi
+done
+exit 0
+HOOK
+chmod +x "$ws/hooks/pre-receive"; touch "$T/refuse-runs"
+n=$(commits)
+out=$(crew bolt new billing "Billing." --repo switchboard-kit 2>&1) || fail "a write failed when its entry could not be pushed: $out"
+missed=$(sed -n "s/^crew: entry \([^ ]*\) did not reach wldn\/main of WilldanGroup\/crew-state: .*github.com could not be reached.*; mac-studio keeps it and pushes it with its next entry\$/\1/p" <<<"$out")
+[[ -n $missed ]] || fail "the refused push was not said:"$'\n'"$out"
+eq "$(grep -c 'did not reach' <<<"$out")" "1"
+has "$(git --git-dir "$ws" show wldn/main:plan.rec)" "Bolt: billing"; eq "$(commits)" "$((n + 1))"
+lacks "$(onbranch mac-studio)" "$missed"; has "$(cat "$rec")" "Id: $missed"
+rm "$T/refuse-runs"
+next=$(emit mac-studio --act tell --on agent/wldn-planner --field Chars=7)
+eq "$(commits)" "$((n + 3))"
+eq "$(git --git-dir "$ws" log -2 --format='%(trailers:key=Crew-Entry,valueonly)' wldn/main | sed '/^$/d' | tr '\n' ' ')" "$next $missed "
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main~1) $(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" \
+  "runs/mac-studio/$day.rec runs/mac-studio/$day.rec"
+ok "an entry whose push is refused is said once and the write it records stands; the host's next entry pushes it first, each its own commit"
+
+touch "$T/refuse-runs"
+left=$(emit mac-studio --act tell --on agent/wldn-planner --field Chars=9 2>/dev/null)
+rm "$T/refuse-runs"
+lacks "$(onbranch mac-studio)" "$left"
+expect_ok crew events --push; eq "$out" "wldn/main: pushed 1 of mac-studio's entries"
+has "$(onbranch mac-studio)" "$left"
+expect_ok crew events --push; eq "$out" "wldn/main: nothing of mac-studio's run record left to push"
+ok "crew events --push pushes what a refused push left in the host's record, then says nothing is left"
 
 crew unit add a "Unit a." --bolt tenants >/dev/null
 before=$(grep -c '^Act: unit.drop$' "$rec" || true)
@@ -117,46 +155,47 @@ has "$(cat "$(home_of $box)"/.local/state/crew/wldn/runs/$box/$day.rec)" "Sessio
 ok "a refused write is one entry and a read none, and an agent's entry names its session as herdr has it"
 
 emit $box --act unit.add --on unit/x --on queue/switchboard-kit --why "plan(queue): add x" >/dev/null
-HOST=$box expect_ok crew events --push; has "$out" "carried $box's run record"
 emit $box --act unit.drop --on unit/x --on queue/switchboard-kit --why "plan(queue): drop x" >/dev/null
-echo "$box" > "$T/down"
-expect_ok crew events --about unit/x
-eq "$(acts "$(grep -v 'did not answer' <<<"$out")")" "unit.add "; has "$out" "$box did not answer"
-expect_ok crew trace unit/x
-has "$out" "unit.add"; lacks "$out" "unit.drop"; has "$out" "$box did not answer"
-rm "$T/down"
+echo "$box" > "$T/down"; : > "$CREW_TEST_LOG"
 expect_ok crew events --about unit/x
 eq "$(acts "$out")" "unit.add unit.drop "
+expect_ok crew trace unit/x
+has "$out" "unit.add"; has "$out" "unit.drop"; lacks "$out" "did not answer"
+rm "$T/down"
 expect_ok crew events --json
-eq "$(jq -r '[.entries[].Host] | unique | join(" ")' <<<"$out")" "$box mac-studio"
-ok "crew events and crew trace read the branch, then each host: one that does not answer is shown as far as it had carried, and named"
+eq "$(jq -r '[.entries[].Host] | unique | join(" ")' <<<"$out")" "$box mac-studio"; eq "$(jq -c .unreachable <<<"$out")" "{}"
+lacks "$(calls)" " ssh "
+ok "crew events and crew trace read the branch alone: a host that does not answer hides none of what it pushed, and no host is asked"
 
 carried=$(onbranch $box)
 mv "$(home_of $box)/.local/state/crew/wldn" "$T/box-record-lost"
 emit $box --act unit.add --on unit/y --on queue/switchboard-kit --why "plan(queue): add y" >/dev/null
 HOST=$box expect_ok crew events --push
 eq "$(onbranch $box | wc -l | tr -d ' ')" "$(( $(wc -w <<<"$carried") + 1 ))"
-ok "a host that lost its run record after carrying keeps its entries on the branch, and adds new ones beside them"
+ok "a host that lost its run record after pushing it keeps its entries on the branch, and adds new ones beside them"
 
+cache=$(home_of mac-studio)/.cache/crew/git/WilldanGroup/crew-state.git
+rm -f "$cache/FETCH_HEAD"; : > "$CREW_TEST_LOG"
 ( export CREW_TEST_HOST=mac-studio HOME=$(home_of mac-studio); cd "$HOME" && exec "$CREW/plugin/bin/crew" events --follow ) > "$T/follow" 2>&1 &
 fpid=$!
-# Its tails are up once one follows the box's files: an entry written before then is never followed.
-tailing() { pgrep -f "tail -q -n 0 -F .*$T/hosts/$box/" >/dev/null; }
-until_ok tailing || fail "crew events --follow never started its tails"
+# Its first read is made once it has fetched the branch: what the branch held then is not printed.
+fetched() { [[ -f $cache/FETCH_HEAD ]]; }
+until_ok fetched || fail "crew events --follow never read the branch"
 emit $box --act stage.start --on stage/a/construct --on unit/a --why "unit(a): start construct" >/dev/null
 follows() { grep -q "stage.start" "$T/follow"; }; until_ok follows || true
 kill "$fpid"; wait "$fpid" 2>/dev/null || true
 has "$(cat "$T/follow")" "stage/a/construct unit/a"; lacks "$(cat "$T/follow")" "unit.add"
-untailed() { ! pgrep -f "tail -q -n 0 -F .*$T/hosts" >/dev/null; }
-until_ok untailed || fail "a tail outlived crew events --follow"
-ok "crew events --follow prints an entry another host writes while it runs, and leaves no tail behind"
+lacks "$(calls)" " ssh "
+ok "crew events --follow prints an entry another host pushes while it runs, and asks no host for it"
 
-# An entry cut short in the host's run record fails recfix --check: a write that would carry it is refused, naming the
-# file, with nothing pushed; once the entry is gone the same write lands.
+# An entry cut short in the host's run record fails recfix --check: the record's push is refused, naming the file, with
+# nothing of it pushed, while the write whose entry it held back lands; once the entry is gone the record is pushed.
 printf 'Id: 20991231T235959Z-mac-studio-1-1\nAt: 2099-12-31T23:59:59Z\n\n' >> "$rec"
-tip=$(git --git-dir "$ws" rev-parse wldn/main)
-expect_fail "runs/mac-studio/$day.rec fails recfix --check" crew bolt new portals "Portals." --repo switchboard-kit
-eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$tip"
-rewrite "$rec" '/^Id: 20991231T235959Z-mac-studio-1-1$/,/^At: 2099-12-31T23:59:59Z$/d'
 expect_ok crew bolt new portals "Portals." --repo switchboard-kit
-ok "a carried run-record file that fails recfix --check refuses the write it rides in, and nothing is pushed"
+has "$out" "did not reach wldn/main of WilldanGroup/crew-state: runs/mac-studio/$day.rec fails recfix --check"
+has "$(git --git-dir "$ws" show wldn/main:plan.rec)" "Bolt: portals"
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" "plan.rec"
+rewrite "$rec" '/^Id: 20991231T235959Z-mac-studio-1-1$/,/^At: 2099-12-31T23:59:59Z$/d'
+expect_ok crew events --push; has "$out" "wldn/main: pushed"
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" "runs/mac-studio/$day.rec"
+ok "an entry cut short in the host's run record refuses the record's push, naming the file, and the write it followed lands"

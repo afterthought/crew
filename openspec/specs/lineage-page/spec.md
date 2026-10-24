@@ -46,11 +46,11 @@ Selecting an object SHALL list its entries in time order: the time, the act, who
 - **THEN** its entries include the approval, with who ran it, on which host, and that agent's session to open
 
 ### Requirement: The page says what it was made from
-The page SHALL state the time it was made, the commit of the flywheel's branch it read, and any host whose uncarried entries it could not read. It SHALL NOT change after it is written; running the command again writes it anew. When the flywheel's branch cannot be read, the command SHALL write no page and SHALL say which branch it could not read.
+The page SHALL state the time it was made and the commit of the flywheel's branch it read, its run record read from that commit alone. It SHALL NOT change after it is written; running the command again writes it anew. When the flywheel's branch cannot be read, the command SHALL write no page and SHALL say which branch it could not read.
 
 #### Scenario: A host was asleep
-- **WHEN** the page is made while a Mac holding uncarried entries does not answer
-- **THEN** the page is complete as far as that host had carried, and names the host
+- **WHEN** the page is made while a Mac that wrote entries of the partition does not answer
+- **THEN** the page holds every entry the branch holds, the Mac's among them, and names no host for its run record
 
 #### Scenario: The branch cannot be read
 - **WHEN** `crew page wldn` runs while the state repository cannot be fetched

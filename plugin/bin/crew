@@ -300,10 +300,11 @@
 #   crew ops steps <env> --label L --json
 #                                      any other operation and its state, on its own or after a deploy
 #
-# What happened, read from the run record every command that moves work appends on the host it ran on:
+# What happened, read from the run record every command that moves work appends on the host it ran on and pushes to
+# the partition's branch as it writes it:
 #   crew events   [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-#                                      the entries of the partition's branch and of every host it runs on, in time order
-#   crew events   --push [--label L]   carry this host's run record to the partition's branch now
+#                                      the entries on the partition's branch, in time order; no host is asked
+#   crew events   --push [--label L]   push what of this host's run record a refused push left on it
 #   crew trace    <object>             one bolt's, unit's or signal's history: what was done, by whom, in which
 #                                      session, with which commit, and what it led to
 #   crew page     <label> [--out <file>] [--since <time>]
