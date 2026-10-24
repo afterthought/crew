@@ -341,6 +341,35 @@ def test_a_dependents_place_takes_a_chores_head_and_a_chores_own_work_leaves_out
     repo.git("-C", str(b), "merge-base", "--is-ancestor", "chore/pin", "HEAD")
 
 
+def test_a_branchs_commits_are_its_first_parent_line_newest_first_and_a_chores_its_own_beyond_its_bolt(repo, tmp_path, monkeypatch):
+    """A stuck report's commits (plan.stuck_said, teams.4): gather.since lists a branch's first-parent line from its
+    head with each commit's short sha, committer time and subject, newest first, so stuck_said can keep those made since
+    the stage began; another unit's work a place merged in is not listed, only the merge; a chore's, read beyond its
+    bolt, leaves out what its place took (plan.11); a branch git can't read is None."""
+    k = Kit(repo, tmp_path)
+    p, o = k.place("a"), k.place("other")
+    (o / "o").write_text("o\n")
+    k.commit(o, "feat(other): its work")
+    for at, name in (("2026-10-23T01:00:00+00:00", "before"), ("2026-10-23T02:10:00+00:00", "first"), ("2026-10-23T02:20:00+00:00", "second")):
+        monkeypatch.setenv("GIT_COMMITTER_DATE", at)
+        (p / name).write_text(f"{name}\n")
+        k.commit(p, f"feat(a): {name}")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-10-23T02:30:00+00:00")
+    repo.git("-C", str(p), "merge", "-q", "--no-edit", "unit/other")
+    sha = lambda n: repo.git("rev-parse", "--short", f"unit/a~{n}")
+    assert gather.since(str(repo.path), "refs/heads/unit/a")[:4] == [
+        (sha(0), "2026-10-23T02:30:00Z", "Merge branch 'unit/other' into unit/a"),
+        (sha(1), "2026-10-23T02:20:00Z", "feat(a): second"),
+        (sha(2), "2026-10-23T02:10:00Z", "feat(a): first"),
+        (sha(3), "2026-10-23T01:00:00Z", "feat(a): before")]
+    cp = k.dir / "places" / "chore-pin"
+    repo.git("worktree", "add", "-q", "--track", "-b", "chore/pin", str(cp), "unit/a")
+    (cp / "pin").write_text("1\n")
+    k.commit(cp, "chore: pin")
+    assert [s for _, _, s in gather.since(str(repo.path), "refs/heads/chore/pin", "refs/heads/unit/a")] == ["chore: pin"]
+    assert gather.since(str(repo.path), "refs/heads/unit/none") is None
+
+
 def test_a_kit_on_github_reads_what_has_landed_from_origin_main_not_the_hosts_own_main(repo, tmp_path):
     """Stages and the tidy through gather.kit (plan.18): a kit with an origin remote reads its landed changes and chores
     at origin/main as the host last fetched it, which a landing elsewhere moved and the host's own main lags; what
