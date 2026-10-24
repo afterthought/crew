@@ -262,14 +262,21 @@ class TestASplitBolt:
 
     def test_a_split_is_read_with_its_commits_and_the_merges_lacked(self):
         said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=no\nMERGES=2\n"
-        assert kit.bolt_split(said, "b") == dict(local=self.LOCAL, there=self.THERE, held="no", merges=2, read=None)
+        assert kit.bolt_split(said, "b") == dict(local=self.LOCAL, there=self.THERE, held="no", merges=2, carried=None,
+                                                 read=None)
+
+    def test_the_work_to_merge_is_read_as_carrying_the_hosts_tip_or_not(self):
+        said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=no\nMERGES=2\n"
+        assert kit.bolt_split(said + "CARRIED=yes\n", "b")["carried"] == "yes"
+        assert kit.bolt_split(said + "CARRIED=no\n", "b")["carried"] == "no"
 
     def test_a_held_copy_is_read_as_held(self):
         said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=yes\nMERGES=0\n"
         assert kit.bolt_split(said, "b")["held"] == "yes"
 
     def test_an_absent_copy_is_read_as_absent(self):
-        assert kit.bolt_split("THERE=-\n", "b") == dict(local=None, there="-", held=None, merges=None, read=None)
+        assert kit.bolt_split("THERE=-\n", "b") == dict(local=None, there="-", held=None, merges=None, carried=None,
+                                                         read=None)
 
     def test_a_copy_git_could_not_read_is_read_with_gits_words(self):
         said = "READ=fatal: '/gone.git' does not appear to be a git repository fatal: Could not read from remote repository. \n"
@@ -284,6 +291,7 @@ class TestASplitBolt:
         f"LOCAL=\nTHERE={THERE}\nHELD=no\nMERGES=2\n",
         f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=maybe\nMERGES=2\n",
         f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=no\nMERGES=\n",
+        f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=no\nMERGES=2\nCARRIED=\n",
     ])
     def test_an_output_that_is_none_of_these_is_refused(self, said):
         with pytest.raises(Refusal, match=r"^crew can't read whether bolt/b is split from: "):

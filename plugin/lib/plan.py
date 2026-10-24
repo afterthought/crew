@@ -3470,9 +3470,10 @@ bolt=$2 file=$3
 # Whether a bolt's branch on the remote its host's tip names holds that tip (plan.19), read in its kit's main checkout
 # with one fetch of it (plan.18), for kit.bolt_split: THERE=- when the remote has no bolt/<bolt>, READ with git's words
 # when it can't be asked or fetched, else LOCAL and THERE, the host's commit and the remote's, HELD, yes when the
-# host's tip is an ancestor of the remote's, and MERGES, the merges the host holds beyond it.
+# host's tip is an ancestor of the remote's, and MERGES, the merges the host holds beyond it; and given the ref of the
+# work to merge ($4), CARRIED, yes when the host's tip is an ancestor of it.
 BOLT_SPLIT = r"""cd "$1" || exit 1
-bolt=$2 remote=$3
+bolt=$2 remote=$3 work=${4:-}
 l=$(git rev-parse --verify -q "refs/heads/bolt/$bolt^{commit}")
 err=$(git ls-remote --exit-code "$remote" "refs/heads/bolt/$bolt" 2>&1); rc=$?
 if [ $rc = 2 ]; then echo "THERE=-"; exit 0; fi
@@ -3484,6 +3485,8 @@ there=$(git rev-parse --verify -q "refs/remotes/$remote/bolt/$bolt^{commit}")
 echo "LOCAL=$l"; echo "THERE=$there"
 git merge-base --is-ancestor "$l" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
 echo "MERGES=$(git rev-list --count --merges "$there..$l" 2>/dev/null)"
+[ -n "$work" ] || exit 0
+git merge-base --is-ancestor "$l" "$work" 2>/dev/null; case $? in 0) echo "CARRIED=yes" ;; 1) echo "CARRIED=no" ;; esac
 """
 
 # The bolt's two copies a landing reads (plan.19), in its kit's main checkout with $file the policy, with one fetch of
@@ -3548,15 +3551,17 @@ def bolts_local_said(fleet, t, plan):
     return out
 
 
-def bolt_split_check(fleet, t, bolt):
+def bolt_split_check(fleet, t, bolt, work=None):
     """What a merge into the bolt reads of a split (plan.19), on the team's host in the kit's main checkout: where the
     bolt lives (BOLT_LIVES), and when the host's own tip names a remote for it (kit.split_remote), that remote's copy
-    after one fetch (BOLT_SPLIT); (remote, kit.bolt_split's facts), or None when there is nothing to read, so a bolt
-    whose tip names no remote fetches nothing."""
+    after one fetch (BOLT_SPLIT), and given the ref of the work to merge, whether it holds the host's tip; (remote,
+    kit.bolt_split's facts), or None when there is nothing to read, so a bolt whose tip names no remote fetches
+    nothing."""
     remote = kit.split_remote(host_run(fleet, t["machine"], BOLT_LIVES, t["kit"]["main"], bolt, kit.DECLARATION), bolt)
     if not remote:
         return None
-    return remote, kit.bolt_split(host_run(fleet, t["machine"], BOLT_SPLIT, t["kit"]["main"], bolt, remote), bolt)
+    return remote, kit.bolt_split(host_run(fleet, t["machine"], BOLT_SPLIT, t["kit"]["main"], bolt, remote,
+                                           *([work] if work else [])), bolt)
 
 
 def bolt_upstream(fleet, t, bolt):
@@ -6254,17 +6259,22 @@ def split_refusal(kind, name, bolt, host, remote, f):
     """Why a unit's, chore's or fix's merge is refused while its bolt is split (plan.19), or None: the host's tip names
     remote for the bolt and that remote's bolt/<bolt> lacks it (f, kit.bolt_split), so sluice would form the merge
     there and drop what the host holds; the landing, whose push makes the two one, is the way on. A copy that holds the
-    host's tip, or none at all, which sluice refuses itself, lets it through; one crew could not read refuses (read.1)."""
+    host's tip, or none at all, which sluice refuses itself, lets it through, and so does a fix whose head holds the
+    host's tip (carried), having taken the host copy's merges in, which sluice's merge on the remote's copy then drops
+    none of: the way on of a bolt whose two copies have diverged (landing_head). One crew could not read refuses
+    (read.1)."""
     if f["read"]:
         return f"crew can't tell whether bolt/{bolt} is split, so {kind} {name}'s merge waits: {f['read']}"
-    if f["there"] == "-" or f["held"] == "yes":
+    if f["there"] == "-" or f["held"] == "yes" or f.get("carried") == "yes":
         return None
     n = f["merges"]
     lacks = f"{host}'s tip" if not n else f"{n} merge{'' if n == 1 else 's'} {host} holds"
+    carry = (f"; a fix that takes {host}'s merges in first (git merge bolt/{bolt} in its place) carries them, and merges"
+             if kind == "fix" else "")
     return (f"bolt/{bolt} is split: its tip on {host}, {f['local'][:7]}, names {remote} for it, so sluice would form "
             f"{kind} {name}'s merge on {remote}'s bolt/{bolt} at {f['there'][:7]}, which lacks {lacks}, and drop "
             f"{'them' if n > 1 else 'it'}. The bolt takes no merge until it lands: its landing (crew bolt submit {bolt}, "
-            f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one")
+            f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one{carry}")
 
 
 def landing_head(bolt, host, f):
@@ -6277,7 +6287,12 @@ def landing_head(bolt, host, f):
     alone when it is level. A host's copy ahead of GitHub's is the split a merge into the bolt is refused for, whose
     way on is this landing: its tip is submitted, nothing levelled, and its push moves GitHub's branch forward,
     dropping nothing. Two copies that have diverged submit nothing, naming both commits and what each lacks, since
-    either submission would drop the other's merges. level is whether SUBMIT writes the host's copy first."""
+    either submission would drop the other's merges, and the way on: the bolt is its branch on GitHub, so the host
+    copy's merges are work only a fix carries, its place cut from GitHub's head and taking them in, merged into the
+    bolt through sluice as any fix (split_refusal lets it through), after which the landing submits GitHub's head and
+    levels the host's copy to it. level is whether SUBMIT writes the host's copy first, the one write the landing
+    makes, the copy set to GitHub's own value, which changes nothing GitHub holds and is no second writer (record
+    0032)."""
     def merges(n):
         return f"{n} merge{'' if n == 1 else 's'}"
     if f["read"]:
@@ -6299,7 +6314,9 @@ def landing_head(bolt, host, f):
                           "lacks; the landing submits that tip, its push moving GitHub's branch forward"))
     return (f"bolt/{bolt} was not submitted: its two copies have diverged: {host}'s {own[:7]} holds {merges(f['lacks'])} "
             f"GitHub's {there[:7]} lacks, and GitHub's holds {merges(f['beyond'])} {host}'s lacks, so either submission "
-            "would drop merges")
+            f"would drop merges. The bolt is its branch on GitHub, so the way on is its team's: its conductor starts a fix "
+            f"(crew fix), whose place is cut from GitHub's head, that takes {host}'s merges in (git merge bolt/{bolt}) and "
+            f"merges into the bolt through sluice; the landing then submits GitHub's head, levelling {host}'s copy to it")
 
 
 def chore_check(fleet, a, label, plan, c):
@@ -6704,7 +6721,7 @@ def fix_cmd(fleet, a):
         elif a.mode == "merge":
             why = own_place(place, *place_branch(fleet, t, place), fix, bolt)
             not why or fail(why)
-            split = bolt_split_check(fleet, t, bolt)
+            split = bolt_split_check(fleet, t, bolt, f"refs/heads/{fix}")
             why = split and split_refusal("fix", a.name, bolt, t["machine"], *split)
             not why or fail(why)
             merge_holds(fleet, t, bolt, f"{fix}'s merge into bolt/{bolt}")
