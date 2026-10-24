@@ -10,7 +10,10 @@
 # $CREW_TEST_ROOT/sluice-preview-holds exists, the stack taking its time, then `up`, or `failed` with its command's
 # output while $CREW_TEST_ROOT/sluice-preview-fails exists, --wait then exiting 1. `sluice previews --json` lists the
 # records; `sluice release <name or revision> --json` removes one, {"preview", "released"}, exiting 0 also when there
-# was none. `sluice submit main --check --head bolt/<bolt> --json`, a bolt's forecast against main, prints
+# was none. `sluice release --worktree <path> --json` releases a worktree as sluice 0.36.4 does, answering
+# {"released": false, "worktree": <path>}, nothing to release, exiting 0; or, while $CREW_TEST_ROOT/sluice-release-fails
+# exists, its release command failed, sluice's error naming the place, exiting 3 (tests/py/sluice-0.36.4/). `sluice
+# submit main --check --head bolt/<bolt> --json`, a bolt's forecast against main, prints
 # $CREW_TEST_ROOT/sluice-check-<bolt, its / as ->.json while it exists, exiting 2 when its conflict is not null and 0
 # when it is, as sluice's forecast of a branch no worktree holds does (its ADR 0039); without that file it refuses
 # `--head` on standard error, exiting 64, as sluice 0.32.0, which has no such forecast, does. As sluice 0.36.4 does, it
@@ -214,6 +217,13 @@ say({"branch": branch, "deleted": tip, "into": other})
     if [[ -e ${CREW_TEST_ROOT:?}/sluice-status-$id.json ]]; then cat "$CREW_TEST_ROOT/sluice-status-$id.json"; exit 0; fi
     printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "$id"
     exit 1
+    ;;
+  release\ --worktree\ *\ --json)
+    if [[ -e ${CREW_TEST_ROOT:?}/sluice-release-fails ]]; then
+      jq -nc --arg m "the release command of $3 ended exit status: 1: tearing down" '{error: {kind: "internal", message: $m, next: []}}'
+      exit 3
+    fi
+    jq -nc --arg path "$3" '{released: false, worktree: $path}'
     ;;
   "previews --json" | release\ *\ --json | preview\ *\ --json)
     : "${CREW_TEST_ROOT:?}"

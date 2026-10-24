@@ -8,9 +8,9 @@
 #                                      slot with the unit or fix it holds and its stage, a unit carried onto its
 #                                      bolt inside another's merge named so, with its merge owed. It first frees each slot
 #                                      whose work has merged, been dropped or left the team's bolt, once its agent
-#                                      is not working, and removes, through the kit's wt remove, the worktrees in
-#                                      the team's kit checkout whose work is over, naming one kept for uncommitted
-#                                      changes or a remove hook
+#                                      is not working, and removes, let go by sluice and then through the kit's
+#                                      wt remove, the worktrees in the team's kit checkout whose work is over, naming
+#                                      one kept for uncommitted changes, sluice's let-go or a remove hook
 #   crew up      <team>                open the team's workspace and start its conductor and ops, each greeted: ops
 #                                      told who it is, what its team holds and to wait to be told; the conductor told
 #                                      to carry on with its bolt, its greeting (also on rebuild, restart and revive)
@@ -121,7 +121,9 @@
 #                                      in a kit whose .config/sluice.toml on origin/main names no checks or no remote
 #                                      for its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
 #                                      words when it makes none, and while a bolt the team holds is not proven (every
-#                                      unit and chore merged, sluice green at its head) or it holds two.
+#                                      unit and chore merged, sluice green at its head) or it holds two; a branch
+#                                      already on GitHub at main's tip with no commit of its own, as a give that
+#                                      failed after sluice made it leaves it, is taken and the give goes on.
 #                                      land and drop have sluice delete it (sluice branch delete) once its worktrees
 #                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
 #                                      while main lacks its tip, and deleted once main holds it. A bolt made before

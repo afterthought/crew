@@ -1004,7 +1004,9 @@ class Stages:
     marks amended whose construct has not committed again, then verify, code, planned, construct, then ready or waiting
     by whether its After is met (after_met); a chore's is chore_stage's, then ready or waiting the same way. A unit
     whose change its bolt holds open, carried there inside another unit's merge, is marked carried and reads its stage
-    from its place, or with none from the change on the bolt, its merge owed (carried_place). Work with no bolt is
+    from its place, or with none from the change on the bolt, its merge owed (carried_place). A place at its path that
+    tracks another bolt, one it has left, kept from a drop or a move, is not its place: its stage is read as having none,
+    and that place is marked left, which the tidy removes and no stage starts over (left_refusal). Work with no bolt is
     queued, and work whose host does not answer, or whose bolt crew can't tell where to read, is unknown, unless main
     holds it landed."""
 
@@ -1043,6 +1045,8 @@ class Stages:
                 res["why"] = why
                 return res
             pl = k.get("chore_places", {}).get(name) if is_chore(u) else k["places"].get(name)
+            if pl and pl.get("bolt") and pl["bolt"] != b:  # a place of a bolt it has left is not its place (left_refusal)
+                res["left"], pl = pl, None
             res["worktree"], res["head"], res["place"] = (pl["path"], pl.get("head"), pl) if pl else (None, None, None)
             unread = k["bolts"].get(b, {}).get("error")  # a bolt crew can't tell where to read (gather.bolt_read)
             if unread and name not in (k.get("chores", []) if is_chore(u) else k["main"]):
@@ -1050,8 +1054,8 @@ class Stages:
                 return res
             if is_chore(u):
                 stage, why = chore_stage(name, b, k, pl)
-                if stage:
-                    res.update(stage=stage, **({"why": why} if why else {}))
+                if stage:  # unknown only for its place, so a drop or a move is not refused for it (place_unread)
+                    res.update(stage=stage, **({"why": why, "place_unread": True} if why else {}))
                     return res
             elif name in k["main"]:
                 res["stage"] = "landed"
@@ -1303,6 +1307,20 @@ fi
 exit $rc
 """
 
+# What a give reads of a bolt's branch sluice refused to make (plan.19, made_said), in the kit's main checkout on the
+# team's host: OWN, the commit of the host's own bolt/<bolt>, or -; then THERE and MAIN, the commits of bolt/<bolt> and
+# of main on the bolt's remote, by one ls-remote, each - when the remote lacks it, or READ, git's words on one line,
+# when the remote could not be asked (kit.bolt_found).
+BOLT_FOUND = r"""cd "$1" || exit 1
+bolt=$2 remote=$3
+echo "OWN=$(git rev-parse --verify -q "refs/heads/bolt/$bolt^{commit}" || echo -)"
+if ! heads=$(git ls-remote "$remote" "refs/heads/bolt/$bolt" refs/heads/main 2>&1); then
+  echo "READ=$(printf '%s' "$heads" | tr '\n' ' ')"; exit 0
+fi
+at() { printf '%s\n' "$heads" | awk -v r="$1" '$2 == r {s = $1} END {print (s != "" ? s : "-")}'; }
+echo "THERE=$(at "refs/heads/bolt/$bolt")"; echo "MAIN=$(at refs/heads/main)"
+"""
+
 # A bolt's branch deleted by sluice wherever the policy at its tip keeps it (plan.19), once its tip is in main, run in
 # the kit's main checkout: where it lives first (BOLT_AT), then RC, sluice's exit, and SAID, its document, base64.
 BOLT_DELETE = r"""main=$1 bolt=$2 file=$3
@@ -1409,8 +1427,10 @@ def bolt_give(fleet, a):
     agents again: at once for a team that held no bolt, and at their next stop beside a bolt that waits to land
     (team_handed); when the kit's policy at its main now names no checks or no remote for its bolt branches, since a
     bolt merges and lands only through sluice and lives on GitHub (teams.5, give_check); when the host's sluice has no
-    `branch create`; and in sluice's words when it makes no branch. A plan write refused after sluice made the branch
-    has sluice delete it again (ungiven_said)."""
+    `branch create`; and in sluice's words when it makes no branch, but for a branch already on its remote at main's
+    tip with no commit of its own, as a give that failed after sluice made it leaves it, which the give takes and goes
+    on with (made_said). A plan write refused after sluice made the branch, or the give took it, has sluice delete it
+    again (ungiven_said)."""
     t = crew.team_of(fleet, a.team)
     label, kits = t["label"], [k["name"] for k in crew.kits_of(t)]
     CONTEXT["label"] = label
@@ -1443,7 +1463,17 @@ def bolt_give(fleet, a):
     READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.strip(), file=sys.stderr)
-    made = made_said(chosen, kit_name, host, r.stdout, r.returncode)
+    found = None
+    if r.returncode == 2:
+        # sluice refused: a branch a give that did not finish left at main is taken as it stands (made_said).
+        try:
+            found = kit.bolt_found(host_run(fleet, host, BOLT_FOUND, main, chosen, remote), chosen)
+        except Refusal as e:
+            found = {"read": str(e)}
+    made, adopted = made_said(chosen, kit_name, host, r.stdout, r.returncode, found, remote)
+    if adopted and found["own"]:
+        m = crew.on_machine(fleet, host, ["git", "-C", main, "config", f"branch.bolt/{chosen}.crew", "given"])
+        m.returncode == 0 or print(f"git could not mark bolt/{chosen} as crew's", file=sys.stderr)
 
     def change(w):
         # The kit's proof was read only for the bolts held then.
@@ -1465,7 +1495,7 @@ def bolt_give(fleet, a):
         READ.drop_kit(host, main)
         fail(ungiven_said(chosen, str(e), r.stdout, r.returncode))
     b = seen["bolt"]
-    print(given_said(t["name"], b, kit_name, remote, made, host))
+    print(given_said(t["name"], b, kit_name, remote, made, host, adopted))
     record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
                 eid=CONTEXT["eid"])
     up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
@@ -1501,18 +1531,42 @@ def give_check(kit_name, where, ref, text, bolt, version, host):
     return remote
 
 
-def made_said(bolt, kit_name, host, out, code):
-    """The commit sluice made a bolt's branch at, from what BOLT_CREATE printed (kit.branch_said); refused in sluice's
-    words when it made none, as when the branch is already there, the plan unchanged (plan.19)."""
+def made_said(bolt, kit_name, host, out, code, found=None, remote="origin"):
+    """The commit a give's bolt/<bolt> stands at, and whether crew took it as it found it rather than sluice made it
+    (plan.19), from what BOLT_CREATE printed (out, code; kit.branch_said) and, when sluice refused, what BOLT_FOUND read
+    of the branch (found, kit.bolt_found; None when crew read nothing): (the commit sluice made it at, False); or (the
+    commit, True) for a branch on its remote at its main's tip with no commit of its own, the host's own copy at that
+    commit or none, as a give that failed after sluice made the branch leaves it, so the give run again goes on: such
+    a branch is what sluice's create would make now and holds nothing for crew to take over (read.4). Else refused in
+    sluice's words, the plan unchanged, naming the branch and where it stands when it is not such a branch."""
     made, why = kit.branch_said(out, code)
-    return made or fail(f"sluice did not make bolt/{bolt} for {kit_name} on {host}: {why}")
+    if made:
+        return made, False
+    said = f"sluice did not make bolt/{bolt} for {kit_name} on {host}: {why}"
+    f = found or {}
+    not f.get("read") or fail(f"{said}; and crew could not read bolt/{bolt} on {remote}: {f['read']}")
+    there, main, own = f.get("there"), f.get("main"), f.get("own")
+    if there and there == main and own in (None, there):
+        return there, True
+    if there and there != main:
+        fail(f"{said}; bolt/{bolt} on {remote} is at {there[:7]} and {remote}'s main at {main[:7] if main else 'nothing'}, "
+             "so it is no branch a give left empty at main, and crew gives no bolt onto it")
+    if there:
+        fail(f"{said}; {host}'s own bolt/{bolt} is at {own[:7]}, not at {remote}'s {there[:7]}, and crew gives no bolt "
+             "onto it")
+    if own:
+        fail(f"{said}; {host}'s own bolt/{bolt} is at {own[:7]} and {remote} has none, and crew gives no bolt onto it")
+    fail(said)
 
 
-def given_said(team, bolt, kit_name, remote, made, host):
+def given_said(team, bolt, kit_name, remote, made, host, adopted=False):
     """What a give says once the plan gives the bolt (plan.19): where sluice made its branch, on GitHub by the kit's
-    remote, from main at the commit it made it at, and the team's host that builds it."""
-    return (f"{team} holds {bolt}: sluice made bolt/{bolt} on GitHub ({remote}) from {kit_name}'s main at {made[:7]}, "
-            f"built on {host} and merged into only through sluice")
+    remote, from main at the commit it made it at, or that crew took the branch an earlier give left there at main
+    (adopted, made_said), and the team's host that builds it."""
+    how = (f"crew took bolt/{bolt}, which sluice made on GitHub ({remote}) for a give that did not finish, at "
+           f"{kit_name}'s main {made[:7]}" if adopted else
+           f"sluice made bolt/{bolt} on GitHub ({remote}) from {kit_name}'s main at {made[:7]}")
+    return f"{team} holds {bolt}: {how}, built on {host} and merged into only through sluice"
 
 
 def ungiven_said(bolt, why, out, code):
@@ -4044,9 +4098,11 @@ def op_unit_move(ctx, a):
     ahead = unblocking(ctx, plan, label, a, to) if getattr(a, "unblocks", None) else None
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"{k} {a.unit} has merged into {src}, so it can't move")
-    s["stage"] != "unknown" or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
+    s["stage"] != "unknown" or s.get("place_unread") or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
     prepare = None
-    if s["worktree"]:
+    # A place that tracks a bolt crew cannot read is not rebased: it is left on the bolt it tracks, which the work has
+    # then left, so the tidy removes it and its next stage cuts its place from bolt/<to> (left_refusal).
+    if s["worktree"] and not s.get("place_unread"):
         to or fail(f"{k} {a.unit} has a worktree at {s['worktree']}, and a queued {k} has none")
         ft, tt = bolt_team(ctx.fleet, plan.bolt(src)), bolt_team(ctx.fleet, plan.bolt(to))
         tt or fail(f"bolt {to} is held by no team, so it has no branch to rebase {a.unit} onto")
@@ -4091,7 +4147,8 @@ def op_unit_drop(ctx, a):
     k = a.cmd
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"{k} {a.unit} has merged into its bolt, so it can't be dropped")
-    s["stage"] != "unknown" or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
+    # A stage unknown only for its place is not merged: the drop goes, and the tidy after it removes that place.
+    s["stage"] != "unknown" or s.get("place_unread") or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
     u0 = plan.item(a.unit)
     bolt = u0.get("Bolt")
     team = bolt_team(ctx.fleet, plan.bolt(bolt)) if bolt else None
@@ -6062,6 +6119,8 @@ def run_check(fleet, a):
     s = st_all.of(a.unit)
     st, place, mark = s["stage"], f"{t['kit']['dir']}/places/{a.unit}", u.get("Amended")
     st != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
+    why = left_refusal("unit", a.unit, bolt, s.get("left"))
+    not why or fail(why)
     amended_at = entry = ""
     after = {d: st_all.of(d)["stage"] for d in u.all("After")}
     why = stage_refusal(a.unit, bolt, a.stage, st, mark, after, role(fleet, os.environ.get("CREW_AGENT")), t["name"],
@@ -6315,6 +6374,8 @@ def chore_check(fleet, a, label, plan, c):
     s = st_all.of(a.unit)
     st, place = s["stage"], f"{t['kit']['dir']}/places/chore-{a.unit}"
     st != "unknown" or fail(f"cannot tell chore {a.unit}'s stage: {s.get('why')}")
+    why = left_refusal("chore", a.unit, bolt, s.get("left"))
+    not why or fail(why)
     after = {d: (st_all.of(d)["kind"], st_all.of(d)["stage"]) for d in c.all("After")}
     why = chore_refusal(a.unit, bolt, a.stage, st, after, a.stage == "merge" and st == "verify" and verified(label, a.unit))
     not why or fail(why)
@@ -6342,6 +6403,19 @@ def chore_check(fleet, a, label, plan, c):
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENTRY="",
                 FORECAST="", TOOK=took)
+
+
+def left_refusal(kind, name, bolt, left):
+    """Why no stage of a unit or chore starts while a place it has left stands at its path (left, as Stages.of marks a
+    place tracking another bolt, kept from a drop or a move), or None: its stage cuts its place from bolt/<bolt>
+    (make_place), never builds on that one, which the team's read before the stage removes when it is clean, its branch
+    kept and built on when it holds work of its own (tidy_over, plan.10, record 0003); one the read kept, saying why, or
+    left for a slot that holds it, waits for a hand."""
+    if not left:
+        return None
+    return (f"{kind} {name}'s place {left['path']} tracks bolt/{left['bolt']}, which it has left for bolt/{bolt}, and still "
+            f"stands: crew's tidy removes it only when it is clean, unlocked and no slot or run holds it, and once it is gone "
+            f"{name}'s stage cuts its place from bolt/{bolt}")
 
 
 def chore_refusal(name, bolt, stage, st, after, delivered_verify):
@@ -6853,10 +6927,13 @@ def tidy(fleet, a):
     removed with its branch, saying the commit the branch was at, a unit's, chore's or fix's branch kept, named and
     recorded instead when git cherry finds work on it its bolt, or main once the bolt has landed or is gone, lacks
     (branch_gone, plan.10); or kept and named, with its branch, while it is locked or has uncommitted changes. The
-    removal goes through the kit's own `wt remove`, run from the kit's main checkout and leaving the branch to crew,
-    so the kit's remove hooks run; one wt refuses, a hook having failed or
-    waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is kept
-    and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
+    removal first releases the place through sluice, `sluice release --worktree <place>`, which runs the kit's policy's
+    release command, ends what its runs left running and frees its ports, so what sluice stood up for it goes too; one
+    sluice does not release, its release command having failed, is kept and named with its branch in sluice's words,
+    and the next read tries it again (release_kept, plan.9). Then it goes through the kit's own `wt remove`, run from
+    the kit's main checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having
+    failed or waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is
+    kept and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
     alone, the branch is kept and said. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
     detached there, a bolt given before record 0026, or directly in <kit>/places/ on unit/<its folder>, on
     chore/<name> in chore-<name>, on bolt/<bolt> in land-<bolt>, or on a fix/ branch; nothing else is touched. While its
@@ -6893,8 +6970,8 @@ def tidy(fleet, a):
         print(unread_plans(errors))
         return
     bolts = {b.name() for *_, p in found for b in p.bolts() if b.get("Repo") == kit}
-    units = {u.name() for *_, p in found for u in p.units() if u.get("Repo") == kit}
-    chores = {u.name() for *_, p in found for u in p.chores() if u.get("Repo") == kit}
+    units = {u.name(): u.get("Bolt") for *_, p in found for u in p.units() if u.get("Repo") == kit}
+    chores = {u.name(): u.get("Bolt") for *_, p in found for u in p.chores() if u.get("Repo") == kit}
     now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as Stages reads it (plan.18)
     ups, on_main = gather.upstreams(main), set(gather.changes(main, now))
     dropped, marks = fixes_dropped(main), bolt_marks(main)
@@ -6953,6 +7030,11 @@ def tidy(fleet, a):
             print(f"{path} is kept{held_too}: {why}")
             continue
         kept = f"{path} is kept{held_too}: {over}, and "
+        # sluice holds the release to the time limit its policy gives a run, as the kit's remove hooks run to their end
+        unreleased = release_kept(*sluice_read(main, "release", "--worktree", path, timeout=None))
+        if unreleased:
+            print(kept + unreleased)
+            continue
         try:  # the clean check above is the guard, so --force; the branch is crew's, so --no-delete-branch
             r = subprocess.run(["wt", "-C", main, "remove", path, "--foreground", "--no-delete-branch", "--force", "--format", "json"],
                                capture_output=True, text=True, stdin=subprocess.DEVNULL,
@@ -7283,11 +7365,13 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
     in <kit>/places/ on unit/<its folder>, on chore/<name> in chore-<name>, on bolt/<bolt> in land-<bolt>, the landing's
     place (bolt_submit), or on a fix/ branch made from a bolt (up, its upstream, bolt/<bolt> or origin/bolt/<bolt>:
     gather.bolt_ref). A bolt's is over once no plan has the bolt (bolts), and so is its landing's, which the landing
-    ends (plan.19); a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)) or no plan
-    has it (units), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while the
-    bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
-    it (chores); a fix's once it has landed on main or merged into its bolt (fix_stage, on its branch's facts,
-    fix_of(branch)), its conductor dropped it (its branch in dropped, record 0028) or no plan has its bolt."""
+    ends (plan.19); a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)), no plan
+    has it (units, each unit's bolt by its name, None for one queued) or it has left the bolt its place tracks
+    (left_over), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while the bolt
+    holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)), no plan has it
+    (chores, each chore's bolt by its name) or it has left that bolt; a fix's once it has landed on main or merged into
+    its bolt (fix_stage, on its branch's facts, fix_of(branch)), its conductor dropped it (its branch in dropped, record
+    0028) or no plan has its bolt."""
     folder, bolt = os.path.basename(path), gather.bolt_of(up)
     if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch in (f"bolt/{folder}", ""):
         return None, None if folder in bolts else f"bolt {folder} is in no plan"
@@ -7297,11 +7381,11 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
         name = branch[6:]
         return name, (f"chore {name} has landed on main" if name in chores_of("main") else
                       f"chore {name} has merged into bolt/{bolt}" if bolt and name in chores_of(f"bolt/{bolt}") else
-                      None if name in chores else f"chore {name} is in no plan")
+                      left_over("chore", name, bolt, chores[name]) if name in chores else f"chore {name} is in no plan")
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch == f"unit/{folder}":
         return folder, (f"unit {folder} has landed on main" if folder in on_main else
                         f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in archived_of(bolt) else
-                        None if folder in units else f"unit {folder} is in no plan")
+                        left_over("unit", folder, bolt, units[folder]) if folder in units else f"unit {folder} is in no plan")
     bolt = gather.bolt_ref(up)[0]  # a fix's, from either form of the bolt it tracks
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("fix/") and bolt:
         stage = fix_stage(fix_of(branch), bolt in bolts)
@@ -7310,6 +7394,16 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
                         f"{branch} was dropped" if branch in dropped else
                         None if bolt in bolts else f"bolt {bolt}, which {branch} was made from, is in no plan")
     return None
+
+
+def left_over(kind, name, bolt, now):
+    """Why a unit's or chore's place is over once the plan holds it in another bolt than the one its place tracks
+    (bolt), or in the queue (now, None there), as a slot's work is once it has left its team's bolt (teams.1): its work
+    for that bolt is over, and a stage of its name cuts its place from the bolt it is in now (left_refusal). None while
+    it is in that bolt, or when its place tracks no bolt crew can name, which it never removes on a guess (read.1)."""
+    if not bolt or bolt == now:
+        return None
+    return f"{kind} {name} has left bolt/{bolt} for " + (f"bolt/{now}" if now else "the queue")
 
 
 def unread_plans(errors):
@@ -7365,6 +7459,20 @@ def run_kept(run, unread):
     what = f"a run in it, `{command}`" if isinstance(command, str) and command else "a run of its checks in it"
     since = f", started {run['started']}" if isinstance(run.get("started"), str) else ""
     return f"sluice's overview lists {what}{since}"
+
+
+def release_kept(doc, unread):
+    """Why the tidy keeps a worktree it would remove once sluice was asked to release it, `sluice release --worktree
+    <place> --json`, which runs the kit's policy's release command, ends what the place's runs left running and frees
+    its ports, the worktree staying (plan.9; sluice 0.36.4, `exec::release`): sluice refused or failed it, a release
+    command that failed among them, in its words (unread, sluice_read's), and keeps the place to release at the next
+    read; or it answered with no document sluice 0.36.4 prints, {"released", "worktree"} (read.2). None once it
+    answered, whether the place held anything to release or not, so the kit's worktree tool may remove it."""
+    if unread:
+        return f"sluice's release of it failed: {unread}"
+    if not (isinstance(doc, dict) and isinstance(doc.get("released"), bool) and isinstance(doc.get("worktree"), str)):
+        return "sluice's release of it printed no document crew reads"
+    return None
 
 
 def wt_refused(code, stderr, host, main):
@@ -8775,14 +8883,15 @@ def sluice_said(o, agent, branch, r):
     return f"{o.phrase()}: sluice says of {agent}'s submission to {branch}: {sluice_words(r)}; the wait goes on until the stage ends"
 
 
-def sluice_read(main, *args):
-    """`sluice <args> --json` run in a kit on this host: (the document, None), or (None, why it can't be read)."""
+def sluice_read(main, *args, timeout=POLL):
+    """`sluice <args> --json` run in a kit on this host: (the document, None), or (None, why it can't be read). It waits
+    timeout seconds for sluice's answer, or for as long as sluice takes when None."""
     try:
-        r = subprocess.run(["sluice", *args, "--json"], cwd=main, capture_output=True, text=True, timeout=POLL)
+        r = subprocess.run(["sluice", *args, "--json"], cwd=main, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
         return None, "this host has no sluice on its path"
     except subprocess.TimeoutExpired:
-        return None, f"it did not answer within {POLL} seconds"
+        return None, f"it did not answer within {timeout} seconds"
     except OSError as e:
         return None, str(e)
     if r.returncode != 0:  # sluice says why as {"error": {"message": ...}} under --json, clap on standard error
@@ -12463,7 +12572,9 @@ def end_session(label, key, unit=None):
     gathered for a proposal's card stay, and with them their folder: they go only with the approval or the decline.
     Returns what it did, in words, and whether it sent SIGTERM. crew's card hook runs it when a crew agent closes or
     withdraws a keyed card, the act when crew closes or withdraws one of its own (row_card_close), and crew card sweep
-    for each session the rail judges dead. A session that ended as the user sent it is forgotten, said so."""
+    for each session the rail judges dead. A session that ended as the user sent it is forgotten, said so. A folder or
+    file of the key's that another of these ends swept first, while this one read plannotator's list, is swept as
+    empty, never raised, so a wait whose card's close ends the session returns."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
     d = CARDS / label / key / unit if unit else CARDS / label / key
     key = f"{key} {unit}" if unit else key
@@ -12481,13 +12592,27 @@ def end_session(label, key, unit=None):
     import shutil
     if s and listed is None:
         return end_said(key, s, None, why), False
-    for f in d.iterdir():
+    try:
+        left = list(d.iterdir())
+    except FileNotFoundError:
+        left = []  # another end swept it first
+    for f in left:
         if f.name != "answers.json":
-            shutil.rmtree(f) if f.is_dir() and not f.is_symlink() else f.unlink()
+            try:
+                shutil.rmtree(f) if f.is_dir() and not f.is_symlink() else f.unlink()
+            except FileNotFoundError:
+                pass  # another end swept it first
     for p in [d, *d.parents]:
-        if p == CARDS / label or not p.is_dir() or any(p.iterdir()):
+        if p == CARDS / label:
             break
-        p.rmdir()
+        try:
+            if any(p.iterdir()):
+                break
+            p.rmdir()
+        except FileNotFoundError:
+            continue  # another end swept it first: swept as empty
+        except NotADirectoryError:
+            break
     if s and decided and decided[0] != "dismissed" and not serving(listed, s):
         return f"{key}'s session had ended as the user sent it, and {key} is forgotten", False
     if not s or not serving(listed, s):

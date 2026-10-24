@@ -725,6 +725,61 @@ def test_the_rest_of_the_environment_passes_through_and_the_one_given_is_not_cha
     assert environ == {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}
 
 
+# --------------------------------------------------------------------------------- a session's end, swept
+# plan.end_session, and crew card wait on a batch whose card's close ends its session: the key's folder swept whether
+# or not the partition's cards folder for it exists, a folder another end swept first, as the card hook's crew card end
+# or the rail's sweep may while this one reads plannotator's list, swept as empty and never raised.
+
+class TestSessionEnd:
+    S = {"pid": 42, "document": "/c/00-summary.md", "url": "http://chuck-herdr-alpha.ts.swancloud.net:19432",
+         "started": "2026-10-23T10:00:00Z"}
+
+    def recorded(self, monkeypatch, tmp_path, key):
+        """The key's session recorded under the partition's cards folder, and another end sweeping its folder while
+        this one reads plannotator's list, which still lists the session, whose pid has gone by its signal."""
+        d = tmp_path / "wldn" / key
+        d.mkdir(parents=True)
+        (d / "session.json").write_text(json.dumps(self.S))
+        (tmp_path / "wldn" / "proposal").mkdir()  # another key's folder, so the partition's stays
+
+        def listed():
+            for f in d.iterdir():
+                f.unlink()
+            d.rmdir()
+            return {42: {"target": self.S["document"]}}, None
+
+        def kill(pid, sig):
+            raise ProcessLookupError(pid)
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(plan, "plannotator_sessions", listed)
+        monkeypatch.setattr(plan.os, "kill", kill)
+        return d
+
+    def test_a_folder_swept_by_another_end_meanwhile_is_swept_as_empty_and_its_end_said(self, monkeypatch, tmp_path):
+        d = self.recorded(monkeypatch, tmp_path, "batch/3")
+        assert plan.end_session("wldn", "batch/3") == ("batch/3's session had already ended, and batch/3 is forgotten", False)
+        assert not d.parent.exists() and (tmp_path / "wldn" / "proposal").is_dir()
+
+    def test_a_key_with_no_folder_ends_nothing_and_makes_none(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        assert plan.end_session("wldn", "proposal/9") == ("no session was running for proposal/9", False)
+        assert not (tmp_path / "wldn").exists()
+
+    def test_a_batch_wait_returns_once_its_card_is_closed_and_its_session_ended_though_another_end_swept_its_folder(
+            self, monkeypatch, tmp_path, capsys):
+        d = self.recorded(monkeypatch, tmp_path, "batch/3")
+        sent = {"status": "answered", "turn": "agent", "version": 2, "answer": {"note": {"text": "Read."}}}
+        acts = Acts({"get_request": (sent, None)}, [post("batch/3", "wldn-planner", "req_b3", On=["batch/3"])])
+        acts.end = lambda label, key: plan.end_session(label, key)[0]
+        fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "teams": {}, "hosts": {}}
+        plan.batch_wait(fleet, "wldn", "batch/3", d, acts)
+        assert [e["Act"] for e in acts.emitted] == ["card.close"]
+        assert capsys.readouterr().out.splitlines() == [
+            "batch/3: sent back on its card, with a note:", "Read.", "card batch/3: req_b3 closed",
+            "batch/3's session had already ended, and batch/3 is forgotten"]
+        assert not d.parent.exists()
+
+
 # ------------------------------------------------------------------------------- crew card wait on a bolt's row
 
 class TestLandWait:
