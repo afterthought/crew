@@ -2,7 +2,7 @@
 
 ## 1. What crew reads of main
 
-- [ ] 1.1 Each kit's read names the revision of main it read at, `main_at`, from the `rev-parse` it already makes (design, Decision 2; Task notes 1.1); passes `tests/contract/test_gather.py`, `tests/suite contract` ending with "0 failed".
+- [x] 1.1 Each kit's read names the revision of main it read at, `main_at`, from the `rev-parse` it already makes (design, Decision 2; Task notes 1.1); passes `tests/contract/test_gather.py`, `tests/suite contract` ending with "0 failed".
 - [ ] 1.2 The landings card's forecast hands back the revision of main it forecast against, or none when it could not fetch or read it (design, Decision 1; Task notes 1.2); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
 
 ## 2. A row forecast to conflict with main takes main first
