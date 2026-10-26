@@ -505,7 +505,7 @@ def test_two_proven_bolts_post_one_card_in_ops_name_with_two_boxes(monkeypatch, 
     assert acts.asked == [("y", "mac-studio"), ("z", "mac-studio")]  # w is swancloud's, no row of crew's card
     post = next(a for t, a in acts.calls if t == "post_request")
     assert (post["idempotencyKey"], post["session"]["label"], post["kind"], post["highStakes"]) == (
-        "land/crew", "swancloud-ops", "multi", True)
+        "land/crew@swancloud", "swancloud-ops", "multi", True)
     assert [o["label"] for o in post["options"]] == ["1. y", "2. z"]
     assert acts.emitted == [dict(Act="card.post", On=["kit/crew"], by="swancloud-ops", Card="req_k1", Key="land/crew",
                                  Heads="y@abc1234 z@abc1234")]

@@ -40,7 +40,7 @@ has "$out" "card deploy/mac-studio: req_stub-1 https://www.pendingyou.com/app/r/
 has "$out" "call get_request (requestId req_stub-1, name swancloud-ops)"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area create_area post_request "
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .approve.risk, .approve.reversible, .title]' <<<"$(py_arg post_request)")" \
-  '["deploy/mac-studio","swancloud-ops","approve","high",false,"Deploy main aaaaaaa to mac-studio"]'
+  '["deploy/mac-studio@swancloud","swancloud-ops","approve","high",false,"Deploy main aaaaaaa to mac-studio"]'
 eq "$(jq -c '[.artifacts[0].lang, .artifacts[0].title, .artifacts[0].lines[2]]' <<<"$(py_arg post_request)")" \
   '["markdown","What'"'"'s in it: swancloud-srv-v0.3.0","- deployer: crew reaches the boxes with the peer key (e5b8322)"]'
 eq "$(jq -c '.artifacts[1].lines' <<<"$(py_arg post_request)")" \
@@ -112,7 +112,7 @@ has "$out" "card deploy/mac-studio: req_stub-1 closed"
 eq "$(py_calls | cut -d' ' -f1 | head -3 | tr '\n' ' ')" "whoami get_request ack_answer "
 eq "$(jq -r .outcome <<<"$(py_arg ack_answer)")" "Deployed ${s2:0:7} to mac-studio: suite ok."
 eq "$(py_calls | grep -c '^post_request ')" "1"
-eq "$(jq -c '[.idempotencyKey, .title]' <<<"$(py_arg post_request)")" '["deploy/mac-studio:2","Deploy main ccccccc to mac-studio"]'
+eq "$(jq -c '[.idempotencyKey, .title]' <<<"$(py_arg post_request)")" '["deploy/mac-studio@swancloud:2","Deploy main ccccccc to mac-studio"]'
 rc=0; dep word mac-studio >/dev/null 2>&1 || rc=$?; eq "$rc" "1"
 has "$(runs)" 'Rows: [{"name":"deployer","state":"ok","detail":"","before":"warn","verdict":"better"}]'
 eq "$(runs | grep -c '^Phase: ')" "3"; eq "$(runs | grep '^Phase: ' | tr '\n' ' ')" "Phase: start Phase: step Phase: end "
@@ -126,7 +126,7 @@ has "$out" "card op/mac-studio/1: req_stub-"
 step1=$(grep -o 'card op/mac-studio/1: req_stub-[0-9]*' <<<"$out" | cut -d' ' -f3)
 deploy_card=$(runs | grep -B1 -A3 '^Key: deploy/mac-studio$' | grep '^Card: ' | tail -1 | cut -d' ' -f2)
 eq "$(jq -c '[.idempotencyKey, .kind, .intent, .follows, .action.where, .action.steps[0].command, .action.done]' <<<"$(py_arg post_request)")" \
-  "[\"op/mac-studio/1\",\"action\",\"do\",\"$deploy_card\",\"a terminal on mac-studio\",\"launchctl kickstart -k gui/501/herdr\",\"herdr answers herdr status.\"]"
+  "[\"op/mac-studio/1@swancloud\",\"action\",\"do\",\"$deploy_card\",\"a terminal on mac-studio\",\"launchctl kickstart -k gui/501/herdr\",\"herdr answers herdr status.\"]"
 expect_ok dep step mac-studio --to "$s2" --key restart-teams/1 --state handed --doer dispatcher --agent swancloud-dispatch-mac-studio --when quiet
 printf "Restart crew's teams.\n- why: It ends a stage mid-unit.\n" > "$T/held.txt"
 expect_ok dep step mac-studio --to "$s2" --key restart-crew/1 --state waiting --doer main-ops --agent swancloud-ops --when quiet --held --text "$T/held.txt"
@@ -164,7 +164,7 @@ has "$out" "card op/mac-studio/1: $step1 withdrawn"
 eq "$(jq -r .reason <<<"$(py_arg cancel_request)")" "Done."
 has "$out" "card op/mac-studio/3: req_stub-"
 eq "$(jq -c '[.idempotencyKey, .kind, .follows, .recommendedIds, [.options[].id], .options[1].consequence]' <<<"$(py_arg post_request)")" \
-  "[\"op/mac-studio/3\",\"choice\",\"$step1\",[\"quiet\"],[\"quiet\",\"now\",\"skip\"],\"It runs at once; no stage is working on mac-studio now\"]"
+  "[\"op/mac-studio/3@swancloud\",\"choice\",\"$step1\",[\"quiet\"],[\"quiet\",\"now\",\"skip\"],\"It runs at once; no stage is working on mac-studio now\"]"
 expect_ok dep steps mac-studio --json
 eq "$(jq -r '[.[] | "\(.key) \(.state)"] | join(", ")' <<<"$out")" "restart-teams/1 handed, restart-crew/1 waiting, restart-herdr/1 done"
 eq "$(jq -r '.[] | select(.key == "restart-herdr/1") | .note' <<<"$out")" "restarted at 10:02"

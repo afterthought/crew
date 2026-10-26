@@ -1121,7 +1121,7 @@ CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "mu
            "rationale", "urgency", "blocking")
 DEAD = "An older copy of this card was lost: dismiss it in the app."
 # The fewest characters Pending You takes in an idempotencyKey (post_request's schema, pendingyou 0.35.1), and what
-# fills a shorter key of crew's out to it: no row key and no revision holds it, so a filled key is no other row's.
+# fills a shorter key of crew's out to it: no row key, label or revision holds it, so a filled key is no other row's.
 KEY_LEAST, FILL = 8, "_"
 
 
@@ -1231,18 +1231,22 @@ def head_anew(entries, card, head):
     return None if asked == head else {"approved": asked or ""}
 
 
-def post_key(entries, key, by):
-    """The idempotency key crew posts its card under a row's key with, from the run record's entries: the row's key for
-    its first card, and for each card after one of `by`'s under it closed (answered and followed, declined, withdrawn or
-    lost), the key with that card's revision, <key>:<n>, since Pending You gives a key's card back as long as it keeps
-    it and takes one key per question. A card still open under the key keeps its own key, so posting it again gives it
-    back. A key shorter than Pending You takes, batch/7 or land/b1, is filled out to KEY_LEAST at its end with FILL,
-    batch/7_, the same on every post: its first part is still crew's (plan.crews_key), and a key long enough is sent as
-    it always was, so a card open under it is given back (batch 7's card on 2026-10-19, refused "idempotencyKey: Too
-    small: expected string to have >=8 characters")."""
+def post_key(entries, key, by, label):
+    """The idempotency key crew posts its card under a row's key with, from the partition's own run record's entries:
+    the row's key qualified by the partition's label, <key>@<label>, for its first card, and for each card after one of
+    `by`'s under it closed (answered and followed, declined, withdrawn or lost), that key with the card's revision,
+    <key>@<label>:<n>, since Pending You gives a key's card back as long as it keeps it and takes one key per question.
+    The label is in the key because every partition's main level posts under the host's one sign-in (record 0031 §6)
+    and a row's key is its partition's alone: madswan's batch 16 was given swancloud's batch 16 card, closed four days
+    before, when both were sent as batch/16 (briefs.16, 2026-10-26). The run record keeps the row's key, and the key's
+    first part is still crew's (plan.crews_key). A card still open under the key keeps its own key, so posting it again
+    gives it back. A key shorter than Pending You takes is filled out to KEY_LEAST at its end with FILL, the same on
+    every post (batch 7's card on 2026-10-19, refused "idempotencyKey: Too small: expected string to have >=8
+    characters")."""
     mine = [e for e in entries if e.get("Act") == "card.close" or (e.get("Key") == key and e.get("By") == by)]
     closed = {c["card"] for c in posted_cards(mine) if c["state"]}
-    return (f"{key}:{len(closed) + 1}" if closed else key).ljust(KEY_LEAST, FILL)
+    sent = f"{key}@{label}"
+    return (f"{sent}:{len(closed) + 1}" if closed else sent).ljust(KEY_LEAST, FILL)
 
 
 def posted_again(card):
