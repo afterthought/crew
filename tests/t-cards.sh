@@ -173,7 +173,7 @@ eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 eq "$(py_calls | sed -n 1p)" 'whoami {"name": "swb-1-conductor"}'
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .approve.risk, .approve.reversible, (.highStakes // "none"), .artifacts[0].lines]' <<<"$posted")" \
-  '["land/b1_","swb-1-conductor","approve","high",false,"none",["v1"]]'
+  '["land/b1@wldn","swb-1-conductor","approve","high",false,"none",["v1"]]'
 has "$(grep "agent prompt swb-1-conductor" "$CREW_TEST_LOG")" \
   "[crew] Your card land/b1 is up for the user: call get_request (requestId req_stub-5, name swb-1-conductor), to hear their answer."
 eq "$(entries card.post | jq -r 'select(.Key == "land/b1") | [(.On | join(" ")), .Card, .By] | join(" ")')" "bolt/b1 req_stub-5 swb-1-conductor"
@@ -215,7 +215,7 @@ call get_request (requestId req_stub-6, name wldn-design)"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .session.cwd, .kind, .approve.risk, .approve.reversible, .artifacts[0].lines[0]]' <<<"$posted")" \
-  "[\"record/switchboard-kit/0032\",\"wldn-design\",\"$k\",\"approve\",\"low\",true,\"# switchboard runs the workflows\"]"
+  "[\"record/switchboard-kit/0032@wldn\",\"wldn-design\",\"$k\",\"approve\",\"low\",true,\"# switchboard runs the workflows\"]"
 has "$(jq -r .summary <<<"$posted")" "Your own words, recorded as your decision: “no fleet”"
 eq "$(entries record.proposed | jq -r '[(.On | join(" ")), (.Commit | join(" ")), .By] | join(" ")')" \
   "record/switchboard-kit/0032 WilldanGroup/switchboard-kit@$(git -C "$k" rev-parse HEAD) wldn-design"
@@ -256,7 +256,7 @@ adr proposed "docs(adr): 0033 a fleet runs the workflows" 33
 : > "$CREW_TEST_LOG"
 design switchboard-kit 33 --proposed --alternatives "$T/alternatives.md" >/dev/null
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .kind, .recommendedIds, [.options[].id], .artifacts[0].lines[0]]')" \
-  '["record/switchboard-kit/0033","choice",["accept"],["loosen","accept","back"],"## Where your rules decided"]'
+  '["record/switchboard-kit/0033@wldn","choice",["accept"],["loosen","accept","back"],"## Where your rules decided"]'
 eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0033") | .Form')" "alternatives"
 eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0032") | .Form // "none"' | sort -u)" "none"
 ok "a record a rule decided is raised as one choice, loosen the rules as drafted, accept as ruled or send back, its alternatives on its face, its status recording that its card offered them"
@@ -294,7 +294,7 @@ HOST=mac-studio expect_ok crew events --push
 design switchboard-kit 34 --proposed >/dev/null
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
-eq "$(jq -r .idempotencyKey <<<"$posted")" "record/switchboard-kit/0034"
+eq "$(jq -r .idempotencyKey <<<"$posted")" "record/switchboard-kit/0034@wldn"
 [[ $(jq -r .summary <<<"$posted") == "An older copy of this card was lost: dismiss it in the app."* ]] ||
   fail "the summary does not open saying the older copy was lost: $posted"
 ok "crew record --proposed, run where its record's card is held on a host this one's sign-in can't reach, posts it saying the older copy was lost"
@@ -324,7 +324,7 @@ PY
 }
 : > "$CREW_TEST_LOG"
 eq "$(land post abc1500 | head -1)" "card land/b1: req_stub-9 https://www.pendingyou.com/app/r/req_stub-9"
-eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .idempotencyKey)" "land/b1:2"
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .idempotencyKey)" "land/b1@wldn:2"
 ok "a row's card raised again after its last card closed is posted under the key with its revision, a new card rather than the closed one given back"
 
 : > "$CREW_TEST_LOG"
@@ -337,7 +337,7 @@ eq "$(head -2 <<<"$raised")" "card land/b1: req_stub-9 closed, the user having a
 card land/b1: req_stub-10 https://www.pendingyou.com/app/r/req_stub-10"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Head is now abc1700"
-eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows]')" '["land/b1:3","req_stub-9"]'
+eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows]')" '["land/b1@wldn:3","req_stub-9"]'
 has "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -r .summary)" "Its head moved since your approval, from abc1600 to abc1700"
 eq "$(jq -r '.["req_stub-9"].status' "$stub/cards.json")" "resolved"
 eq "$(entries card.close | jq -r 'select(.Card == "req_stub-9") | [.Key, .State] | join(" ")')" "land/b1 closed"
@@ -380,7 +380,7 @@ posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 s1=$cards_dir/batch/1/session.json; u1=$(jq -r .url "$s1"); p1=$(jq -r .pid "$s1")
 [[ $u1 =~ ^http://chuck-herdr-alpha\.ts\.swancloud\.net:194[3-5][0-9]$ ]] || fail "not a link on the box's tailnet name: $u1"
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .title, .context.links[0].url]' <<<"$posted")" \
-  "[\"batch/1_\",\"wldn-planner\",\"fyi\",\"Goal of b1 (batch 1)\",\"$u1\"]"
+  "[\"batch/1@wldn\",\"wldn-planner\",\"fyi\",\"Goal of b1 (batch 1)\",\"$u1\"]"
 has "$(jq -r .summary <<<"$posted")" "1 change to read, nothing to approve."
 has "$(jq -r '.artifacts[0].lines | join("\n")' <<<"$posted")" "**swb-1 · v1**"$'\n\n'"v1 gives each tenant its own zone."
 folder=$(cd "$reports" && pwd -P)/batch-wldn-1
@@ -399,7 +399,7 @@ has "$out" "card batch/1: req_stub-12 https://www.pendingyou.com/app/r/req_stub-
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request whoami match_area post_request "
 posted=$(py_calls | sed -n 5p | cut -d' ' -f2-)
 has "$(jq -r .summary <<<"$posted")" "An older copy of this card was lost: dismiss it in the app."
-eq "$(jq -r .idempotencyKey <<<"$posted")" "batch/1:2"
+eq "$(jq -r .idempotencyKey <<<"$posted")" "batch/1@wldn:2"
 eq "$(jq -r '.context.links[0].url' <<<"$posted")" "$u1"; eq "$(listed)" "$p1"
 eq "$(entries card.close | jq -r 'select(.Key == "batch/1") | [.Card, .State] | join(" ")')" "req_stub-11 lost"
 ok "a batch's card lost to the planner is raised again by the sweep's entry under its key, saying its older copy is dead, its link the session's that still runs"
@@ -520,7 +520,7 @@ eq "$(tail -1 <<<"$out")" "call get_request (requestId $c, name wldn-planner)"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .title, .kind, [.options[].id], .recommendedIds]' <<<"$posted")" \
-  "[\"proposal/$n\",\"wldn-planner\",\"Plan change to p1: 2 new\",\"multi\",[\"add:p-a\",\"add:p-b\"],[\"add:p-a\",\"add:p-b\"]]"
+  "[\"proposal/$n@wldn\",\"wldn-planner\",\"Plan change to p1: 2 new\",\"multi\",[\"add:p-a\",\"add:p-b\"],[\"add:p-a\",\"add:p-b\"]]"
 grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was told of the card its own command raised"
 ok "crew plan propose raises the proposal's card in the planner's name under proposal/<n>, one checkbox list every row set as proposed, and prints the line that adopts it"
 
@@ -538,7 +538,7 @@ has "$out" "card proposal/$n: $c withdrawn, its kind having changed, and its new
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request cancel_request whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.requestId, .reason]')" "[\"$c\",\"Rewritten as proposal $m after your note\"]"
 eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows, .title, [.questions[] | [.id, [.options[].id]]]]')" \
-  "[\"proposal/$n:2\",\"$c\",\"Plan change to p2: 6 new\",[[\"rows-1\",[\"add:p-a\",\"add:p-c\",\"add:p-d\"]],[\"rows-2\",[\"add:p-e\",\"add:p-f\",\"add:p-g\"]]]]"
+  "[\"proposal/$n@wldn:2\",\"$c\",\"Plan change to p2: 6 new\",[[\"rows-1\",[\"add:p-a\",\"add:p-c\",\"add:p-d\"]],[\"rows-2\",[\"add:p-e\",\"add:p-f\",\"add:p-g\"]]]]"
 eq "$(entries card.close | jq -r "select(.Card == \"$c\") | [.State, .Outcome] | join(\": \")")" "withdrawn: changed in kind: a new card follows it"
 eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $m (wldn)" | grep 'card:' | sed 's/^ *//')" \
   "card:   proposal/$n, open, asked by wldn-planner ($c1)"
@@ -555,7 +555,7 @@ has "$out" "card proposal/$n: $c1 closed, the user having answered it, and its n
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Rewritten as proposal $r after your note"
 eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows, .title, [.options[].id]]')" \
-  "[\"proposal/$n:3\",\"$c1\",\"Plan change to p3: 2 new\",[\"add:p-c\",\"add:p-a\"]]"
+  "[\"proposal/$n@wldn:3\",\"$c1\",\"Plan change to p3: 2 new\",[\"add:p-c\",\"add:p-a\"]]"
 eq "$(entries card.post | jq -r "select(.Card == \"$c2\") | [(.On | join(\" \")), .Key, .By] | join(\" \")")" "proposal/$n proposal/$n wldn-planner"
 eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $r (wldn)" | grep 'card:' | sed 's/^ *//')" \
   "card:   proposal/$n, open, asked by wldn-planner ($c2)"
@@ -663,7 +663,7 @@ aged "$id" "$old"
 HOST=$box expect_ok crew rail --label wldn; r=$out
 pc=$(sed -n "s|^card $k: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
 [[ -n $pc ]] || fail "the read raised no card for $k:"$'\n'"$r"
-eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r '[.idempotencyKey, .session.label] | join(" ")')" "$k wldn-planner"
+eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r '[.idempotencyKey, .session.label] | join(" ")')" "$k@wldn wldn-planner"
 has "$r" "  $k (wldn), wldn-planner's $pc: posted: its row had none open"
 has "$r" "    card:   $k, open, asked by wldn-planner ($pc)"
 ok "a row whose card's post was refused shows the refusal, is left by a read while the refusal is under ten minutes old, and is raised through its kind's raise by the first read after"
@@ -681,7 +681,7 @@ aged "$id" "$old"
 HOST=$box expect_ok crew rail --label wldn; r=$out
 sc=$(sed -n "s|^card $op: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
 [[ -n $sc ]] || fail "the read raised no card for $op:"$'\n'"$r"
-eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempotencyKey == \"$op\") | [.session.label, .kind, .intent] | join(\" \")")" "wldn-ops action do"
+eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempotencyKey == \"$op@wldn\") | [.session.label, .kind, .intent] | join(\" \")")" "wldn-ops action do"
 has "$r" "  $op (wldn), wldn-ops's $sc: posted: its row had none open"
 has "$r" "    card:   $op, open, asked by wldn-ops ($sc)"
 ok "a step waiting on the user has its card raised by crew ops step, and one whose post was refused raised through the step's raise by the first read after ten minutes"

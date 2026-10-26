@@ -134,7 +134,7 @@ card=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d'
 [[ -n $card ]] || fail "the merge's end raised no landings card:"$'\n'"$out"
 has "$out" "call get_request (requestId $card, name wldn-ops)"
 posted=$(calls | grep "^$box pendingyou post_request ")
-has "$posted" '"idempotencyKey": "land/switchboard-kit"'
+has "$posted" '"idempotencyKey": "land/switchboard-kit@wldn"'
 has "$posted" '"label": "wldn-ops"'
 has "$posted" "\"title\": \"Land the bolt tenant-environments on switchboard-kit's main\""
 h1=$(git -C "$k" rev-parse bolt/tenant-environments)
@@ -482,7 +482,7 @@ kit=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' 
 [[ -n $kit ]] || fail "no landings card was raised for north and south:"$'\n'"$out"
 posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .highStakes, [.options[].label], .recommendedIds]' <<<"${posted#* post_request }")" \
-  '["land/switchboard-kit:3","wldn-ops","multi",true,["1. north","2. south"],["land:north","land:south"]]'  # two closed before it
+  '["land/switchboard-kit@wldn:3","wldn-ops","multi",true,["1. north","2. south"],["land:north","land:south"]]'  # two closed before it
 has "$posted" "It is forecast to conflict with north on regions.txt."
 eq "$(field $box card.post Heads kit/switchboard-kit)" "north@$(short bolt/north) south@$(short bolt/south)"
 crew unit add south-more "More of south." --bolt south >/dev/null
