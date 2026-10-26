@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-26
 decision-makers: the user, swancloud-design
 consulted: madswan-planner, swancloud-planner, trc-1-conductor, fww-2-conductor
@@ -7,7 +7,7 @@ consulted: madswan-planner, swancloud-planner, trc-1-conductor, fww-2-conductor
 
 # A unit in a slot put after unconstructed work goes back to waiting, its branch kept
 
-Status: proposed to the user on 2026-10-26, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-26, on their card (req_0996b0fc48f24cc18f2c, "Approved").
 
 Deciders: the user, on this record's card; written by the design agent from madswan-planner's and the conductors' findings of 2026-10-25 and 2026-10-26.
 Amends: `plan.md` (adds a clause to `plan.13`); `teams.1` stands unamended.
