@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: rejected
 date: 2026-10-26
 decision-makers: the user, swancloud-design
 consulted: madswan-planner, swancloud-planner
@@ -7,7 +7,7 @@ consulted: madswan-planner, swancloud-planner
 
 # A bolt that builds on another bolt is given once that bolt has landed
 
-Status: proposed to the user on 2026-10-26, as `briefs.15` has it; accepted only on their yes.
+Status: rejected by the user on 2026-10-27, on their card (req_e437516c9e3f46839dae): "I don't understand where this requirement came from. The whole point of a bolt is that it's something that can be delivered to production independently". `plan.13` and `teams.16` stand unamended: a bolt is planned so that it lands and delivers on its own, so a bolt whose units build on another bolt's unlanded code is mis-planned, the planner's to plan otherwise, in one bolt or after the other has landed, and no `After` between bolts is added.
 
 Deciders: the user, on this record's card; written by the design agent from madswan-planner's finding of 2026-10-26.
 Amends: `plan.13` (a bolt's `After`), `teams.16` (the give); the `bolt-plan` spec gains a bolt's `After`.

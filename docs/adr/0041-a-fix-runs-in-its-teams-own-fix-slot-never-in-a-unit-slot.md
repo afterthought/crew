@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: rejected
 date: 2026-10-26
 decision-makers: the user, swancloud-design
 consulted: madswan-planner, swancloud-planner
@@ -7,7 +7,7 @@ consulted: madswan-planner, swancloud-planner
 
 # A fix runs in its team's own fix slot, never in a unit slot
 
-Status: proposed to the user on 2026-10-26, as `briefs.15` has it; accepted only on their yes.
+Status: rejected by the user on 2026-10-27, on their card (req_ab0c43a1ac464c36baa5): "I don't understand why we're having these hard-coded rules about one fix slot and everything like that. Honestly what's the difference between a fix, a unit, and a chore? They're all just different Flume kinds. Once we start integrating with Flume, we need to decide: is a team bound to one unit of work or is it able to work on multiple? I feel like this is trying to stomp out fires and not stepping back and thinking about the big-picture design." `teams.1`, `teams.3` and `teams.16` stand unamended. What a fix, a unit and a chore are is Flume's kinds, and what a team may hold at once is the design question to settle with Flume's integration, in `_open.md`; no slot rule is added for a fix.
 
 Deciders: the user, on this record's card; written by the design agent from madswan-planner's finding of 2026-10-26.
 Amends: `teams.1`, `teams.3` and `teams.16` (a fix's slot); the `bolt-teams` spec, *Units run in slots*, gains the fix slot.
