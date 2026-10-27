@@ -884,20 +884,38 @@ def step_card(f):
                  recommendedIds=["quiet"])
 
 
+AMENDED = re.compile(r"^Amended\b[^:.]*:\s*")
+
+
+def first_words(text):
+    """An amendment's own first words, which title its record's card (record 0031 as amended 2026-10-24): the first
+    sentence of its paragraph, with its `Amended <date>:` lead, a list item's marker, its Markdown marks and its
+    closing stop left out."""
+    p = AMENDED.sub("", " ".join(MARKS.sub("", re.sub(r"^[-*+]\s+", "", (text or "").strip())).split()))
+    return SENTENCE.split(p, 1)[0].rstrip(".") if p else ""
+
+
 def record_card(f):
     """A decision record's card (record 0031 §5): a plain record's a hold-to-accept of low risk, holding the record
     whole as Markdown, its opening sentences the summary and the user's own words beside them; a record a rule of the
     user's decided between alternatives a choice asked once, loosen the rules as drafted and take the other path,
     accept the record as ruled, or send it back, its face the alternatives, the rules that decided and each loosened,
-    then the record. f: kit, number, title, opening, quoted (the user's words it records), text (the record, Markdown),
-    alternatives ({rules, other, text, recommended: loosen or accept}) or None, follows."""
+    then the record. An amendment's card is titled by the amendment's own first words, cut at whole words, not the
+    record's title, so each amendment of one record reads as its own question (record 0031 as amended 2026-10-24).
+    f: kit, number, title, opening, quoted (the user's words it records), text (the record, Markdown), amendment (its
+    first words, first_words) or None, alternatives ({rules, other, text, recommended: loosen or accept}) or None,
+    follows."""
     n = f"{int(f['number']):04d}"
     quoted = list(f.get("quoted") or [])
     words = "Your own words, recorded as your decision:\n" + "\n".join(f"“{q}”" for q in quoted) if quoted else ""
     record = markdown(f"Record {n}", f"record-{n}.md", f["text"])
-    alt = f.get("alternatives")
+    alt, amended = f.get("alternatives"), f.get("amendment")
+
+    def titled(head):
+        head += f" {n} in {f['kit']}: "
+        return head + (by_words(amended, TITLE - len(head)) if amended else f["title"])
     if not alt:
-        return built(f"record/{f['kit']}/{n}", f"Accept record {n} in {f['kit']}: {f['title']}",
+        return built(f"record/{f['kit']}/{n}", titled("Accept an amendment to record" if amended else "Accept record"),
                      f["opening"] + ("\n\n" + words if words else ""), words, (), [record], f.get("follows"),
                      urgency="whenever", kind="approve", intent="approve",
                      approve={"action": f"Accept record {n}", "risk": "low", "reversible": True}, recommendedIds=["approve"])
@@ -908,7 +926,7 @@ def record_card(f):
                {"id": "back", "label": "Send it back with a note", "consequence": "The design agent revises it from your note"}]
     summary = (f"Your rules decided this one: {rules} chose the record's path over the other, {alt['other']}. One decision: "
                "the record as ruled, or loosen the rules as drafted and take the other path.")
-    return built(f"record/{f['kit']}/{n}", f"Record {n} in {f['kit']}: {f['title']}", summary, words, (),
+    return built(f"record/{f['kit']}/{n}", titled("An amendment to record" if amended else "Record"), summary, words, (),
                  [markdown("Where your rules decided, and the rules loosened", f"record-{n}-rules.md", alt["text"]), record],
                  f.get("follows"), urgency="whenever", kind="choice", intent="decide", options=options,
                  recommendedIds=[alt.get("recommended") or "accept"])

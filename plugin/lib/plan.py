@@ -13837,14 +13837,15 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     """A decision record's facts as its card is built from them (cards.record_card), from its Markdown at a commit, and
     whether the file holds the status the design agent records (briefs.15): its title, its frontmatter's or else its
     heading's; its opening, the first paragraph of its body that is neither a heading nor a `Name:` line, or, for an
-    amendment, the paragraph its proposed mark stands in; the user's words its deciders line quotes; its body whole;
-    and the alternatives a rule of the user's decided between, from the Markdown --alternatives hands, whose
-    frontmatter names the rules that decided (`rules:`, separated by commas), the other path (`other:`) and, when the
-    user's own words point there, `recommended: loosen`, else accepting as ruled is. A file holds its frontmatter's
-    status, but proposed while an amendment to an accepted record is still marked proposed ("Status: proposed" past
-    the record's own status line), and accepted or rejected alike once the mark the text before (before, the record at
-    the commit before) held is gone, the amendment taken in or out. Refused naming what the file holds when it holds no
-    such status, and refused when what the card is built from can't be read (read.1)."""
+    amendment, the paragraph its proposed mark stands in; an amendment's own first words, which title its card in
+    place of the record's (cards.first_words, record 0031 as amended 2026-10-24), else None; the user's words its
+    deciders line quotes; its body whole; and the alternatives a rule of the user's decided between, from the Markdown
+    --alternatives hands, whose frontmatter names the rules that decided (`rules:`, separated by commas), the other
+    path (`other:`) and, when the user's own words point there, `recommended: loosen`, else accepting as ruled is. A
+    file holds its frontmatter's status, but proposed while an amendment to an accepted record is still marked proposed
+    ("Status: proposed" past the record's own status line), and accepted or rejected alike once the mark the text
+    before (before, the record at the commit before) held is gone, the amendment taken in or out. Refused naming what
+    the file holds when it holds no such status, and refused when what the card is built from can't be read (read.1)."""
     n = f"{number:04d}"
     fields, body, paras = record_split(text)
     now, marked = record_status_held(text)
@@ -13855,12 +13856,15 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
                             f"and land it on main, then run crew record again.")
     head = next((p for p in paras if p.startswith("# ")), "")
     title = fields.get("title") or re.sub(r"^#\s+(\d+\.\s+)?", "", head)
-    if marked and now == "accepted":
+    amended = bool(marked) and now == "accepted"
+    if amended:
         opening = re.sub(r"\s*Status: proposed\b.*?(?:\.(?=\s|$)|$)", "", marked[0], flags=re.S).strip()
     else:
         opening = next((p for p in paras if not p.startswith("#") and not re.match(r"[A-Z][\w -]*:\s", p)), "")
-    title and opening or fail(f"crew can't read record {n} in {kit} for its card: it has no "
-                              + ("title" if not title else "opening paragraph") + ". Nothing is raised.")
+    amendment = cards.first_words(opening) if amended else None
+    title and opening and amendment != "" or fail(
+        f"crew can't read record {n} in {kit} for its card: it has no "
+        + ("title" if not title else "opening paragraph" if not opening else "words of its amendment") + ". Nothing is raised.")
     deciders = next((p for p in paras if p.startswith("Deciders:")), "")
     quoted = [a or b for a, b in re.findall(r"“([^”]+)”|\"([^\"]+)\"", deciders)]
     alt = None
@@ -13874,7 +13878,8 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
                "the file holds nothing under its frontmatter for the card" if not abody else None)
         not why or fail(f"crew refuses the alternatives for record {n} in {kit}: {why}. Nothing is raised.")
         alt = {"rules": rules, "other": other, "text": abody, "recommended": rec}
-    return {"kit": kit, "number": number, "title": title, "opening": opening, "quoted": quoted, "text": body, "alternatives": alt}
+    return {"kit": kit, "number": number, "title": title, "opening": opening, "amendment": amendment, "quoted": quoted, "text": body,
+            "alternatives": alt}
 
 
 def raise_record(fleet, label, facts, where, note, acts=None, dead=False):
