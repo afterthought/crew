@@ -20,8 +20,8 @@
 
 ## 4. The journey
 
-- [ ] 4.1 A ticked bolt sluice refused takes main in by its fix, is asked for on no card, is read by ops with no card open and lands on the same send (design, Decisions 5 and 6; Task notes 4.1); passes `tests/suite t-journey-land`.
+- [x] 4.1 A ticked bolt sluice refused takes main in by its fix, is asked for on no card, is read by ops with no card open and lands on the same send (design, Decisions 5 and 6; Task notes 4.1); passes `tests/suite t-journey-land`.
 
 ## 5. The affected tests
 
-- [ ] 5.1 After `tests/moon-tasks` is run and `tests/moon.yml` committed for any test whose reads changed, `tests/suite --affected` ends with "0 failed".
+- [x] 5.1 After `tests/moon-tasks` is run and `tests/moon.yml` committed for any test whose reads changed, `tests/suite --affected` ends with "0 failed".
