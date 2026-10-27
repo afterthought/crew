@@ -461,23 +461,80 @@ class TestBatchFacts:
     ("construct", True, []),
     ("code", False, []),
     ("verify", False, []),
-    ("merge", False, ["landing", "batch", "tidy"]),
-    ("merge", True, ["landing", "batch", "tidy"]),
+    ("merge", False, ["batch", "landing", "tidy"]),
+    ("merge", True, ["batch", "landing", "tidy"]),
 ])
 def test_a_merge_reckons_a_batch_as_a_construct_does(stage, fix, then):
     """A wait's end reckons a batch after a construct's change and after a merge (briefs.12): a bolt whose last unit
     merged leaves its conductor waiting on nothing, so no later wait would tell the planner its batch is due at once, as
     on 2026-10-19, when every-deploy-has-its-live-card and swc-1's bolt sat merged two hours with no batch begun; and
-    a merge's end removes its place and branch as it lands, for the same reason (teams.1, plan.9)."""
+    a merge's end removes its place and branch as it lands, for the same reason (teams.1, plan.9). The batch comes
+    before the landing card's hand."""
     assert plan.after_delivery(stage, fix) == then
 
 
-def test_the_rails_sweep_reckons_a_batch_for_the_teams_on_its_host():
-    """The rail's sweep reckons each partition's batch for its teams on this host holding a bolt, in the plan's order
-    (briefs.12), so a bolt whose units have all merged reaches the planner with no conductor waiting; a team elsewhere,
-    and a partition whose plan was not read, are not reckoned here."""
+class TestReckonedAtOnce:
+    """A bolt whose last unit has merged has its batch reckoned from the bolt where it lives, after a fetch, before and
+    whatever the landing card's hand does, and again on every wait of its conductor until the planner is told
+    (briefs.12; wldn's awb-1, 2026-10-27: proven at 01:59Z with two units in no batch, the reckoning read with no fetch,
+    skipped by a refusal in the same wait's tail and never repeated, so no batch was due until one was started by hand
+    at 12:18Z)."""
+    T = FLEET["teams"]["swb-1"]
+
+    def reckoned(self, monkeypatch, acts):
+        monkeypatch.setattr(plan, "batch_check", lambda fleet, t, fetch=False: acts.append(("batch", t["name"], fetch)))
+
+    def test_a_merges_end_reckons_the_batch_after_a_fetch_before_the_landing_cards_hand_that_refuses(self, monkeypatch):
+        acts = []
+        self.reckoned(monkeypatch, acts)
+
+        def landing(fleet, t, bolt):
+            acts.append(("landing", bolt))
+            raise plan.Refusal("crew could not raise the landings card")
+        monkeypatch.setattr(plan, "landing_after_merge", landing)
+        with pytest.raises(plan.Refusal):
+            plan.after_answer(FLEET, self.T, plan.after_delivery("merge", False), "bolt/b1@abc1234")
+        assert acts == [("batch", "swb-1", True), ("landing", "b1")]
+
+    def test_every_conductors_wait_reckons_the_batch_after_a_fetch_whatever_its_forecast_could_not_read(self, monkeypatch, capsys):
+        acts = []
+        self.reckoned(monkeypatch, acts)
+
+        def reach(fleet, t):
+            raise plan.Refusal("wldn's plan could not be read")
+        monkeypatch.setattr(plan, "reach", reach)
+        plan.before_waiting(FLEET, self.T)
+        assert acts == [("batch", "swb-1", True)]
+        assert "no forecast: wldn's plan could not be read" in capsys.readouterr().err
+
+    def test_a_bolt_whose_units_have_all_merged_is_read_where_it_lives_after_a_fetch_and_its_batch_told_at_once(self, monkeypatch):
+        """Only the team's bolts with a unit due are read, so a wait fetches nothing for a bolt that can make no batch
+        due."""
+        pl = plan_of(bolts={"b0": "swb-1", "b1": "swb-1"}, units={"w0": "b0", "x1": "b1", "x2": "b1"})
+        entries = [constructed("x1", "bbb1"), constructed("x2", "ccc1")]
+        read, told_, emitted = [], [], []
+
+        class Merged:
+            def of(self, name):
+                return {"stage": "merged"}
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: pl)
+        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: entries)
+        monkeypatch.setattr(plan, "stages_for", lambda fleet, p, bolts, fetch=False: read.append(([b.name() for b in bolts], fetch)) or Merged())
+        monkeypatch.setattr(plan.crew, "tell", lambda fleet, name, text: told_.append((name, text)) or True)
+        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **kw: emitted.append((act, on)))
+        assert plan.batch_check(FLEET, self.T, fetch=True) is True
+        assert read == [(["b1"], True)]
+        assert [n for n, _ in told_] == ["wldn-planner"]
+        assert "bolt b1 has every unit merged, and lands only once x1 or x2 have been in a batch the user has answered" in told_[0][1]
+        assert emitted == [("batch.due", ["agent/wldn-planner", "unit/x1", "unit/x2"])]
+
+
+def test_the_rails_sweep_reckons_a_batch_for_every_team_of_the_partition_wherever_it_runs():
+    """The rail's sweep reckons each partition's batch for every team of the teams file holding a bolt of it, in the
+    plan's order, on whichever host the rail runs (briefs.12), so a bolt whose units have all merged reaches the planner
+    with no conductor waiting, from a rail on another host than its team's (wldn's awb-1, 2026-10-27); a team the teams
+    file lacks, and a partition whose plan was not read, are not reckoned."""
     teams = {"swb-1": {"machine": "mac-studio"}, "swb-2": {"machine": "chuck-herdr-alpha"}}
     found = [("wldn", None, None, PLAN), ("swancloud", None, None, None)]
-    assert plan.batch_reckoners(found, teams, "mac-studio") == {"wldn": ["swb-1"]}
-    assert plan.batch_reckoners(found, teams, "chuck-herdr-alpha") == {"wldn": ["swb-2"]}
-    assert plan.batch_reckoners(found, teams, "deneb") == {}
+    assert plan.batch_reckoners(found, teams) == {"wldn": ["swb-1", "swb-2"]}
+    assert plan.batch_reckoners(found, {"swb-2": teams["swb-2"]}) == {"wldn": ["swb-2"]}
