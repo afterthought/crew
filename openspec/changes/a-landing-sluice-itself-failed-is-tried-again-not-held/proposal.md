@@ -47,8 +47,11 @@ tests/py/test_landing.py
 tests/py/test_landings.py
 tests/py/test_rail.py
 tests/py/test_cards.py
+tests/py/test_pane_landing.py
 tests/py/sluice-0.36.4/*
+tests/contract/test_git.py
 tests/t-journey-land.sh
+tests/t-briefs.sh
 tests/stubs/sluice
 tests/stubs/wt-submit
 tests/moon.yml
