@@ -52,7 +52,7 @@ Code
 
 ## Details
 
-**[state.1]** Rules out: a checkout of the state branch; a merge of two appended records; `merge=union`; a push with `+`. Source: `bolt-plan` spec "Writes go through crew and are never merged"; `flywheel-state` spec; `plan.py` `land`, 318–389; ADR 0003 for what "held" means.
+**[state.1]** Rules out: a checkout of the state branch; a merge of two appended records; `merge=union`; a push with `+`. Source: `bolt-plan` spec "Writes go through crew and are never merged"; `flywheel-state` spec; `plan.py` `land`, 318–389; ADR 0003 for what "held" means. Read 2026-10-27 (madswan signal 2026-10-27-swancloud-operator-cbefe4ba/02): `land` applies a refused push again at once, five replays and no wait between them, so a run-record push to a branch taking a commit every few seconds, as madswan/main did at 17:33Z with nineteen commits in two minutes, can lose every replay inside ten seconds and be kept for the host's next entry (`record.2`), the branch then lacking an entry `read.5` says it holds as written. The rule's outcome stands: a write is applied again to the new tip until it lands, and a branch that is merely busy is outwaited, not given up on; a replay that waits a growing moment before it fetches again changes no rule and is a crew chore, the kept entry staying the fallback for a branch that will not take it.
 
 **[state.2]** Rules out: a `Stage` or `Date` field in `plan.rec`; a status file beside the plan. Not ruled out: the marks `Amended` and, once built, `Hold`. Source: `bolt-plan` spec "A unit's stage is read from the kits"; `plan.py` 71–94.
 
