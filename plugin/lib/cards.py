@@ -244,6 +244,49 @@ def answer_lines(key, card, got):
     return lines
 
 
+BOX = re.compile(r"^(?:land|add):([a-z0-9][a-z0-9-]*)$")  # a box crew minted, named by the bolt or unit it names
+
+
+def answer_said(got, offered=()):
+    """What the user answered on a card, in crew's own words made from names alone, as a card's close keeps it for the
+    card that follows (rail-cards "The close of an answered card records the answer"; record.3): from get_request's
+    reply, read as answer_lines reads it, off the user's turn: approved or declined; the boxes they ticked, each of
+    crew's named by the bolt or unit it names (land:<bolt>, add:<unit>), and those of offered, the ids the card
+    offered, they left; a lone unit's unticked as left it out, and any other option picked as it is; done, a failed
+    step, or that they will handle it themselves; and "with a note" when they wrote one, never its words. None when
+    the reply holds no answer."""
+    answer = got.get("answer") if isinstance(got, dict) and got.get("turn") != "you" else None
+    if not isinstance(answer, dict):
+        return None
+    said, picked, lists = [], [], isinstance(answer.get("choiceIds"), list)
+    wrote = bool(text_of(answer.get("note")) or text_of(answer.get("text")))
+    if isinstance(answer.get("approved"), bool):
+        said.append("approved" if answer["approved"] else "declined")
+    picked += [c for c in answer.get("choiceIds") or [] if isinstance(c, str)]
+    for a in (answer.get("answers") or {}).values() if isinstance(answer.get("answers"), dict) else []:
+        if isinstance(a, dict):
+            lists = lists or isinstance(a.get("choiceIds"), list)
+            picked += [c for c in a.get("choiceIds") or [] if isinstance(c, str)]
+            if isinstance(a.get("approved"), bool) and ("approved" if a["approved"] else "declined") not in said:
+                said.append("approved" if a["approved"] else "declined")
+        wrote = wrote or bool(text_of(a))
+    ticked = [BOX.match(c).group(1) for c in picked if BOX.match(c)]
+    boxes = [BOX.match(c).group(1) for c in offered if BOX.match(c)]
+    if ticked or lists and not [c for c in picked if not BOX.match(c)]:
+        left = [b for b in boxes if b not in ticked]
+        said.append(f"ticked {joined(ticked) if ticked else 'none'}" + (f", left {joined(left)}" if left else ""))
+    said += ["left it out" if c == "unticked" else f"picked {c}" for c in picked if not BOX.match(c)]
+    if answer.get("done") is True:
+        said.append("done")
+    if isinstance(answer.get("failedStep"), int) and not isinstance(answer.get("failedStep"), bool):
+        said.append(f"said step {answer['failedStep']} did not work")
+    if answer.get("handled") is True:
+        said.append("said you will handle it yourself")
+    if not said:
+        return "answered with a note" if wrote else None
+    return ", ".join(said) + (", with a note" if wrote else "")
+
+
 # ------------------------------------------------------------------------------- a proposal's change, drawn
 
 TEXT, SAYS = 40, 33  # the card's text, monospace lines of at most forty characters; what a block says, indented seven
@@ -982,6 +1025,39 @@ def proposal_form(argvs):
     return "choice" if k == 1 else "multi" if k <= BOXES else "lists"
 
 
+def proposal_since(old_argvs, old_case, new_argvs, new_case):
+    """What a proposal's rewrite changed, read against the proposal it replaces, as the card that follows the one the
+    user answered says it (rail-cards "A card that follows one the user answered says so first"), from both
+    proposals' commands, parsed, and cases: each unit or chore it makes new that the old did not, and each the old made
+    new that it no longer does (new_units); each whose intent it words otherwise; each it newly drops, or no longer
+    drops; how many of its other commands changed; and that its case is rewritten. Sentences, [] when its commands and
+    its case are the old's."""
+    def intents(argvs):
+        return {a.unit: " ".join(a.intent.split()) for a in argvs
+                if a.cmd in ("unit", "chore") and a.sub in ("add", "amend", "split") and getattr(a, "intent", None)}
+
+    def drops(argvs):
+        return [a.unit for a in argvs if a.cmd in ("unit", "chore") and a.sub == "drop"]
+    was, now = new_units(old_argvs), new_units(new_argvs)
+    added, gone = [u for u in now if u not in was], [u for u in was if u not in now]
+    dropping, undropped = [u for u in drops(new_argvs) if u not in drops(old_argvs)], [u for u in drops(old_argvs) if u not in drops(new_argvs)]
+    old_i, new_i = intents(old_argvs), intents(new_argvs)
+    worded = [u for u in new_i if u in old_i and new_i[u] != old_i[u]]
+    named = set(added + gone + dropping + undropped)
+
+    def others(argvs):  # every other command, its words of intent left to worded
+        return [tuple(sorted((k, repr(v)) for k, v in vars(a).items() if k not in ("do", "label", "intent")))
+                for a in argvs if getattr(a, "unit", None) not in named]
+    o, n = others(old_argvs), others(new_argvs)
+    changed = max(sum(max(n.count(k) - o.count(k), 0) for k in set(n)), sum(max(o.count(k) - n.count(k), 0) for k in set(o)))
+    said = ([f"It adds {joined(added)}."] if added else []) + ([f"It no longer adds {joined(gone)}."] if gone else [])
+    said += ([f"It words {worded[0]}'s intent otherwise." if len(worded) == 1 else f"It words the intents of {joined(worded)} otherwise."]
+             if worded else [])
+    said += ([f"It drops {joined(dropping)}."] if dropping else []) + ([f"It no longer drops {joined(undropped)}."] if undropped else [])
+    said += [f"It changes {plural(changed, 'other command' if said else 'command')}."] if changed else []
+    return said + (["Its case is rewritten."] if " ".join((old_case or "").split()) != " ".join((new_case or "").split()) else [])
+
+
 def proposal_card(f):
     """A proposal's card (record 0031 §5, plan-proposals): titled "Plan change to <bolt>: <counts>", with no number and
     no question; a sentence of what the planner proposes and why, from its case, and what the user does with it; one
@@ -1125,6 +1201,113 @@ def follows_of(kind, thing, entries, by):
         steps = [c for c in cards[deploys[-1] + 1:] if c["key"].startswith(f"op/{thing['env']}/") and c["key"] != thing.get("key")]
         return (steps[-1] if steps else cards[deploys[-1]])["card"]
     return None
+
+
+# ------------------------------------------------------------------------- a card asked again (record 0031)
+
+STANDS = "stands"  # the State of a follow-on crew withheld, its earlier card's answer standing (plan.card_posted)
+
+
+def standing(entries, key, owner):
+    """The card whose answer stands under a row's key (rail-cards "A follow-on with nothing changed is not posted"):
+    the one the owner's newest post under the key names when that post is a follow-on crew withheld (State stands);
+    None once a card is posted under it after, or when none was withheld. A post Pending You refused changes nothing,
+    having shown the user nothing. entries are in the order they were written."""
+    card = None
+    for e in entries:
+        if e.get("Act") != "card.post" or e.get("Key") != key or e.get("By") != owner:
+            continue
+        if e.get("State") == STANDS:
+            card = e.get("Card")
+        elif not e.get("Refused"):
+            card = None
+    return card
+
+
+def answered_before(entries, follows, key, owner):
+    """The card the user answered that a post under a row's key comes after (rail-cards "A card that follows one the
+    user answered says so first"), from the run record's entries, oldest first: the card the post follows (follows)
+    when its close shows it closed or declined, else the card whose answer stands under the key (standing). As {card,
+    posted, answered, answer}: when its last post and its close were recorded, as the run record writes them, and what
+    the user answered as its close recorded it (answer_said), None when it recorded none; None when the post follows
+    no card the user answered."""
+    def last(act, card):
+        return next((e for e in reversed(entries) if e.get("Act") == act and e.get("Card") == card and not e.get("Refused")), None)
+    shut = last("card.close", follows) if follows else None
+    card = follows if shut and (shut.get("State") or "closed") in ("closed", "declined") else standing(entries, key, owner)
+    if not card:
+        return None
+    shut, post = last("card.close", card) or {}, last("card.post", card) or {}
+    return {"card": card, "posted": post.get("At"), "answered": shut.get("At"), "answer": shut.get("Answer")}
+
+
+def said_at(at, day=None):
+    """A run record's time as a card says it, YYYY-MM-DD HH:MM UTC, its date left off when it is that of day, another
+    time of the run record's."""
+    m = re.fullmatch(r"(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(?::\d\d)?Z", at or "")
+    if not m:
+        return at
+    return f"{m.group(2)} UTC" if day and day.startswith(m.group(1)) else f"{m.group(1)} {m.group(2)} UTC"
+
+
+def sentences(said):
+    """Sentences said after a colon: each ending as a sentence ends, the first begun in lower case unless its first
+    word holds a capital past its first letter, a name as GitHub or UTC."""
+    out = [s if s[-1] in ".!?…" else s + "." for s in (x.strip() for x in said) if s]
+    if out and out[0][1:].split(" ", 1)[0] == out[0][1:].split(" ", 1)[0].lower():
+        out[0] = out[0][0].lower() + out[0][1:]
+    return " ".join(out)
+
+
+def answered_opening(earlier, since):
+    """The paragraph a card opens with when it follows one the user answered (rail-cards "A card that follows one the
+    user answered says so first"): that they answered the card before it, when that card was posted and by when crew
+    recorded their answer, what they answered, and what changed since, the event's sentences (since); None when the
+    event gives nothing changed, so the card is not posted. earlier as answered_before gives it."""
+    said = [s for s in since or [] if s and s.strip()]
+    if not said:
+        return None
+    posted, answered = earlier.get("posted"), earlier.get("answered")
+    times = (f", posted {said_at(posted)}" if posted else "") + (f", by {said_at(answered, posted)}" if answered else "")
+    what = earlier.get("answer") or "crew holds no record of what you answered"
+    return f"You answered the card before this one{times}: {what}. Since then: {sentences(said)}"
+
+
+def stands_said(earlier):
+    """What crew records and says of a follow-on it withholds, nothing having changed since the user answered the card
+    before it (earlier, as answered_before gives it), in its own words."""
+    by = f" by {said_at(earlier['answered'])}" if earlier.get("answered") else ""
+    return f"Not posted: nothing has changed since the user answered {earlier['card']}{by}, so their answer stands"
+
+
+def deploy_since(earlier, head):
+    """What changed since the user answered a deploy's card, as the card offered again says it: the head offered now
+    and the one they answered on (earlier, the followed card's recorded head or the one they approved), or that crew
+    holds no record of that one; nothing when the head is the one they answered on."""
+    if earlier and (head.startswith(earlier) or earlier.startswith(head)):
+        return []
+    return [f"The offer is now {head[:7]}, where you answered on {earlier[:7]}." if earlier else
+            f"The offer is now {head[:7]}, and crew holds no record of the head you answered on."]
+
+
+def step_since(followed, env, n, to=None):
+    """What changed since the user answered the card a step's card follows, from that card's key (followed): its
+    deploy's, deploy/<env>, ended, and this is its step n; a step's before it, op/<env>/<m>, is behind them, and this
+    is step n; nothing for any other key, or none."""
+    m = re.fullmatch(r"op/[a-z0-9][a-z0-9-]*/(\d+)", followed or "")
+    if m:
+        return [f"Step {m.group(1)} is behind you, and this is step {n}."]
+    if followed == f"deploy/{env}":
+        return [f"The deploy{f' of {to[:7]}' if to else ''} to {env} ended, and this is its step {n}."]
+    return []
+
+
+def opened(card, opening, follows):
+    """A card that follows one the user answered, its summary opening with what they answered and what changed since
+    (answered_opening), cut again at whole sentences, and its details opening with it too; following that card,
+    follows, when its builder set none."""
+    context = dict(card["context"], background="\n\n".join(x for x in (opening, card["context"].get("background")) if x))
+    return dict(card, summary=prose(f"{opening}\n\n{card['summary']}"), context=context, follows=card.get("follows") or follows)
 
 
 # ---------------------------------------------------------------------------------------- the act's decisions

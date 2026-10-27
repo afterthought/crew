@@ -1702,6 +1702,105 @@ class TestFollows:
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
 
 
+def replied(answer, turn="agent", status="answered"):
+    return {"status": status, "turn": turn, "version": 3, "answer": answer}
+
+
+class TestAnswerSaid:
+    """rail-cards "The close of an answered card records the answer": what the user answered, in crew's words made from
+    names alone (cards.answer_said), which the close of the card keeps as Answer for the card that follows it, and none
+    of the words they typed (record.3)."""
+
+    @pytest.mark.parametrize("answer, offered, said", [
+        ({"approved": True}, (), "approved"),
+        ({"approved": False, "note": {"text": "not tonight"}}, (), "declined, with a note"),
+        ({"approved": False, "text": "not tonight"}, (), "declined, with a note"),
+        ({"choiceIds": ["land:y"], "note": "y first, z after the fix"}, ("land:y", "land:z"), "ticked y, left z, with a note"),
+        ({"choiceIds": ["land:y", "land:z"]}, ("land:y", "land:z", "land:w"), "ticked y and z, left w"),
+        ({"answers": {"rows-1": {"choiceIds": ["land:y"]}, "rows-2": {"choiceIds": []}}}, ("land:y", "land:z"), "ticked y, left z"),
+        ({"choiceIds": []}, ("land:y", "land:z"), "ticked none, left y and z"),
+        ({"choiceIds": ["add:a-1", "add:a-2"]}, (), "ticked a-1 and a-2"),
+        ({"choiceIds": ["quiet"]}, (), "picked quiet"),
+        ({"choiceIds": ["unticked"]}, (), "left it out"),
+        ({"done": True}, (), "done"),
+        ({"failedStep": 2, "note": "the key was refused"}, (), "said step 2 did not work, with a note"),
+        ({"handled": True}, (), "said you will handle it yourself"),
+        ({"note": "why this one?"}, (), "answered with a note")])
+    def test_the_answer_is_said_in_crews_words_from_names_alone(self, answer, offered, said):
+        got = built.answer_said(replied(answer), offered)
+        assert got == said
+        assert not any(w in got for w in ("tonight", "first", "refused", "why"))
+
+    @pytest.mark.parametrize("got", [replied({}), replied({"choiceIds": ["land:y"]}, turn="you", status="pending"),
+                                     {"status": "pending", "turn": "you"}, {}, None])
+    def test_a_reply_holding_no_answer_says_none(self, got):
+        assert built.answer_said(got, ("land:y",)) is None
+
+    def test_a_card_picked_up_in_pending_you_still_says_the_answer_its_reply_carries(self):
+        assert built.answer_said({"status": "resolved", "answer": {"approved": True}}) == "approved"
+
+
+class TestAnsweredBefore:
+    """rail-cards "A card that follows one the user answered says so first": the card the user answered that a post
+    comes after (cards.answered_before), from the run record alone, and the paragraph the post opens with
+    (cards.answered_opening), or none when nothing changed, so the post is withheld."""
+    DESIGN, KEY = "swancloud-design", "record/crew/0019"
+    POST = dict(Act="card.post", Key=KEY, By=DESIGN, Card="req_1", At="2026-10-23T13:10:04Z")
+    CLOSE = dict(Act="card.close", Key=KEY, By=DESIGN, Card="req_1", State="closed", At="2026-10-23T14:02:41Z",
+                 Answer="declined, with a note")
+    EARLIER = {"card": "req_1", "posted": "2026-10-23T13:10:04Z", "answered": "2026-10-23T14:02:41Z", "answer": "declined, with a note"}
+
+    def test_a_post_following_a_card_the_user_answered_finds_it_with_its_times_and_answer(self):
+        assert built.answered_before([self.POST, self.CLOSE], "req_1", self.KEY, self.DESIGN) == self.EARLIER
+        declined = dict(self.CLOSE, State="declined")
+        assert built.answered_before([self.POST, declined], "req_1", self.KEY, self.DESIGN)["card"] == "req_1"
+
+    @pytest.mark.parametrize("state", ["withdrawn", "lost"])
+    def test_a_post_following_a_card_withdrawn_or_lost_or_still_open_follows_no_answered_card(self, state):
+        assert built.answered_before([self.POST, dict(self.CLOSE, State=state)], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST, dict(self.CLOSE, Refused="x")], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST, self.CLOSE], None, self.KEY, self.DESIGN) is None
+
+    def test_a_key_whose_newest_post_was_withheld_comes_after_the_card_whose_answer_stands(self):
+        stood = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Card="req_1", State="stands", Refused="Not posted: …")
+        entries = [self.POST, self.CLOSE, stood]
+        assert built.standing(entries, self.KEY, self.DESIGN) == "req_1"
+        assert built.answered_before(entries, None, self.KEY, self.DESIGN) == self.EARLIER
+        refused = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Refused="Pending You refused post_request: x")
+        assert built.answered_before(entries + [refused], None, self.KEY, self.DESIGN) == self.EARLIER
+        posted = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Card="req_2")
+        assert built.answered_before(entries + [posted], None, self.KEY, self.DESIGN) is None
+        assert built.standing(entries, self.KEY, "crw-1-conductor") is None and built.standing(entries, "record/crew/0020", self.DESIGN) is None
+
+    def test_the_opening_says_when_the_card_was_answered_with_what_and_what_changed_since(self):
+        said = built.answered_opening(self.EARLIER, ["Revised at 4be21c0: docs(adr): 0019 takes the user's note"])
+        assert said == ("You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: declined, with a note. "
+                        "Since then: revised at 4be21c0: docs(adr): 0019 takes the user's note.")
+        later = dict(self.EARLIER, answered="2026-10-24T09:00:00Z")
+        assert ", by 2026-10-24 09:00 UTC: " in built.answered_opening(later, ["x"])
+        assert built.answered_opening(self.EARLIER, ["GitHub's main moved", "y waits"]).endswith("Since then: GitHub's main moved. y waits.")
+
+    def test_an_answer_crew_holds_no_record_of_is_said_so(self):
+        said = built.answered_opening(dict(self.EARLIER, answer=None), ["The offer is now e104bcf, where you answered on ddcf2cb."])
+        assert said == ("You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: crew holds no record of "
+                        "what you answered. Since then: the offer is now e104bcf, where you answered on ddcf2cb.")
+
+    @pytest.mark.parametrize("since", [None, [], ["", "  "]])
+    def test_nothing_changed_since_makes_no_opening_and_the_withheld_post_says_the_answer_stands(self, since):
+        assert built.answered_opening(self.EARLIER, since) is None
+        assert built.stands_said(self.EARLIER) == ("Not posted: nothing has changed since the user answered req_1 by "
+                                                   "2026-10-23 14:02 UTC, so their answer stands")
+
+    def test_a_card_opened_so_says_it_first_in_its_summary_and_details_and_follows_the_answered_card(self):
+        card = built.record_card(dict(kit="crew", number=19, title="T", opening="The record's own opening.", quoted=[],
+                                      text="# 19. T\n\nBody.", alternatives=None))["card"]
+        out = built.opened(card, "You answered the card before this one: approved. Since then: x.", "req_1")
+        assert out["summary"].startswith("You answered the card before this one: approved. Since then: x.\n\nThe record's own opening.")
+        assert out["context"]["background"].startswith("You answered the card before this one") and out["follows"] == "req_1"
+        assert built.opened(dict(card, follows="req_0"), "o.", "req_1")["follows"] == "req_0"
+
+
 class TestStranded:
     """rail-cards, "A batch's card the main level's host can't reach is raised again there": which of the planner's
     cards under a batch's key the main level's host, deneb, can't reach (cards.stranded), from the run record alone."""
@@ -2033,6 +2132,9 @@ class TestRecordCommand:
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
         assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
+        # rail-cards "A record revised after the user's note": the card that follows says first what they answered
+        assert re.match(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you answered\. "
+                        r"Since then: revised at 9ab0123: ops\.7 loosened\.\n\n", acts.calls[3][1]["summary"])
 
     def test_the_sweeps_raise_of_a_record_posts_it_again_from_its_record_saying_an_older_copy_was_lost(self, monkeypatch):
         """rail-cards, "A record's card left on the host the main level left": the record read with status proposed on

@@ -243,6 +243,45 @@ def test_a_closed_proposal_has_no_card_drawn_again():
         built(9, "x", "unit order d-fourth --first", state="dropped")
 
 
+def dos(*lines):
+    return [plan.do_args("wldn", d) for d in lines]
+
+
+class TestWhatARewriteChanged:
+    """rail-cards "A proposal rewritten after the user's note": what a rewrite changed, read against the proposal it
+    replaces (cards.proposal_since), which the card that follows the one the user answered says first; nothing when
+    its commands and its case are the old's, so that card is withheld."""
+    X, Y = 'unit add x "X lands first." --bolt deploys', 'unit add y "Y after." --bolt deploys'
+
+    def test_a_unit_added_and_one_no_longer_added(self):
+        assert cards.proposal_since(dos(self.Y), "Case.", dos(self.X), "Case.") == ["It adds x.", "It no longer adds y."]
+        moved_in = dos(self.X, "unit move m-move deploys")
+        assert cards.proposal_since(dos(self.X), "Case.", moved_in, "Case.") == ["It adds m-move."]
+
+    def test_an_intent_reworded(self):
+        reworded = 'unit add x "X lands first,   once its key is cut." --bolt deploys'
+        assert cards.proposal_since(dos(self.X, self.Y), "Case.", dos(reworded, self.Y), "Case.") == ["It words x's intent otherwise."]
+        assert cards.proposal_since(dos(self.X), "Case.", dos('unit add x "X lands first." --bolt deploys'), "Case.") == []
+
+    def test_a_drop_added_and_one_no_longer_made(self):
+        drop = 'unit drop a-first "Folded into x."'
+        assert cards.proposal_since(dos(self.X), "Case.", dos(self.X, drop), "Case.") == ["It drops a-first."]
+        assert cards.proposal_since(dos(self.X, drop), "Case.", dos(self.X), "Case.") == ["It no longer drops a-first."]
+
+    def test_other_commands_changed_are_counted(self):
+        assert cards.proposal_since(dos(self.X, "unit order d-fourth --first"), "Case.", dos(self.X, "unit order d-fourth --before a-first"),
+                                    "Case.") == ["It changes 1 command."]
+        assert cards.proposal_since(dos("unit order d-fourth --first"), "Case.", dos(self.X, "unit order d-fourth --before a-first"),
+                                    "Case.") == ["It adds x.", "It changes 1 other command."]
+
+    def test_a_case_rewritten_alone(self):
+        assert cards.proposal_since(dos(self.X), "X first,\nas you said.", dos(self.X), "X first, as   you said.") == []
+        assert cards.proposal_since(dos(self.X), "X first.", dos(self.X), "X first, then y.") == ["Its case is rewritten."]
+
+    def test_the_same_commands_and_case_give_nothing(self):
+        assert cards.proposal_since(dos(self.X, self.Y), "Case.", dos(self.X, self.Y), "Case.") == []
+
+
 def test_a_reading_opened_after_the_card_was_raised_changes_the_planners_card_to_carry_its_link():
     """card-sessions "Starting a batch's or a proposal's reading changes its card": proposal_act answers a relink with
     a change noting the reading is open again, for the planner's own proposal alone."""
