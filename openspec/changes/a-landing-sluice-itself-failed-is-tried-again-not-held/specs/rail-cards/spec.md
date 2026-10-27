@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: A refused landing is held on its row
-A bolt whose landing sluice refused for its own content, its submission in conflict or blamed for a check that ran and failed, SHALL be held on its row at that head, with no box, the row saying sluice's words and that it waits for its team's fix, while the bolts after it go on. It SHALL have a box again once its head moves and it reads proven. A landing that did not land for any other cause SHALL NOT hold its row.
+A bolt whose landing sluice refused for its own content, its submission in conflict or blamed for a check that ran and failed, SHALL be held on its row at that head, with no box, the row saying sluice's words and that it waits for its team's fix, while the bolts after it go on. Once its head moves and it reads proven, it SHALL land on the user's send that ticked it when that send still stands for its work, and SHALL otherwise have a box again. A landing that did not land for any other cause SHALL NOT hold its row.
 
 #### Scenario: The second of three is refused
 - **WHEN** the user sends `land/crew` with `y`, `z` and `w` ticked, and sluice refuses `z` for a conflict on `plugin/lib/plan.py`
@@ -12,8 +12,12 @@ A bolt whose landing sluice refused for its own content, its submission in confl
 - **THEN** `z` is held on its row with no box, saying sluice's words and that it waits for its team's fix
 
 #### Scenario: The fix merges
-- **WHEN** `z`'s team's take-main fix merges into `z` and `z` reads proven at its new head
-- **THEN** `z` has a box on `land/crew` again
+- **WHEN** `z`'s team's take-main fix merges into `z` and `z` reads proven at its new head, its own work unchanged since the user's send
+- **THEN** `z` has no box on any landings card and lands on that send
+
+#### Scenario: A fix that changes the bolt's work merges
+- **WHEN** `z` was refused for a failed check, and its team's fix commits a change and merges, and `z` reads proven at its new head
+- **THEN** `z` has a box on `land/crew` again, its note naming the fix's commit
 
 ## ADDED Requirements
 
