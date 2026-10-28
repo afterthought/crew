@@ -3837,6 +3837,25 @@ def landing_unheld(fleet, t, bolt, *words):
     return [f"{w.rstrip('.')}. {said}" if said else w for w in words]
 
 
+def pane_words(acts, words, refusal):
+    """The transcript record the user's words in the caller's pane were read from, as the run record names it
+    (session/<id>/<its uuid, or line-<its hash>>), read in the caller's own session transcript on this host (acts.heard);
+    refused in refusal's words, given crew's verdict on them (submit_word_refusal, leave_word_refusal), when crew does
+    not read them as the user's (signals.5, briefs.12)."""
+    v, sid = acts.heard(words)
+    why = refusal(v)
+    not why or fail(why)
+    return f"session/{sid}/{v.uuid or f'line-{v.line_hash()[:16]}'}"
+
+
+def leave_word_refusal(bolt, v):
+    """Why crew bolt leave records no stop of the bolt (main-level "A landing stopped in ops's pane is recorded as the
+    user's words"), or None, as submit_word_refusal judges the words that land one, holding none of them (record.3). A
+    decision of facts alone (code.7)."""
+    return words_refusal(f"crew records no stop of bolt {bolt}", v, "stop a landing",
+                         "the user stops a landing on its kit's landings card or in main-level ops's pane")
+
+
 def submit_word_refusal(bolt, v):
     """Why crew bolt submit --excerpt submits nothing of the bolt (plan.16, briefs.12), or None: the verdict v on the
     words in the caller's own transcript (transcript.check, want="user") does not read them as the user's (signals.5),
@@ -4096,10 +4115,7 @@ def bolt_submit(fleet, a):
     words, frm = getattr(a, "excerpt", None), []
     if words is not None:
         words.strip() or fail("crew bolt submit needs the user's words: --excerpt \"<their words, as they wrote them>\"")
-        v, sid = CardActs(fleet).heard(words)
-        why = submit_word_refusal(", ".join(bolts), v)
-        not why or fail(why)
-        frm = [f"session/{sid}/{v.uuid or f'line-{v.line_hash()[:16]}'}"]
+        frm = [pane_words(CardActs(fleet), words, lambda v: submit_word_refusal(", ".join(bolts), v))]
     outcomes, pending = [], []
     for b, when in submit_order(bolts, {b: teams[b]["machine"] for b in bolts}):
         if when == "ended":
@@ -4112,6 +4128,43 @@ def bolt_submit(fleet, a):
         print(f"{joined(missed)} did not land, as said above; " + (f"{joined([b for b, landed in outcomes if landed])} landed"
                                                                     if len(missed) < len(outcomes) else "none landed"), file=sys.stderr)
         raise Stopped(1)
+
+
+def bolt_leave(fleet, a):
+    """crew bolt leave <bolt>... --excerpt "<the user's words>" [--label L]: main-level ops's record of the user's own
+    words in its pane stopping the landing of bolts waiting on a kit's landings card (main-level "A landing stopped in
+    ops's pane is recorded as the user's words", rail-cards "A bolt stopped in ops's pane is shown as left"): the words
+    read first in the caller's own session transcript on this host, as crew bolt submit --excerpt reads them, and
+    nothing recorded unless crew reads them as the user's (pane_words, leave_word_refusal); refused too, recording
+    nothing, for a bolt the plan does not hold, one no team holds and one that does not read proven (land_read), which
+    have no landing to stop. Each bolt's stop recorded as a bolt.leave naming its head as its row reads it, the
+    transcript record the words were read from and their length, none of the words (record.3); then each kit's landings
+    card raised on the partition's main machine (land_hand), saying the bolts were stopped on the user's words, which
+    shows them unticked as left until the user ticks them on a send, ops lands them on the user's words or their head
+    moves (left_now)."""
+    bolts = list(a.bolt)
+    label, _, _, plan = locate(fleet, "Bolt", bolts[0], default_label(fleet, a))
+    CONTEXT["label"] = label
+    held = {b: plan.bolt(b) or fail(f"{label}'s plan holds no bolt {b}, so it has no landing to stop") for b in bolts}
+    teams = {b: bolt_team(fleet, held[b]) or fail(f"bolt {b} is held by no team, so it has no landing to stop") for b in bolts}
+    words = a.excerpt or ""
+    words.strip() or fail("crew bolt leave needs the user's words: --excerpt \"<their words, as they wrote them>\"")
+    frm = [pane_words(CardActs(fleet), words, lambda v: leave_word_refusal(", ".join(bolts), v))]
+    heads = {}
+    for b in bolts:
+        row, why = land_read(fleet, label, plan, held[b], teams[b])
+        row or fail(f"bolt {b} does not read proven, so it has no landing to stop: {why}")
+        heads[b] = row["facts"]["head"]
+    kits = {}
+    for b in bolts:
+        record.emit(label, "bolt.leave", [f"bolt/{b}"], frm=frm, why=f"bolt({b}): stopped on the user's words in {record.who()}'s pane",
+                    Head=heads[b], Chars=len(words))
+        kits.setdefault(held[b].get("Repo") or teams[b]["kit"]["name"], []).append(b)
+        print(f"bolt {b} is left at {heads[b][:7]} on the user's words in {record.who()}'s pane: no take-main fix starts for it "
+              "until they tick it on its kit's landings card or you land it on their words")
+    for kit_name, stopped in kits.items():
+        land_hand(fleet, label, kit_name, note=f"{joined(stopped)} {'was' if len(stopped) == 1 else 'were'} stopped on your words "
+                                               f"in {record.who()}'s pane")
 
 # ---------------------------------------------------------------------------------------------------- units
 
@@ -15234,6 +15287,10 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("bolt", nargs="+")
     x.add_argument("--excerpt", help="the user's words in your pane that said to land them, as they wrote them")
     x.add_argument("--label")
+    x = bo.add_parser("leave")
+    x.add_argument("bolt", nargs="+")
+    x.add_argument("--excerpt", required=True, help="the user's words in your pane that stopped their landing, as they wrote them")
+    x.add_argument("--label")
 
     un = sub.add_parser("unit").add_subparsers(dest="sub", required=True)
     x = un.add_parser("add")
@@ -15454,7 +15511,7 @@ COMMANDS = {
     ("card", "read"): card_read, ("card", "answer"): batch_answer,
     ("record", None): record_status,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
-    ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit,
+    ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit, ("bolt", "leave"): bolt_leave,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
@@ -15478,7 +15535,8 @@ TEAM_COMMANDS = {(c, None) for c in ("_status", "_unit-run", "_unit-wait", "_fix
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
-    ("bolt", "drop"): "bolt.drop", ("bolt", "land"): "bolt.land", ("bolt", "submit"): "bolt.submit", ("unit", "add"): "unit.add", ("unit", "split"): "unit.split",
+    ("bolt", "drop"): "bolt.drop", ("bolt", "land"): "bolt.land", ("bolt", "submit"): "bolt.submit", ("bolt", "leave"): "bolt.leave",
+    ("unit", "add"): "unit.add", ("unit", "split"): "unit.split",
     ("unit", "amend"): "unit.amend",
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
     ("chore", "add"): "chore.add", ("chore", "order"): "chore.order", ("chore", "after"): "chore.after", ("chore", "move"): "chore.move",

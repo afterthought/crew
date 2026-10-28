@@ -15,7 +15,7 @@
 
 ## 4. A stop in ops's pane
 
-- [ ] 4.1 `crew bolt leave <bolt>... --excerpt` records a stop only on words crew reads as the user's in the caller's transcript, holding none of the words, refuses as `crew bolt submit --excerpt` refuses, and raises the kit's card (design, Decision 4; Task notes 4.1); passes `tests/py/test_pane_landing.py` and `tests/py/test_parser.py`, `tests/suite logic` ending with "0 failed".
+- [x] 4.1 `crew bolt leave <bolt>... --excerpt` records a stop only on words crew reads as the user's in the caller's transcript, holding none of the words, refuses as `crew bolt submit --excerpt` refuses, and raises the kit's card (design, Decision 4; Task notes 4.1); passes `tests/py/test_pane_landing.py` and `tests/py/test_parser.py`, `tests/suite logic` ending with "0 failed".
 
 ## 5. The conductor's wait
 
