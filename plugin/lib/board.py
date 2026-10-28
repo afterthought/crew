@@ -1253,7 +1253,11 @@ class Watches:
                     doc = None
                 self.states[key] = {"doc": doc} if isinstance(doc, dict) else {"why": "sluice overview --watch printed a line that is no JSON document"}
             if done:
-                code = w["proc"].wait()
+                try:
+                    code = w["proc"].wait(timeout=5)
+                except subprocess.TimeoutExpired:  # its output ended and it lives on: ended all the same
+                    w["proc"].kill()
+                    code = w["proc"].wait()
                 said = gather.sluice_said("sluice overview --watch", code, "", w["err"].decode(errors="replace"))
                 if watch_refused(code, said):
                     self.refused.add(key[0])
@@ -1265,11 +1269,16 @@ class Watches:
         self.states[key] = {"why": f"its overview watch ended ({why}), and is opened again at the follower's next tick"}
 
     def seed(self, kits):
-        """Each watched kit nothing has read the queue of yet takes the overview its gather read (gather.kit's
-        overview), so the watch's first line, the same but for its time, moves nothing: a kit's queue is read once.
+        """Each kit whose gather read its overview itself this refresh (gather.kit's overview, taken from the answer so
+        it is never read twice) takes it as its queue when nothing has read the queue since, none yet or its watch
+        ended: so a new watch's first line, the same but for its time, moves nothing, and a kit's queue is read once.
         Whether any did."""
-        new = {key: {"doc": answer["overview"]} for host, ks in kits.items() for m, (_, answer) in ks.items()
-               if (key := (host, m)) in self.running and key not in self.states and isinstance((answer or {}).get("overview"), dict)}
+        new = {}
+        for host, ks in kits.items():
+            for m, (_, answer) in ks.items():
+                doc = answer.pop("overview", None) if isinstance(answer, dict) else None
+                if isinstance(doc, dict) and "doc" not in self.states.get((host, m), {}):
+                    new[(host, m)] = {"doc": doc}
         self.states.update(new)
         return bool(new)
 
@@ -1425,9 +1434,10 @@ class Follower:
         if self.last["read"] is not None:
             self.reroute(routes, now["routes"])
         if self.watches is not None and self.last["read"] is not None:
+            seeded = self.watches.seed(self.kept.kits)  # the overviews the read's gathers made, each new watch's first line
             self.requeue(m.get("queues", ()))
             self.watches.sync(fleet, queue_kits(self.kept.kits), tick=False)
-            if self.watches.seed(self.kept.kits):  # the overviews the read's gathers made, each new watch's first line
+            if seeded:
                 self.last["stamps"] = dict(self.last["stamps"], queues=self.watches.stamp())
                 self.seen = dict(self.seen, queues=self.watches.stamp())
         self.write(fleet)

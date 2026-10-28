@@ -598,7 +598,19 @@ class TestRefresh:
         w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:30:00Z")}
         assert follower.look(self.FLEET) == follower.seen, "the watch's first line woke the follower"
         follower.refresh()
-        assert len(self.reads) == 1 and "submissions" not in follower.kept.kits[BOX]["/kit/main"][1], "the first line was taken as a move"
+        answer = follower.kept.kits[BOX]["/kit/main"][1]
+        assert len(self.reads) == 1 and "submissions" not in answer and "overview" not in answer, "the first line was taken as a move"
+
+    def test_a_queue_an_ended_watch_left_unread_takes_the_overview_its_gather_read_and_never_a_stale_one(self):
+        w = self.Watching()
+        w.end((BOX, "/kit/main"), "sluice overview --watch exited 255")
+        answer = {"ok": True, "overview": self.QUEUED}
+        assert w.seed({BOX: {"/kit/main": ({"main": "/kit/main"}, answer)}}) and w.states[(BOX, "/kit/main")] == {"doc": self.QUEUED}
+        assert "overview" not in answer
+        w.end((BOX, "/kit/main"), "sluice overview --watch exited 255")
+        assert not w.seed({BOX: {"/kit/main": ({"main": "/kit/main"}, answer)}}) and "why" in w.states[(BOX, "/kit/main")]
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, branches=[])}
+        assert not w.seed({BOX: {"/kit/main": ({"main": "/kit/main"}, {"ok": True, "overview": self.QUEUED})}}), "a watch's line was overwritten"
 
     def test_a_watch_that_ended_says_why_on_its_rows_and_is_opened_and_asked_once_at_the_next_tick(self, follower, monkeypatch):
         """The crew-board spec, A watch ends: the ssh holding it dropped."""
@@ -888,7 +900,7 @@ class TestWatches:
                 (r, self.w), (e, self.ew) = os.pipe(), os.pipe()
                 self.stdout, self.stderr = os.fdopen(r, "rb"), os.fdopen(e, "rb")
 
-            def wait(self):
+            def wait(self, timeout=None):
                 return 2
         w, p = board.Watches(), Proc()
         for pipe in (p.stdout, p.stderr):
