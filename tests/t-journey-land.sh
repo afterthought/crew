@@ -510,8 +510,12 @@ until_ok queued near-reach || fail "the landing was not recorded queued:"$'\n'"$
 killed near-reach "$submitter"
 near=$kd/places/land-near-reach
 waiter=$(cat "$(git -C "$near" rev-parse --absolute-git-dir)/crew-landing")
-kill -KILL "$waiter"
-until_ok bash -c '! kill -0 "$1" 2>/dev/null' _ "$waiter" || fail "the waiter was not stopped"
+# stopped <pid>: the process and everything it started, its children first, so the waiter's loop does not outlive the
+# process crew-landing names and read the landing itself
+stopped() { local c; for c in $(pgrep -P "$1"); do stopped "$c"; done; kill -KILL "$1" 2>/dev/null || true; }
+loop=$(pgrep -P "$waiter")
+stopped "$waiter"
+until_ok bash -c 'for p; do ! kill -0 "$p" 2>/dev/null || exit 1; done' _ "$waiter" $loop || fail "the waiter was not stopped"
 rm "$T/sluice-wait-holds"
 eq "$(plan -t Bolt -e "Bolt = 'near-reach'" -c) $(field $box bolt.submit Outcome bolt/near-reach)" "1 "
 out=$(export CREW_AGENT=swb-1-conductor; crew status swb-1 2>&1) || fail "the team could not be read:"$'\n'"$out"
