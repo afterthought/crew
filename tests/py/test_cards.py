@@ -690,7 +690,19 @@ class ReadingActs:
         self.refusals = list(refusals)
         self.given, self.said, self.made_on = preview, released, made
         self.sessions, self.ended, self.emitted, self.calls, self.previews, self.releases = [], [], [], [], [], []
-        self.read = []
+        self.batch_releases, self.read = [], []
+
+    def preview(self, label, key, facts):
+        self.previews.append((label, key, facts["head"], facts["previewed"], facts.get("policy")))
+        return self.given
+
+    def release_preview(self, label, key):
+        self.releases.append((label, key))
+        return self.said
+
+    def release_previews(self, label, key):
+        self.batch_releases.append((label, key))
+        return None
 
     def made(self, label, host, units, key):
         self.read.append((host, list(units), key))
@@ -699,14 +711,6 @@ class ReadingActs:
         if host not in self.made_on:
             raise crew.Refusal("ssh: connect to host chuck-herdr-alpha port 22: Operation timed out")
         return self.made_on[host]
-
-    def preview(self, label, key, facts):
-        self.previews.append((label, key, facts["head"], facts["previewed"]))
-        return self.given
-
-    def release_preview(self, label, key):
-        self.releases.append((label, key))
-        return self.said
 
     def tell(self, name, text):
         self.calls.append(("tell", {"to": name, "text": text}))
@@ -1061,9 +1065,10 @@ class TestReadingAgain:
 
 
 class TestLandingPreview:
-    """A bolt's row on its kit's landings card is read with its preview asked for first when the kit's policy at the
-    head declares one (rail-cards, record 0031 §3), through the act's reach, and with none and no word of one when it
-    does not; a held row and a bolt that is no row end the reading and release the preview (land_row)."""
+    """A bolt's row on its kit's landings card is read with what its preview is, through the act's reach, once the
+    kit's policy at the head is read (rail-cards "A landing row carries what brings its bolt's preview up", record
+    0043), sluice asked for nothing there; a held row and a bolt that is no row end the reading and release the
+    preview (land_row)."""
     TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
     PREVIEW = dict(head=LANDING["head"], name="preview/0123456789ab", state="starting", addresses={"web": "http://web.example"})
 
@@ -1074,42 +1079,40 @@ class TestLandingPreview:
         monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: previewed)
         return plan.land_row(FLEET, "wldn", "b1", acts)
 
-    def test_a_kit_declaring_a_preview_has_it_asked_first_and_listed_on_the_card(self, monkeypatch):
-        """rail-cards "A kit that declares a preview"."""
+    def test_the_kits_declaration_at_the_head_is_handed_to_the_act_and_the_row_carries_what_it_gives(self, monkeypatch):
+        """rail-cards "A kit that declares a preview": a preview brought up from the card listed on it."""
         acts = ReadingActs(preview=self.PREVIEW)
         row = self.row(monkeypatch, acts, (True, None))
         assert row["box"] and row["facts"]["preview"] == self.PREVIEW
-        assert acts.previews == [("wldn", "land/b1", LANDING["head"], True)]
+        assert acts.previews == [("wldn", "land/b1", LANDING["head"], True, None)]
         card = built.landings_card(dict(kit="k", rows=[dict(row["facts"], conductor="swb-1-conductor")]))["card"]
         assert {"label": "Preview: web", "url": "http://web.example"} in card["context"]["links"]
 
-    def test_a_kit_declaring_none_is_asked_nothing_and_its_row_says_nothing_of_one(self, monkeypatch):
+    def test_a_kit_declaring_none_is_handed_to_the_act_as_none(self, monkeypatch):
         """rail-cards "A kit that declares none"."""
-        acts = ReadingActs(preview=self.PREVIEW)
-        assert self.row(monkeypatch, acts, (False, None))["facts"]["preview"] is None and acts.previews == []
+        acts = ReadingActs(preview={"head": LANDING["head"], "none": True})
+        assert self.row(monkeypatch, acts, (False, None))["facts"]["preview"] == {"head": LANDING["head"], "none": True}
+        assert acts.previews == [("wldn", "land/b1", LANDING["head"], False, None)]
 
-    def test_a_preview_recorded_where_the_policy_now_declares_none_is_handed_to_the_act_to_release(self, monkeypatch, previews):
-        (previews / "wldn").mkdir(parents=True)
-        (previews / "wldn" / "b1.json").write_text(json.dumps({"head": "0" * 40, "main": "/kit/main"}))
-        acts = ReadingActs()
-        self.row(monkeypatch, acts, (False, None))
-        assert acts.previews == [("wldn", "land/b1", LANDING["head"], False)]
-
-    def test_a_policy_crew_cannot_read_is_said_as_a_preview_not_asked_and_the_row_raised(self, monkeypatch):
+    def test_a_policy_crew_cannot_read_is_handed_to_the_act_with_why_and_the_row_raised(self, monkeypatch):
+        """rail-cards "The policy can't be read": the row keeps its box."""
         why = "git show in /kit/main on mac-studio failed: fatal: bad object abc1234"
-        acts = ReadingActs(preview=self.PREVIEW)
+        acts = ReadingActs(preview={"head": LANDING["head"], "why": why, "policy": True})
         row = self.row(monkeypatch, acts, (None, why))
-        assert row["box"] and acts.previews == []
+        assert row["box"] and acts.previews == [("wldn", "land/b1", LANDING["head"], None, why)]
         card = built.landings_card(dict(kit="k", rows=[row["facts"]]))["card"]
-        assert f"A preview of abc1234 was asked for and is not there: {why}. Nothing waits on it." in card["context"]["background"]
+        assert f"Whether abc1234 has a preview to try can't be told: {why}." in card["context"]["background"]
 
-    def test_a_previews_end_hands_the_kits_card_its_own_note(self, monkeypatch):
-        """rail-cards "The host is busy when the card is raised": the kit's card raised with the preview's note."""
+    def test_a_previews_change_hands_the_card_it_was_asked_from_its_note(self, monkeypatch):
+        """rail-cards "The host is busy when the card is raised" and "A line naming a branch sluice does not land": a
+        kit's landings card raised with the note, a batch's card with its own."""
         handed = []
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, self.TEAM))
-        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((label, kit, note)))
-        plan.preview_changed(FLEET, "wldn", "b1", "Its preview of abc1234 is up")
-        assert handed == [("wldn", "switchboard-kit", "b1: Its preview of abc1234 is up")]
+        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append(("land", label, kit, note)))
+        monkeypatch.setattr(plan, "batch_hand", lambda fleet, label, n, note: handed.append(("batch", label, n, note)))
+        plan.preview_changed(FLEET, "wldn", "land/switchboard-kit", "b1: Its preview of abc1234 is up")
+        plan.preview_changed(FLEET, "wldn", "batch/7", "a/demo: Its preview of abc1234 could not be brought up")
+        assert handed == [("land", "wldn", "switchboard-kit", "b1: Its preview of abc1234 is up"),
+                          ("batch", "wldn", 7, "a/demo: Its preview of abc1234 could not be brought up")]
 
     def test_a_held_row_ends_its_reading_and_releases_its_preview(self, monkeypatch):
         """rail-cards "A fix holds the landing": the preview is released."""
@@ -1434,7 +1437,8 @@ class TestLanding:
         reading = (f"Read the bolt in one session: {self.READ}\n\nIt lands nothing: approving this card is the word to land.\n\n")
         assert c["context"]["background"] == (
             reading + "Try it running: a preview of 4581216 sluice brings up, at these addresses once it is up. It lands "
-            f"nothing; approving this card is the word to land.\nweb: {self.WEB}\napi: {self.API}\n\n"
+            "nothing; approving this card is the word to land. Write on this card that you are done with it to put it "
+            f"away.\nweb: {self.WEB}\napi: {self.API}\n\n"
             + bare["context"]["background"].removeprefix(reading))
         assert c["context"]["links"] == [{"label": "Read bolt a-deploy-holds-at-a-failure", "url": self.READ},
                                          {"label": "Preview: web", "url": self.WEB}, {"label": "Preview: api", "url": self.API},
@@ -1446,7 +1450,8 @@ class TestLanding:
     def test_a_preview_up_is_listed_as_up(self):
         c = landing(link=self.READ, preview=dict(self.PREVIEW, state="up"))["card"]
         assert ("Try it running: a preview of 4581216, up at these addresses. It lands nothing; approving this card is the "
-                f"word to land.\nweb: {self.WEB}\napi: {self.API}\n\n") in c["context"]["background"]
+                "word to land. Write on this card that you are done with it to put it away.\n"
+                f"web: {self.WEB}\napi: {self.API}\n\n") in c["context"]["background"]
         assert [a["title"] for a in c["artifacts"][2:4]] == ["Preview: web", "Preview: api"]
 
     def test_a_preview_that_failed_says_so_with_the_end_of_its_output_and_lists_no_address(self):
@@ -1480,9 +1485,38 @@ class TestLanding:
         assert all(f"site{i}: {u}" in c["context"]["background"] for i, u in enumerate(many.values()))
 
     def test_a_card_built_with_no_preview_is_as_before(self):
-        """rail-cards "A kit that declares none": no preview and no word of one."""
         c = landing(link=self.READ, preview=None)["card"]
         assert c == landing(link=self.READ)["card"] and "preview" not in json.dumps(c).lower()
+
+    def test_a_row_whose_kit_declares_a_preview_names_what_brings_it_up_and_lists_no_address(self):
+        """rail-cards "A kit that declares a preview" (record 0043): the bolt branch and head, to bring it up by
+        writing on the card, not held while the card waits."""
+        bare = landing(link=self.READ)["card"]
+        c = landing(link=self.READ, preview={"branch": "bolt/a-deploy-holds-at-a-failure", "head": "4581216abcdef", "state": "ask"})["card"]
+        assert c["context"]["background"].split("\n\n")[2] == (
+            "Try it running from bolt/a-deploy-holds-at-a-failure at 4581216: write on this card to bring it up, and that "
+            "you are done to put it away. It is not held while the card waits.")
+        assert c["artifacts"] == bare["artifacts"] and c["context"]["links"] == bare["context"]["links"]
+        self.same_but_details(c, bare)
+
+    def test_a_row_whose_kit_declares_none_says_no_preview(self):
+        """rail-cards "A kit that declares none"."""
+        c = landing(preview={"head": "4581216abcdef", "none": True})["card"]
+        assert c["context"]["background"].startswith("No preview.\n\n")
+
+    def test_a_policy_crew_cannot_read_says_its_preview_cant_be_told_and_why(self):
+        """rail-cards "The policy can't be read"."""
+        why = "git show in /kit/main on mac-studio failed: fatal: bad object 4581216"
+        c = landing(preview={"head": "4581216abcdef", "why": why, "policy": True})["card"]
+        assert c["context"]["background"].startswith(f"Whether 4581216 has a preview to try can't be told: {why}.\n\n")
+
+    def test_a_moved_head_says_the_old_ones_preview_was_released(self):
+        """rail-cards "The head moves with a preview up"."""
+        c = landing(preview={"branch": "bolt/y", "head": "4581216abcdef", "state": "ask", "released": "abc1234000"})["card"]
+        assert ("Try it running from bolt/y at 4581216: write on this card to bring it up, and that you are done to put it "
+                "away. It is not held while the card waits. Its preview of abc1234 was released as the head moved.") in c["context"]["background"]
+        c = landing(preview={"head": "4581216abcdef", "none": True, "released": "4581216abcdef"})["card"]
+        assert c["context"]["background"].startswith("No preview. Its preview of 4581216 was put away.\n\n")
 
 
 def landings_row(bolt, team="swc-1", head="abc1234def", **more):
@@ -1616,6 +1650,17 @@ class TestLandings:
                 "swc-1-conductor starts it with crew card session land/z") in face
         assert "- a\n- b\n- c (chore)" in face
         assert [l["label"] for l in b["card"]["context"]["links"]][:2] == ["Read y", "Preview y: web"]
+
+    def test_each_rows_paragraph_names_what_brings_its_preview_up_or_says_it_has_none(self):
+        """rail-cards "A landing row carries what brings its bolt's preview up": on a list of rows, each row's own."""
+        rows = [landings_row("y", preview={"branch": "bolt/y", "head": "abc1234def", "state": "ask"}),
+                landings_row("z", preview={"head": "abc1234def", "none": True})]
+        b = built.landings_card(dict(kit="crew", rows=rows))
+        face = "\n".join(b["card"]["artifacts"][0]["lines"])
+        assert ("Try it running from bolt/y at abc1234: write on this card to bring it up, and that you are done to put it "
+                "away. It is not held while the card waits.") in face.split("**2. z**")[0]
+        assert "No preview." in face.split("**2. z**")[1]
+        assert not any(l["label"].startswith("Preview") for l in b["card"]["context"]["links"])
 
     def test_a_card_holds_at_most_pending_yous_artifacts(self):
         c = landings(5)["card"]

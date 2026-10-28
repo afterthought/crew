@@ -591,20 +591,34 @@ def high(action):
 # ---------------------------------------------------------------------------------------- the six builders
 
 def preview_said(p):
-    """What a landing card says of a preview of the bolt's head (rail-cards, record 0031 §3): the paragraph its details
-    hold after the reading's, and the addresses it lists, [(label, address)] in the order sluice gives them. p is a
-    preview sluice named, {head, name, addresses, state}, its output with it when it failed, or one that is not there,
-    {head, why}; None says nothing. One that waits or starts lists its addresses for once it is up, one up lists them as
-    up, each saying it lands nothing; one that failed or is not there says why, the end of a failure's output cut to a
-    detail's budget by whole lines, and lists none."""
+    """What a landing card says of a preview of the bolt's head (rail-cards, record 0043): the paragraph its details
+    hold after the reading's, and the addresses it lists, [(label, address)] in the order sluice gives them. p is what
+    brings one up, {branch, head, state: "ask"}, which says to write on the card to bring it up, and that it is not held
+    while the card waits; {head, none}, "No preview."; {head, why, policy} when whether the head has one can't be told;
+    either with released, the revision of one brought up before and released, as the head moved or not; a preview
+    sluice named, {head, name, addresses, state}, its output with it when it failed, or one that is not there, {head,
+    why}; None says nothing. One that waits or starts lists its addresses for once it is up, one up lists them as up,
+    each saying it lands nothing and how to put it away; one that failed or is not there says why, the end of a
+    failure's output cut to a detail's budget by whole lines, and lists none."""
     if not p:
         return "", []
     h = p["head"][:7]
+    was = p.get("released")
+    gone = (f" Its preview of {was[:7]} was released as the head moved." if was and was != p["head"] else
+            f" Its preview of {h} was put away." if was else "")
+    if p.get("none"):
+        return f"No preview.{gone}\n\n", []
+    if p.get("state") == "ask":
+        return (f"Try it running from {p['branch']} at {h}: write on this card to bring it up, and that you are done to "
+                f"put it away. It is not held while the card waits.{gone}\n\n"), []
+    if p.get("policy"):
+        return f"Whether {h} has a preview to try can't be told: {p['why'].rstrip('.')}.\n\n", []
     if p.get("state") in ("waiting", "starting", "up"):
         shown = list(p["addresses"].items())
         where = f"a preview of {h}, up at these addresses" if p["state"] == "up" else (
             f"a preview of {h} sluice brings up, at these addresses once it is up")
-        return (f"Try it running: {where}. It lands nothing; approving this card is the word to land.\n"
+        return (f"Try it running: {where}. It lands nothing; approving this card is the word to land. Write on this card "
+                "that you are done with it to put it away.\n"
                 + "".join(f"{label}: {url}\n" for label, url in shown) + "\n"), shown
     why = (last_lines(p.get("output"), DETAIL) or "its command failed, printing nothing") if p.get("state") == "failed" else p["why"]
     return f"A preview of {h} was asked for and is not there: {why.rstrip('.')}. Nothing waits on it.\n\n", []
