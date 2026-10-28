@@ -1,0 +1,163 @@
+{
+  "at": "2026-10-28T16:24:41Z",
+  "branches": [
+    {
+      "at": "54f68b7c283cbe530b124267e3e3b376d638f1c5",
+      "branch": "bolt/crews-chores-of-the-24th-night",
+      "candidates": [
+        {
+          "executor": "open",
+          "failed": [],
+          "id": "c12",
+          "limit": 1200,
+          "ran": 0,
+          "replayed": 0,
+          "revision": "07a5c1c61f8e7dc5689b44522f5f95362cf48d41",
+          "started": "2026-10-28T01:03:27Z",
+          "state": "testing",
+          "submissions": [
+            317
+          ],
+          "targets": [
+            "#check-full"
+          ]
+        },
+        {
+          "executor": "open",
+          "failed": [],
+          "id": "c13",
+          "limit": 1200,
+          "ran": 0,
+          "replayed": 0,
+          "revision": "45c4c6fff706e7de29087163df752398dc87b66c",
+          "state": "formed",
+          "submissions": [
+            317,
+            318
+          ],
+          "targets": [
+            "#check-full"
+          ]
+        }
+      ],
+      "depth": 2,
+      "held_checkouts": [],
+      "parallel": 4,
+      "recent": [
+        {
+          "at": "2026-10-28T00:18:15Z",
+          "combination": "50b1d85bd8457805e566c8fb331957527d534e90",
+          "event": "blamed",
+          "id": 313,
+          "schema": "sluice/log@1"
+        },
+        {
+          "at": "2026-10-28T00:43:33Z",
+          "combination": "4ba8ae86810bedd84e84a8510c20c0bf3e208ba0",
+          "event": "blamed",
+          "id": 315,
+          "schema": "sluice/log@1"
+        },
+        {
+          "at": "2026-10-28T01:02:27Z",
+          "combination": "34684964905872397a1bd59d7db0e1aba6949be0",
+          "event": "blamed",
+          "id": 316,
+          "schema": "sluice/log@1"
+        }
+      ],
+      "recent_from": {
+        "313": "chore/a-stage-drives-a-browser-only-the-kits-way",
+        "315": "chore/crew-needs-help-prints-its-usage-and-records-nothing",
+        "316": "chore/a-failed-taking-with-no-conflict-is-said-in-gits-words"
+      },
+      "remote": "origin",
+      "submissions": [
+        {
+          "after": [],
+          "attempt": 1,
+          "branch": "bolt/crews-chores-of-the-24th-night",
+          "from": {
+            "agent": "crw-5-unit-2",
+            "path": "/Users/chuck/Code/github_afterthought/crew/places/chore-a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives",
+            "worktree": "chore/a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives"
+          },
+          "head": "aa1a9c7fa2f7a64d505f4c6a99e0f76b5f948d2b",
+          "id": 317,
+          "priority": 0,
+          "schema": "sluice/submission@1",
+          "state": "testing",
+          "submitted": "2026-10-28T00:01:43Z",
+          "tested": {
+            "combination": "07a5c1c61f8e7dc5689b44522f5f95362cf48d41",
+            "on": "54f68b7c283cbe530b124267e3e3b376d638f1c5",
+            "submissions": [
+              317
+            ]
+          }
+        },
+        {
+          "after": [],
+          "attempt": 2,
+          "branch": "bolt/crews-chores-of-the-24th-night",
+          "from": {
+            "agent": "crw-5-unit-1",
+            "path": "/Users/chuck/Code/github_afterthought/crew/places/chore-a-stage-drives-a-browser-only-the-kits-way",
+            "worktree": "chore/a-stage-drives-a-browser-only-the-kits-way"
+          },
+          "head": "ed8e7a92d5f8385895c2cf99d277a4c147738e6f",
+          "id": 318,
+          "priority": 0,
+          "schema": "sluice/submission@1",
+          "state": "queued",
+          "submitted": "2026-10-28T00:23:06Z"
+        }
+      ],
+      "version": 57,
+      "window": 1
+    },
+    {
+      "at": "448c54383a531407f3e4a110dc7804f4319e154f",
+      "branch": "main",
+      "candidates": [],
+      "depth": 1,
+      "held_checkouts": [],
+      "parallel": 4,
+      "recent": [],
+      "recent_from": {},
+      "remote": "origin",
+      "submissions": [
+        {
+          "schema": "sluice/submission@1",
+          "id": 355,
+          "branch": "main",
+          "head": "b49230ce242d7a965174cc0f52589739ed97f375",
+          "from": {
+            "agent": "swancloud-ops",
+            "worktree": "pull/198",
+            "head": "bolt/crew-opens-no-tab-the-user-does-not-use"
+          },
+          "submitted": "2026-10-28T15:30:29Z",
+          "after": [],
+          "priority": 0,
+          "attempt": 1,
+          "state": "queued"
+        }
+      ],
+      "version": 5871,
+      "window": 4
+    }
+  ],
+  "host": "deneb",
+  "hosts": [],
+  "previews": [],
+  "repository": "/Users/chuck/Code/github_afterthought/crew/crew.git",
+  "room": {
+    "bound": 3,
+    "queue": 3,
+    "reserve": 1,
+    "sessions": 0
+  },
+  "schema": "sluice/overview@1",
+  "sessions": []
+}
