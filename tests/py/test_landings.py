@@ -136,6 +136,49 @@ def test_a_landing_stopped_at_the_bolts_present_head_keeps_its_box_saying_what_s
     assert "stopped" not in plan.landing_rows(["y"], {"y": facts("y", head)}, {})[0]["facts"]
 
 
+def test_a_bolt_forecast_to_conflict_with_main_takes_main_first_with_no_box():
+    """rail-cards "Main landed a change the bolt also made"."""
+    rows = plan.landing_rows(["y", "z"], {"y": dict(facts("y"), conductor="crw-1-conductor"), "z": facts("z")}, {},
+                             takes_main={"y": ("e4f5a6b", ["openspec/specs/artifact-buckets/spec.md"])})
+    assert [(r["bolt"], r["box"], r.get("why"), r.get("takes_main")) for r in rows] == [
+        ("y", False, "takes main first: forecast to conflict with main on openspec/specs/artifact-buckets/spec.md at "
+                     "e4f5a6b; crw-1-conductor takes main in by a fix", True),
+        ("z", True, None, None)]
+
+
+def test_a_conflict_a_wait_recorded_holds_the_row_when_the_cards_own_forecast_was_not_made():
+    """rail-cards "A wait found it first": the record's conflict at the bolt's present head (main_conflict)."""
+    head = "d" * 40
+    recorded = [dict(Act="forecast", On=["bolt/y"], Heads=f"bolt/y@{head[:7]} main@2222222", Paths="README.md", Reached="wait")]
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, {}, takes_main={"y": plan.main_conflict(recorded, "y", head)})
+    assert (row["box"], row["why"], row["takes_main"]) == (
+        False, "takes main first: forecast to conflict with main on README.md at 2222222; its team takes main in by a fix", True)
+
+
+def test_a_conflict_only_with_a_row_above_holds_nothing():
+    """rail-cards "Only a bolt above it": a forecast against a row above is said on the row, not held."""
+    rows = plan.landing_rows(["y", "z"], {"y": facts("y"), "z": dict(facts("z"), forecast=[("y", ["plan.py"])])}, {}, takes_main={})
+    assert [r["box"] for r in rows] == [True, True]
+
+
+def test_a_take_main_fix_in_flight_holds_its_row_as_taking_main_first_in_its_words():
+    """rail-cards "The conductor started the fix"; any other fix holds the row in its words as ever."""
+    words = "Take main into the bolt: it is forecast to conflict on README.md"
+    y, z = plan.landing_rows(["y", "z"], {"y": facts("y", fixes={"fix/y/take-main-e4f5a6b": words}),
+                                          "z": facts("z", fixes={"fix/z/take-main-e4f5a6b": words, "fix/z/gap": "A zone is missing."})}, {})
+    assert (y["box"], y["why"], y["takes_main"]) == (False, f'takes main first: take-main-e4f5a6b taking main in: "{words}"', True)
+    assert (z["box"], z.get("takes_main")) == (False, None)
+    assert z["why"] == f'held for a fix: A zone is missing. (fix/z/gap); takes main first: take-main-e4f5a6b taking main in: "{words}"'
+
+
+def test_a_new_head_with_no_conflict_forecast_has_its_box_again():
+    """rail-cards "The fix merges": the record's conflict was at the head the fix moved the bolt from."""
+    recorded = [dict(Act="forecast", On=["bolt/y"], Heads="bolt/y@ccccccc main@2222222", Paths="README.md", Reached="told")]
+    takes = {b: c for b in ["y"] for c in [plan.main_conflict(recorded, b, "d" * 40)] if c}
+    row, = plan.landing_rows(["y"], {"y": facts("y", "d" * 40)}, {}, takes_main=takes)
+    assert row["box"] and "takes_main" not in row
+
+
 # ---------------------------------------------------------------------------------------------- the forecasts
 
 def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():
@@ -144,10 +187,20 @@ def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():
     assert got == {"y": [], "z": [("y", ["plugin/lib/plan.py"])]}
 
 
-def test_a_bolt_behind_main_names_main_first():
-    paths = {("y", "main"): ["README.md"], ("z", "main"): ["a"], ("z", "y"): ["b"]}
-    got = plan.row_forecasts(["y", "z"], lambda ours, theirs: paths.get((ours, theirs), []))
-    assert got == {"y": [("main", ["README.md"])], "z": [("main", ["a"]), ("y", ["b"])]}
+def test_a_bolt_behind_main_names_main_first_and_alone():
+    """A bolt forecast to conflict with main takes main first (landing_rows), so it is forecast against main alone and
+    no row below is forecast against it."""
+    paths = {("y", "main"): ["README.md"], ("z", "main"): ["a"], ("z", "y"): ["b"], ("w", "y"): ["c"], ("w", "x"): ["d"]}
+    got = plan.row_forecasts(["y", "z", "x", "w"], lambda ours, theirs: paths.get((ours, theirs), []))
+    assert got == {"y": [("main", ["README.md"])], "z": [("main", ["a"])], "x": [], "w": [("x", ["d"])]}
+
+
+def test_a_bolt_the_record_holds_taking_main_first_is_forecast_against_main_alone():
+    """rail-cards "A wait found it first": a row the run record holds taking main first is no row above another."""
+    asked = []
+    got = plan.row_forecasts(["y", "z"], lambda ours, theirs: asked.append((ours, theirs)) or (["b"] if (ours, theirs) == ("z", "y") else []),
+                             held=["y"])
+    assert got == {"y": [], "z": []} and ("z", "y") not in asked
 
 
 def test_a_forecast_git_could_not_tell_is_kept_as_not_made():
@@ -169,10 +222,10 @@ def test_a_bolt_branch_crew_cannot_read_is_said_and_its_box_kept(monkeypatch):
     def git(fleet, t, where, *args, ok=(0,)):
         calls.append(args)
         if args[:2] == ("rev-parse", "--verify"):
-            return (0, "f" * 40) if "bolt/z" in args[3] else (1, "")
+            return (0, "f" * 40) if "bolt/z" in args[3] or "/main^" in args[3] else (1, "")
         return (0, "tree\n") if args[0] == "merge-tree" else (0, "")
     monkeypatch.setattr(plan, "kit_git", git)
-    got, why = plan.forecast_rows(FLEET, "swancloud", "crew", ["y", "z"])
+    got, why, at = plan.forecast_rows(FLEET, "swancloud", "crew", ["y", "z"])
     assert got == {"y": [("main", None)], "z": [("y", None)]}
     assert why == {"y": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's",
                    "z": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's"}
@@ -200,21 +253,74 @@ def where_read(monkeypatch, policy):
 def test_a_bolt_on_github_is_forecast_where_it_lives(monkeypatch):
     """bolt-plan "A bolt on GitHub is read where it lives": GitHub's copy, whose policy names origin for the bolt, not
     the host's lagging copy."""
-    (got, why), trees = where_read(monkeypatch, '[branches."bolt/*"]\nremote = "origin"\n')
+    (got, why, at), trees = where_read(monkeypatch, '[branches."bolt/*"]\nremote = "origin"\n')
     assert why == {} and trees == ["1" * 40]
 
 
 def test_a_bolt_kept_on_its_host_is_forecast_at_the_hosts_branch(monkeypatch):
     """bolt-plan "A bolt kept on its host": GitHub's copy names no remote for the bolt, or has no policy."""
     for policy in ("[branches.main]\nremote = \"origin\"\n", None):
-        (got, why), trees = where_read(monkeypatch, policy)
+        (got, why, at), trees = where_read(monkeypatch, policy)
         assert why == {} and trees == ["2" * 40]
 
 
 def test_a_policy_crew_cannot_read_at_githubs_copy_is_said_and_forecasts_nothing(monkeypatch):
-    (got, why), trees = where_read(monkeypatch, "[branches\n")
+    (got, why, at), trees = where_read(monkeypatch, "[branches\n")
     assert got == {"y": [("main", None)]} and trees == []
     assert why["y"].startswith(".config/sluice.toml at origin/bolt/y is not TOML, so crew can't read bolt y: ")
+
+
+def test_the_forecast_hands_back_the_revision_of_main_it_forecast_against(monkeypatch):
+    """rail-cards "Main moves under an open card": the commit origin/main names after the fetch, which the merge-trees
+    are made onto and the raise keeps."""
+    (got, why, at), trees = where_read(monkeypatch, None)
+    assert at == {"main": "1" * 40}
+
+
+def test_a_forecast_whose_fetch_or_read_of_main_failed_hands_back_no_revision(monkeypatch):
+    def fetch_refused(fleet, t, where, *args, ok=(0,)):
+        if args[0] == "fetch":
+            raise crew.Refusal("git fetch in /c/main on mac-studio failed: could not read from remote")
+        return 0, ""
+    monkeypatch.setattr(plan, "kit_git", fetch_refused)
+    got, why, at = plan.forecast_rows(FLEET, "swancloud", "crew", ["y"])
+    assert at is None and got == {"y": [("main", None)]} and why["y"].endswith("could not read from remote")
+
+    def no_main(fleet, t, where, *args, ok=(0,)):
+        return (1, "") if args[0] == "rev-parse" else (0, "")
+    monkeypatch.setattr(plan, "kit_git", no_main)
+    got, why, at = plan.forecast_rows(FLEET, "swancloud", "crew", ["y"])
+    assert at is None and why == {"y": "/c/main on mac-studio has no origin/main to forecast against"}
+    assert plan.forecast_rows(FLEET, "swancloud", "atlas-kit", ["y"])[2] is None
+
+
+# ------------------------------------------------------------------------------------ when main moved under a card
+
+M1, M2 = "a1b2c3d" + "0" * 33, "e4f5a6b" + "0" * 33
+
+
+def test_a_card_main_moved_under_is_due_a_raise_and_one_it_did_not_is_not():
+    """rail-cards "Main moves under an open card" and "Main has not moved"."""
+    cards_ = [("swancloud", "crew"), ("swancloud", "swancloud")]
+    mains = {("swancloud", "crew"): M2, ("swancloud", "swancloud"): M1}
+    assert plan.landings_moved(cards_, mains, {("swancloud", "crew"): M1, ("swancloud", "swancloud"): M1}) == (
+        [("swancloud", "crew")], [])
+
+
+def test_a_card_with_no_revision_kept_is_due_a_raise():
+    """A lost note costs one more raise."""
+    assert plan.landings_moved([("swancloud", "crew")], {("swancloud", "crew"): M1}, {}) == ([("swancloud", "crew")], [])
+
+
+def test_a_kit_whose_read_names_no_revision_is_unread_and_not_judged_moved():
+    """read.2: an older gather leaves main_at out, and a kit not read has none."""
+    cards_ = [("swancloud", "crew"), ("swancloud", "swancloud")]
+    assert plan.landings_moved(cards_, {("swancloud", "crew"): None}, {("swancloud", "crew"): M1}) == (
+        [], [("swancloud", "crew"), ("swancloud", "swancloud")])
+
+
+def test_no_open_card_is_nothing_due():
+    assert plan.landings_moved([], {("swancloud", "crew"): M2}, {("swancloud", "crew"): M1}) == ([], [])
 
 
 # ------------------------------------------------------------------- a bolt's own work between two heads
@@ -422,6 +528,41 @@ def test_a_send_holding_only_a_held_bolt_closes_keeping_it_and_one_whose_work_ch
     step = plan.landings_step([box("y"), hold("z", REFUSED), box("w")], answered("y@abc1234", "z@abc1234"), ["y", "z"],
                               {"y", "z", "w"})
     assert (step[0], step[3]) == ("follow", [("y", "abc1234"), ("z", "abc1234")]) and f"Held: z, {REFUSED}; {STANDS}" in step[1]
+
+
+def taking_main(bolt):
+    return dict(hold(bolt, MAIN_FIRST), takes_main=True)
+
+
+def test_a_ticked_bolt_then_taking_main_first_leaves_the_card_its_send_standing():
+    """rail-cards "Ticked, then forecast to conflict" and "Ticked beside one that lands"."""
+    assert plan.landings_step([taking_main("y")], answered("y@abc1234"), ["y"], {"y"}) == ("leave",)
+    assert plan.landings_step([taking_main("y")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y"},
+                              landed={"z": "2" * 40}) == ("leave",)
+
+
+def test_a_ticked_bolt_taking_main_first_is_kept_on_the_send_when_a_new_card_follows():
+    step = plan.landings_step([taking_main("y"), box("w")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z", "w"})
+    assert step == ("follow", "Landing as you ticked: z. Taking main in first, your send standing for it: y. Since your "
+                              "send, w reads proven, and the card that follows asks for it.", [], [("y", "abc1234"), ("z", "abc1234")])
+
+
+def test_a_ticked_bolt_taking_main_first_whose_own_work_changed_keeps_no_send():
+    """A send stands while the bolt takes main in only for the work the user sent (send_stands): one that gained work
+    of its own is held, and asked for again once it reads proven."""
+    y = dict(taking_main("y"), facts=facts("y", H2))
+    work = {"y": dict(head=H2, gained=[("1a2b3c4", "fix: keep the lease")], lost=[], why=None)}
+    step = plan.landings_step([y], answered("y@abc1234"), ["y"], {"y"}, work=work)
+    assert step == ("close", f"Held: y, {MAIN_FIRST}; y's head is now def5678, with work of its own since your send at "
+                             "abc1234: fix: keep the lease, so a card asks for it again once it reads proven.", None, [])
+
+
+def test_a_ticked_bolt_held_for_any_other_fix_is_held_and_the_card_closed_keeping_its_send():
+    """Only a bolt taking main in leaves the card; one held for another fix closes it, its send kept on the close."""
+    step = plan.landings_step([hold("y")], answered("y@abc1234"), ["y"], {"y"})
+    assert step == ("close", "Held: y, held for a fix: one zone is missing (fix/y/gap); your send stands for it: it lands "
+                             "once its team's fix has only taken main in and sluice has proven it, with nothing asked.", None,
+                    [("y", "abc1234")])
 
 
 def test_a_landing_on_the_users_word_in_ops_pane_closes_a_waiting_card_no_row_of_which_can_land_as_answered_there():
@@ -680,6 +821,9 @@ PLAN = ("%rec: Bolt\n\n" + "".join(f"Bolt: {b}\nRepo: {k}\nTeam: {t}\n\n" for b,
                                     [("y", "crew", "crw-1"), ("w", "swancloud", "swc-1"), ("z", "crew", "crw-1")]) + "%rec: Unit\n\n")
 
 
+MAIN = "e4f5a6b" + "0" * 33
+
+
 def row(bolt, head=H1, **more):
     return dict(bolt=bolt, box=True, facts=dict(bolt=bolt, kit="crew", units=["a"], chores=[], batches={}, head=head, at=None,
                                                 moved=0, pr=None, team="crw-1", conductor="crw-1-conductor", preview=None,
@@ -691,17 +835,26 @@ class LandActs:
     gives it (rows, a missing one's host not answering), the forecasts, this host's run record (entries) and the
     partition's (partition), and Pending You's tools answered from answers."""
 
-    def __init__(self, rows, entries=(), partition=(), answers=None, here="mac-studio", works=None):
+    def __init__(self, rows, entries=(), partition=(), answers=None, here="mac-studio", against_main=None, main=MAIN, works=None):
         self.rows, self.held, self.whole, self.answers, self.here = rows, list(entries), list(partition), dict(answers or {}), here
         self.calls, self.emitted, self.told, self.asked, self.works, self.worked = [], [], [], [], dict(works or {}), []
+        # The forecast: each bolt's conflicts with main ({bolt: [("main", paths)]}) at the revision main (None, unread).
+        self.against_main, self.main, self.forecasts, self.kept = dict(against_main or {}), main, [], {}
 
     def land_row(self, label, bolt, host):
         self.asked.append((bolt, host))
         got = self.rows.get(bolt)
         return (got, None) if got else (None, "ssh: connect to host deneb: timed out")
 
-    def forecast(self, label, kit, bolts):
-        return {b: [] for b in bolts}, {}
+    def forecast(self, label, kit, bolts, held=()):
+        self.forecasts.append((list(bolts), list(held)))
+        return {b: self.against_main.get(b) or [] for b in bolts}, {}, self.main and {"main": self.main}
+
+    def keep_main(self, label, kit, sha):
+        self.kept[kit] = sha
+
+    def kept_main(self, label, kit):
+        return self.kept.get(kit)
 
     def work(self, label, kit, moves):
         self.worked.append(moves)
@@ -885,6 +1038,92 @@ def test_a_bolt_proven_after_the_answer_gets_a_new_card_following_it_and_the_sen
     assert raised(monkeypatch, again) == "req_k2"
     assert [t for t, _ in again.calls] == ["get_request"]
     assert "card land/crew: y lands on the user's send of an earlier card, so it is no row of this one" in capsys.readouterr().out
+
+
+WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}
+MAIN_FIRST = "takes main first: forecast to conflict with main on README.md at e4f5a6b; crw-1-conductor takes main in by a fix"
+
+
+def test_main_moving_so_one_of_two_conflicts_follows_the_card_with_the_other_as_its_one_box(monkeypatch):
+    """rail-cards "One of two": every row forecast against main first; a list of two becomes an approval of one."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=dict(POSTED, **WAITING), against_main={"z": [("main", ["README.md"])]})
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.forecasts == [(["y", "z"], [])] and acts.kept == {"crew": MAIN}
+    assert next(a for t, a in acts.calls if t == "cancel_request")["reason"] == f"z {MAIN_FIRST}"
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert (post["kind"], post["follows"]) == ("approve", "req_k1")
+    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
+    assert acts.emitted[-1]["Heads"] == "y@abc1234"
+
+
+def test_main_moving_so_one_of_three_conflicts_changes_the_card_in_place_saying_why(monkeypatch):
+    """rail-cards "One of three"."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234 w@abc1234")]
+    acts = LandActs({"y": row("y"), "z": row("z"), "w": row("w")}, held, answers=WAITING, against_main={"w": [("main", ["README.md"])]})
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(PLAN.replace("Bolt: w\nRepo: swancloud\nTeam: swc-1", "Bolt: w\nRepo: crew\nTeam: crw-1")))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert change["changeNote"] == f"w {MAIN_FIRST}"
+    assert acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234"
+
+
+def test_a_conflict_the_record_holds_at_the_rows_head_holds_it_with_no_forecast_against_it(monkeypatch):
+    """rail-cards "A wait found it first": the row is handed to the forecast as held, and held taking main first in the
+    recorded files though the card's own forecast says nothing of it."""
+    recorded = [dict(Act="forecast", On=["bolt/y"], Heads="bolt/y@abc1234 main@2222222", Paths="docs/a.md", Reached="wait")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, partition=recorded, answers=POSTED, main=None)
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.forecasts == [(["y", "z"], ["y"])] and acts.kept == {}
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [
+        "**y**: takes main first: forecast to conflict with main on docs/a.md at 2222222; crw-1-conductor takes main in by a fix"]
+    assert acts.emitted[-1]["Heads"] == "z@abc1234"
+
+
+FIX = ('crew fix crw-1 take-main-e4f5a6b "Take main into the bolt: it is forecast to conflict on README.md"')
+TOLD = dict(Act="forecast", On=["bolt/z"], why="bolt(z): forecast to conflict with main", Heads="bolt/z@abc1234 main@e4f5a6b",
+            Paths="README.md", Reached="told")
+
+
+def test_a_row_newly_taking_main_first_tells_its_conductor_the_fix_once_and_records_it(monkeypatch):
+    """bolt-teams "Main moves under a waiting bolt", "Told once" and "The team holds two bolts": crw-1 holds y and z."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, acts)
+    conductor = [w for n, w in acts.told if n == "crw-1-conductor"]
+    assert conductor == [f"bolt/z is forecast to conflict with main on README.md: main has landed work on them since the bolt "
+                         f"took it. Take main into the bolt now, while the conflict is small, by a fix as when swancloud-ops "
+                         f"says a landing conflicts: {FIX} --bolt z"]
+    assert [e for e in acts.emitted if e["Act"] == "forecast"] == [TOLD]
+    again = LandActs({"y": row("y"), "z": row("z")}, partition=[TOLD],
+                     answers=dict(POSTED, get_request=({"status": "pending", "turn": "you", "version": 2}, None)),
+                     against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, again)
+    assert [n for n, _ in again.told if n == "crw-1-conductor"] == [] and not [e for e in again.emitted if e["Act"] == "forecast"]
+    assert again.forecasts == [(["y", "z"], ["z"])]  # still held, by the record and the forecast
+
+
+def test_a_forecast_the_wait_said_first_is_not_told_again_and_one_bolt_names_no_bolt(monkeypatch):
+    """bolt-teams "The wait said it first": the wait's entry, at the same heads, on the partition's record."""
+    waited = dict(TOLD, Reached="wait")
+    acts = LandActs({"y": row("y"), "z": row("z")}, partition=[waited], answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, acts)
+    assert [n for n, _ in acts.told if n == "crw-1-conductor"] == []
+    alone = LandActs({"z": row("z")}, answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan("%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"))
+    plan.raise_landings(FLEET, "swancloud", "crew", alone)
+    assert [w for n, w in alone.told if n == "crw-1-conductor"][0].endswith(FIX)
+
+
+def test_a_conductor_that_cannot_be_told_has_nothing_recorded_and_its_row_stays_held(monkeypatch, capsys):
+    """bolt-teams "The conductor cannot be told"."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED, against_main={"z": [("main", ["README.md"])]})
+    acts.tell = lambda name, text: name != "crw-1-conductor" and LandActs.tell(acts, name, text)
+    raised(monkeypatch, acts)
+    assert not [e for e in acts.emitted if e["Act"] == "forecast"]
+    assert "crw-1-conductor was not told z takes main first, so it is told at the next raise" in capsys.readouterr().err
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
 
 
 ONLY_Z = "%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"
