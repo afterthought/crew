@@ -374,6 +374,8 @@ class TestRefresh:
             self.reads.append((list(labels), sweep, plan.READ.tip("o/state", "wldn/main"), plan.READ.tip("o/state", "swancloud/main")))
             served = kept.served(BOX, "/kit/main", {"main": "/kit/main"})
             kept.use(BOX, "/kit/main", {"main": "/kit/main"}, served or {"ok": True, "stamp": self.stamps[(BOX, "/kit/main")]})
+            if kept.cards is None:  # the tick's ask, which rail_read makes when the follower kept no read to ask from
+                kept.cards = ({}, None)
             print("crew: a word the read said", file=sys.stderr)
             return {"found": [], "errors": {"wldn/main of o/state": "a plan it could not read"}, "signals": {}, "unchecked": list(self.unchecked),
                     "sv": {}, "rows": [], "cards": [], "unread": {}, "batched": {}, "served": served is not None}
@@ -436,6 +438,42 @@ class TestRefresh:
         follower.refresh()
         assert self.again == [["wldn", "swancloud"]]
 
+    def test_the_clock_asks_pending_you_after_the_kept_reads_cards_once_a_tick_and_never_between(self, follower, monkeypatch):
+        """The crew-board spec, The follower asks Pending You about cards on its clock: one bridge a tick for the cards the
+        kept read's sweep would act on, none on a tick when it names none, and none at a refresh between ticks."""
+        bridges, test = [], self
+        self.to_ask = []
+
+        class Py:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+            def answer(self, tool, args):
+                return {"status": "pending"}, None
+
+        class Acts:
+            def __init__(self, fleet):
+                pass
+
+            def bridge(self, name, later, held=None):
+                bridges.append(name)
+                return Py()
+        monkeypatch.setattr(plan, "SweepActs", Acts)
+        monkeypatch.setattr(plan, "cards_asked", lambda fleet, read, here, now: list(test.to_ask))
+        monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
+        follower.tick()
+        follower.tick()
+        assert bridges == [] and follower.kept.cards == ({}, None) and len(self.reads) == 1
+        self.to_ask = ["req_p4"]
+        follower.tick()
+        assert bridges == ["crew"] and follower.kept.cards == ({"req_p4": ({"status": "pending"}, None)}, None)
+        follower.refresh()
+        follower.refresh()
+        assert bridges == ["crew"], "a refresh between ticks asked Pending You"
+
     def test_a_refresh_with_nothing_moved_sweeps_the_sessions_only_where_the_last_could_not(self, follower):
         """The card-sessions spec, A host the last sweep missed."""
         self.unchecked = [{"label": "wldn", "host": BOX, "why": "did not answer (exit 255)"}]
@@ -493,7 +531,7 @@ class TestMoved:
 
     def test_nothing_moved_names_nothing_and_a_branch_the_cache_lacks_stands(self):
         assert board.moved(self.KEPT, self.now()) == {"crew": False, "state": set(), "blueprints": set(), "kits": set(), "readings": set(),
-                                                      "read": False, "any": False}
+                                                      "cards": False, "read": False, "any": False}
 
     def test_one_state_tip_moved_names_its_partition_alone(self):
         m = board.moved(self.KEPT, self.now(state={"wldn": "d" * 40}))
@@ -520,6 +558,24 @@ class TestMoved:
     def test_a_host_whose_readings_could_not_be_stamped_counts_as_moved(self):
         assert board.moved(self.KEPT, self.now(readings={BOX: None}))["readings"] == {BOX}
 
+    FOUND = {"req_p4": ({"status": "pending", "version": 2}, None), "req_q1": (None, "This is wldn-ops's card; leave it.")}
+
+    def test_the_same_answers_at_the_next_tick_leave_the_cards_and_one_card_now_lost_moves_them(self):
+        """The crew-board spec, A card lost between ticks: Pending You answered alike, then no longer finds proposal 4's."""
+        kept = dict(self.KEPT, cards=board.cards_stamp(self.FOUND, None, False, 1))
+        assert not board.moved(kept, dict(kept, cards=board.cards_stamp(dict(self.FOUND), None, False, 2)))["any"]
+        m = board.moved(kept, dict(kept, cards=board.cards_stamp(dict(self.FOUND, req_p4=(None, "Not found: request:req_p4.")), None, False, 2)))
+        assert m["cards"] and m["any"] and not m["read"] and m["readings"] == m["kits"] == set()
+
+    def test_a_failed_bridge_or_a_card_the_last_sweep_left_moves_the_cards_at_each_tick_and_only_then(self):
+        """A card left because its act did not go through is tried again once a minute, not at every refresh."""
+        for why, left in (("Pending You did not answer whoami within 30 seconds.", False), (None, True)):
+            at_tick = board.cards_stamp(self.FOUND, why, left, 2)
+            assert board.moved(dict(self.KEPT, cards=board.cards_stamp(self.FOUND, None, False, 1)), dict(self.KEPT, cards=at_tick))["cards"]
+            kept = dict(self.KEPT, cards=at_tick)
+            assert not board.moved(kept, dict(kept))["cards"], "a refresh between ticks took the cards as moved again"
+            assert board.moved(kept, dict(kept, cards=board.cards_stamp(self.FOUND, why, left, 3)))["cards"]
+
     def test_crews_head_or_the_teams_file_moved_or_unreadable_says_crew_moved(self):
         assert board.moved(self.KEPT, self.now(crew=("e" * 40, b"{teams}")))["crew"]
         assert board.moved(self.KEPT, self.now(crew=("c" * 40, b"{teams, again}")))["crew"]
@@ -529,6 +585,31 @@ class TestMoved:
         m = board.moved(None, self.KEPT)
         assert m["crew"] and m["state"] == {"wldn", "swancloud"} and m["kits"] == set(self.KEPT["kits"]) and m["any"] and m["read"]
         assert m["readings"] == {BOX, "mac-studio"}
+
+
+def test_no_card_to_ask_after_starts_no_bridge_and_the_cards_asked_are_asked_in_one():
+    """The crew-board spec, No card to ask about: no bridge at all (a logic test's subprocess raises); and the cards the
+    clock's tick asks after are asked in one bridge in crew's own name."""
+    assert plan.cards_fetched(FLEET, []) == ({}, None)
+    opened = []
+
+    class Py:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def answer(self, tool, args):
+            opened.append((tool, args["requestId"], args["name"]))
+            return {"status": "pending"}, None
+
+    class Acts:
+        def bridge(self, name, later, held=None):
+            opened.append(name)
+            return Py()
+    assert plan.cards_fetched(FLEET, ["req_1", "req_2"], Acts()) == ({"req_1": ({"status": "pending"}, None), "req_2": ({"status": "pending"}, None)}, None)
+    assert opened == ["crew", ("get_request", "req_1", "crew"), ("get_request", "req_2", "crew")]
 
 
 class TestKept:

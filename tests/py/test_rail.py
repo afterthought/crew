@@ -931,14 +931,14 @@ class Acts:
         return None
 
 
-def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), **kw):
+def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), handed=None, **kw):
     """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards, its
-    plan holding the proposals numbered proposed."""
+    plan holding the proposals numbered proposed; handed, the host's follower's answers from its clock's last ask."""
     fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
     read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=list(rows_), cards=list(cards_),
                 unread=unread or {}, logs={"wldn": list(entries)}, proposed={"wldn": set(proposed)})
     acts = Acts(entries=[{"Act": "card.post", "Key": c["key"], "By": c["by"], "Card": c["card"]} for c in cards_], **kw)
-    return plan.sweep_cards(fleet, read, acts), acts
+    return plan.sweep_cards(fleet, read, acts, handed), acts
 
 
 NOT_FOUND = (None, "Not found: request:req_x.")
@@ -1204,6 +1204,34 @@ class TestSweep:
                           answers={"get_request": NOT_FOUND}, readings={"batch/3": self.LINK})
         assert seen == ["batch/3"] and acts.raised == []
         assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "posted again as req_b4")]
+
+    def test_the_followers_answers_handed_in_are_acted_on_with_no_ask_of_its_own(self):
+        """The crew-board spec, The follower asks Pending You about cards on its clock: a sweep between ticks judges the
+        cards as the tick last answered, asking nothing in crew's own name, and acts as it would on its own ask."""
+        p4 = card("proposal/4", "req_p4", "wldn-planner")
+        out, acts = swept(cards_=[p4], entries=[did("plan.approve", On=["proposal/4"])], handed=({"req_p4": ({"status": "pending", "version": 2}, None)}, None))
+        assert [c for c in acts.calls if c[0] == "crew"] == []
+        assert [(d["key"], d["did"]) for d in out["done"]] == [("proposal/4", "closed")]
+
+    def test_a_card_the_ticks_ask_did_not_answer_for_waits_for_the_next_tick(self):
+        """A question opened since the tick: neither asked after nor acted on until the next tick asks after it."""
+        q = card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
+        out, acts = swept(cards_=[q], listed={"crw-3-conductor": (False, None)}, handed=({}, None))
+        assert (out, acts.calls, acts.emitted) == ({"done": [], "unswept": []}, [], [])
+
+    def test_a_ticks_failed_ask_handed_in_leaves_the_partition_unswept_and_asks_nothing_again(self):
+        said = "Pending You did not answer whoami within 30 seconds. " + plan.SWEEP_LATER
+        out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], entries=[did("plan.approve", On=["proposal/4"])], handed=({}, said))
+        assert out == {"done": [], "unswept": [dict(label="wldn", why=said)]} and acts.calls == [] and acts.emitted == []
+
+    def test_the_cards_asked_on_the_clock_are_those_the_sweep_would_ask_after(self):
+        """plan.cards_asked, the follower's tick's ask: the cards of rows gone, held with their row, and questions."""
+        p4, q = card("proposal/4", "req_p4", "wldn-planner"), card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
+        fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
+        read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=[], cards=[p4, q], unread={},
+                    logs={"wldn": [did("plan.approve", On=["proposal/4"])]}, proposed={"wldn": {4, 5}})
+        assert plan.cards_asked(fleet, read, "mac-studio", NOW) == ["req_p4", "req_q1"]
+        assert plan.cards_asked(fleet, dict(read, cards=[]), "mac-studio", NOW) == []
 
     def test_a_host_not_signed_in_changes_nothing_and_says_so(self):
         said = "this host can't ask through Pending You: it is not signed in. The user signs it in with pendingyou-signin. " + plan.SWEEP_LATER

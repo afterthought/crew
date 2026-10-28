@@ -543,13 +543,16 @@ def wanted(path, since):
 class Kept:
     """What the host's follower keeps between its refreshes, in its own process and never written (plan.12's reading
     of 2026-10-28, state.4): each kit's answer, with the request it answered and the stamp it was read at, by host;
-    each branch tip's files by blob, the blobs' text, and the blobs whose recfix check passed. It is keyed by the
-    stamps and commits it was read at, so nothing is served once they move (read.1); what a refresh did not use is
-    dropped at its end (settle)."""
+    each branch tip's files by blob, the blobs' text, and the blobs whose recfix check passed; and what Pending You
+    answered of the cards at the clock's last tick. It is keyed by the stamps and commits it was read at, so nothing is
+    served once they move (read.1); what a refresh did not use is dropped at its end (settle)."""
 
     def __init__(self):
         self.kits, self.used, self.stamps = {}, {}, {}
         self.listings, self.blobs, self.checked, self.tips = {}, {}, set(), set()
+        # cards: the clock's last ask of Pending You after the cards (cards_fetched), (found, why), which every card
+        # sweep judges with until the next tick; None while no tick has asked, when the read's sweep asks on its tick
+        self.cards = None
 
     def served(self, host, main, req):
         return kit_served(self.kits.get(host, {}).get(main), self.stamps.get((host, main)), req)
@@ -12468,7 +12471,10 @@ def rail_read(fleet, labels, board=False, sweep=False):
                 gives=gives, ops=opses, logs=logs, batched=batched, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
-        read["swept"] = sweep_cards(fleet, read)
+        k = READ.follower
+        if k is not None and k.cards is None:  # the follower's tick with no read kept to ask from: its one ask, made here
+            k.cards = cards_fetched(fleet, cards_asked(fleet, read, crew.this_host(), datetime.datetime.now(datetime.timezone.utc)))
+        read["swept"] = sweep_cards(fleet, read, answers=k.cards if k is not None else None)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
                                     {l: partition_kits(fleet, l) for l, *_ in found})
         read["moved"] = sweep_moved(fleet, read)
@@ -15201,7 +15207,60 @@ def question_close(acts, label, c, words):
     return state
 
 
-def sweep_cards(fleet, read, acts=None):
+def sweep_judgments(fleet, read, here, now):
+    """The judgments the rail's sweep of the cards acts on, made on this host (here) at now from a read (rail_read):
+    each partition's whose plan was read and whose run record was read from its branch, [(label, owners, planner, j)],
+    j as sweep_judged gives it, owners each row's owner by its key with each decision record's row the design agent's,
+    planner the batches' owner; and each partition it can't judge with why, [{label, why}], its run record unread. A
+    decision on plain facts (code.7)."""
+    unswept, judged = [], []
+    down = {h for h, v in read["sv"].items() if not v["ok"]}
+    for l, _, _, pl in read["found"]:
+        if not pl:
+            continue
+        unread = read["unread"].get(l, {})
+        if unread:
+            unswept.append(dict(label=l, why="; ".join(f"its run record could not be read from {b}, so which cards are open can't be told: {v}"
+                                                       for b, v in sorted(unread.items()))))
+            continue
+        rows = [r for r in read["rows"] if r["label"] == l]
+        owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
+        blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
+        blind |= {b.get("Repo") for b in pl.bolts() if b.name() in blind and b.get("Repo")}  # a kit's card, a bolt of it unread
+        planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
+        design = (f"{l}-design", fleet["partitions"][l]["machine"])
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind,
+                         read["proposed"].get(l), now, planner, design, partition_kits(fleet, l),
+                         {x["bolt"]: r["key"].split("/", 1)[1] for r in rows if r["group"] == "land" for x in r.get("bolts", [])})
+        judged.append((l, dict(owners, **{r["key"]: design for r, _ in j["again"] if r["group"] == "records"}), planner, j))
+    return judged, unswept
+
+
+def cards_asked(fleet, read, here, now):
+    """The cards the rail's sweep asks Pending You whether it still finds, of the judgments it would act on
+    (sweep_judgments): each card of a row that is gone, each held with its row and each question, each once, in order.
+    The host's follower asks after them on its clock's tick (cards_fetched) and none when there are none. A decision
+    on plain facts (code.7)."""
+    judged, _ = sweep_judgments(fleet, read, here, now)
+    return list(dict.fromkeys(c["card"] for _, _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]))
+
+
+def cards_fetched(fleet, asked, acts=None):
+    """The card sweep's one ask of Pending You, in crew's own name (SWEEPER), whether it still finds each card asked,
+    which it answers for another assistant's card by refusing it as that assistant's and for one this host's sign-in no
+    longer reaches with "not found": ({card: (got, words)}, None), or ({}, why) when the bridge failed; no bridge when
+    none is asked."""
+    if not asked:
+        return {}, None
+    acts = acts or SweepActs(fleet)
+    try:
+        with acts.bridge(SWEEPER, SWEEP_LATER) as py:
+            return {card: py.answer("get_request", {"requestId": card, "name": SWEEPER}) for card in asked}, None
+    except Refusal as e:
+        return {}, str(e)
+
+
+def sweep_cards(fleet, read, acts=None, answers=None):
     """The rail read's sweep of the cards on this host, under its sign-in (record 0031 §1, §2, read.4): for each
     partition whose plan was read, and whose run record was read from its branch, it closes each card of a row that
     is gone with why (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"],
@@ -15215,8 +15274,9 @@ def sweep_cards(fleet, read, acts=None):
     it records crew's close of each batch that waits on nothing, once, as batch.close on batch/<n> in the planner's
     name with its card key and why (briefs.12), so a host not signed in still records it; a card open under its key is
     withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
-    (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
-    that assistant's, and for a card this host's sign-in no longer reaches with "not found". Every row's card this
+    (SWEEPER) whether it finds each card (cards_fetched), in one bridge and none when it asks after no card; or, for
+    the host's follower, which asks on its clock's tick alone, takes answers, (found, why), the clock's last ask's,
+    acting on no card that ask did not answer for, until the next tick does. Every row's card this
     host's sign-in can't reach, posted from another host or lost to its owner, while the row's owner runs here, is
     posted again through its kind's raise, its summary saying the older copy is dead, the older copy reported lost and
     never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again, briefs.11,
@@ -15228,24 +15288,8 @@ def sweep_cards(fleet, read, acts=None):
     acts = acts or SweepActs(fleet)
     here, now = acts.host(), acts.now()
     out, judged = {"done": [], "unswept": []}, []
-    down = {h for h, v in read["sv"].items() if not v["ok"]}
-    for l, _, _, pl in read["found"]:
-        if not pl:
-            continue
-        unread = read["unread"].get(l, {})
-        if unread:
-            out["unswept"].append(dict(label=l, why="; ".join(f"its run record could not be read from {b}, so which cards are open can't be told: {v}"
-                                                              for b, v in sorted(unread.items()))))
-            continue
-        rows = [r for r in read["rows"] if r["label"] == l]
-        owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
-        blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
-        blind |= {b.get("Repo") for b in pl.bolts() if b.name() in blind and b.get("Repo")}  # a kit's card, a bolt of it unread
-        planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
-        design = (f"{l}-design", fleet["partitions"][l]["machine"])
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind,
-                         read["proposed"].get(l), now, planner, design, partition_kits(fleet, l),
-                         {x["bolt"]: r["key"].split("/", 1)[1] for r in rows if r["group"] == "land" for x in r.get("bolts", [])})
+    found_judged, out["unswept"] = sweep_judgments(fleet, read, here, now)
+    for l, owners, planner, j in found_judged:
         for key, why in j.pop("settled"):
             got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
                             Key=key, Outcome=why)
@@ -15254,15 +15298,13 @@ def sweep_cards(fleet, read, acts=None):
         j["none"] = [r for r in j["none"] if acts.raise_of(r["key"].split("/")[0])]
         j["again"] = [(r, c) for r, c in j["again"] if acts.raise_of(r["key"].split("/")[0])]
         if any(j.values()):
-            judged.append((l, dict(owners, **{r["key"]: design for r, _ in j["again"] if r["group"] == "records"}), j))
+            judged.append((l, owners, j))
     if not judged:
         return out
-    asked = [c["card"] for _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]]
-    try:
-        with acts.bridge(SWEEPER, SWEEP_LATER) as py:
-            found = {card: py.answer("get_request", {"requestId": card, "name": SWEEPER}) for card in asked}
-    except Refusal as e:
-        out["unswept"] += [dict(label=l, why=str(e)) for l, _, _ in judged]
+    asked = list(dict.fromkeys(c["card"] for _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]))
+    found, error = answers if answers is not None else cards_fetched(fleet, asked, acts)
+    if error is not None:
+        out["unswept"] += [dict(label=l, why=error) for l, _, _ in judged]
         return out
 
     def did(l, key, card, by, what, words, new=None):
@@ -15279,6 +15321,8 @@ def sweep_cards(fleet, read, acts=None):
             return None, None
     for l, owners, j in judged:
         for c, outcome, reason in j["gone"]:
+            if c["card"] not in found:
+                continue
             words = found[c["card"]][1]
             if cards.lost(words):
                 card_lost(acts, l, c["by"], c["key"], c["card"], words)
@@ -15289,6 +15333,8 @@ def sweep_cards(fleet, read, acts=None):
             else:
                 did(l, c["key"], c["card"], c["by"], "left", "its close did not go through, as said above")
         for c in j["questions"]:
+            if c["card"] not in found:
+                continue
             words = found[c["card"]][1]
             if cards.lost(words):
                 card_lost(acts, l, c["by"], c["key"] or "", c["card"], words)
@@ -15302,7 +15348,7 @@ def sweep_cards(fleet, read, acts=None):
                 did(l, c["key"], c["card"], c["by"], state or "left", {None: "its close did not go through, as said above",
                                                                        "lost": "this host's sign-in no longer reaches it"}.get(state, f"{c['by']} ended"))
         for c, row in j["held"]:
-            words = found[c["card"]][1]
+            words = found.get(c["card"], (None, None))[1]
             if not cards.lost(words):
                 continue
             new, kind_raises = raised(l, row, c["by"])
@@ -15322,7 +15368,7 @@ def sweep_cards(fleet, read, acts=None):
                 did(l, row["key"], older, owner, "left",
                     "its batch no longer waits to be read" if row["key"].startswith("batch/") else "its raise posted none")
         for c, row in j["unread"]:
-            if cards.lost(found[c["card"]][1]):
+            if c["card"] not in found or cards.lost(found[c["card"]][1]):
                 continue
             try:
                 with acts.bridge(c["by"], SWEEP_LATER) as py:
