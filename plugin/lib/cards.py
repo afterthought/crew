@@ -658,7 +658,7 @@ def landing_card(f):
     said.append(f"main has moved {plural(moved, 'landing')} since the bolt was cut." if moved else
                 "main has not moved since the bolt was cut.")
     if "forecast" in f:  # a row of its kit's landings card (rail-cards "The landings card forecasts each row's conflicts")
-        said.append(forecast_said(f["forecast"], f.get("forecast_why")))
+        said.append(forecast_said(f["forecast"], f.get("forecast_why"), f.get("would_main")))
     frees = f.get("frees")
     if frees:  # its team holds another bolt, proven too, so a yes frees it (teams.16)
         said.append(f"A yes frees {frees['team']} for {frees['next']}, which waits behind this landing." if frees.get("next")
@@ -703,17 +703,25 @@ def landing_card(f):
                  approve=high(f"Land {f['bolt']} on {f['kit']}'s main"), recommendedIds=["approve"], rationale=by_words(then, DETAIL))
 
 
-def forecast_said(forecast, why=None):
+def forecast_said(forecast, why=None, would=None):
     """What a row of a kit's landings card says of its forecast (rail-cards "The landings card forecasts each row's
     conflicts"): forecast, [(with, paths)] as plan.row_forecasts gives it, "main" or a bolt above it, paths None for one
     not made, with why. No conflict forecast; the files and the bolt or main each is with; or that its forecast could
-    not be made and why, which holds nothing."""
+    not be made and why, which holds nothing. With would, (main's short sha, [paths]) for a row the user left that a
+    conflict with main would hold once ticked (plan.landing_rows' would_main), that first, and nothing more of main
+    (rail-cards "A row the user left says whether it would take main first")."""
+    if would:
+        forecast = [(w, p) for w, p in forecast if w != "main"]
     hits = [(w, p) for w, p in forecast if p]
     unmade = [w for w, p in forecast if p is None]
     said = ([f"It is forecast to conflict with " + "; and with ".join(f"{w} on {joined(list(p))}" for w, p in hits) + "."]
             if hits else [] if unmade else ["No conflict is forecast."])
     if unmade:
         said.append(f"Its forecast against {joined(unmade)} could not be made: {(why or 'git could not tell').rstrip('.')}.")
+    if would:
+        said = [f"It would take main first if you tick it: forecast to conflict with main on {joined(list(would[1]))} at "
+                f"{would[0][:7]}. Ticked, its team takes main in by a fix, your send standing through it."] + (
+            [] if said == ["No conflict is forecast."] else said)
     return " ".join(said)
 
 
@@ -771,7 +779,7 @@ def row_paragraph(n, r):
     if frees:
         said.append(f"A yes frees {frees['team']} for {frees['next']}." if frees.get("next") else
                     f"A yes frees {frees['team']}, and nothing is planned for it.")
-    said.append(forecast_said(r.get("forecast") or [], r.get("forecast_why")))
+    said.append(forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main")))
     lines.append(" ".join(said))
     links = ([f"[Read {r['bolt']}]({r['link']})"] if r.get("link") else
              [f"Its reading could not be opened: {r['unread']}; crew tries it again when the rail is read, and "
@@ -830,7 +838,7 @@ def landings_card(f):
     def option(i, r):
         return {"id": f"land:{r['bolt']}", "label": cut(f"{i}. {r['bolt']}", LABEL),
                 "detail": by_words(("Left on your last send. " if r["left"] else "") + row_counts(r), DETAIL),
-                "consequence": by_words(forecast_said(r.get("forecast") or [], r.get("forecast_why")), DETAIL)}
+                "consequence": by_words(forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main")), DETAIL)}
     options = [option(i, r) for i, r in enumerate(rows, 1)]
     ticked = [o["id"] for o, r in zip(options, rows) if not r["left"]]
     then = by_words("After they land: main-level ops lands them through sluice in this order, closing each as it lands, "

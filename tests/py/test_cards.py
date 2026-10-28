@@ -1502,6 +1502,23 @@ class TestLandings:
         assert c["options"][1]["consequence"] == said
         assert said in "\n".join(c["artifacts"][0]["lines"])
 
+    def test_a_left_row_that_would_take_main_first_says_so_first_on_its_consequence_and_paragraph(self):
+        """rail-cards "Left, and main conflicts with it": the row keeps its box and says it would take main first."""
+        would = ("It would take main first if you tick it: forecast to conflict with main on README.md at e4f5a6b. Ticked, "
+                 "its team takes main in by a fix, your send standing through it.")
+        rows = [landings_row("y"), landings_row("z", forecast=[("main", ["README.md"])], would_main=("e4f5a6b", ["README.md"]))]
+        b = built.landings_card(dict(kit="crew", rows=rows, left=["z"]))
+        c = b["card"]
+        assert c["recommendedIds"] == ["land:y"] and c["options"][1]["consequence"] == would
+        assert would in "\n".join(c["artifacts"][0]["lines"])
+        one = built.landings_card(dict(kit="crew", rows=rows[1:], left=["z"]))["card"]
+        assert would in one["summary"] and "It is forecast to conflict" not in one["summary"]
+
+    def test_a_left_rows_forecast_against_main_not_made_is_not_said_beside_the_conflict_the_record_holds(self):
+        assert built.forecast_said([("main", None)], "git could not tell", ("2222222", ["a.md", "b.md"])) == (
+            "It would take main first if you tick it: forecast to conflict with main on a.md and b.md at 2222222. Ticked, "
+            "its team takes main in by a fix, your send standing through it.")
+
     def test_a_forecast_not_made_is_said_with_why(self):
         assert built.forecast_said([("main", None)], "bolt/y is on no branch crew can read") == (
             "Its forecast against main could not be made: bolt/y is on no branch crew can read.")

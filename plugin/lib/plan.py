@@ -2074,7 +2074,7 @@ def work_said(bolt, sent, head, work):
 TAKE_MAIN = "Take main into the bolt"
 
 
-def landing_rows(order, rows, held, stopped=None, takes_main=None):
+def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
     """The rows of a kit's landings card (rail-cards, record 0031 as amended 2026-10-23), from facts alone: order, the
     plan's bolts of the kit by name, in its order; rows, {bolt: facts} for each that reads proven as a fix in flight on
     it leaves it (land_row), its facts carrying its head and its fixes in flight, {fix: the words it started with or
@@ -2086,8 +2086,10 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None):
     (stopped_at), which holds nothing (rail-cards "A landing sluice or its host stopped keeps its box"); or {bolt, box:
     False, why, facts}, held with no box: for a fix in flight on it, in the fix's words, or for sluice's refusal of its
     landing at its present head, until its team's fix moves the head; or, marked takes_main, taking main first,
-    forecast to conflict with main, or with only take-main fixes in flight (TAKE_MAIN), each named with its words. A
-    bolt not in rows is no row."""
+    forecast to conflict with main, or with only take-main fixes in flight (TAKE_MAIN), each named with its words; but a
+    bolt the user left (left, left_now) marked takes_main keeps its box, its facts marked would_main, (main's short
+    sha, [paths]), for its row to say it would take main first once ticked (rail-cards "A row the user left says
+    whether it would take main first"). A bolt not in rows is no row."""
     out, stopped, takes_main = [], stopped or {}, takes_main or {}
     for b in [b for b in order if b in rows]:
         f = rows[b]
@@ -2100,13 +2102,15 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None):
                             for fix, note in sorted(fixes.items()))
         elif at and (at.startswith(f["head"]) or f["head"].startswith(at)):
             why = f"held: sluice refused its landing at {f['head'][:7]}, and it waits for its team's fix: {words}"
-        elif b in takes_main:
+        elif b in takes_main and b not in left:
             main, paths = takes_main[b]
             why, main_first = (f"takes main first: forecast to conflict with main on {joined(list(paths))} at {main[:7]}; "
                                f"{f.get('conductor') or 'its team'} takes main in by a fix"), True
         else:
             stop = stopped_at(stopped, b, f["head"])
-            out.append(dict(bolt=b, box=True, facts=dict(f, stopped=(stopped[b][0], stop)) if stop else f))
+            marks = dict(**({"stopped": (stopped[b][0], stop)} if stop else {}),
+                         **({"would_main": (takes_main[b][0][:7], list(takes_main[b][1]))} if b in takes_main else {}))
+            out.append(dict(bolt=b, box=True, facts=dict(f, **marks) if marks else f))
             continue
         out.append(dict(bolt=b, box=False, why=why, facts=f, **({"takes_main": True} if main_first else {})))
     return out
@@ -2826,7 +2830,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
         acts.keep_main(label, kit, onto["main"])
     found = {b: p for b, fs in forecast.items() for w, p in fs if w == "main" and p}
     takes = dict(recorded, **{b: (onto["main"][:7], p) for b, p in found.items()})
-    rows = [landing_rows([r["bolt"]], {r["bolt"]: r["facts"]}, {}, takes_main=takes)[0] if r["box"] else r for r in rows]
+    rows = [landing_rows([r["bolt"]], {r["bolt"]: r["facts"]}, {}, takes_main=takes, left=left)[0] if r["box"] else r for r in rows]
     main_told(acts, label, plan, {r["bolt"]: r["facts"] for r in rows if r["bolt"] in found}, found, onto, whole + entries)
     boxed = [r["bolt"] for r in rows if r["box"]]
     for r in rows:

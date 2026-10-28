@@ -7,7 +7,7 @@
 
 ## 2. A left row says it would take main first
 
-- [ ] 2.1 A left bolt forecast to conflict with main keeps its box, its row saying it would take main first once ticked, while a left bolt with a fix in flight or sluice's refusal is held as before (design, Decision 2; Task notes 2.1); passes `tests/py/test_landings.py` and `tests/py/test_cards.py`, `tests/suite logic` ending with "0 failed".
+- [x] 2.1 A left bolt forecast to conflict with main keeps its box, its row saying it would take main first once ticked, while a left bolt with a fix in flight or sluice's refusal is held as before (design, Decision 2; Task notes 2.1); passes `tests/py/test_landings.py` and `tests/py/test_cards.py`, `tests/suite logic` ending with "0 failed".
 
 ## 3. No fix while left
 

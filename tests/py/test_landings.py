@@ -193,6 +193,39 @@ def test_a_take_main_fix_in_flight_holds_its_row_as_taking_main_first_in_its_wor
     assert z["why"] == f'held for a fix: A zone is missing. (fix/z/gap); takes main first: take-main-e4f5a6b taking main in: "{words}"'
 
 
+def test_a_bolt_the_user_left_forecast_to_conflict_with_main_keeps_its_box_marked_that_it_would_take_main_first():
+    """rail-cards "A bolt the user left" and "Left, and main conflicts with it": no fix is started for it, so it is not
+    held taking main first."""
+    rows = plan.landing_rows(["y", "z"], {"y": facts("y"), "z": facts("z")}, {}, takes_main={"z": ("e4f5a6b0", ["README.md"])},
+                             left={"z"})
+    assert [(r["bolt"], r["box"], r["facts"].get("would_main")) for r in rows] == [
+        ("y", True, None), ("z", True, ("e4f5a6b", ["README.md"]))]
+    # a left bolt forecast clean is a row as any
+    assert plan.landing_rows(["z"], {"z": facts("z")}, {}, takes_main={}, left={"z"})[0] == dict(bolt="z", box=True, facts=facts("z"))
+
+
+def test_a_left_bolt_whose_landing_was_stopped_keeps_both_marks():
+    """A stop holds nothing (rail-cards "A landing sluice or its host stopped keeps its box"), and a left bolt forecast
+    to conflict with main keeps its box: its row says both."""
+    head = "a" * 40
+    entries = [dict(submitted("z", head), Why="sluice exited 3", Outcome="stopped")]
+    row, = plan.landing_rows(["z"], {"z": facts("z", head)}, {}, plan.stops(entries),
+                             takes_main={"z": ("e4f5a6b0", ["README.md"])}, left={"z"})
+    assert row["box"] and row["facts"]["would_main"] == ("e4f5a6b", ["README.md"])
+    assert row["facts"]["stopped"] == (head, "sluice exited 3")
+
+
+def test_a_left_bolt_with_a_fix_in_flight_or_sluices_refusal_is_held_as_before():
+    """Those hold whatever the user chose (Decision 2)."""
+    takes = {"y": ("e4f5a6b", ["README.md"]), "z": ("e4f5a6b", ["README.md"])}
+    held = plan.refusals([submitted("z", "a" * 40, "bolt/z did not land: sluice found a conflict")])
+    y, z = plan.landing_rows(["y", "z"], {"y": facts("y", fixes={"fix/y/gap": "A zone is missing."}), "z": facts("z")}, held,
+                             takes_main=takes, left={"y", "z"})
+    assert (y["box"], y["why"]) == (False, "held for a fix: A zone is missing. (fix/y/gap)")
+    assert (z["box"], z["why"]) == (False, "held: sluice refused its landing at aaaaaaa, and it waits for its team's fix: "
+                                           "bolt/z did not land: sluice found a conflict")
+
+
 def test_a_new_head_with_no_conflict_forecast_has_its_box_again():
     """rail-cards "The fix merges": the record's conflict was at the head the fix moved the bolt from."""
     recorded = [dict(Act="forecast", On=["bolt/y"], Heads="bolt/y@ccccccc main@2222222", Paths="README.md", Reached="told")]
