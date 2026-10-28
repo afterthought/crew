@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-28
 decision-makers: the user, swancloud-design
 consulted: madswan-design (Flume's kinds and status), swancloud-planner
@@ -7,7 +7,7 @@ consulted: madswan-design (Flume's kinds and status), swancloud-planner
 
 # A team is bound to one bolt and launches work while its host has room
 
-Status: proposed to the user on 2026-10-28, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-28, on their card (req_f2cd7549a2674d88bdd3, "Approved").
 
 Deciders: the user, who settled the picture in their own words on the design agent's card of 2026-10-28 (req_49bc94cf20294abc890e, "Kinds and a team's bound with Flume: does this picture match your thinking?"): "Yes, write it up as one record" and, for the meantime, "Small crew fix now: a slot with no agent running is free to the bolt's fix"; and on 2026-10-27, rejecting records 0041 and 0042: "Honestly what's the difference between a fix, a unit, and a chore? They're all just different Flume kinds. Once we start integrating with Flume, we need to decide: is a team bound to one unit of work or is it able to work on multiple?" and "The whole point of a bolt is that it's something that can be delivered to production independently." Their words settle what they said; the record's other words are the design agent's, asked on this card.
 Amends: `teams.1` (what a slot is and what "in flight" counts), `teams.3` (where a fix runs), `teams.16` (what a team is bound to); the open item "What a team holds at once, with Flume's kinds" in `_open.md`, which leaves when this record is accepted.
@@ -39,7 +39,7 @@ Option 3.
 
 ## Consequences
 
-- `teams.1`, `teams.3` and `teams.16` are amended, marked proposed until the user's yes; the open item leaves then.
+- `teams.1`, `teams.3` and `teams.16` carry the amendment, accepted 2026-10-28; the open item has left `_open.md`.
 - On the yes, one crew chore now: `a-slot-whose-agent-is-not-running-is-lent-to-its-bolts-fix` (point 6), with its cases: every slot holding verified work waiting on the fix; a slot whose agent is running is never lent; the waiting work resumes in its slot after the fix merges.
 - A question to Flume's design, through madswan: `flume status` says, per host, how many agents run and whether there is room for one more, in the terms crew launches with; crew's unit that launches while Flume says room is proposed when that integration is designed, never before.
 - Records 0041 and 0042 stay rejected; the deadlocks they answered are read against this record.
