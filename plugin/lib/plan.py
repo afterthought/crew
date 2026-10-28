@@ -13087,6 +13087,7 @@ def session_open(d, name, write):
                 (d / "result.json").rename(d / f"result.{re.sub(r'[-:]', '', s['started'])}.json")
             (d / "session.json").unlink()
         shutil.which("plannotator") or fail("plannotator is not on this host's path, and a card's session is a plannotator session")
+        untold(d)  # a told mark is the last reading's, and this one is told of when the user sends it
         here = crew.this_host()
         files = [os.path.realpath(f) for f in write()]
         gone = [f for f in files if not os.path.isfile(f)]
@@ -13531,6 +13532,16 @@ def reading_decided(d, decided):
         if s and (d / "result.json").exists():
             (d / "result.json").rename(d / f"result.{re.sub(r'[-:]', '', s['started'])}.json")
             (d / "session.json").unlink()
+            untold(d)
+
+
+def untold(d):
+    """A key's reading folder (d) cleared of the told mark the rail's refresh left (sweep_told), once the reading it
+    marked is set aside or a new one starts, so the next reading the user sends is told of again."""
+    try:
+        (d / "told.json").unlink()
+    except FileNotFoundError:
+        pass
 
 
 def end_session(label, key, unit=None):

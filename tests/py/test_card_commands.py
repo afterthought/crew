@@ -992,6 +992,25 @@ def test_a_reading_read_before_any_refresh_leaves_it_nothing_to_tell(tmp_path):
     assert plan.readings_sent(tmp_path, {"land/y"}, []) == []
 
 
+def test_a_told_mark_goes_with_the_reading_it_marked_so_the_next_one_is_told_of_again(tmp_path):
+    """card-sessions "A landing's reading sent": crew card read sets the reading aside and its told mark with it, and a
+    new session the user then sends is told of once more."""
+    d = tmp_path / "land/y"
+    d.mkdir(parents=True)
+    (d / "session.json").write_text(json.dumps({"pid": 42, "document": "/c/00-y.md", "url": "http://x:19432", "started": "2026-10-23T10:00:00Z"}))
+    (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "x"}))
+    (d / "told.json").write_text("{}")
+    assert plan.readings_sent(tmp_path, {"land/y"}, []) == [("land/y", ("annotated", "x", None), True)]
+    plan.reading_decided(d, ("annotated", "x", None))
+    assert not (d / "told.json").exists()
+    (d / "result.json").write_text(json.dumps({"decision": "approved"}))
+    assert plan.readings_due(plan.readings_sent(tmp_path, {"land/y"}, [])) == [("land/y", "tell")]
+    (d / "told.json").write_text("{}")
+    plan.untold(d)
+    plan.untold(d)
+    assert not (d / "told.json").exists()
+
+
 class TestSweptReading:
     FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "teams": ["swb-1"]}},
              "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha"}}, "hosts": {}}
