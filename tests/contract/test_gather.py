@@ -372,6 +372,22 @@ def test_a_kit_whose_main_now_is_missing_is_not_read(repo, tmp_path):
     assert got["ok"] is False and "has no origin/main to read" in got["error"]
 
 
+def test_a_kit_names_the_revision_of_main_it_was_read_at(repo, tmp_path):
+    """The rail's sweep through gather.kit's main_at (plan.landings_moved, rail-cards "Main moves under an open card"): a
+    kit with an origin names origin/main's commit as the host last fetched it, not the host's own main; one with none
+    names its own main's."""
+    k = Kit(repo, tmp_path)
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    repo.git("fetch", "-q", "origin")
+    fetched = repo.git("rev-parse", "refs/remotes/origin/main")
+    repo.commit("feat: only on the host's own main", {"here.txt": "h\n"})
+    assert k.read()["main_at"] == fetched
+    repo.git("remote", "remove", "origin")
+    assert k.read()["main_at"] == repo.git("rev-parse", "refs/heads/main") != fetched
+
+
 def on_github(repo, tmp_path, policy=ON_GITHUB):
     """A kit whose main and bolt/te carry policy, and its GitHub: a bare clone as origin, fetched; and a clone of
     GitHub on bolt/te, where sluice lands the bolt's merges from another host."""
