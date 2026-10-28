@@ -576,8 +576,10 @@ class TestTheSubmission:
         them (QUEUE) answering overview, nothing standing unless given, sluice's record of main read right after it
         (SUBMISSIONS) answering record, none of main's submissions unless given, and each other script crew runs there
         answering in turn from outs; what ran (the script and its bolt, the submission's number, gh's act or the main
-        checkout), what was recorded, and which bolts crew bolt land closed, kept on self."""
+        checkout), what was recorded of each landing's outcome, its entry as sluice queued it kept apart (self.queued),
+        and which bolts crew bolt land closed, kept on self."""
         ran_, emitted, closed, argvs = self.ran, self.emitted, self.closed, self.argvs = [], [], [], []
+        self.order = []  # the scripts run and the entries recorded, in turn
         said, record = said or policy(TAKES_NONE), record or ran_as(0, NONE_YET)
         copies, overview = copies or ran_as(0, "THERE=-\n"), overview or ran_as(0, EMPTY_QUEUE)
         monkeypatch.setattr(plan, "CONTEXT", {})
@@ -598,14 +600,18 @@ class TestTheSubmission:
             ran_.append((names[argv[2]], argv[at[argv[2]]]))
             return (copies if argv[2] == plan.LAND_COPIES else overview if argv[2] == plan.QUEUE else record if first
                     else outs.pop(0))
-        monkeypatch.setattr(plan.crew, "on_machine", on_machine)
-        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: emitted.append((act, on, f)))
+        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: self.order.append(names[argv[2]]) or on_machine(fleet, host, argv))
+        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: self.order.append(f.get("Outcome") or act) or emitted.append((act, on, f)))
         monkeypatch.setattr(plan.record, "who", lambda: "wldn-ops")
         monkeypatch.setattr(plan, "may_write", lambda fleet, key, a: None)
         monkeypatch.setattr(plan, "bolt_land", close or (lambda fleet, a: closed.append(a.bolt)))
         self.handed = []
         monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: self.handed.append(kit))
-        plan.bolt_submit({}, argparse.Namespace(bolt=list(bolts), label=None))
+        try:
+            plan.bolt_submit({}, argparse.Namespace(bolt=list(bolts), label=None))
+        finally:
+            self.queued = [e for e in emitted if e[2].get("Outcome") == "queued"]
+            emitted[:] = [e for e in emitted if e[2].get("Outcome") != "queued"]
         return ran_, emitted
 
     def scripts(self):
@@ -635,6 +641,17 @@ class TestTheSubmission:
         assert "bolt/b submitted to k's main, sluice's #7" in out
         assert "bolt/b landed on k's main at bbbbbbb: now crew bolt land b. sluice exited 3" in out
         assert self.closed == ["b"]
+
+    def test_the_submission_is_recorded_queued_with_its_number_before_any_wait(self, monkeypatch):
+        """bolt-teams "The number is recorded before the wait": once sluice has queued it as #7, the bolt.submit names
+        the bolt and its team, Outcome queued, sluice's number, the head submitted and main before, and the kit, before
+        crew waits on #7."""
+        self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")])
+        (act, on, f), = self.queued
+        assert (act, on) == ("bolt.submit", ["bolt/b", "team/swb-1"])
+        assert {k: f[k] for k in ("Outcome", "Submission", "Head", "Base", "Repo")} == dict(Outcome="queued", Submission="7", Head=TIP, Base=OLD, Repo="k")
+        assert not f.get("frm") and "Chars" not in f
+        assert self.order.index("queued") < self.order.index("WAIT")
 
     def test_a_wait_that_is_still_undecided_is_waited_on_again(self, monkeypatch):
         self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(5, "{}"), ran_as(5, "{}"), ran_as(0, "{}"),
@@ -1048,6 +1065,8 @@ class TestAStandingLanding:
         assert [a[4:] for a in self.argvs if a[2] == plan.WAIT] == [["/k/main", "355"]]
         out = capsys.readouterr().out
         assert "bolt/b's landing #355 stands in sluice at 2222222, its head: crew waits on #355 again and submits nothing" in out
+        (_, _, q), = self.queued  # recorded queued, so any later read reads #355 (plan.21)
+        assert (q["Submission"], q["Head"]) == ("355", GITHUBS)
         assert self.emitted == [("bolt.submit", ["bolt/b"], {"why": "bolt(b): landed on main at bbbbbbb", "Head": GITHUBS})]
         assert self.closed == ["b"]
 
@@ -1124,6 +1143,26 @@ class TestTheStops:
         got = plan.stops([self.STOP])
         assert plan.stopped_at(got, "b", TIP[:7]) == self.STOP["Why"]
         assert plan.stopped_at(got, "b", "e" * 40) is None and plan.stopped_at(got, "c", TIP) is None
+
+
+class TestTheQueuedLanding:
+    """Decision 1: a landing sluice has queued is its bolt's last bolt.submit marked Outcome queued (plan.submit_queued),
+    in flight: no refusal, no stop and no landing, until an outcome follows it."""
+    QUEUED = submitted("b", Outcome="queued", Submission="412", Base=OLD)
+
+    def test_a_bolts_last_submission_queued_is_its_landing_in_flight(self):
+        assert plan.submit_queued([self.QUEUED], "b") == self.QUEUED
+        assert plan.submit_queued([self.QUEUED], "z") is None and plan.submit_queued([], "b") is None
+
+    def test_an_outcome_after_it_ends_it(self):
+        for outcome in (submitted("b", Outcome="landed", Submission="412"), submitted("b", Refused="#412 conflict: a.txt"),
+                        submitted("b", Why="sluice itself failed", Outcome="stopped")):
+            assert plan.submit_queued([self.QUEUED, outcome], "b") is None
+
+    def test_it_holds_no_refusal_and_no_stop_of_an_earlier_landing(self):
+        entries = [submitted("b", Refused="#400 conflict: a.txt"), submitted("b", Why="stopped", Outcome="stopped"), self.QUEUED]
+        assert plan.refusals(entries) == {} and plan.stops(entries) == {}
+        assert plan.refused_at(entries, "b", TIP) is None
 
 
 class TestSubmitDecisions:

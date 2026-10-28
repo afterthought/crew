@@ -101,15 +101,22 @@ def submit(monkeypatch, tmp_path):
 
 
 class TestTheSubmission:
-    def test_the_users_words_land_the_bolt_recorded_by_their_record_and_length_and_kept_here_before_it_closes(self, submit, monkeypatch):
-        kept = []  # what crew bolt land's close reads back
+    def test_the_users_words_land_the_bolt_recorded_by_their_record_and_length_and_kept_here_as_it_is_queued(self, submit, monkeypatch):
+        """bolt-teams "Queued on the user's words in ops's pane": the queued entry and the landing's own each name the
+        transcript record and the words' length, none of the words, and the words are kept on this host as sluice
+        queues it, before any wait, so crew bolt land's close reads them back wherever the landing's end is read."""
+        kept = []  # what the words kept read back, at the wait and at crew bolt land's close
         monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: kept.append(plan.landing_word_read("swancloud", a.bolt, "session/s-1/u-7")))
+        ran = plan.crew.on_machine
+        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: (
+            argv[2] == plan.WAIT and kept.append(plan.landing_word_read("swancloud", "y", "session/s-1/u-7"))) or ran(fleet, host, argv))
         got = submit["run"](WORDS)
-        assert kept == [WORDS]
+        assert kept[0] == WORDS and kept[-1] == WORDS
         assert got["ran"] == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
-        [e] = got["emitted"]
-        assert e["Act"] == "bolt.submit" and e["frm"] == ["session/s-1/u-7"] and e["Chars"] == len(WORDS)
-        assert WORDS not in repr(e)
+        queued, landed = got["emitted"]
+        assert (queued["Act"], queued["Outcome"], landed["Act"]) == ("bolt.submit", "queued", "bolt.submit")
+        for e in (queued, landed):
+            assert e["frm"] == ["session/s-1/u-7"] and e["Chars"] == len(WORDS) and WORDS not in repr(e)
         assert plan.landing_word_read("swancloud", "y", "session/s-1/u-7") == WORDS
 
     def test_a_record_with_no_uuid_is_named_by_its_lines_hash(self, submit):
@@ -121,7 +128,7 @@ class TestTheSubmission:
         landed = [ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]
         submit["outs"] = [QUEUED, QUEUED] + landed + landed  # one host: both queued, then each waited on in order
         got = submit["run"](WORDS, bolts=("y", "z"))
-        assert [e["frm"] for e in got["emitted"]] == [["session/s-1/u-7"]] * 2 and got["closed"] == ["y", "z"]
+        assert [e["frm"] for e in got["emitted"]] == [["session/s-1/u-7"]] * 4 and got["closed"] == ["y", "z"]
         assert plan.landing_word_read("swancloud", "z", "session/s-1/u-7") == WORDS
 
     @pytest.mark.parametrize("v", [heard("agent:swancloud-operator"), heard(grade="refused"), heard("tool"),
@@ -140,16 +147,19 @@ class TestTheSubmission:
         assert submit["ran"] == []
 
     def test_the_cards_send_lands_as_before_naming_no_record(self, submit):
-        e = submit["run"]()["emitted"][0]
-        assert "frm" not in e and "Chars" not in e
+        for e in submit["run"]()["emitted"]:
+            assert not e.get("frm") and "Chars" not in e
         assert not (plan.LANDINGS / "swancloud" / "y.json").exists()
 
-    def test_a_submission_that_did_not_land_keeps_no_words(self, submit):
+    def test_a_submission_that_did_not_land_is_recorded_naming_no_record(self, submit):
+        """The words were kept as it was queued; its refusal names no record of them, so no landing reads them back."""
         submit["outs"][1:] = [ran_as(1, json.dumps(dict(RAN, id=7))), ran_as(0, said(1, new=OLD, github=OLD, held="no"))]
         with pytest.raises(plan.Stopped):
             submit["run"](WORDS)
-        assert submit["emitted"][0].get("refused") and "frm" not in submit["emitted"][0]
-        assert plan.landing_word_read("swancloud", "y", "session/s-1/u-7") is None
+        queued, refused = submit["emitted"]
+        assert queued["Outcome"] == "queued" and refused.get("refused") and "frm" not in refused
+        assert plan.pane_word_of([dict(e, Act="bolt.submit", From=e.get("frm") or [], Refused=e.get("refused"))
+                                  for e in submit["emitted"]], "y") is None
 
 
 def submitted(bolt="y", frm=None, refused=None, by="swancloud-ops", at="2026-10-22T21:04:00Z", host="deneb"):
@@ -166,6 +176,12 @@ class TestTheWordRead:
         entries = [submitted(), submitted(frm="session/s-1/u-7")]
         assert plan.pane_word_of(entries, "y") == ("swancloud-ops", "2026-10-22T21:04:00Z", "session/s-1/u-7", "deneb")
         assert plan.pane_word_of(entries, "z") is None
+
+    def test_a_landing_still_queued_is_in_flight_and_names_no_pane(self):
+        entries = [submitted(), dict(submitted(frm="session/s-1/u-7"), Outcome="queued", Submission="7")]
+        assert plan.pane_word_of(entries, "y") is None
+        entries.append(dict(submitted(frm="session/s-1/u-7"), Outcome="landed", Submission="7"))
+        assert plan.pane_word_of(entries, "y") == ("swancloud-ops", "2026-10-22T21:04:00Z", "session/s-1/u-7", "deneb")
 
     def test_a_refused_pane_submission_after_a_card_one_names_no_pane(self):
         entries = [submitted(), submitted(frm="session/s-1/u-7", refused="crew submits nothing of bolt y: …")]

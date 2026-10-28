@@ -2006,8 +2006,10 @@ def pane_word_of(entries, bolt):
     """The user's word to land the bolt given in a pane (plan.16, crew bolt submit --excerpt), from the run record's
     entries, oldest first: (who submitted it, when, the transcript record its words were read from, the host it ran
     on) for the last bolt.submit on bolt/<bolt> not refused, when it names a session's record (From session/<sid>/
-    <record>); None for a landing on the card's approval, or when no submission of the bolt landed."""
-    done = [e for e in entries if e.get("Act") == "bolt.submit" and not e.get("Refused") and f"bolt/{bolt}" in (e.get("On") or [])]
+    <record>); None for a landing on the card's approval, or when no submission of the bolt landed. A landing queued
+    (submit_queued) is in flight, no landing, and its outcome's entry names the record as it does."""
+    done = [e for e in entries if e.get("Act") == "bolt.submit" and not e.get("Refused") and e.get("Outcome") != "queued"
+            and f"bolt/{bolt}" in (e.get("On") or [])]
     frm = [f for f in (done[-1].get("From") or []) if f.startswith("session/")] if done else []
     return (done[-1].get("By"), done[-1].get("At"), frm[0], done[-1].get("Host")) if frm else None
 
@@ -2151,7 +2153,8 @@ def pull_of(sluice_from, repo):
 
 
 def last_submits(entries):
-    """Each bolt's last bolt.submit entry, from the run record's entries, oldest first: {bolt: entry}."""
+    """Each bolt's last bolt.submit entry, from the run record's entries, oldest first: {bolt: entry}. One marked
+    Outcome queued is a landing in flight (submit_queued): no landing, no refusal and no stop."""
     last = {}
     for e in entries:
         if e.get("Act") != "bolt.submit":
@@ -2160,6 +2163,14 @@ def last_submits(entries):
             if o.startswith("bolt/"):
                 last[o[5:]] = e
     return last
+
+
+def submit_queued(entries, bolt):
+    """The bolt's landing while sluice has it queued (plan.21, Decision 1), from the run record's entries, oldest first:
+    its last bolt.submit when that is marked Outcome queued, naming sluice's number for it as Submission, which any
+    host reads; None once an outcome follows it, or when it has none. A decision of facts alone (code.7)."""
+    e = last_submits(entries).get(bolt)
+    return e if e and e.get("Outcome") == "queued" else None
 
 
 def refusals(entries):
@@ -4183,7 +4194,7 @@ def submit_order(bolts, hosts):
     return [(b, "first" if i == 0 else "queued" if hosts[b] == hosts[bolts[i - 1]] else "ended") for i, b in enumerate(bolts)]
 
 
-def landing_submitted(fleet, t, bolt):
+def landing_submitted(fleet, label, t, bolt, frm=(), excerpt=None):
     """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held), the
     bolt's two copies read there after one fetch (LAND_COPIES, kit.land_copies) and the head it submits decided
     (landing_head, plan.19), and its landing pull request, a draft, readied, since the submission is the user's word
@@ -4203,7 +4214,12 @@ def landing_submitted(fleet, t, bolt):
     standing, when crew finds none to wait on, its words (left_standing). Or {bolt, t, refused}, nothing submitted,
     when main now, the bolt's copies or sluice's record of main could not be read, the bolt's two copies have diverged,
     the pull request could not be readied, or the submission could not be made, in crew's, sluice's, gh's, git's or the
-    host's words; refused before its submission ran, its pull request is left as it was."""
+    host's words; refused before its submission ran, its pull request is left as it was. Once sluice has queued it and
+    crew has its number, before any wait, it is recorded so (Decision 1): a bolt.submit marked Outcome queued, naming
+    the team holding it, sluice's number as Submission, the head submitted and main before, so any host knows which
+    submission to read (landing_read); on the user's words in the caller's pane (frm, the transcript record bolt_submit
+    read excerpt from), naming that record and the words' length, the words kept on this host then (landing_word_keep),
+    since the landing's end may be read on another; one waited on again as it stands in sluice is recorded so too."""
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     try:
         before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
@@ -4236,6 +4252,7 @@ def landing_submitted(fleet, t, bolt):
             return dict(bolt=bolt, t=t, refused=f"bolt/{bolt}'s landing #{n} was not waited on again on {host}: {told}")
         if decided["said"] and (f["LEVEL"] or not decided["level"]):
             print(decided["said"])
+        landing_queued(label, t, bolt, str(n), f["TIP"], before, frm, excerpt)  # read from here as any queued one
         return dict(bolt=bolt, t=t, before=before, path=path, **f, standing=None, last=n - 1)
     s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
     subs = submissions_listed(s.returncode, s.stdout, s.stderr)
@@ -4265,7 +4282,21 @@ def landing_submitted(fleet, t, bolt):
             f["ID"], why = (str(sub["id"]), None) if isinstance(sub, dict) else ("", sub)
         standing = None if f["ID"] else left_standing(bolt, name, path, f, why, was)
     print(submitted_line(bolt, name, f, was))
+    if f["RC"] == "0" and f["ID"]:
+        landing_queued(label, t, bolt, f["ID"], f["TIP"], before, frm, excerpt)
     return dict(bolt=bolt, t=t, before=before, path=path, **f, standing=standing, last=last)
+
+
+def landing_queued(label, t, bolt, n, tip, before, frm=(), excerpt=None):
+    """A landing's submission recorded as sluice has queued it, #n at tip with main before it (landing_submitted), and
+    the user's words, when the word to land was theirs in the caller's pane, kept on this host (landing_word_keep)."""
+    record.emit(label, "bolt.submit", [f"bolt/{bolt}", f"team/{t['name']}"], frm=frm, why=f"bolt({bolt}): queued on main as #{n}",
+                Outcome="queued", Submission=n, Head=tip, Base=before, Repo=t["kit"]["name"],
+                **(dict(Chars=len(excerpt)) if frm else {}))
+    if frm:  # for crew bolt land to close its card with, wherever the landing's end is read
+        at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        landing_word_keep(label, bolt, excerpt, record.who(), at, frm[0])
+        print(f"bolt {bolt} is submitted on the user's word in {record.who()}'s pane; crew bolt land closes its card with their words")
 
 
 def submit_ran(fleet, host, main, path, bolt, head="", own="", *again):
@@ -4309,8 +4340,8 @@ def landing_ended(fleet, label, p, a):
     newer than its last), its verdict with it, and while it has the submission standing crew says so and waits on it
     again (wait_again), SUBMIT given the submission's id and the tip it submitted, then its outcome waited on and its
     end read as before. A landing on the user's words in the caller's pane (p's frm, the transcript record bolt_submit
-    read them from, a's excerpt) is recorded naming that record and the words' length, and the words kept on this host
-    (landing_word_keep) before it is closed. Its words printed, standard error for one that did not land. Returns
+    read them from, a's excerpt) is recorded naming that record and the words' length, the words kept on this host as
+    it was queued (landing_queued). Its words printed, standard error for one that did not land. Returns
     (bolt, landed)."""
     bolt, t = p["bolt"], p["t"]
     if p.get("refused") and p.get("attempted"):  # its submission ran and failed: drafted, and stopped, nothing of the bolt's
@@ -4389,10 +4420,6 @@ def landing_ended(fleet, label, p, a):
     frm, excerpt = p.get("frm") or [], getattr(a, "excerpt", None)
     record.emit(label, "bolt.submit", [f"bolt/{bolt}"], why=f"bolt({bolt}): landed on main at {now[:7]}", Head=p["TIP"],
                 **(dict(frm=frm, Chars=len(excerpt)) if frm else {}))
-    if frm:  # the user's words kept on this host, for crew bolt land to close its card with (landing_word_keep)
-        at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        landing_word_keep(label, bolt, excerpt, record.who(), at, frm[0])
-        print(f"bolt {bolt} landed on the user's word in {record.who()}'s pane; crew bolt land closes its card with their words")
     print(words)
     closing = argparse.Namespace(cmd="bolt", sub="land", bolt=bolt, label=label)
     try:
@@ -4438,7 +4465,7 @@ def bolt_submit(fleet, a):
         if when == "ended":
             outcomes += [landing_ended(fleet, label, p, a) for p in pending]
             pending = []
-        pending.append(dict(landing_submitted(fleet, teams[b], b), frm=frm))
+        pending.append(dict(landing_submitted(fleet, label, teams[b], b, frm, words), frm=frm))
     outcomes += [landing_ended(fleet, label, p, a) for p in pending]
     missed = [b for b, landed in outcomes if not landed]
     if missed:

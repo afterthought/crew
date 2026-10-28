@@ -1,7 +1,7 @@
 ## 1. The queued submission is recorded, and its waiter waits a call at a time
 
 - [x] 1.1 A run-record entry carries `Submission` (design, Decision 1; Task notes 1.1); passes `tests/py/test_record.py`.
-- [ ] 1.2 `crew bolt submit` records a `bolt.submit` entry with `Outcome: queued`, `Submission`, `Head` and `Base` as soon as sluice has queued the landing, keeps the user's pane words on the submitting host then, and no reader of the record takes a queued entry for an outcome (design, Decision 1; Task notes 1.2); passes `tests/py/test_landing.py`.
+- [x] 1.2 `crew bolt submit` records a `bolt.submit` entry with `Outcome: queued`, `Submission`, `Head` and `Base` as soon as sluice has queued the landing, keeps the user's pane words on the submitting host then, and no reader of the record takes a queued entry for an outcome (design, Decision 1; Task notes 1.2); passes `tests/py/test_landing.py`.
 - [ ] 1.3 The landing's background waiter on the team's host calls `sluice wait <n> --timeout 9m --json` again while it exits 5, then runs `crew _landing-read <label> <bolt>`, and `landing_now` still reads it alive meanwhile (design, Decision 3; Task notes 1.3); Verify `tests/suite t-journey-land` ends with "0 failed".
 
 ## 2. One read records a landing from sluice's record
