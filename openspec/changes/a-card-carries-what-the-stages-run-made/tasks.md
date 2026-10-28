@@ -20,7 +20,7 @@
 
 ## 4. Briefs and usage
 
-- [ ] 4.1 Main-level ops's and the planner's briefs say to reply in the thread and run `crew card preview` when the user writes on their card asking for a preview or saying they are done, and the conductor's says the landing row's preview comes up only on the user's ask (design, Decision 8; Task notes 4.1): Verify `tests/suite t-briefs` ends with "0 failed".
+- [x] 4.1 Main-level ops's and the planner's briefs say to reply in the thread and run `crew card preview` when the user writes on their card asking for a preview or saying they are done, and the conductor's says the landing row's preview comes up only on the user's ask (design, Decision 8; Task notes 4.1): Verify `tests/suite t-briefs` ends with "0 failed".
 - [ ] 4.2 `crew card preview` is named in `plugin/bin/crew`'s usage, README and the crew skill together (design, Decision 6; Task notes 4.2): Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 5. Integration
