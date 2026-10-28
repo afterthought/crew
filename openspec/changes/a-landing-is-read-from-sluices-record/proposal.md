@@ -51,6 +51,7 @@ plugin/tests/**
 docs/architecture/_open.md
 tests/py/**
 tests/stubs/sluice
+tests/contract/test_git.py
 tests/t-journey-land.sh
 tests/t-briefs.sh
 tests/moon.yml
