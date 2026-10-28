@@ -2,7 +2,9 @@
 stage from the changes main and its bolt's branch hold, its place, and its fix (state.2, plan.12; crew bolts, crew
 board and crew sites read every host's kits through gather.kit, once per host)."""
 import os
+import re
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -581,52 +583,26 @@ class TestStamp:
         repo.git("config", "branch.fix/te/edge.crew", "dropped")
         assert gather.stamp(self.req) != s
 
-    def records(self, repo):
-        """sluice's records in the kit's git folder, laid out as read on mac-studio, 2026-10-28, in crew.git/sluice/."""
+    def test_a_write_under_sluices_folder_leaves_it(self, repo, tmp_path):
+        """The crew-board spec, sluice's folder moves: a kit's queue is its overview's to say (sluice ADR 0023), so a
+        branch's version written and a submission queued in the git folder's sluice/ leave the stamp as it was."""
+        self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
         r = repo.path / ".git" / "sluice"
-        for b in ("main", "bolt/te"):
-            (r / b / "submissions").mkdir(parents=True)
-            for f in ("branch.json", "finished.jsonl", "lock", "log.jsonl"):
-                (r / b / f).write_text("")
-            (r / b / "version").write_text("1\n")
-        for d in (".logs", ".runs", ".progress", ".tmp", ".places", ".intake"):
-            (r / d).mkdir()
-        (r / ".lock").write_text("")
-        (r / ".next-id").write_text("12\n")
-        return r
-
-    def test_sluices_records_of_the_queue_move_it(self, repo, tmp_path):
-        """The rows' submissions are read from sluice overview, which reads these records (the crew-board spec, A merge
-        moves in sluice's queue): a branch's version written, a submission queued, and the next id taken."""
-        self.kit(repo, tmp_path)
-        r = self.records(repo)
-        s = gather.stamp(self.req)
+        (r / "main").mkdir(parents=True)
         (r / "main" / "version").write_text("2\n")
-        versioned = gather.stamp(self.req)
-        assert versioned != s
+        (r / "bolt" / "te" / "submissions").mkdir(parents=True)
         (r / "bolt" / "te" / "submissions" / "13.json").write_text("{}")
-        queued = gather.stamp(self.req)
-        assert queued != versioned
-        (r / ".next-id").write_text("14\n")
-        assert gather.stamp(self.req) not in (queued, None)
-
-    def test_sluices_logs_progress_and_results_move_it_not(self, repo, tmp_path):
-        """The crew-board spec, sluice writes only its logs: a run's logs, progress and results leave the stamp."""
-        self.kit(repo, tmp_path)
-        r = self.records(repo)
-        s = gather.stamp(self.req)
-        (r / ".logs" / "13.log").write_text("a test ran\n")
-        (r / ".progress" / "13.json").write_text("{}")
-        (r / ".runs" / "13").mkdir()
-        (r / "results.jsonl").write_text("{}\n")
         assert gather.stamp(self.req) == s
 
-    def test_a_kit_with_no_sluice_records_stamps_alike_twice(self, repo, tmp_path):
-        self.kit(repo, tmp_path)
-        s = gather.stamp(self.req)
-        assert s and gather.stamp(self.req) == s
-        self.records(repo)
-        assert gather.stamp(self.req) != s
+    def test_nothing_of_crews_names_a_path_in_sluices_folder(self):
+        """crew reads and names no folder of sluice's (the crew-board spec, The follower follows each kit's queue through
+        sluice's overview): no file of crew's joins a git folder to sluice/ or names a path under it."""
+        plugin = Path(__file__).resolve().parents[2] / "plugin"
+        named = re.compile(r"""(common|git[_-]?dir|\.git)\S*\s*,\s*["']sluice["']|\.git/sluice\b|sluice/(main|bolt)/|\.next-id""")
+        found = [f"{p.relative_to(plugin)}:{n}" for p in sorted(plugin.rglob("*")) if p.is_file() and p.suffix in ("", ".py", ".sh", ".js", ".ts", ".md")
+                 for n, line in enumerate(p.read_text(errors="replace").splitlines(), 1) if named.search(line)]
+        assert found == []
 
     def test_it_starts_no_process(self, repo, tmp_path, monkeypatch):
         k = self.kit(repo, tmp_path)
