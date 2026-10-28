@@ -419,7 +419,7 @@ The command that raises a card SHALL print the card's id and the line that adopt
 - **THEN** the command prints the card's id and `call get_request (requestId <id>, name <role>)`, and no tell is sent
 
 ### Requirement: A card the user answered is followed by its new version
-When crew changes one of its own cards because its thing changed, it SHALL change the card in place while the card waits on the user. Once the user has answered the card, which Pending You no longer changes, crew SHALL ack it with the change note as its outcome and post the new version as a new card that follows it, in the same owner's name. The run record SHALL hold the answered card's close and the new card's post, both under the row's key.
+When crew changes one of its own cards because its thing changed, it SHALL change the card in place while the card waits on the user. Once the user has answered the card, which Pending You no longer changes, crew SHALL ack it with the change note as its outcome and post the new version as a new card that follows it, in the same owner's name, saying first that the user answered the earlier card, when and with what, and what changed since, as every card that follows one the user answered says it. The run record SHALL hold the answered card's close, with the answer, and the new card's post, both under the row's key.
 
 #### Scenario: A card waiting on the user
 - **WHEN** crew changes its card `req_1` under `land/b1`, which waits on the user
@@ -427,7 +427,7 @@ When crew changes one of its own cards because its thing changed, it SHALL chang
 
 #### Scenario: A card the user answered
 - **WHEN** crew changes its card `req_1` under `land/b1` after the user has answered it
-- **THEN** `req_1` is acked with the change note, and a new card following `req_1` is posted. The run record has `req_1`'s close and the new card's post under `land/b1`, and `crew card read land/b1` finds the new card
+- **THEN** `req_1` is acked with the change note, and a new card following `req_1` is posted, its summary opening with what the user answered on `req_1` and what changed. The run record has `req_1`'s close, with the answer, and the new card's post under `land/b1`, and `crew card read land/b1` finds the new card
 
 ### Requirement: A card posted after a closed one takes its key's revision
 Every card crew posts under a row's key after a card of the owner's under that key has closed SHALL take the key with its revision, `<key>:<n>`, as its idempotency key, so Pending You never gives the closed card back. A card still open under the key SHALL keep its own key, so posting it again gives it back, and the run record SHALL hold one post of it: a post Pending You answers with the card this host's record already holds open under the key and owner is that card, printed with the line that adopts it and recorded no second time.
@@ -884,18 +884,22 @@ Each row SHALL carry the conflicts crew forecasts when its bolt is merged onto t
 - **THEN** `y`'s row says its forecast could not be made and why, and `y` keeps its box
 
 ### Requirement: A refused landing is held on its row
-A bolt whose submission to main sluice refused, or that failed main's checks, SHALL be held on its row at that head, with no box, the row saying sluice's words and that it waits for its team's fix, while the bolts after it go on. It SHALL have a box again once its head moves and it reads proven.
+A bolt whose submission to main sluice refused, or that failed main's checks, SHALL be held on its row at that head, with no box, the row saying sluice's words and that it waits for its team's fix, while the bolts after it go on. Once its head moves and it reads proven, it SHALL land on the user's send that ticked it when that send still stands for its work, and SHALL otherwise have a box again.
 
 #### Scenario: The second of three is refused
 - **WHEN** the user sends `land/crew` with `y`, `z` and `w` ticked, and sluice refuses `z` for a conflict on `plugin/lib/plan.py`
 - **THEN** `y` and `w` land, `z` stays on crew's landing row held, saying sluice's words and that it waits for its team's fix, and the next landings card raised carries `z` held with no box
 
 #### Scenario: The fix merges
-- **WHEN** `z`'s team's take-main fix merges into `z` and `z` reads proven at its new head
-- **THEN** `z` has a box on `land/crew` again
+- **WHEN** `z`'s team's take-main fix merges into `z` and `z` reads proven at its new head, its own work unchanged since the user's send
+- **THEN** `z` has no box on any landings card and lands on that send
+
+#### Scenario: A fix that changes the bolt's work merges
+- **WHEN** `z` was refused for a failed check, and its team's fix commits a change and merges, and `z` reads proven at its new head
+- **THEN** `z` has a box on `land/crew` again, its note naming the fix's commit
 
 ### Requirement: The landings card closes when nothing waits
-A landings card the user has answered SHALL be left as it is until every bolt they ticked has landed or been held, then closed naming what landed and where GitHub's main holds it, what was held and why, and what was left; a new card SHALL follow it while rows can land. A send ticking none SHALL close it, landing nothing. With no row that can land, no card SHALL be open, and the next proven bolt SHALL raise one, following nothing.
+A landings card the user has answered SHALL be left as it is until every bolt they ticked has landed or been held, then closed naming what landed and where GitHub's main holds it, what was held and why, and what was left; a new card SHALL follow it while rows can land. The close SHALL keep the user's send for each ticked bolt that was held and still stands for its work, saying so. A send ticking none SHALL close it, landing nothing. With no row that can land, no card SHALL be open, and the next proven bolt SHALL raise one, following nothing.
 
 #### Scenario: Everything ticked lands
 - **WHEN** the user sent `land/crew` with `y` and `z` ticked and both land
@@ -909,6 +913,10 @@ A landings card the user has answered SHALL be left as it is until every bolt th
 - **WHEN** no landings card of crew is open and bolt `w` reads proven
 - **THEN** `land/crew` is posted with `w` as its one row, following no card
 
+#### Scenario: A ticked bolt held at the close
+- **WHEN** the user sent `land/crew` with `y` and `z` ticked, `y` lands and sluice refuses `z`
+- **THEN** the card is closed saying `y` landed and `z` was held and why, and that the send stands for `z`: it lands once its team's fix has only taken main in and sluice has proven it, with nothing asked
+
 ### Requirement: A bolt's own landing card gives way to its kit's
 An open landing card under `land/<bolt>`, in a conductor's name, SHALL be withdrawn by the rail's sweep on the team's host, saying the bolt is now a row of its kit's landings card, and that card SHALL be raised for the bolt. crew SHALL raise no card under `land/<bolt>`. A bolt SHALL NOT be added to the plan under a name that is a kit's of its partition.
 
@@ -919,3 +927,90 @@ An open landing card under `land/<bolt>`, in a conductor's name, SHALL be withdr
 #### Scenario: A bolt named as a kit
 - **WHEN** a proposal adds a bolt named `crew` to swancloud's plan, whose teams build the kit crew
 - **THEN** its approval is refused, naming the kit, and nothing is written
+
+### Requirement: A ticked bolt's approval stands while its own work is unchanged
+The user's send on a kit's landings card SHALL stand for each bolt they ticked, at any later head whose own work is the same as at the head they ticked. A bolt's own work SHALL be the non-merge commits its head holds that GitHub's main does not. A bolt whose send stands SHALL be no row of any later landings card, and SHALL land on that send once it reads proven at its new head, with no card asking for it.
+
+#### Scenario: A refused bolt takes main in
+- **WHEN** the user sent `land/crew` with `z` ticked at `abc1234`, sluice refused `z` for a conflict with main, and `z`'s team's take-main fix, resolving the conflict in its merge, merged into `z`, which reads proven at `def5678`
+- **THEN** no landings card asks for `z`, and `crew card read land/crew` names `z` among the bolts the user's earlier send lands, with the `crew bolt submit` that lands it
+
+#### Scenario: The head moves by taking main in before the landing
+- **WHEN** the user sent `land/crew` with `y` and `z` ticked, `y` is landing, and a take-main fix moves `z`'s head before ops submits it
+- **THEN** the card is left as it is, and once `z` reads proven at its new head it lands on the same send
+
+#### Scenario: The host's copy is brought level
+- **WHEN** the user ticked `z` at the host copy's head `abc1234`, and the copy is brought level with GitHub's `def5678`, whose merges bring in only main's commits
+- **THEN** the send stands for `z` at `def5678`
+
+#### Scenario: Two take-main fixes in a row
+- **WHEN** the user ticked `z` at `abc1234`, and two take-main fixes later `z` reads proven at `0a1b2c3`, holding the same commits of its own as at `abc1234`
+- **THEN** the send stands for `z` at `0a1b2c3`
+
+### Requirement: A ticked bolt whose own work changed is asked again, saying what changed
+A bolt the user ticked whose head now holds commits of its own the ticked head did not, or lacks some it held, SHALL be a row of the next landings card, and that card SHALL say the head the user sent, the head now, and the subjects of the commits gained and lost, five at most, with how many more. A bolt whose own work crew cannot compare SHALL be asked again the same way, the card saying why crew could not tell.
+
+#### Scenario: A fix adds a commit
+- **WHEN** the user ticked `z` at `abc1234`, and a fix that commits `fix: keep the lease` merges into `z`, which reads proven at `def5678`
+- **THEN** `z` is a row of the card that follows, and its note says `z`'s head is now `def5678`, with work of its own since the user's send at `abc1234`: `fix: keep the lease`
+
+#### Scenario: A take-main fix that also commits a change
+- **WHEN** the user ticked `z` at `abc1234`, and its take-main fix merges main and then commits `test: wait for the new lock`
+- **THEN** `z` is asked again, the card naming `test: wait for the new lock`
+
+#### Scenario: crew cannot compare the heads
+- **WHEN** the user ticked `z` at `abc1234`, `z` reads proven at `def5678`, and GitHub's main cannot be fetched where the kit's forecasts are made
+- **THEN** `z` is asked again, and the card says crew could not tell whether `z`'s own work changed since the send, in git's words
+
+### Requirement: A card that follows one the user answered says so first
+Every card crew posts that follows a card the user answered SHALL open its summary, and its details, with one paragraph saying that the user answered the earlier card, when the earlier card was posted and by when crew recorded their answer, what they answered, and what has changed since, before anything else the card says, so a card asked again is never read as a repeat. A card the user answered is one the run record shows closed after their answer, declined among them, and one whose follow-on crew withheld (below). What they answered SHALL be the answer crew recorded at the earlier card's close; where the run record holds none, the paragraph SHALL say crew holds no record of what they answered. What changed SHALL be the sentences the event that raised the card gives: a record's new commit; a proposal's rewrite read against the proposal it replaces; a deploy's newer head; a step's place after the card it follows; what the user's send on a kit's landings card landed, held and left, and the bolts proven or moved since.
+
+#### Scenario: A record revised after the user's note
+- **WHEN** the user answered record 0019's card `req_1`, posted 2026-10-23 13:10 UTC, with a note, crew recorded it by 14:02 UTC, and the design agent revises the record at `4be21c0`
+- **THEN** the card that follows `req_1` opens "You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: declined, with a note. Since then: revised at 4be21c0", with the commit's subject, before the record's own opening
+
+#### Scenario: A proposal rewritten after the user's note
+- **WHEN** the user answered proposal 239's card with a note and the planner rewrites it as proposal 241, which adds unit `x` and no longer adds unit `y`
+- **THEN** the card that follows says first what the user answered and that proposal 241 adds `x` and no longer adds `y`
+
+#### Scenario: A deploy offered again after the user declined it
+- **WHEN** the user declined deneb's deploy of `ddcf2cb` and the deployer offers deneb `e104bcf`
+- **THEN** the new deploy card follows the declined one and opens saying the user declined `ddcf2cb`, when, and that the offer is now `e104bcf`
+
+#### Scenario: The landings card after a send that left a bolt
+- **WHEN** the user sent `land/crew` with `y` ticked and `z` cleared, and `y` lands
+- **THEN** the card that follows opens saying the user sent the earlier card, when, ticking `y` and leaving `z`, and that `y` landed and `z`, which they left, waits on this card
+
+#### Scenario: An answer crew holds no record of
+- **WHEN** a card that follows one the user answered is posted, and the run record's close of the earlier card holds no answer, as a close made before crew recorded answers
+- **THEN** its opening says the user answered the earlier card, when, that crew holds no record of what they answered, and what changed since
+
+### Requirement: A follow-on with nothing changed is not posted, the earlier answer standing
+A card that follows one the user answered, for which the event that raised it gives nothing changed since the answer, SHALL NOT be posted: crew SHALL record it as a `card.post` under the row's key in its owner's name, refused in crew's own words naming the earlier card and saying its answer stands, with that card's id and the state `stands`, and SHALL refuse nothing of the event. The rail's card line SHALL show those words, and the rail's sweep SHALL NOT raise that row's card again; the next post under the row's key SHALL follow the card whose answer stands and SHALL be posted only when its event gives what changed since.
+
+#### Scenario: A proposal rewritten with nothing changed
+- **WHEN** the user answered proposal 239's card and the planner rewrites it as proposal 240 with the same commands and the same case
+- **THEN** no card is posted for proposal 240; the run record has a `card.post` under the proposal's key, refused in crew's words naming 239's card and saying its answer stands, state `stands`; and `crew rail` shows the row with those words
+
+#### Scenario: A deploy offered again at the head the user declined
+- **WHEN** the user declined deneb's deploy of `ddcf2cb` and the deployer offers deneb `ddcf2cb` again with the same notes and steps
+- **THEN** no card is posted, and the decline stands
+
+#### Scenario: The sweep meets a withheld card
+- **WHEN** proposal 240's card was withheld and the rail is read on the planner's host
+- **THEN** the sweep raises no card for proposal 240's row, and records nothing more
+
+#### Scenario: Something changes after a withheld card
+- **WHEN** proposal 240's card was withheld and the planner rewrites it as proposal 242, which adds unit `w`
+- **THEN** proposal 242's card is posted following 239's card, opening with what the user answered on it and that proposal 242 adds `w`
+
+### Requirement: The close of an answered card records the answer
+When crew closes one of its own cards that the user answered, it SHALL record on the close's entry what they answered as `Answer`, in crew's own words made from names alone: approved or declined; the options they picked, by the bolt, unit or choice each names; done, a failed step, or that they will handle it themselves; and "with a note" when they wrote one, never the note's words (`record.3`). A card answered in a conversation, closed as answered there, SHALL record that it was answered in a pane.
+
+#### Scenario: A landings card sent with ticks
+- **WHEN** the user sends `land/crew` with `land:y` ticked, `land:z` cleared and a note, and crew closes it
+- **THEN** the close's entry holds `Answer: ticked y, left z, with a note`, and none of the note's words
+
+#### Scenario: A deploy declined
+- **WHEN** the user declines deneb's deploy card with the words "not tonight" and crew closes it
+- **THEN** the close's entry holds `Answer: declined, with a note`
