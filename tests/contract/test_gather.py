@@ -64,6 +64,45 @@ def test_a_kits_queue_handed_in_is_its_submissions_and_sluice_is_not_run(repo, t
     assert gather.kit(req, stamped=True)["overview"] == doc, "the follower's gather did not give back the overview its watch starts from"
 
 
+def test_a_kits_gather_reads_sluices_record_of_each_asked_bolt_and_of_main_once_each_in_its_main_checkout(repo, tmp_path, monkeypatch):
+    """The crew-board spec, A held bolt's decided merges: a gather of a kit reads sluice's record of each held bolt's
+    branch and of main with `sluice status <branch> --all --json`, a process each, in the kit's main checkout, keeping
+    of main the bolt's landing alone, and with its queue handed in runs no overview of its own; a bolt sluice holds no
+    record of yet is none, and a record that can't be read is said (plan.20, read.1). sluice here is a script on the
+    path answering as sluice 0.51.3 does (tests/py/sluice-0.51.3/)."""
+    k = Kit(repo, tmp_path)
+    repo.git("branch", "bolt/new")
+    bin_, log = tmp_path / "bin", tmp_path / "sluice.log"
+    bin_.mkdir()
+    sub = '{"schema": "sluice/submission@1", "id": %d, "branch": "%s", "state": "landed", "submitted": "2026-10-28T10:0%d:00Z", ' \
+          '"told": "2026-10-28T10:1%d:00Z", "from": {"worktree": "%s"%s}}'
+    docs = {"bolt/te": '{"branch": "bolt/te", "submissions": [%s]}' % (sub % (41, "bolt/te", 1, 1, "unit/a", "")),
+            "main": '{"branch": "main", "submissions": [%s, %s]}' % (sub % (42, "main", 2, 2, "pull/7", ', "head": "bolt/te"'),
+                                                                     sub % (43, "main", 3, 3, "pull/8", ', "head": "bolt/other"'))}
+    for b, d in docs.items():
+        (tmp_path / f"{b.replace('/', '-')}.json").write_text(d)
+    (bin_ / "sluice").write_text(f"""#!/bin/sh
+echo "$(pwd -P) $*" >> {log}
+case "$*" in
+  "status bolt/te --all --json") cat {tmp_path}/bolt-te.json ;;
+  "status main --all --json") cat {tmp_path}/main.json ;;
+  "status bolt/new --all --json") echo '{{"error":{{"kind":"not_found","message":"no branch bolt/new; branches with records: bolt/te, main"}}}}'; exit 1 ;;
+  *) echo "sluice: $* is not stubbed" >&2; exit 2 ;;
+esac
+""")
+    (bin_ / "sluice").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
+    got = gather.kit({"main": str(repo.path), "dir": str(k.dir), "bolts": ["te", "new"], "queued": [[], None]})
+    assert "history_error" not in got and [(s["id"], s["branch"], s["worktree"], s["pull_head"], s["told"]) for s in got["history"]] == [
+        (41, "bolt/te", "unit/a", None, "2026-10-28T10:11:00Z"), (42, "main", "pull/7", "bolt/te", "2026-10-28T10:12:00Z")]
+    main = os.path.realpath(repo.path)
+    assert log.read_text().splitlines() == [f"{main} status bolt/te --all --json", f"{main} status bolt/new --all --json",
+                                            f"{main} status main --all --json"]
+    (tmp_path / "main.json").write_text("not json")
+    assert gather.kit({"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"], "queued": [[], None]})["history_error"] == \
+        "sluice status main printed no JSON"
+
+
 def test_main_holds_its_open_and_archived_changes_an_archived_one_without_its_date(repo, tmp_path):
     """Stages: a unit whose change main holds, open or archived, has landed (the archive at merge, record 0006)."""
     k = Kit(repo, tmp_path)
@@ -503,12 +542,15 @@ def test_a_bolt_whose_policy_on_github_is_not_toml_is_read_nowhere(repo, tmp_pat
 def test_a_read_that_asks_a_fetch_reads_what_github_holds_now_and_every_other_as_last_fetched(repo, tmp_path):
     """crew bolts, a give's proven check (plan.survey with fetch) and every other read (plan.18, plan.19): a request
     with fetch runs `git fetch -q origin` in the kit's main checkout first and reads a merge pushed to GitHub's bolt
-    since; one without reads the bolt as the host last fetched it; a fetch that fails reads the kit unread, naming
-    GitHub and git's words, and nothing from the host's copy."""
+    since; one without reads the bolt as the host last fetched it, before the sluice status it then asks for the bolt's
+    record, which sluice 0.51.3 answers for a branch on a remote by fetching it there (read in a scratch repository on
+    2026-10-28); a fetch that fails reads the kit unread, naming GitHub and git's words, and nothing from the host's
+    copy."""
     k, other = on_github(repo, tmp_path)
     head = landed_on_github(other, {"one": "1\n"}, "Merge unit/u into bolt/te\n\nSluice-Result: passed (9 run, 0 replayed)")
     req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"]}
-    assert gather.kit(req)["bolts"]["te"]["head"] == repo.git("rev-parse", "origin/bolt/te") != head
+    last = repo.git("rev-parse", "origin/bolt/te")
+    assert gather.kit(req)["bolts"]["te"]["head"] == last != head
     got = gather.kit(req, fetch=True)["bolts"]["te"]
     assert (got["head"], got["verdict"]) == (head, "passed (9 run, 0 replayed)")
     repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))

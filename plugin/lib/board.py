@@ -201,7 +201,9 @@ def board_data(fleet, labels, read, now):
     and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
     every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind,
     and each of them its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
-    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22).
+    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22). Each ledger has its
+    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, user, hold, nobody}, now: {holder, what,
+    since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
     the design agent's band shows (records_proposed)."""
@@ -300,7 +302,8 @@ def board_data(fleet, labels, read, now):
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
-                          "landing": landing, "submissions_error": unread}
+                          "landing": landing, "submissions_error": unread,
+                          "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
@@ -473,7 +476,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Construction")
         for b in p["construction"]:
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
-                        state_said(b["state"]), landing_said(b), queue_said(b, True)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                        state_said(b["state"]), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
             for u in b["units"]:
                 line(fields(u["unit"], stage_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
@@ -553,13 +556,19 @@ def queue_said(b, why=False):
     return (f"submissions can't be read: {b['submissions_error']}" if why else ("submissions can't be read", "dim")) if b.get("submissions_error") else ""
 
 
+def time_of(b):
+    """A held bolt's age and who held its time, as its head line ends with them (plan.time_said, plan.20); nothing for
+    a ledger made without it."""
+    return (b.get("time") or {}).get("said") or ""
+
+
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
     dim; then its pips, its name, its state unless active (state_said), its landing standing in sluice (landing_said),
-    that its submissions can't be read when they can't (queue_said), and how many of its units have merged; its
-    landing's marker in the gutter, or attention once every unit has landed."""
+    that its submissions can't be read when they can't (queue_said), how many of its units have merged, and its age and
+    who held its time (time_of); its landing's marker in the gutter, or attention once every unit has landed."""
     return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], state_said(b["state"]),
-                      landing_said(b), queue_said(b), merged(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                      landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
 
 
 def ledger_rows(b):
@@ -1027,6 +1036,20 @@ def queue_of(state):
     return gather.submissions_of(state["doc"]) if "doc" in state else (None, state["why"])
 
 
+def kept_gone(before, now, history, at):
+    """sluice's record of a kit's submissions once its queue moved with nothing gathered (Decision 7 of
+    a-bolts-row-shows-its-age-and-who-holds-it): the last gather's (history), and each submission that stood before
+    (before) and has left the queue the watch's line now holds (now) that the record holds no outcome for, kept as it
+    last stood, told at the line's time (at), so its time in the gate counts until the next gather reads sluice's
+    record of it; the record as it was while it, the queue or the line's time can't be read (read.1). A decision on
+    plain facts (code.7)."""
+    if history is None or now is None or not isinstance(at, str) or not at:
+        return history
+    standing, told = {x["id"] for x in now}, {x["id"] for x in history if x.get("told")}
+    gone = [dict(x, told=at) for x in before or [] if x["id"] not in standing and x["id"] not in told]
+    return [x for x in history if x["id"] not in {g["id"] for g in gone}] + gone
+
+
 def queue_kits(kits):
     """The kits whose queue the follower's read shows, by (host, main): each the read asked bolts of and read (gather.kit
     reads sluice's queue for those alone), of the kept answers, {host: {main: (request, answer)}}."""
@@ -1452,12 +1475,16 @@ class Follower:
 
     def requeue(self, moved_):
         """Each kit whose queue moved has its kept answer's submissions remade from what its watch or the clock's ask
-        last read (queue_of), the read's rows and frames drawn from it with nothing gathered (Decision 7)."""
+        last read (queue_of), the read's rows and frames drawn from it with nothing gathered (Decision 7), and its kept
+        record of sluice's the last gather read holds each that left the queue as it last stood (kept_gone)."""
         for host, main in moved_:
             state, (_, answer) = self.watches.states.get((host, main)), self.kept.kits.get(host, {}).get(main, (None, None))
             if state is None or not (answer or {}).get("ok"):
                 continue
+            before = answer.get("submissions")
             answer["submissions"], why = queue_of(state)
+            if "history" in answer:
+                answer["history"] = kept_gone(before, answer["submissions"], answer["history"], (state.get("doc") or {}).get("at"))
             answer.pop("submissions_error", None)
             if why:
                 answer["submissions_error"] = why

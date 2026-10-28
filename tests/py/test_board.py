@@ -34,6 +34,21 @@ def ago(minutes):
     return board.iso(NOW - datetime.timedelta(minutes=minutes))
 
 
+def hm(minutes):
+    """A time minutes before the board was read as a head line says when a holder began (plan.time_said)."""
+    t = (NOW - datetime.timedelta(minutes=minutes)).astimezone()
+    return f"{t:%H:%M}" if t.date() == NOW.astimezone().date() else f"{t:%Y-%m-%d %H:%M}"
+
+
+# Each held bolt's give, as the run record holds it: tenant-environments 200 minutes before the board was read, and
+# board-done 30; with nothing else of theirs recorded, each has been nobody's since (plan.20).
+GIVES = [dict(Id=f"{ago(200)}-mac-studio-1-0", At=ago(200), Host="mac-studio", Act="bolt.give", On=["bolt/tenant-environments", "team/swb-1"]),
+         dict(Id=f"{ago(30)}-mac-studio-1-0", At=ago(30), Host="mac-studio", Act="bolt.give", On=["bolt/board-done", "team/brd-1"])]
+TE_TIME = f"3h 20m: nobody 3h 20m; stalled since {hm(200)}"
+DONE_TIME = f"30m: nobody 30m; stalled since {hm(30)}"
+NO_GIVE = "its age can't be told: the run record of the last 60 days holds no give of it"
+
+
 @pytest.fixture(autouse=True)
 def here(monkeypatch):
     monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
@@ -56,9 +71,9 @@ def kits(ok=True):
            "slots": {"swb-1": [{"slot": "unit-1", "kind": "unit", "name": "a"}, {"slot": "unit-4", "kind": "fix", "name": "fix/tenant-environments/edge"}]},
            "sites": {"/kit/places/a": {"here": "http://unit-a--switchboard-kit.localhost", "tailnet": "https://unit-a--switchboard-kit--box.dev"}},
            "routes": [{"name": "unit-a--switchboard-kit", "url": "http://unit-a.localhost"}],
-           "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}]}
+           "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}], "submissions": [], "history": []}
     brd = {"ok": True, "main": ["done-one"], "places": {}, "reports": {}, "bolts": {"board-done": {"head": "e" * 40, "head_at": ago(10), "changes": []}},
-           "fixes": [], "slots": {}, "sites": {}, "routes": []}
+           "fixes": [], "slots": {}, "sites": {}, "routes": [], "submissions": [], "history": []}
     mac = {"mac-studio": {"ok": True, "kits": {"/a/main": {"ok": True, "main": [], "places": {}, "reports": {}, "bolts": {}, "fixes": []}}}}
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
@@ -72,7 +87,7 @@ def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, ca
     ops_rows = [dict(r, at=plan.utc(r["at"]), doc=None) for r in ops.rows(FLEET, "wldn", list(entries))]
     return dict(found=found, sv=sv, props=list(props), cards=list(cards), unread=unread or {}, errors=errors or {},
                 landings=list(landings), gives=gives or {}, signals={"wldn": (signals or [], {})}, ops={"wldn": list(entries)},
-                logs={"wldn": list(logs) or list(entries)},
+                logs={"wldn": GIVES + (list(logs) or list(entries))},
                 rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None) if p else []) + ops_rows)
 
 
@@ -147,10 +162,10 @@ class TestText:
 
     def test_construction_shows_a_held_bolt_as_a_ledger(self):
         con = lane(board.board_text(data()), "Construction")
-        assert con[:4] == ["  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha",
+        assert con[:4] == [f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {TE_TIME}",
                            "    a  code 1/2  unit-1  https://unit-a--switchboard-kit--box.dev", "    b  planned",
                            "    fix/tenant-environments/edge  fix  unit-4"]
-        assert "! breadboard-kit board-done  brd-1 on chuck-herdr-alpha  landed" in con
+        assert f"! breadboard-kit board-done  brd-1 on chuck-herdr-alpha  landed  {DONE_TIME}" in con
 
     def test_a_held_bolt_every_unit_of_which_landed_is_named_for_attention(self):
         att = lane(board.board_text(data()), "attention")
@@ -212,7 +227,8 @@ class TestText:
         out = board.board_text(data(sv=kits(ok=False)))
         assert f"! {BOX} did not answer (its kits: ssh: timed out)" in lane(out, "attention")
         con = lane(out, "Construction")
-        assert f"  switchboard-kit tenant-environments  swb-1 on {BOX}  unknown" in con and "    a  unknown" in con
+        assert (f"  switchboard-kit tenant-environments  swb-1 on {BOX}  unknown  3h 20m; who held its time can't be told: its submissions "
+                "can't be read: its kit was not read") in con and "    a  unknown" in con
         assert out.splitlines()[0].endswith("read from mac-studio")
 
     def test_an_operator_host_with_no_team_is_never_named_for_its_run_record(self):
@@ -582,6 +598,33 @@ class TestRefresh:
         assert len(self.reads) == 2 and self.handed[-1] == {(BOX, "/kit/main"): [answer["submissions"], None]}
         assert w.opened == [(BOX, "/kit/main")] and w.closed == [], "a watch was opened twice"
 
+    def test_a_submission_that_left_the_queue_counts_as_it_last_stood_until_the_lines_time(self, follower):
+        """The crew-board spec, The follower follows each kit's queue (between gathers, a submission that has left the
+        queue counts as it last stood until the line that no longer holds it): #41 under test leaves the queue, and the
+        refresh, gathering nothing, keeps it in the last gather's record of sluice's, told at that line's time, once."""
+        self.req = {"main": "/kit/main", "bolts": ["te"]}
+        follower.watches = w = self.Watching()
+        follower.refresh()
+        answer = follower.kept.kits[BOX]["/kit/main"][1]
+        landed = {"id": 40, "branch": "bolt/te", "head": None, "state": "landed", "submitted": "2026-10-28T15:00:00Z", "told": "2026-10-28T15:10:00Z",
+                  "worktree": "unit/b", "pull_head": None}
+        answer["history"] = [landed, dict(landed, id=41, state="queued", told=None, worktree="unit/a")]
+        testing = dict(self.QUEUED, branches=[dict(self.QUEUED["branches"][0], candidates=[
+            {"id": "c1", "state": "testing", "started": "2026-10-28T16:20:00Z", "submissions": [41]}], submissions=[
+            dict(self.QUEUED["branches"][0]["submissions"][0], submitted="2026-10-28T16:00:00Z")])])
+        w.states[(BOX, "/kit/main")] = {"doc": testing}
+        follower.refresh()
+        assert answer["history"][-1]["told"] is None and [s["started"] for s in answer["submissions"]] == ["2026-10-28T16:20:00Z"]
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:40:00Z", branches=[])}
+        follower.refresh()
+        assert len(self.reads) == 1 and answer["submissions"] == [], "the queue's move gathered the kit"
+        assert answer["history"] == [landed, {"id": 41, "branch": "bolt/te", "head": None, "state": "testing", "worktree": "unit/a", "pull_head": None,
+                                              "submitted": "2026-10-28T16:00:00Z", "started": "2026-10-28T16:20:00Z", "told": "2026-10-28T16:40:00Z"}]
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:50:00Z", branches=[dict(self.QUEUED["branches"][0], submissions=[
+            {"id": 42, "branch": "bolt/te", "state": "queued", "from": {"worktree": "unit/b"}}])])}
+        follower.refresh()
+        assert [x["told"] for x in answer["history"]] == ["2026-10-28T15:10:00Z", "2026-10-28T16:40:00Z"], "a gone submission was told again"
+
     def test_a_new_watch_starts_from_the_overview_its_kits_gather_read_so_its_first_line_moves_nothing(self, follower, monkeypatch):
         """A kit's queue is read once: the gather's own overview is the kept line the watch's first is compared with."""
         self.req = {"main": "/kit/main", "bolts": ["te"]}
@@ -860,6 +903,20 @@ class TestWatches:
         assert [s["id"] for s in board.queue_of({"doc": queued})[0]] == [41, 42]
         assert board.queue_of({"why": "its overview watch ended"}) == (None, "its overview watch ended")
 
+    def test_a_submission_gone_from_the_queue_is_kept_told_at_the_lines_time_until_sluices_record_tells_it(self):
+        """Decision 7 of a-bolts-row-shows-its-age-and-who-holds-it: between gathers, one that left the queue counts as
+        it last stood until the line that no longer holds it."""
+        a = {"id": 41, "branch": "bolt/te", "state": "testing", "submitted": "2026-10-28T16:00:00Z", "started": "2026-10-28T16:05:00Z"}
+        b = {"id": 42, "branch": "bolt/te", "state": "queued", "submitted": "2026-10-28T16:10:00Z", "started": None}
+        told = {"id": 40, "state": "landed", "told": "2026-10-28T15:00:00Z"}
+        at = "2026-10-28T16:30:00Z"
+        assert board.kept_gone([a, b], [b], [told, dict(a, told=None)], at) == [told, dict(a, told=at)]
+        assert board.kept_gone([a, b], [b], [told, dict(a, told="2026-10-28T16:20:00Z")], at) == [told, dict(a, told="2026-10-28T16:20:00Z")]
+        assert board.kept_gone([a], [a, b], [told], at) == [told]
+        assert board.kept_gone([a], [], None, at) is None, "a record that could not be read was made"
+        assert board.kept_gone([a], None, [told], at) == [told], "a queue that can't be read was taken as empty"
+        assert board.kept_gone([a], [], [told], None) == [told], "a line with no time told one at a guess"
+
     def test_a_watch_opens_for_each_kit_shown_and_closes_for_one_no_longer_shown(self):
         assert board.watch_plan({self.KIT, self.OTHER}, set(), set(), set(), False) == {"open": [self.KIT, self.OTHER], "close": [], "ask": []}
         assert board.watch_plan({self.KIT}, {self.KIT, self.OTHER}, set(), set(), True) == {"open": [], "close": [self.OTHER], "ask": []}
@@ -1100,7 +1157,7 @@ class TestMore:
                              "records", "teams"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
         assert sorted(te) == ["bolt", "fixes", "goal", "host", "landing", "markers", "repo", "state", "submissions_error", "team", "teams",
-                              "units", "url"]
+                              "time", "units", "url"]
         assert sorted(te["units"][0]) == ["kind", "slot", "stage", "submission", "tasks", "unit", "url", "worktree"]
         assert sorted(te["fixes"][0]) == ["fix", "merged", "slot", "submission", "url", "worktree"]
 
@@ -1126,7 +1183,7 @@ WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-
 
 class TestViews:
     def test_a_conductor_reads_its_bolt_as_a_ledger_a_pip_to_each_unit_then_what_comes_next(self):
-        assert view("swb-1-conductor") == ["  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
+        assert view("swb-1-conductor") == [f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
                                            "    fix/tenant-environments/edge  fix  unit-4", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
 
     def test_a_team_holding_a_bolt_that_waits_to_land_and_one_it_builds_draws_both(self, monkeypatch):
@@ -1143,11 +1200,11 @@ class TestViews:
         swb["places"]["ssh-one"] = dict(swb["places"]["a"], path="/kit/places/ssh-one", bolt="ssh-fix")
         swb["slots"]["swb-2"] = [{"slot": "unit-1", "kind": "unit", "name": "ssh-one"}]
         mine = view("swb-2-conductor", sv=sv)
-        assert mine[:4] == ["✓ switchboard-kit  ●  doctor-rows  waits to land  1 of 1 merged  no card open", "    ●  rows-one  merged",
-                            "  switchboard-kit  ◑  ssh-fix  0 of 1 merged", "    ◑  ssh-one  code 1/2  unit-1"]
+        assert mine[:4] == [f"✓ switchboard-kit  ●  doctor-rows  waits to land  1 of 1 merged  {NO_GIVE}  no card open", "    ●  rows-one  merged",
+                            f"  switchboard-kit  ◑  ssh-fix  0 of 1 merged  {NO_GIVE}", "    ◑  ssh-one  code 1/2  unit-1"]
         assert lane(board.board_text(data(sv=sv)), "Construction") == [
-            "✓ switchboard-kit doctor-rows  swb-2 on chuck-herdr-alpha  waits to land  no card open", "    rows-one  merged",
-            "  switchboard-kit ssh-fix  swb-2 on chuck-herdr-alpha", "    ssh-one  code 1/2  unit-1"]
+            f"✓ switchboard-kit doctor-rows  swb-2 on chuck-herdr-alpha  waits to land  {NO_GIVE}  no card open", "    rows-one  merged",
+            f"  switchboard-kit ssh-fix  swb-2 on chuck-herdr-alpha  {NO_GIVE}", "    ssh-one  code 1/2  unit-1"]
 
     def test_each_bolt_is_marked_from_its_kits_landing_row_and_ops_band_draws_the_row_with_its_card(self, monkeypatch):
         """Two proven bolts of one kit are one landing row, land/<kit> (crew-rail "Two bolts of one kit"): each bolt's
@@ -1169,7 +1226,7 @@ class TestViews:
         v = board.agent_views(d)
         assert "".join(t for t, _ in v["cards"]["wldn-ops"][0]).startswith("  your card  land/switchboard-kit  req_k1")
         assert "✓ 1 to approve" in "\n".join(view("wldn-operator", sv=sv, cards=[card]))
-        assert view("swb-1-conductor", sv=sv, cards=[card])[0].endswith("doctor-rows  waits to land  1 of 1 merged  card open, asked by wldn-ops")
+        assert view("swb-1-conductor", sv=sv, cards=[card])[0].endswith(f"doctor-rows  waits to land  1 of 1 merged  {NO_GIVE}  card open, asked by wldn-ops")
 
     def test_a_unit_waits_on_no_answer_so_it_has_no_marker_even_with_an_old_verify_card_open(self):
         card = dict(label="wldn", card="req_2", key="verify/a/20261012-1200", by="swb-1-conductor", host="mac-studio", at=NOW)
@@ -1185,18 +1242,20 @@ class TestViews:
 
     def test_a_conductor_whose_host_does_not_answer_is_told_and_its_units_are_unknown(self):
         mine = view("swb-1-conductor", sv=kits(ok=False))
-        assert mine[0] == "  switchboard-kit  ??  tenant-environments  unknown  0 of 2 merged" and mine[1] == "    ?  a  unknown"
+        assert mine[0] == ("  switchboard-kit  ??  tenant-environments  unknown  0 of 2 merged  3h 20m; who held its time can't be told: its "
+                           "submissions can't be read: its kit was not read") and mine[1] == "    ?  a  unknown"
         assert f"! {BOX} did not answer (its kits: ssh: timed out)" in mine
         assert not [l for l in view("atl-1-conductor", sv=kits(ok=False)) if "did not answer" in l]
 
     def test_a_bolt_landed_and_still_in_the_plan_is_named_for_attention_to_its_conductor(self):
-        assert view("brd-1-conductor") == ["! breadboard-kit  ●  board-done  landed  1 of 1 merged", "    ●  done-one  landed",
+        assert view("brd-1-conductor") == [f"! breadboard-kit  ●  board-done  landed  1 of 1 merged  {DONE_TIME}", "    ●  done-one  landed",
                                            "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
 
     def test_the_planner_reads_the_plan_in_brief_each_teams_bolt_and_the_proposals_with_whom_they_wait_on(self):
         assert view("wldn-planner", props=WAITS) == [
             "wldn plan  2 held  1 planned  1 queued  1 proposal open", "  atlas-kit  atl-1  holds no bolt",
-            "! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged", "  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged",
+            f"! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged  {DONE_TIME}",
+            f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}",
             "  switchboard-kit  swb-2  holds no bolt", "✓ proposal 2 by wldn-planner  Tenants get d.  waiting on swb-1-conductor  no card open",
             "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit",
             "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
@@ -1221,8 +1280,8 @@ class TestViews:
         mine = view("wldn-operator", props=WAITS, signals=SIGS)
         assert mine[:4] == [f"wldn board  read from {BOX}, mac-studio", "Inception  3 signals not moved  1 exploration",
                             "Bolt plan  1 proposal open  1 planned  1 queued", "Construction"]
-        assert mine[4:8] == ["  atlas-kit  atl-1  holds no bolt", "! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged",
-                             "  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged", "  switchboard-kit  swb-2  holds no bolt"]
+        assert mine[4:8] == ["  atlas-kit  atl-1  holds no bolt", f"! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged  {DONE_TIME}",
+                             f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}", "  switchboard-kit  swb-2  holds no bolt"]
         assert "Operation  0 landed in seven days" in mine and "waits on the user  ✓ 1 to approve" in mine
 
     def test_an_operator_reads_each_environment_with_a_deploy_or_an_operation_waiting_and_counts_their_cards(self):
@@ -1322,10 +1381,14 @@ QUESTION = dict(label="wldn", card="req_q1", key=None, on="agent/swb-1-conductor
 
 
 # Merges and a landing standing in sluice's queue, as the gather reads them on swb-1's host (gather.submissions_of).
-STANDING_SUBS = [{"id": 41, "branch": "bolt/tenant-environments", "head": "a" * 40, "state": "testing", "worktree": "unit/a", "pull_head": None},
+STANDING_SUBS = [{"id": 41, "branch": "bolt/tenant-environments", "head": "a" * 40, "state": "testing", "worktree": "unit/a", "pull_head": None,
+                  "submitted": ago(30), "started": ago(20)},
                  {"id": 43, "branch": "bolt/tenant-environments", "head": "c" * 40, "state": "queued", "worktree": "fix/tenant-environments/edge",
-                  "pull_head": None},
-                 {"id": 355, "branch": "main", "head": "d" * 40, "state": "queued", "worktree": "pull/198", "pull_head": "bolt/tenant-environments"}]
+                  "pull_head": None, "submitted": ago(25), "started": None},
+                 {"id": 355, "branch": "main", "head": "d" * 40, "state": "queued", "worktree": "pull/198", "pull_head": "bolt/tenant-environments",
+                  "submitted": ago(10), "started": None}]
+# tenant-environments' time with those standing: #41 queued ten minutes, the team's, then under test twenty, the kit's.
+QUEUED_TIME = f"3h 20m: team 10m, kit 20m, nobody 2h 50m; kit since {hm(20)}, #41"
 
 
 def queued(subs=(), error=None):
@@ -1351,8 +1414,8 @@ class TestSubmissions:
         """crew-board "A landing standing in sluice": the lane, its conductor's band and main-level ops's."""
         sv = queued(STANDING_SUBS)
         assert lane(board.board_text(data(sv=sv)), "Construction")[0] == (
-            "  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing #355 queued")
-        assert view("swb-1-conductor", sv=sv)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged"
+            f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing #355 queued  {QUEUED_TIME}")
+        assert view("swb-1-conductor", sv=sv)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged  {QUEUED_TIME}"
         assert "  switchboard-kit  tenant-environments  landing #355 queued" in view("wldn-ops", sv=sv)
 
     def test_a_landing_on_ops_landing_row_is_named_with_its_bolt(self, monkeypatch):
@@ -1371,14 +1434,63 @@ class TestSubmissions:
         sv = queued(error="sluice overview exited 2: not a repository sluice serves")
         out = lane(board.board_text(data(sv=sv)), "Construction")
         assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  submissions can't be read: sluice overview "
-                          "exited 2: not a repository sluice serves")
+                          "exited 2: not a repository sluice serves  3h 20m; who held its time can't be told: its submissions can't be read: "
+                          "sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in out if "#" in l]
         mine = view("swb-1-conductor", sv=sv)
-        assert mine[0] == "  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged"
+        assert mine[0] == ("  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged  3h 20m; who held its time "
+                           "can't be told: its submissions can't be read: sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in mine if "#" in l]
 
     def test_nothing_standing_draws_nothing_new(self):
         assert view("swb-1-conductor", sv=queued([])) == view("swb-1-conductor")
+
+
+class TestTime:
+    """crew-board "A held bolt's head line shows its age and who held its time" (plan.20): each holder now as the lane,
+    the JSON and the bands draw tenant-environments' head line, given 200 minutes before the board was read."""
+
+    @staticmethod
+    def head(**kw):
+        return lane(board.board_text(data(**kw)), "Construction")[0]
+
+    def test_the_team_while_a_stage_runs(self):
+        logs = [dict(Act="stage.start", On=["stage/a/code", "unit/a", "agent/swb-1-unit-1"], At=ago(50))]
+        said = f"3h 20m: team 50m, nobody 2h 30m; team since {hm(50)}, code on a"
+        assert self.head(logs=logs).endswith(f"swb-1 on {BOX}  {said}")
+        assert view("swb-1-conductor", logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {said}"
+        assert f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {said}" in view("wldn-planner", logs=logs)
+
+    def test_the_kit_while_a_merge_is_under_test(self):
+        assert self.head(sv=queued(STANDING_SUBS)).endswith(QUEUED_TIME)
+
+    def test_the_user_while_a_card_of_the_bolts_is_open(self):
+        logs = [dict(Act="card.post", On=["bolt/tenant-environments"], Card="req_l", Key="land/tenant-environments", By="swb-1-conductor", At=ago(40))]
+        assert self.head(logs=logs).endswith(f"3h 20m: user 40m, nobody 2h 40m; user since {hm(40)}, land/tenant-environments")
+
+    def test_a_hold_while_its_teams_host_is_held(self):
+        logs = [dict(Act="host.hold", On=[f"host/{BOX}"], By="chuck", At=ago(15))]
+        assert self.head(logs=logs).endswith(f"3h 20m: hold 15m, nobody 3h 05m; held since {hm(15)}: its host {BOX} is held by chuck")
+
+    def test_stalled_once_nobody_has_held_it_five_minutes_and_not_before(self):
+        assert self.head().endswith(TE_TIME)
+        logs = [dict(Act="stage.start", On=["stage/a/code", "unit/a", "agent/swb-1-unit-1"], At=ago(50)),
+                dict(Act="stage.end", On=["stage/a/code", "unit/a", "agent/swb-1-unit-1"], At=ago(2))]
+        assert self.head(logs=logs).endswith(f"3h 20m: team 48m, nobody 2h 32m; nobody since {hm(2)}")
+
+    def test_an_age_that_cant_be_told_says_why_and_shows_no_share(self):
+        unread = {"wldn": {"wldn/main of WilldanGroup/crew-state": "fetch failed"}}
+        said = "its age can't be told: wldn/main of WilldanGroup/crew-state could not be read (fetch failed)"
+        assert self.head(unread=unread).endswith(said)
+        assert view("swb-1-conductor", unread=unread)[0].endswith(f"0 of 2 merged  {said}")
+
+    def test_the_json_carries_the_age_the_shares_and_the_holder_now(self):
+        logs = [dict(Act="stage.start", On=["stage/a/code", "unit/a", "agent/swb-1-unit-1"], At=ago(50))]
+        te = data(logs=logs)["partitions"][0]["construction"][0]
+        assert te["time"] == {"age": 200, "shares": {"team": 50, "kit": 0, "user": 0, "hold": 0, "nobody": 150},
+                              "now": {"holder": "team", "what": "code on a", "since": ago(50)}, "stalled": False,
+                              "said": f"3h 20m: team 50m, nobody 2h 30m; team since {hm(50)}, code on a"}
+        assert json.loads(json.dumps(te))["time"] == te["time"]
 
 
 class TestCards:
@@ -1433,4 +1545,4 @@ def test_a_chore_is_marked_in_a_ledger_a_planned_bolt_and_the_queue(monkeypatch)
     assert lane(out, "Bolt plan") == ["  switchboard-kit apex-zones  Goal of apex-zones.", "    pin  chore ready", "  switchboard-kit tidy  chore queued"]
     # Its conductor's view, the mod's band, draws the chore in its ledger as the board does (code.8).
     mine = view("swb-1-conductor", sv=sv)
-    assert mine[:3] == ["  switchboard-kit  ◑◕  tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◕  bump  chore verify  unit-2"]
+    assert mine[:3] == [f"  switchboard-kit  ◑◕  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2  unit-1", "    ◕  bump  chore verify  unit-2"]

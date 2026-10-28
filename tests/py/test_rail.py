@@ -1547,3 +1547,45 @@ class TestMainMoved:
             None, f"crew on {BOX} names no revision of main it read /kit/main at, as a crew older than the read of it does")
         assert acts.main_at("wldn", KIT, survey(ok=False)) == (None, f"{BOX} did not answer (ssh: connect to host timed out)")
         assert acts.main_at("wldn", "atlas-kit", sv) == (None, "no team of wldn builds atlas-kit")
+
+
+class TestLandTime:
+    """crew-rail "A bolt's land line shows its age and who held its time" (plan.20): apex-zones, given to swb-2 five
+    hours before the rail was read, its one unit's merge run from 200 minutes to 170 and its kit's landings card open
+    for the last two hours."""
+
+    LOGS = [{"Act": "bolt.give", "On": ["bolt/apex-zones", "team/swb-2"], "At": iso(300)},
+            {"Act": "stage.start", "On": ["stage/zone-one/merge", "unit/zone-one", "agent/swb-2-unit-1"], "At": iso(200)},
+            {"Act": "stage.end", "On": ["stage/zone-one/merge", "unit/zone-one", "agent/swb-2-unit-1"], "At": iso(170)},
+            {"Act": "card.post", "On": [f"land/{KIT}"], "Card": "req_k1", "Key": f"land/{KIT}", "By": "wldn-ops", "At": iso(120)}]
+
+    @staticmethod
+    def hm(minutes_ago):
+        t = (NOW - datetime.timedelta(minutes=minutes_ago)).astimezone()
+        return f"{t:%H:%M}" if t.date() == NOW.astimezone().date() else f"{t:%Y-%m-%d %H:%M}"
+
+    def read(self):
+        sv = survey()
+        sv[BOX]["kits"]["/kit/main"].update(submissions=[], history=[])
+        found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+        return dict(found=found, rows=plan.rail_rows(FLEET, found, sv, [], {}, None), cards=[], sv=sv, unread={}, errors={}, props=[],
+                    landings=[], gives={}, signals={"wldn": ([], {})}, ops={"wldn": []}, logs={"wldn": list(self.LOGS)})
+
+    def test_a_bolt_waiting_on_the_users_yes_says_its_age_the_users_share_and_that_the_user_holds_it(self):
+        said = f"5h 00m: team 30m, user 2h 00m, nobody 2h 30m; user since {self.hm(120)}, land/{KIT}"
+        out = plan.rail_text(FLEET, ["wldn"], self.read(), NOW).splitlines()
+        assert " " * 29 + f"apex-zones, swb-2 on {BOX}: can land; {said}" in out
+
+    def test_the_rail_and_the_board_agree_from_one_read(self):
+        import board
+        read = self.read()
+        rail = next(l for l in plan.rail_text(FLEET, ["wldn"], read, NOW).splitlines() if l.strip().startswith("apex-zones, swb-2"))
+        ledger = next(b for b in board.board_data(FLEET, ["wldn"], read, NOW)["partitions"][0]["construction"] if b["bolt"] == "apex-zones")
+        assert rail.endswith("can land; " + ledger["time"]["said"]) and ledger["time"]["shares"]["user"] == 120
+
+    def test_a_kit_not_read_says_why_its_time_cant_be_told_after_its_age(self):
+        read = self.read()
+        del read["sv"][BOX]["kits"]["/kit/main"]["history"]
+        out = plan.rail_text(FLEET, ["wldn"], read, NOW)
+        assert ("can land; 5h 00m; who held its time can't be told: its submissions can't be read: sluice's record of its "
+                "submissions was not read") in out

@@ -106,7 +106,7 @@ signal's id takes its full id, <capture>/<NN>-<slug>, or its short one, <capture
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, base64, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
+import argparse, base64, bisect, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
 # getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
 # module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
@@ -3310,7 +3310,9 @@ def bolt_land(fleet, a):
     on the user's word in ops's pane (pane_word_of), that word and their words kept on this host (landing_word_read),
     as answered there (pane_landed); the words kept are removed once the landing is written. A bolt no team holds,
     built outside a team, is read on the host and main checkout of a team of the partition building its kit, and lands
-    the same way once main holds each of its units' changes and chores, on the user's word (roles.2)."""
+    the same way once main holds each of its units' changes and chores, on the user's word (roles.2). A bolt a team
+    held records its Age and Split with its landing, read from sluice's record on its team's host (landing_time), and
+    neither when that can't be read, the landing going on (plan.20)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
     t = held = bolt_team(fleet, b)
@@ -3352,8 +3354,10 @@ def bolt_land(fleet, a):
             w.on.append(f"{kind_of(u)}/{u.name()}")
         w.plan.remove(w.plan.bolt(a.bolt))
         return [a.bolt]
+    # A bolt a team held records its age and who held its time, or neither when that can't be read (plan.20).
+    spent = landing_time(fleet, t, plan, b, entries, datetime.datetime.now(datetime.timezone.utc)) if held else {}
     write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"],
-          fields=dict(Repo=t["kit"]["name"], Head=head))
+          fields=dict(Repo=t["kit"]["name"], Head=head, **spent))
     if b.get("Team"):
         after = plan_of(fleet, label)
         print(landed_line(a.bolt, t["kit"]["name"], head, t["name"], [x.name() for x in held_by(after, t["name"])] if after else None))
@@ -3556,6 +3560,68 @@ printf 'MARKED=%q\n' "$marked"
 SUBMISSIONS = r"""cd "$1" || exit 2
 exec sluice status main --all --json
 """
+
+# sluice's record of every submission a bolt's branch and its kit's main have had, read on the team's host in the kit's
+# main checkout as a landing is recorded (landing_time): for bolt/<bolt> and then main, a line of `sluice status <branch>
+# --all --json`'s exit and its standard output and error, each base64 after an x, so an empty one is still a word.
+HISTORY = r"""cd "$1" || exit 2
+for b in "bolt/$2" main; do
+  err=$(mktemp) || exit 2
+  out=$(sluice status "$b" --all --json 2>"$err"); rc=$?
+  printf '%s x%s x%s\n' "$rc" "$(printf '%s' "$out" | base64 | tr -d '\n')" "$(base64 < "$err" | tr -d '\n')"
+  rm -f "$err"
+done
+"""
+
+
+def history_read(printed, bolt):
+    """sluice's record of a bolt's submissions as HISTORY printed it on the team's host, read as the gather reads it
+    (gather.status_read), of main the bolt's landing alone, a submission from bolt/<bolt> or a pull request opened from
+    it: (submissions, None), or (None, why) for a record that can't be read, or a print crew can't read (read.1)."""
+    lines = (printed or "").splitlines()
+    if len(lines) != 2:
+        return None, f"sluice's record of bolt/{bolt} and main was not printed whole on the team's host"
+    out = []
+    for branch, line in zip((f"bolt/{bolt}", "main"), lines):
+        words = line.split(" ")
+        if len(words) != 3 or not words[0].isdigit() or not all(w.startswith("x") for w in words[1:]):
+            return None, f"sluice's record of {branch} was printed as crew can't read it: {cut(line, 120)}"
+        try:
+            said = [base64.b64decode(w[1:]).decode(errors="replace") for w in words[1:]]
+        except ValueError:
+            return None, f"sluice's record of {branch} was printed as crew can't read it: {cut(line, 120)}"
+        subs, why = gather.status_read(branch, int(words[0]), *said)
+        if why:
+            return None, why
+        out += subs if branch != "main" else [x for x in subs if f"bolt/{bolt}" in (x["worktree"], x["pull_head"])]
+    return out, None
+
+
+def landing_split(entries, plan_, b, host, kit_name, history, now):
+    """The fields a held bolt's bolt.land entry records of its time (run-record "A bolt's landing entry records its time
+    by holder", plan.20), a decision of facts alone (code.7): Age, its whole minutes from its newest give to its
+    landing, and Split, those minutes by holder in HOLDERS' order, each named, `team 200, kit 25, user 125, hold 0,
+    nobody 20`, made by the board's own rule (bolt_facts, bolt_time) from the partition's run record (entries) and
+    sluice's record of the bolt's submissions (history, history_read's), nothing standing since it landed. Its landing
+    is when sluice told the newest of its landings on main that landed, or now when none did. {} when its give or
+    sluice's record can't be read, so the entry carries neither and the landing goes on (read.1)."""
+    subs, why = history
+    told = max((x["told"] for x in subs or [] if x.get("branch") == "main" and x.get("state") == "landed" and x.get("told")), default=None)
+    tm = time_at(bolt_facts(entries, plan_, b.name(), b.get("Team"), host, kit_name, ([], None), history), utc(told) if told else now)
+    if "unknown" in tm:
+        return {}
+    return {"Age": str(tm["age"]), "Split": ", ".join(f"{h} {tm['shares'][h]}" for h in HOLDERS)}
+
+
+def landing_time(fleet, t, plan_, b, entries, now):
+    """A held bolt's Age and Split for its landing's entry (landing_split), sluice's record of its submissions read on
+    its team's host (HISTORY, history_read), the one process it starts there; {} when that can't be read."""
+    try:
+        history = history_read(host_run(fleet, t["machine"], HISTORY, t["kit"]["main"], b.name()), b.name())
+    except Refusal as e:
+        history = (None, str(e))
+    return landing_split(entries, plan_, b, t["machine"], t["kit"]["name"], history, now)
+
 
 # A submission's states in sluice 0.36.4 (sluice-core records.rs, State): those it stands in, in the queue or a chain
 # under test, as crew says them, and those it is out in, where sluice's wait ends.
@@ -11509,6 +11575,275 @@ def bolts_text(data):
     return "\n".join(lines)
 
 
+# ------------------------------------------------------------------------------------------------- a bolt's time
+
+HOLDERS = ("team", "kit", "user", "hold", "nobody")
+STALLED = 5  # minutes nobody has held a bolt before its row says it is stalled (teams.23's measure)
+
+
+def bolt_time(start, end, stages, submissions, cards, holds):
+    """Where a held bolt's time went (plan.20, record 0044), a decision of facts alone (code.7): from its newest give
+    (start) to end, the time now or its landing, cut at every start and end the facts hold, each piece going to the
+    first holder that applies: the team while a stage of its work runs other than a merge; the kit while one of its
+    submissions is under test; the team while a merge stage runs or one of its submissions stands in sluice not under
+    test; the user while a card of the bolt's is open; a hold while one is recorded on it; else nobody. A team at work
+    is not idle whatever else happens, a gate's checks are the gate's while the merge agent waits on them, and waiting
+    on people counts only while nothing moves, so the shares sum to the age. stages are [{start, end, merge, what}],
+    submissions [{submitted, started, decided, state, what}], cards [{at, until, key}] and holds [{at, until, what}],
+    every time aware and an end of None running to end. A submission is under test from the start of its checks to its
+    decision; one testing with no start of checks, and one decided, whose record in sluice 0.51.3 keeps no start of
+    checks, count under test for their whole stay, so a decided merge's queued minutes go to the kit until sluice keeps
+    that start (the design's Decision 3). Returns {age, shares: {holder: minutes}, now: {holder, what, since}, stalled}
+    in whole minutes, since the time the holder at end began to hold the bolt, and stalled once nobody has held it for
+    STALLED minutes."""
+    facts = []
+
+    def put(a, b, rank, holder, what):
+        a, b = max(a, start), min(b or end, end)
+        if a < b:
+            facts.append((rank, a, b, holder, what))
+    for s in stages:
+        put(s["start"], s.get("end"), 3 if s.get("merge") else 1, "team", s.get("what"))
+    for s in submissions:
+        if s.get("decided") or s.get("state") == "testing":
+            checks = s.get("started") or s["submitted"]
+            put(checks, s.get("decided"), 2, "kit", s.get("what"))
+            put(s["submitted"], checks, 3, "team", s.get("what"))
+        else:
+            put(s["submitted"], None, 3, "team", s.get("what"))
+    for c in cards:
+        put(c["at"], c.get("until"), 4, "user", c.get("key"))
+    for h in holds:
+        put(h["at"], h.get("until"), 5, "hold", h.get("what"))
+    facts.sort(key=lambda f: (f[0], f[1]))
+    cuts = sorted({start, end} | {t for f in facts for t in f[1:3]})
+    secs, pieces = dict.fromkeys(HOLDERS, 0.0), []
+    for a, b in zip(cuts, cuts[1:]):
+        top = next((f for f in facts if f[1] <= a and f[2] >= b), None)
+        holder, what = (top[3], top[4]) if top else ("nobody", None)
+        secs[holder] += (b - a).total_seconds()
+        pieces.append((a, holder, what))
+    age = int(max(0.0, (end - start).total_seconds()) // 60)
+    shares = {h: int(secs[h] // 60) for h in HOLDERS}
+    for h in sorted(HOLDERS, key=lambda h: -(secs[h] / 60 - shares[h]))[:age - sum(shares.values())]:
+        shares[h] += 1  # the minutes the floors left, to the largest parts left over, so the shares sum to the age
+    holder, what, since = (pieces[-1][1], pieces[-1][2], pieces[-1][0]) if pieces else ("nobody", None, start)
+    for a, h, _ in reversed(pieces):
+        if h != holder:
+            break
+        since = a
+    return {"age": age, "shares": shares, "now": {"holder": holder, "what": what, "since": since},
+            "stalled": holder == "nobody" and (end - since).total_seconds() >= STALLED * 60}
+
+
+def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, history, unread=None):
+    """What a held bolt's time is split from (bolt_time), read from what crew already keeps, a decision of facts alone
+    (code.7): the partition's run record (entries, oldest first, read from its branch, read.5) and sluice's submissions
+    of the kit, those standing as the gather or the follower's watch read them (submissions, gather.submissions_of's
+    (list, why)) and every one its branches have had (history, gather.decided_of's (list, why), with each the follower
+    saw leave the queue since, told at the line's time, board.kept_gone). The start is the bolt's
+    newest give not refused. Its stages are each stage.start of a unit or chore of the bolt's, and each fix.start and
+    fix.merge of a fix of it, fix/<bolt>/<f>, not refused, to the next stage.end naming the same stage and agent, or
+    running yet, a merge told by its stage/<u>/merge or by fix.merge. Its submissions are those submission_rows gives
+    the bolt's lines and its landing, a merge into bolt/<bolt> from a unit's, chore's or fix's branch of it and a
+    landing on main from bolt/<bolt> or a pull request opened from it, the standing read standing over sluice's record
+    of the same number. Its cards are each card posted and not yet closed, a card lost to its owner and posted again
+    under its key counting as one, that is the bolt's: under land/<bolt>; a batch's holding a unit of it; a proposal's
+    whose plan.propose names the bolt or its work, or one of its chain does; its kit's landings card, land/<kit>, from
+    the end of its last merge on; a question an agent of the team holding it asked since the give; or one whose post
+    names the bolt or its work. Its holds are its team's host's, each host.hold to its host.go, what for being who held
+    the host (the one hold crew records, the design's Decision 4). Returns {start, stages, submissions, cards, holds}
+    as bolt_time takes them, or {unknown: why} when the give or the run record can't be read, and {unknown: why,
+    start} when the give is read and sluice's record of a submission is not, so no share is guessed (read.1)."""
+    if unread:
+        return {"unknown": "its age can't be told: " + "; ".join(f"{k} could not be read ({v})" for k, v in unread.items())}
+    give = next((e for e in reversed(entries) if e.get("Act") == "bolt.give" and not e.get("Refused") and f"bolt/{bolt}" in (e.get("On") or [])), None)
+    if give is None:
+        return {"unknown": f"its age can't be told: the run record of the last {BATCH_DAYS} days holds no give of it"}
+    start = utc(give["At"])
+    work = {f"{kind_of(u)}/{u.name()}" for u in plan.work_of(bolt)}
+    units, fixes = {o.split("/", 1)[1] for o in work}, f"fix/{bolt}/"
+
+    def ours(on):
+        return any(o in work or o == f"bolt/{bolt}" or o.startswith(fixes) for o in on)
+
+    def agent_of(on):
+        return next((o for o in on if o.startswith("agent/")), None)
+    ends = {}
+    for i, e in enumerate(entries):
+        if e.get("Act") == "stage.end" and not e.get("Refused"):
+            for o in e.get("On") or []:
+                if o.startswith(("stage/", fixes)):
+                    ends.setdefault((o, agent_of(e["On"])), []).append(i)
+    stages = []
+    for i, e in enumerate(entries):
+        act, on = e.get("Act"), e.get("On") or []
+        if e.get("Refused") or act not in ("stage.start", "fix.start", "fix.merge"):
+            continue
+        if act == "stage.start":
+            obj = next((o for o in on if o.startswith("stage/")), None) if any(o in work for o in on) else None
+            if not obj:
+                continue
+            _, name, stage = obj.split("/", 2)
+            merge, what = stage == "merge", f"{stage} on " + ("chore " if f"chore/{name}" in on else "") + name
+        else:
+            obj = next((o for o in on if o.startswith(fixes)), None)
+            if not obj:
+                continue
+            merge = act == "fix.merge"
+            what = f"merge of {obj}" if merge else f"fix {obj}"
+        later = ends.get((obj, agent_of(on)), [])
+        j = bisect.bisect_right(later, i)
+        stages.append({"start": utc(e["At"]), "end": utc(entries[later[j]]["At"]) if j < len(later) else None, "merge": merge, "what": what})
+    last_merge = max((s["end"] for s in stages if s["merge"] and s["end"]), default=None)
+
+    subs, why = submissions
+    hist, hwhy = history
+    if why or hwhy:
+        return {"unknown": f"who held its time can't be told: its submissions can't be read: {why or hwhy}", "start": start}
+
+    def of_bolt(x):
+        w = x.get("worktree") or ""
+        if x.get("branch") == f"bolt/{bolt}":
+            return w in work or w.startswith(fixes)
+        return x.get("branch") == "main" and (w == f"bolt/{bolt}" or (w.startswith("pull/") and x.get("pull_head") == f"bolt/{bolt}"))
+    gate = {}
+    for x in [x for x in hist if of_bolt(x)] + [x for x in subs if of_bolt(x)]:
+        decided = x.get("told")
+        if not x.get("submitted") or (x.get("state") not in STANDING and not decided):
+            return {"unknown": f"who held its time can't be told: sluice's record of #{x['id']} gives no time it was "
+                               + ("submitted" if not x.get("submitted") else "decided"), "start": start}
+        gate[x["id"]] = {"submitted": utc(x["submitted"]), "started": utc(x.get("started")), "decided": utc(decided),
+                         "state": x.get("state"), "what": f"#{x['id']}"}
+
+    chain, named = {}, set()
+
+    def first(p):
+        while chain.get(p, p) != p:
+            p = chain[p]
+        return p
+    for e in entries:
+        if e.get("Act") == "plan.propose" and not e.get("Refused"):
+            ps = [first(o) for o in e.get("On") or [] if o.startswith("proposal/")]
+            for p in ps[1:]:
+                chain[p] = ps[0]
+            if ps and ours(e["On"]):
+                named.add(ps[0])
+    named = {first(p) for p in named}
+    held_units = {f"batch/{n}": [u for u, *_ in us] for n, _, us in batches(entries)}
+    asking = (f"{team}-conductor", f"{team}-ops")
+    open_, lost, spans, key_of = {}, {}, [], {}
+    for e in entries:
+        act, card = e.get("Act"), e.get("Card")
+        if act == "card.post" and card and not e.get("Refused"):
+            k = e.get("Key") or card
+            key_of[card] = k
+            if k not in open_:
+                open_[k] = dict(lost.pop(k), cards=set()) if k in lost else {
+                    "at": utc(e["At"]), "key": e.get("Key"), "by": e.get("By"), "on": e.get("On") or [], "cards": set()}
+            open_[k]["cards"].add(card)
+        elif act == "card.close" and card and not e.get("Refused"):
+            k = key_of.get(card) or e.get("Key") or card
+            c = open_.get(k)
+            if c is None:
+                continue
+            c["cards"].discard(card)
+            if not c["cards"]:  # a card lost to its owner waits for its copy posted again under its key
+                del open_[k]
+                c["until"] = utc(e["At"])
+                if e.get("State") == "lost":
+                    lost[k] = c
+                else:
+                    spans.append(c)
+    cards_ = []
+    for c in spans + list(lost.values()) + [dict(c, until=None) for c in open_.values()]:
+        key, at = c["key"] or "", c["at"]
+        if key.startswith("batch/"):
+            mine = any(u in units for u in card_part(key, held_units.get(key.partition("-")[0], [])))
+        elif key.startswith("proposal/"):
+            mine = first(key) in named
+        elif key == f"land/{kit_name}" and kit_name != bolt:
+            mine, at = last_merge is not None, max(at, last_merge or at)
+        else:
+            mine = (key == f"land/{bolt}" or key.startswith(f"land/{bolt}/") or ours(c["on"])
+                    or (card_kind(key or None) == "question" and at >= start
+                        and (c["by"] in asking or re.fullmatch(rf"{re.escape(team)}-unit-[0-9]+", c["by"] or "") is not None)))
+        if mine:
+            cards_.append({"at": at, "until": c["until"], "key": c["key"]})
+
+    holds, held = [], None
+    for e in entries:
+        if f"host/{host}" in (e.get("On") or []) and not e.get("Refused"):
+            if e.get("Act") == "host.hold" and held is None:
+                held = {"at": utc(e["At"]), "what": f"its host {host} is held by {e.get('By')}"}
+            elif e.get("Act") == "host.go" and held is not None:
+                holds.append(dict(held, until=utc(e["At"])))
+                held = None
+    return {"start": start, "stages": stages, "submissions": list(gate.values()), "cards": cards_,
+            "holds": holds + ([dict(held, until=None)] if held else [])}
+
+
+def span(m):
+    """Minutes in their two largest units, as age says a time ago: <1m, 14m, 3h 05m, 2d 04h."""
+    if m < 1:
+        return "<1m"
+    if m < 60:
+        return f"{m}m"
+    h, m = divmod(m, 60)
+    if h < 24:
+        return f"{h}h {m:02d}m"
+    d, h = divmod(h, 24)
+    return f"{d}d {h:02d}h"
+
+
+def time_said(tm, now):
+    """A held bolt's time as its head line on the board and its land line on the rail end with it (the design's
+    Decision 5): its age, each holder's minutes in HOLDERS' order but a holder that held none, and who holds it now and
+    since when, the card's key for the user, the submission for the kit, the stage for the team, what the hold is for,
+    or that it is stalled once nobody has held it STALLED minutes, `3h 05m: team 2h 10m, kit 12m, user 40m; user since
+    14:02, batch/12`; or why it can't be told, after its age once that is known (time_at)."""
+    if "unknown" in tm:
+        return (f"{span(tm['age'])}; " if "age" in tm else "") + tm["unknown"]
+    shares = ", ".join(f"{h} {span(tm['shares'][h])}" for h in HOLDERS if tm["shares"][h])
+    n = tm["now"]
+    since = utc(n["since"]) if isinstance(n["since"], str) else n["since"]
+    at = f"{since.astimezone():%H:%M}" if since.astimezone().date() == now.astimezone().date() else f"{since.astimezone():%Y-%m-%d %H:%M}"
+    who = (f"stalled since {at}" if tm["stalled"] else f"held since {at}: {n['what']}" if n["holder"] == "hold" else
+           f"nobody since {at}" if n["holder"] == "nobody" else f"{n['holder']} since {at}, {n['what'] or 'a question'}")
+    return span(tm["age"]) + (f": {shares}" if shares else "") + f"; {who}"
+
+
+def held_time(fleet, entries, unread, plan_, b, k, now):
+    """A held bolt's time to now, as its rows carry it (plan.20): bolt_time's split of bolt_facts' facts, read from the
+    partition's run record (entries, oldest first, and unread, its branches that could not be read) and its kit as the
+    gather or the host's follower last read it (k, Stages.kit's), its submissions standing and sluice's record of them,
+    a kit not read or either not read saying why; since as ISO 8601, so the board's JSON carries it, and the words
+    its lines end with (time_said). The board and the rail each call it at the time they draw, from the same read, so
+    the two never differ for one bolt and a redraw from a kept read ages it reading nothing."""
+    t = fleet["teams"].get(b.get("Team")) or {}
+
+    def pair(key, what):
+        if not (k or {}).get("ok"):
+            return None, "its kit was not read"
+        if k.get(f"{key}_error"):
+            return None, k[f"{key}_error"]
+        return (k[key], None) if isinstance(k.get(key), list) else (None, f"{what} was not read")
+    facts = bolt_facts(entries, plan_, b.name(), b.get("Team"), t.get("machine"), b.get("Repo") or ((k or {}).get("kit") or {}).get("name"),
+                       pair("submissions", "sluice's queue"), pair("history", "sluice's record of its submissions"), unread)
+    tm = time_at(facts, now)
+    if "now" in tm:
+        tm = dict(tm, now=dict(tm["now"], since=tm["now"]["since"].astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+    return dict(tm, said=time_said(tm, now))
+
+
+def time_at(facts, end):
+    """A held bolt's time to end, from its facts (bolt_facts): bolt_time's split, or, when the facts can't be told,
+    {unknown: why}, with its age in minutes once its give was read."""
+    if "unknown" in facts:
+        return {"unknown": facts["unknown"], **({"age": int(max(0.0, (end - facts["start"]).total_seconds()) // 60)} if facts.get("start") else {})}
+    return bolt_time(facts["start"], end, facts["stages"], facts["submissions"], facts["cards"], facts["holds"])
+
+
 # ------------------------------------------------------------------------------------------------- batches
 
 BATCH_DAYS = 60  # how far back the run record is read for constructs and batches
@@ -12696,7 +13031,8 @@ def swept_cards(cards_, swept, here, now, kits=()):
 
 def rail_text(fleet, labels, read, now):
     """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
-    wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it,
+    wait, how long ago that was, what it is, each bolt's line of a kit's landing row ending with the bolt's age and who
+    held its time (land_times), the commands that answer it, and its card key with whether a card is open for it,
     whose and its id, by which its owner asks Pending You for it, or, with none open, the words of the refusal of its
     last post, oldest first; then the questions the asking roles put to the user, each with its key, which names it,
     its asker and its age, since no entry holds a card's words (record.3); then each card act of an agent's whose reply
@@ -12729,6 +13065,8 @@ def rail_text(fleet, labels, read, now):
         for r in mine:
             at = r.get("date") or (f"{r['at'].astimezone():%Y-%m-%d %H:%M}" if r["at"] else "-")
             first, *rest = r["what"]
+            if g == "land":  # each bolt's line ends with its time, drawn now as the board draws it (land_times)
+                rest = [f"{w}; {t}" for w, t in zip(rest, land_times(fleet, read, r, now))]
             lines.append(f"  {at:<16}  {age(r['at'], now) if r['at'] else '-':<7}  {first}")
             lines += [" " * 29 + w for w in rest]
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
@@ -12784,6 +13122,22 @@ def rail_text(fleet, labels, read, now):
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
     return "\n".join(lines)
+
+
+def land_times(fleet, read, r, now):
+    """The time of each bolt a kit's landing row names, in its order, as its land line ends with it (crew-rail "A bolt's
+    land line shows its age and who held its time", plan.20): held_time's words at now, from the read's run record and
+    the bolt's kit as the read surveyed it, the very read and rule the board's head line is drawn from, so the rail and
+    the board never differ for one bolt."""
+    plan_ = next((p for l, _, _, p in read["found"] if l == r["label"] and p), None)
+    if plan_ is None:
+        return []
+    st, out = Stages(fleet, plan_, read["sv"]), []
+    for x in r.get("bolts", []):
+        b = plan_.bolt(x["bolt"])
+        out.append(held_time(fleet, (read.get("logs") or {}).get(r["label"], []), read["unread"].get(r["label"], {}), plan_, b,
+                             st.kit(b)[0], now)["said"] if b else "")
+    return out
 
 
 def labels_of(read, labels):
