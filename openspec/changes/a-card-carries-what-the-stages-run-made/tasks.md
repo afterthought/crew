@@ -2,10 +2,10 @@
 
 ## 1. What a stage made reaches its batch's card
 
-- [ ] 1.1 A made line is read as written, a durable thing by its address, a running thing by its branch and revision, and a line crew can't read carried as its text (design, Decision 2; Task notes 1.1): passes `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
-- [ ] 1.2 The conductor's wait reads `made.jsonl` in the place's git directory at each look and at the stage's end and keeps each new line once, as written, under the stage first seen, on the team's host (design, Decisions 1 and 3; Task notes 1.2): passes `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
-- [ ] 1.3 A batch's card carries each unit's made lines under its paragraph, read from the copies on each unit's team's host, a silent host named and nothing refused, and the copies go when the bolt lands or is dropped (design, Decision 4; Task notes 1.3): passes `tests/py/test_cards.py` and `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
-- [ ] 1.4 A line kept for a unit in a batch whose card waits on the user changes that card in place, and one kept after the user answered leaves it as it is (design, Decision 4; Task notes 1.4): passes `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
+- [x] 1.1 A made line is read as written, a durable thing by its address, a running thing by its branch and revision, and a line crew can't read carried as its text (design, Decision 2; Task notes 1.1): passes `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
+- [x] 1.2 The conductor's wait reads `made.jsonl` in the place's git directory at each look and at the stage's end and keeps each new line once, as written, under the stage first seen, on the team's host (design, Decisions 1 and 3; Task notes 1.2): passes `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
+- [x] 1.3 A batch's card carries each unit's made lines under its paragraph, read from the copies on each unit's team's host, a silent host named and nothing refused, and the copies go when the bolt lands or is dropped (design, Decision 4; Task notes 1.3): passes `tests/py/test_cards.py` and `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
+- [x] 1.4 A line kept for a unit in a batch whose card waits on the user changes that card in place, and one kept after the user answered leaves it as it is (design, Decision 4; Task notes 1.4): passes `tests/py/test_made.py`, `tests/suite logic` ends with "0 failed".
 
 ## 2. A preview comes up on the user's ask and goes on their done
 

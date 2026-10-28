@@ -681,13 +681,24 @@ class ReadingActs:
     """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends, and a landing's
     preview is asked for and released: a session's link given, or its start refused with why, always (refused) or for
     each start in turn (refusals, None for a start that opens); the preview given (preview), and its release said
-    (released); Pending You's tools answered from answers, a (got, words) pair."""
+    (released); what each unit made, by host (made, {host: {"made": …, "previews": …}}, a host missing from it not
+    answering); Pending You's tools answered from answers, a (got, words) pair."""
 
-    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None, refusals=()):
+    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None, refusals=(),
+                 made=None):
         self.answers, self.held, self.refused, self.started = dict(answers or {}), list(entries), refused, started
         self.refusals = list(refusals)
-        self.given, self.said = preview, released
+        self.given, self.said, self.made_on = preview, released, made
         self.sessions, self.ended, self.emitted, self.calls, self.previews, self.releases = [], [], [], [], [], []
+        self.read = []
+
+    def made(self, label, host, units, key):
+        self.read.append((host, list(units), key))
+        if self.made_on is None:
+            return {"made": {}, "previews": {}}
+        if host not in self.made_on:
+            raise crew.Refusal("ssh: connect to host chuck-herdr-alpha port 22: Operation timed out")
+        return self.made_on[host]
 
     def preview(self, label, key, facts):
         self.previews.append((label, key, facts["head"], facts["previewed"]))
@@ -2352,6 +2363,54 @@ class TestBatch:
     def test_a_review_card_carries_the_reviewers_paragraph_in_its_words(self):
         c = built.batch_card(dict(n=3, previous=2, units=BATCH_UNITS[:1], link=None))["card"]
         assert BATCH_UNITS[0]["paragraph"] in c["summary"]
+
+    PAGE = '{"name": "spike", "kind": "page", "address": "https://example.test/spike"}'
+    DEMO = '{"name": "demo", "kind": "preview", "branch": "bolt/y", "revision": "abc1234"}'
+
+    def test_each_units_made_lines_are_under_its_paragraph_on_the_face_and_in_the_details(self):
+        """rail-cards "A spike recorded by a code stage", "A thing that must run" and "Nothing recorded" (record 0043):
+        the lines as written, under their unit, and how to bring a thing that must run up, in the user's words."""
+        units = [dict(BATCH_UNITS[0], made=[["code", [self.PAGE, self.DEMO]]]), BATCH_UNITS[1]]
+        c = built.batch_card(dict(n=7, previous=6, units=units, link=None))["card"]
+        face, back = c["artifacts"][0]["lines"], c["context"]["background"]
+        spike = "- `code`: spike, page, at https://example.test/spike"
+        demo = "- `code`: demo, preview, brought up from bolt/y at abc1234; write on this card naming u1/demo to bring it up"
+        assert face[face.index("**swb-1 · u1**"):face.index("**swb-1 · u2**")] == [
+            "**swb-1 · u1**", "", BATCH_UNITS[0]["paragraph"], "", spike, demo, ""]
+        assert f"u1 (swb-1)\n{BATCH_UNITS[0]['paragraph']}\n{spike}\n{demo}\n\nu2 (swb-1)" in back
+        assert back.endswith(built.TRY) and face[-1] == built.TRY
+        assert built.TRY == ("To try it running, write on this card naming it; it is put away when you write that you are "
+                             "done, or when this card closes.")
+        assert not any(a["kind"] == "url" and "example.test" in a["ref"] for a in c["artifacts"])
+
+    def test_a_batch_whose_units_made_nothing_says_nothing_of_made_things(self):
+        c = built.batch_card(dict(n=7, previous=6, units=[dict(u, made=[]) for u in BATCH_UNITS[:2]], link=None))["card"]
+        assert built.batch_card(dict(n=7, previous=6, units=BATCH_UNITS[:2], link=None))["card"] == c
+        assert "write on this card" not in c["context"]["background"] and "`code`" not in "\n".join(c["artifacts"][0]["lines"])
+
+    def test_a_durable_thing_alone_says_nothing_of_bringing_one_up(self):
+        c = built.batch_card(dict(n=7, units=[dict(BATCH_UNITS[0], made=[["code", [self.PAGE]]])], link=None))["card"]
+        assert built.TRY not in c["context"]["background"]
+
+    def test_the_raise_reads_each_units_lines_from_its_teams_host_and_a_silent_host_is_named(self, capsys):
+        """rail-cards "A batch's card carries what each unit's stages recorded as made" with a host that does not
+        answer (read.3): one read a host, a silent one said on standard error, its units carrying none, nothing
+        refused."""
+        up = {"head": "abc1234", "name": "preview/0", "state": "up", "addresses": {"web": "http://w"}}
+        acts = ReadingActs(made={"mac-studio": {"made": {"z1": [["code", [self.DEMO]]]}, "previews": {"z1/demo": up}}})
+        facts = dict(n=7, previous=None, link=None, units=[
+            dict(unit="x1", team="swb-1", subject="x", paragraph="X."), dict(unit="z1", team="atl-1", subject="z", paragraph="Z."),
+            dict(unit="y1", team="swb-2", subject="y", paragraph="Y."), dict(unit="w1", team="gone-9", subject="w", paragraph="W.")])
+        plan.batch_made(FLEET, "wldn", facts, acts)
+        assert acts.read == [("chuck-herdr-alpha", ["x1", "y1"], "batch/7"), ("mac-studio", ["z1"], "batch/7")]
+        assert [u.get("made") for u in facts["units"]] == [None, [["code", [self.DEMO]]], None, None]
+        assert facts["units"][1]["up"] == {"demo": up}
+        err = capsys.readouterr().err
+        assert "batch 7's card carries nothing w1 made: its team gone-9 is not in the teams file" in err
+        assert ("batch 7's card carries nothing x1 and y1 made this raise: chuck-herdr-alpha did not answer (ssh: connect "
+                "to host chuck-herdr-alpha port 22: Operation timed out)") in err
+        lines = built.batch_card(facts)["card"]["artifacts"][0]["lines"]
+        assert "- `code`: demo, preview, brought up from bolt/y at abc1234; up at web http://w; it lands nothing" in lines
 
 
 class TestWords:

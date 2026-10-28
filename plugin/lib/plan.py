@@ -1517,17 +1517,19 @@ def main_held(name, machine, said):
     return sha, why
 
 
-def tidy_after(fleet, t, what, landed=None, dropped=None):
+def tidy_after(fleet, t, what, landed=None, dropped=None, units=()):
     """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
     has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did; and,
     after a landing, the bolt's landing card closed there with the words, where its conductor holds it
     (landing_cards_closed), and the bolt's branch deleted by sluice once the landing's place is gone (land_delete,
     plan.19), landed being (bolt, the outcome recorded, what Pending You is sent in its place or None, whether the user
     answered it in a conversation); after a drop (dropped, the bolt), its branch asked of sluice by the tidy's judgment
-    of it (bolt_branch_asked). A host that does not answer leaves that to the team's next read, the delete named with
-    its command, and the write stands."""
+    of it (bolt_branch_asked); after either, what the bolt's units (units) recorded as made, kept there, removed
+    (made_drop). A host that does not answer leaves that to the team's next read, the delete named with its command,
+    and the write stands."""
     bolt, outcome, said, here = landed or (None, None, None, False)
     more = (["--landed", bolt, "--outcome", outcome] + (["--said", said] if said else []) + (["--here"] if here else [])) if landed else []
+    more += ["--units", *units] if units else []
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"], *more))
     READ.drop_kit(t["machine"], t["kit"]["main"])
     said = tidied(t["name"], what, r.returncode, r.stdout, r.stderr)
@@ -3361,7 +3363,7 @@ def bolt_land(fleet, a):
             here = crew.this_host()
             where = f"are kept on {pane[3]}, where it was submitted, not on {here}" if pane[3] != here else f"are not kept on {here}"
             print(f"the user's words to land {a.bolt} {where}: its landing card closes naming {pane[0]}'s pane and the time, without them")
-        tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, outcome, sent, bool(pane)))
+        tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, outcome, sent, bool(pane)), units=units)
         if pane:
             landing_word_drop(label, a.bolt)
     else:
@@ -4795,9 +4797,11 @@ def op_bolt_drop(ctx, a):
         w.plan.remove(b)
         return [a.bolt]
 
+    gone = [] if a.requeue else [u.name() for u in plan.work_of(a.bolt)]
+
     def after(repo, sha):  # the bolt's branch asked of sluice there, after its worktrees (plan.19, bolt_branch_asked)
         if team:
-            tidy_after(ctx.fleet, team, f"bolt {a.bolt}", dropped=a.bolt)
+            tidy_after(ctx.fleet, team, f"bolt {a.bolt}", dropped=a.bolt, units=gone)
     return Op(label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), "bolt.drop",
               on=[f"bolt/{a.bolt}"], body=a.reason, after=after)
 
@@ -10033,8 +10037,14 @@ def stage_wait(fleet, a):
     stuck = datetime.timedelta(milliseconds=a.stuck)
     seen_quiet = seen_working = None
     sluice_seen, here, main = {}, os.path.realpath(place) if place else None, t["kit"]["main"]
+    unread_made = set()  # what crew could not read of what the stage made, said once
+
+    def made():  # what a unit's stage records as made, kept at each look and at its end (made_look)
+        if here and o.kind == "unit" and not o.fix and o.stage in UNIT_STAGES:
+            made_look(fleet, t, o, place, unread_made)
     with READ.fresh():  # each look reads the plan and the kit afresh
         while True:
+            made()
             if here:  # what refs can't give: a conflict or a failed check sluice records for the place's submission
                 doc, why = sluice_read(main, "overview")
                 outcomes, notes = overview_look(sluice_seen, doc, why, here, o.start, lambda sid: sluice_read(main, "status", str(sid)))
@@ -10060,6 +10070,8 @@ def stage_wait(fleet, a):
             remaining = deadline - time.monotonic()
             how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0, over,
                              session_ended(session))
+            if how:  # once more at the stage's end, before a merge's tidy removes the place
+                made()
             if how == "ended":
                 print(ended_said(t, agent))
                 return
@@ -10809,10 +10821,14 @@ def team_tidy(fleet, a):
     panes told the branch they work for now, none once the bolt has landed or been dropped, and each whose session
     carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing, the bolt's branch
     deleted by sluice once the landing's place is gone (land_delete, plan.19), and its card closed there with the words
-    (landing_cards_closed)."""
+    (landing_cards_closed); and what the units of a bolt that landed or was dropped (--units) recorded as made, kept
+    here for its batch's card, removed (made_drop)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     reap(fleet, team, a.landed)
+    said = made_drop(t["label"], a.units)
+    if said:
+        print(said)
     import hold  # hold imports this module
     for name in team.hint_standing(crew.team_bolt(t)):
         hold.hand(name)
@@ -11962,8 +11978,8 @@ def batch_facts(n, entries, summary, subjects):
 
 def batch_read(fleet, label, n, acts):
     """Batch n's card's facts as its raise reads them, on the main level's host: from this host's run record, the
-    reviewer's summary and the plan's goals (batch_facts); None while its point has not come or has passed. A summary
-    crew can't read is refused, naming it."""
+    reviewer's summary and the plan's goals (batch_facts), each unit with what its stages recorded as made (batch_made);
+    None while its point has not come or has passed. A summary crew can't read is refused, naming it."""
     f = batch_file(label, n)
     try:
         summary = f.read_text()
@@ -11971,7 +11987,35 @@ def batch_read(fleet, label, n, acts):
         summary = None
     except OSError as e:
         fail(f"crew can't read batch {n}'s summary {f}: {e.strerror or e}")
-    return batch_facts(n, acts.entries(label), summary, batch_subjects(plan_of(fleet, label)))
+    facts = batch_facts(n, acts.entries(label), summary, batch_subjects(plan_of(fleet, label)))
+    if facts:
+        batch_made(fleet, label, facts, acts)
+    return facts
+
+
+def batch_made(fleet, label, facts, acts):
+    """Each unit of a batch's card given what its stages recorded as made (made), read from the copies kept on its
+    team's host, and the previews brought up from the card there (up, by the made thing's name), through acts.made, one
+    read a host (crew _made, code.3; design Decision 4). A host that does not answer, and a unit whose team the teams
+    file does not name, is said on standard error, its units carrying none this raise (read.3); nothing is refused,
+    since the batch stands, and a host is read only for its own kits' places' facts (read.5)."""
+    n, by = facts["n"], {}
+    for u in facts["units"]:
+        t = fleet["teams"].get(u["team"])
+        if t:
+            by.setdefault(t["machine"], []).append(u["unit"])
+        else:
+            print(f"batch {n}'s card carries nothing {u['unit']} made: its team {u['team']} is not in the teams file", file=sys.stderr)
+    for host, names in sorted(by.items()):
+        try:
+            got = acts.made(label, host, names, f"batch/{n}")
+        except Refusal as e:
+            print(f"batch {n}'s card carries nothing {joined(names)} made this raise: {host} did not answer ({e})", file=sys.stderr)
+            continue
+        for u in facts["units"]:
+            if u["unit"] in names:
+                u["made"] = got["made"].get(u["unit"]) or []
+                u["up"] = {t.split("/", 1)[1]: p for t, p in got["previews"].items() if t.split("/", 1)[0] == u["unit"]}
 
 
 def raise_batch(fleet, row, acts=None, note=None):
@@ -14536,6 +14580,180 @@ def landing_word_drop(label, bolt):
     landing_word_path(label, bolt).unlink(missing_ok=True)
 
 
+# -------------------------------------------------------------------------------------- what a stage made, kept
+
+# What a unit's stages recorded as made (rail-cards "A batch's card carries what each unit's stages recorded as made"),
+# kept by the conductor's wait on the team's host, as the run wrote it, so the lines outlive the place's tidy
+# (bolt-teams "The conductor's wait keeps a copy of what each stage made"): ~/.local/state/crew/made/<label>/<unit>/
+# <stage>.jsonl, a line a thing, under the stage that was running when the wait first saw it, gone when the unit's bolt
+# lands or is dropped. Until crew runs stages through Flume, which renders the file's path into a stage's prompt, a
+# run's lines are read from made.jsonl in its place's own git directory (record 0043, the stopgap roles.5 names).
+MADE = pathlib.Path.home() / ".local/state/crew/made"
+MADE_FILE = "made.jsonl"
+UNIT_STAGES = ("construct", "code", "verify", "settle", "merge")
+
+
+def made_lines(text):
+    """The lines of a made.jsonl as the run wrote them, in order, each without its newline, a blank one holding nothing
+    left out."""
+    return [l for l in (text or "").split("\n") if l.strip()]
+
+
+def made_file(path):
+    """A made.jsonl's lines (made_lines), [] when there is none; refused naming the file when it can't be read."""
+    try:
+        return made_lines(pathlib.Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError) as e:
+        fail(f"{path} can't be read: {getattr(e, 'strerror', None) or e}")
+
+
+def made_read(fleet, t, place):
+    """What the stage running in a place has recorded as made, its made.jsonl in the place's own git directory (design
+    Decision 1), read on the team's host: its lines (made_file); refused naming what could not be read."""
+    return made_file(pathlib.Path(kit_git(fleet, t, place, "rev-parse", "--absolute-git-dir")[1]) / MADE_FILE)
+
+
+def made_kept(label, unit):
+    """The lines kept for a unit on this host, by stage, [(stage, [line])], in the order its stages run; refused
+    naming a copy that can't be read."""
+    d = MADE / label / unit
+    stages = sorted((p.stem for p in d.glob("*.jsonl")) if d.is_dir() else [],
+                    key=lambda s: (UNIT_STAGES.index(s) if s in UNIT_STAGES else len(UNIT_STAGES), s))
+    return [(s, made_file(d / f"{s}.jsonl")) for s in stages]
+
+
+def made_new(kept, lines):
+    """The lines of a place's made.jsonl the wait keeps now (bolt-teams "The conductor's wait keeps a copy of what each
+    stage made"), from facts alone (code.7): each line no stage of the unit has kept (kept, as made_kept gives it), once,
+    in the order the run wrote them."""
+    seen, out = {l for _, ls in kept for l in ls}, []
+    for l in lines:
+        if l not in seen:
+            seen.add(l)
+            out.append(l)
+    return out
+
+
+def made_keep(label, unit, stage, lines):
+    """Lines appended to the unit's copy under stage on this host, each as the run wrote it."""
+    if not lines:
+        return
+    d = MADE / label / unit
+    d.mkdir(parents=True, exist_ok=True)
+    with open(d / f"{stage}.jsonl", "a", encoding="utf-8") as f:
+        f.write("".join(f"{l}\n" for l in lines))
+
+
+def made_drop(label, units):
+    """The copies of the units removed from this host, once their bolt has landed or been dropped: what it said."""
+    import shutil
+    gone = [u for u in units if crew.NAME.match(u) and (MADE / label / u).is_dir()]
+    for u in gone:
+        shutil.rmtree(MADE / label / u, ignore_errors=True)
+    return f"removed what {joined(gone)} recorded as made, kept for {'its' if len(gone) == 1 else 'their'} batch's card" if gone else None
+
+
+def batch_open(entries, unit):
+    """The batch whose card carries the unit's made lines while it waits on the user, from the run record's entries,
+    oldest first: the newest batch holding the unit, while its card is neither closed (batch_closed) nor its batch
+    settled (batch_settled); None otherwise. A card the user answered is left as it is by the raise itself
+    (row_card_change)."""
+    n = max((m for m, _, units in batches(entries) if any(u == unit for u, *_ in units)), default=None)
+    if n is None or f"batch/{n}" in batch_closed(entries) or f"batch/{n}" in batch_settled(entries):
+        return None
+    return n
+
+
+def made_look(fleet, t, o, place, said):
+    """One look of the conductor's wait at what a unit's stage has recorded as made (bolt-teams "The conductor's wait
+    keeps a copy of what each stage made"): the place's lines read, each new one kept under the stage running now
+    (made_new, made_keep), and, when one was, the card of the batch holding the unit raised on the partition's main
+    machine with a note naming it (batch_hand) while the card is open (batch_open). What crew can't read is said on
+    standard error, once for the same words (said, a set the wait keeps), and the wait goes on, keeping what it copied
+    before."""
+    label = t["label"]
+    try:
+        new = made_new(made_kept(label, o.name), made_read(fleet, t, place))
+        made_keep(label, o.name, o.stage, new)
+    except Refusal as e:
+        why = f"what {o.name}'s {o.stage} made is not kept yet: {e}"
+        if why not in said:
+            said.add(why)
+            print(why, file=sys.stderr)
+        return
+    if not new:
+        return
+    try:
+        n = batch_open(partition_entries(fleet, label), o.name)
+    except Refusal as e:
+        print(f"{o.name} recorded {joined([made_name(l) for l in new])}, and no batch's card is changed: {e}", file=sys.stderr)
+        return
+    if n is not None:
+        batch_hand(fleet, label, n, f"{o.name} recorded {joined([made_name(l) for l in new])}")
+
+
+def made_name(line):
+    """A made line's name, as a change note names it, or that crew could not read it."""
+    m = cards.made_line(line)
+    return "a line crew could not read" if m.get("unread") else m["name"]
+
+
+def made_cmd(fleet, a):
+    """crew _made <label> <unit>... --json, on the units' team's host: what each unit's stages recorded as made, kept
+    here (made_kept), {"made": {unit: [[stage, [line]]]}, "previews": {}}; what a copy crew can't read is said on
+    standard error, its unit carrying none."""
+    made = {}
+    for u in a.unit:
+        crew.NAME.match(u) or fail(f"a unit's name is lowercase words with dashes, not {u}")
+        try:
+            made[u] = [[s, ls] for s, ls in made_kept(a.label, u) if ls]
+        except Refusal as e:
+            print(f"{u}: {e}", file=sys.stderr)
+    print(json.dumps({"made": made, "previews": {}}))
+
+
+def made_listed(out):
+    """crew _made's answer as another host printed it (made_cmd), its shape checked (read.2): {"made": {unit: [[stage,
+    [line]]]}, "previews": {thing: preview}}; refused when it is not that."""
+    try:
+        got = json.loads(out)
+    except ValueError:
+        got = None
+    ok = (isinstance(got, dict) and isinstance(got.get("made"), dict) and isinstance(got.get("previews"), dict)
+          and all(isinstance(v, list) and all(isinstance(s, list) and len(s) == 2 and isinstance(s[0], str) and isinstance(s[1], list)
+                                              and all(isinstance(l, str) for l in s[1]) for s in v) for v in got["made"].values())
+          and all(isinstance(p, dict) and isinstance(p.get("head"), str) for p in got["previews"].values()))
+    return got if ok else fail(f"crew _made printed nothing crew reads: {cut((out or '').strip(), 200)}")
+
+
+def batch_hand(fleet, label, n, note):
+    """The raise of batch n's card handed to the partition's main machine, where the planner's cards are (code.3), as
+    crew _batch-card <label> <n> --note <words>, or in this process when this is that machine: changed in place while
+    it waits on the user, and left as it is once they answered it (raise_batch); what it said passed on, and its failure
+    said, refusing nothing of the event that handed it."""
+    machine = crew.partition_of(fleet, label)["machine"]
+    if machine == crew.this_host():
+        try:
+            raise_batch(fleet, {"label": label, "key": f"batch/{n}"}, note=note)
+        except Refusal as e:
+            print(f"batch {n}'s card is not raised: {e}", file=sys.stderr)
+        return
+    r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "_batch-card", label, str(n), "--note", note))
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    if r.returncode:
+        said = ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
+        print(f"batch {n}'s card is not raised on {machine}: {said}", file=sys.stderr)
+
+
+def batch_card_cmd(fleet, a):
+    """crew _batch-card <label> <n> [--note <words>]: raise_batch on the partition's main machine, handed there by an
+    event that changed what the card carries (batch_hand)."""
+    raise_batch(fleet, {"label": a.label, "key": f"batch/{a.n}"}, note=a.note)
+
+
 # ------------------------------------------------------------------------------- crew's own cards: the act
 
 class CardActs:
@@ -14583,6 +14801,20 @@ class CardActs:
         """The preview crew recorded for a landing card's bolt released (preview_release), in words; None when none was
         recorded."""
         return preview_release(label, key.split("/", 1)[1])[0] if key.startswith("land/") else None
+
+    def made(self, label, host, units, key):
+        """What the units recorded as made, kept on host, {"made": {unit: [[stage, [line]]]}, "previews": {}}
+        (made_cmd): read here when this is the host, else by crew _made there as the one asking (code.3); refused
+        naming what could not be read."""
+        if host == crew.this_host():
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                made_cmd(self.fleet, argparse.Namespace(label=label, unit=list(units), card=key, json=True))
+            return json.loads(out.getvalue())
+        r = crew.on_machine(self.fleet, host, crew.crew_argv(self.fleet, host, "_made", label, *units, "--card", key, "--json"))
+        sys.stderr.write(r.stderr)
+        r.returncode == 0 or fail(((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
+        return made_listed(r.stdout)
 
     def host(self):
         return crew.this_host()
@@ -16112,6 +16344,15 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("kit")
     x.add_argument("--note")
     x.add_argument("--pane")
+    x = sub.add_parser("_made")
+    x.add_argument("label")
+    x.add_argument("unit", nargs="+")
+    x.add_argument("--card")
+    x.add_argument("--json", action="store_true")
+    x = sub.add_parser("_batch-card")
+    x.add_argument("label")
+    x.add_argument("n", type=int)
+    x.add_argument("--note")
     x = sub.add_parser("_unit-wait")
     x.add_argument("unit")
     x.add_argument("--timeout", type=int, default=3600000)
@@ -16130,6 +16371,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--force", action="store_true")
     x.add_argument("--landed")
     x.add_argument("--outcome")
+    x.add_argument("--units", nargs="+", default=[])
     x.add_argument("--said")
     x.add_argument("--here", action="store_true")
     x = sub.add_parser("_unit-free")
@@ -16182,6 +16424,7 @@ COMMANDS = {
     ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
     ("_construct-again", None): construct_hand, ("_preview", None): preview_handed,
     ("_land-row", None): land_row_cmd, ("_land-card", None): land_card_cmd,
+    ("_made", None): made_cmd, ("_batch-card", None): batch_card_cmd,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
     ("_review", None): review_cmd, ("_console", None): console_cmd, ("_revive", None): revive_cmd,

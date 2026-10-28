@@ -492,6 +492,10 @@ case $cmd in
   _preview)  # crew _preview <label> <bolt> <head>: a landing card's preview of the bolt's head, asked of sluice and
     # waited on to its end in a process of its own on the team's host, which the card's raise hands it to (code.9)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _made | _batch-card)  # crew _made <label> <unit>... [--card <key>] --json, on the units' team's host: what each
+    # unit's stages recorded as made, kept there, which a batch's raise reads; crew _batch-card <label> <n> [--note
+    # <words>], on the partition's main machine: batch n's card raised, which a stage's new made line hands there
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   _land-row | _land-card)  # crew _land-row <label> <bolt> --json, on the bolt's team's host: its row on its kit's
     # landings card, its reading and preview opened or ended there; crew _land-card <label> <kit> [--note <words>], on
     # the partition's main machine: the kit's landings card raised from each row, which every event that changes a row
