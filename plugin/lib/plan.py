@@ -11078,12 +11078,42 @@ def bolts_view(fleet, a):
         sys.exit("\n".join(errors.values()))
 
 
+def submission_rows(submissions, bolt, lines):
+    """Whose line of a bolt's row each submission standing in sluice's queue is (bolt-teams "A submission's number is
+    on its bolt's row from the submit", teams.22), a decision of facts alone (code.7): from the kit's submissions as the
+    gather reads them (gather.submissions_of), the bolt, and its lines, [(name, kind)], kind unit, chore or fix, a fix
+    named by its branch, fix/<bolt>/<f>. On bolt/<bolt>, a submission from unit/<u>, chore/<c> or a fix's branch is that
+    line's; on main, one from bolt/<bolt>, or from a pull request, pull/<n>, opened from it, is the bolt's landing.
+    Returns ({name: {id, state}}, {id, state, head} or None), the newest of a line's when it has two, as a resubmission
+    from one worktree replaces the first; a submission naming no line of the plan, a hand submission, is no line's."""
+    branch = {"unit": "unit/{}", "chore": "chore/{}", "fix": "{}"}
+    of = {branch[kind].format(name): name for name, kind in lines}
+    rows, landing = {}, None
+    for x in sorted(submissions or [], key=lambda x: x["id"]):
+        if x["branch"] == f"bolt/{bolt}" and x.get("worktree") in of:
+            rows[of[x["worktree"]]] = {"id": x["id"], "state": x.get("state")}
+        elif x["branch"] == "main" and (x.get("worktree") == f"bolt/{bolt}" or (
+                (x.get("worktree") or "").startswith("pull/") and x.get("pull_head") == f"bolt/{bolt}")):
+            landing = {"id": x["id"], "state": x.get("state"), "head": x.get("head")}
+    return rows, landing
+
+
+def standing_said(sub):
+    """A standing submission as a row says it: its number and its state in crew's words (STANDING), sluice's own word
+    for a state crew has none for, and none when sluice gave none."""
+    words = STANDING.get(sub.get("state"), sub.get("state"))
+    return f"#{sub['id']}" + (f" {words}" if words else "")
+
+
 def bolts_data(fleet, labels, found, sv, errors, bolt=None):
     """What crew bolts shows, from the plans read (found) and the survey of the hosts holding their bolts (sv): each
     partition's plans, each bolt with its team, host, state, verification (sluice's verdict on its last landing, as
     kit.verification reads it, for a bolt whose kit was read), units and chores in build order with their kinds and
-    stages read from the kits, and fixes, and the queue; the hosts that did not answer and the plans that could not be
-    read. With bolt, that bolt alone."""
+    stages read from the kits, and fixes, each with the number and state of its merge standing in sluice's queue on
+    the bolt's branch (submission), the bolt's landing standing on its kit's main (landing), and, when the queue could
+    not be read on the team's host, why (submissions_error), no line then given a submission (submission_rows,
+    teams.22); and the queue; the hosts that did not answer and the plans that could not be read. With bolt, that bolt
+    alone."""
     data = {"partitions": [], "unreachable": {h: v["error"] for h, v in sv.items() if not v["ok"]}, "unread": errors}
     for l in labels:
         part = {"label": l, "plans": []}
@@ -11105,8 +11135,14 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None):
                 fixes = [dict(fix=f["fix"], worktree=f["path"], merged=f["merged"]) for f in (k["fixes"] if k else []) if f["bolt"] == b.name()]
                 bk = (k or {}).get("bolts", {}).get(b.name()) or {}
                 verified = dict(zip(("state", "said"), kit.verification(bk.get("head"), bk.get("verdict")))) if k and bk.get("exists") else None
+                unread = (k or {}).get("submissions_error")
+                rows, landing = submission_rows(None if unread else (k or {}).get("submissions"), b.name(),
+                                                [(u["unit"], u["kind"]) for u in units] + [(f["fix"], "fix") for f in fixes])
+                for x in units + fixes:
+                    x["submission"] = rows.get(x.get("unit") or x.get("fix"))
                 bolts.append(dict(bolt=b.name(), repo=b.get("Repo"), goal=b.get("Goal"), sources=b.all("Source"), team=b.get("Team"),
-                                  host=t["machine"] if t else None, state=st.bolt_state(b), verification=verified, units=units, fixes=fixes))
+                                  host=t["machine"] if t else None, state=st.bolt_state(b), verification=verified, units=units, fixes=fixes,
+                                  landing=landing, submissions_error=unread))
             queue = [] if bolt else [dict(unit=u.name(), kind=kind_of(u), repo=u.get("Repo"), stage="queued", sources=u.all("Source"))
                                      for u in plan.queue()]
             part["plans"].append({"repo": repo, "plan": tip, "bolts": bolts, "queue": queue})
@@ -11115,9 +11151,11 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None):
 
 
 def bolts_text(data):
-    """crew bolts as text: each plan's branch and tip, each bolt with its repo, team and state, its verification when
-    its kit was read, and each unit with its stage, tasks and place, each chore among them with `chore` before its stage, each fix, the queue by repo with each
-    unit's and chore's sources, and each host that did not answer."""
+    """crew bolts as text: each plan's branch and tip, each bolt with its repo, team and state and its landing standing
+    in sluice, `landing #<n> <state>` (standing_said), that its submissions can't be read on its host and why, once,
+    when they can't, its verification when its kit was read, and each unit with its stage, tasks, its merge standing in
+    sluice, `#<n> <state>`, and place, each chore among them with `chore` before its stage, each fix with its merge, the
+    queue by repo with each unit's and chore's sources, and each host that did not answer."""
     lines = []
     for p in data["partitions"]:
         for pl in p["plans"]:
@@ -11127,16 +11165,21 @@ def bolts_text(data):
             lines.append(f"{p['label']}/main {pl['plan'][:7]}  {pl['repo']}")
             for b in pl["bolts"]:
                 who = f"{b['team']} @ {b['host']}" if b["team"] else "no team"
-                lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}")
+                lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}"
+                             + (f"  landing {standing_said(b['landing'])}" if b.get("landing") else ""))
+                if b.get("submissions_error"):
+                    lines.append(f"  submissions: can't be read on {b['host']}: {b['submissions_error']}")
                 if b.get("verification"):
                     lines.append(f"  verification: {b['verification']['state']}, {b['verification']['said']}")
                 for u in b["units"]:
                     stage = ("chore " if u.get("kind") == "chore" else "") + u["stage"] + (
-                        f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else "")
+                        f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else "") + (
+                        f" {standing_said(u['submission'])}" if u.get("submission") else "")
                     where = "places/" + os.path.basename(u["worktree"]) if u["worktree"] else ""
                     lines.append(f"  {u['unit']:<40} {stage:<12} {where}".rstrip())
                 for f in b["fixes"]:
-                    lines.append(f"  {f['fix']:<40} {'fix merged' if f['merged'] else 'fix':<12} places/{os.path.basename(f['worktree'])}")
+                    fixed = ("fix merged" if f["merged"] else "fix") + (f" {standing_said(f['submission'])}" if f.get("submission") else "")
+                    lines.append(f"  {f['fix']:<40} {fixed:<12} places/{os.path.basename(f['worktree'])}")
             repos = sorted({u["repo"] for u in pl["queue"]})
             for r in repos:
                 lines.append(f"queue  {r}")
