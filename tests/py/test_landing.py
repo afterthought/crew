@@ -1331,7 +1331,7 @@ class TestTheLandingsRead:
         self.ran, self.emitted, self.entries = [], [], [dict(self.Q)]  # its entry not yet on the branch
         assert plan.landing_read(self.F, "wldn", "b") == (True, words)
         assert self.ran == [] and self.emitted == [] and words in capsys.readouterr().out
-        assert self.closed == [("b", {"by": "wldn-ops", "said": "plan(b): land the bolt, its landing #412 read from sluice's record by "
+        assert self.closed == [("b", {"by": "wldn-ops", "close_why": "plan(b): land the bolt, its landing #412 read from sluice's record by "
                                                               "swb-1-conductor"})]  # by the first read alone, the plan then holding it no more
 
     def test_a_read_waiting_on_one_that_closed_the_bolt_says_its_close_and_closes_nothing(self, monkeypatch, tmp_path, capsys):
@@ -1504,6 +1504,25 @@ class TestWhoReads:
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [TestTheLandingsRead.Q])
         with pytest.raises(plan.Refusal, match="went on to read main"):
             plan.bolt_land({}, argparse.Namespace(bolt="b", label=None), by="wldn-ops")
+
+
+def test_a_close_by_a_read_records_its_bolt_land_in_ops_name_with_its_why(monkeypatch):
+    """Decision 4: crew bolt land's code, run by a read, writes its bolt.land by main-level ops with the Why the read
+    gives it, whatever names the command uses for its own reads on the way."""
+    P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "swb-1", "Repo": "k"}, "work_of": lambda s, b: [], "units": lambda s: []})
+    wrote = []
+    monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, P()))
+    monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
+    monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TestTheSubmission.T)
+    monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: TestTheSubmission.BEFORE)
+    monkeypatch.setattr(plan, "stages_for", lambda fleet, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
+    monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [])
+    monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append((subject, k.get("by"), k.get("why"))))
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+    monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
+    monkeypatch.setattr(plan, "tidy_after", lambda *a, **k: None)
+    plan.bolt_land({}, argparse.Namespace(bolt="b", label=None), by="wldn-ops", close_why="plan(b): land the bolt, its landing #412 read")
+    assert wrote == [("plan(b): land the bolt", "wldn-ops", "plan(b): land the bolt, its landing #412 read")]
 
 
 class TestARefusedClose:
