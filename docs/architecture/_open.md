@@ -14,14 +14,14 @@ What is still open now that every page is written. A working file: an item leave
 
 - **mac-studio's Pending You sign-in**: the host has had none since its credential file was cleared (2026-10-10 09:05Z), so the headers helper gives no token and every session uses Claude Code's own sign-in, one per account's settings folder, which minted the connection of 2026-10-11; sessions of an account never signed in so have no Pending You tools. Ruled by the user 2026-10-12: they sign the host in again with `pendingyou-signin` at a quiet moment, approving the code on their phone. Every card open then is lost to its owner and posted again under its key, the older copy named dead (`a-card-reaches-the-user-when-the-tools-drop`'s design); after it, the three test cards, then `every-crew-card-goes-through-crew`. Record 0031 (accepted 2026-10-14) restates it: one sign-in per host for crew and every session, the Claude Code logins removed from the account folders (swancloud's part).
 
-## Moves to the tools (record 0047, proposed 2026-10-28)
+## Moves to the tools (record 0047, accepted 2026-10-28)
 
 - **Move 1, sluice (now):** landed read from sluice's record (0044's unit, in flight); one driver per host bound by swancloud and outcomes pushed (sluice 0068, 0046 part 5).
 - **Move 2, crew's lasting reading (now):** no waiting process of crew's, a session's start listing its open waits, submission numbers on rows (0046 parts 1 to 4); one follower per host (`plan.12`).
 - **Move 3, Flume (when its first release runs a kind on a host):** stages as Flume places, waits, stuck and lost reads, and a team's room from Flume's status (0045 point 5); the slot machinery and the transcript reads leave crew whole.
 - **Move 4, Tailrace (when its push profile holds):** the deployer's mechanics leave swancloud.
-- **Move 5, teams out of crew (when Flume runs a unit's whole state machine):** the conductor, team ops, the team, the dispatcher, the slot bound, the give and team tells leave crew; capacity is Flume's room per host; the user chooses on the rail what runs and lands (record 0047 as amended 2026-10-28, proposed; the user's order: fires, Flume, then this).
-- **Move 6, roles on demand (after move 5):** no crew role stands; each is a kind Flume launches on a nudge naming a record, one run at a time per role and partition; the operator folds into `crew send` (record 0047 as amended, proposed).
+- **Move 5, teams out of crew (when Flume runs a unit's whole state machine):** the conductor, team ops, the team, the dispatcher, the slot bound, the give and team tells leave crew; capacity is Flume's room per host; the user chooses on the rail what runs and lands (record 0047 as amended 2026-10-28, accepted; the user's order: fires, Flume, then this).
+- **Move 6, roles on demand (after move 5):** no crew role stands; each is a kind Flume launches on a nudge naming a record, one run at a time per role and partition; the operator folds into `crew send` (record 0047 as amended, accepted).
 - **Stopgaps until move 3:** a slot lent to its bolt's fix (0045); a held unit's wait on the row (0044).
 
 ## Accepted, not built
