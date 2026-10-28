@@ -289,13 +289,13 @@ class TestNames:
         ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a kit's landings card is crew's"),
         ("wldn-ops", "op/a/1", "a step's card is crew's")])
     def test_the_hook_refuses_an_agents_post_under_crews_key_as_crew_sends_it(self, monkeypatch, agent, row, said):
-        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key shorter
-        than Pending You's eight characters filled out (cards.post_key, batch/7 as batch/7_), and its revision."""
+        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key qualified
+        by its partition's label (cards.post_key, batch/7 as batch/7@wldn), and its revision."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
         monkeypatch.setenv("CREW_AGENT", agent)
         monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
         closed = [dict(Act="card.post", Key=row, By=agent, Card="req_1"), dict(Act="card.close", Card="req_1")]
-        for sent in (plan.cards.post_key([], row, agent), plan.cards.post_key(closed, row, agent)):
+        for sent in (plan.cards.post_key([], row, agent, "wldn"), plan.cards.post_key(closed, row, agent, "wldn")):
             assert len(sent) >= plan.cards.KEY_LEAST
             assert cards.refusal(hooked("post_request", {"idempotencyKey": sent, "name": agent})).startswith(
                 f"crew refuses {agent}'s post of the card under {sent}: {said}")
@@ -1854,7 +1854,7 @@ class TestTheRefusedDeployCards:
         follows = built.follows_of("deploy", {"env": "deneb", "head": self.HEAD}, self.ENTRIES, self.OPS)
         assert plan.row_card_post(None, "swancloud", self.OPS, built.deploy_card, self.facts(follows), self.WHERE, acts) == "req_deneb2"
         sent = next(a for t, a in acts.calls if t == "post_request")
-        assert sent["idempotencyKey"] == "deploy/deneb:2" and "follows" not in sent
+        assert sent["idempotencyKey"] == "deploy/deneb@swancloud:2" and "follows" not in sent
         assert sent["artifacts"][0]["lines"] == ["the-box-works-in-wldn-prod"]
         assert [(e["Act"], e["Card"], e["Key"], e["by"]) for e in acts.emitted] == [("card.post", "req_deneb2", "deploy/deneb", self.OPS)]
 
@@ -2094,7 +2094,7 @@ class TestRecordCommand:
         acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
         assert plan.raise_record(None, "wldn", f, where, "Revised at abc1234: x", acts) == "req_c1"
         sent = acts.calls[1][1]
-        assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032", "wldn-design")
+        assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032@wldn", "wldn-design")
         assert acts.emitted[0]["On"] == ["record/switchboard-kit/0032"] and acts.told == []
         held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
         acts = Acts({"get_request": ({"status": "pending", "version": 2}, None), "update_request": ({"version": 3}, None)}, entries=held,
@@ -2107,7 +2107,7 @@ class TestRecordCommand:
         assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
-        assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
+        assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032@wldn:2", "req_c1")
         # rail-cards "A record revised after the user's note": the card that follows says first what they answered
         assert re.match(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you answered\. "
                         r"Since then: revised at 9ab0123: ops\.7 loosened\.\n\n", acts.calls[3][1]["summary"])
@@ -2128,7 +2128,7 @@ class TestRecordCommand:
         assert plan.raise_record_again(None, row, acts) == "req_c1"
         assert reads == [("wldn", "switchboard-kit", 32, "proposed", None)]
         sent = next(a for t, a in acts.calls if t == "post_request")
-        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032")
+        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032@wldn")
         assert sent["summary"] == f"{built.DEAD}\n\n" + built.record_card(recorded(MADR, "proposed"))["card"]["summary"]
         acts = Acts({}, caller="wldn-design")
         with pytest.raises(crew.Refusal) as e:
@@ -2148,7 +2148,7 @@ class TestRecordCommand:
             assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
             assert [c[0] for c in acts.calls] == ["get_request", "match_area", "post_request"]
             assert (acts.emitted[0]["Act"], acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("card.close", state, plan.ENDED_ELSEWHERE)
-            assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032:2"
+            assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032@wldn:2"
             assert acts.calls[2][1].get("follows") == follows
         for status in ("resolved", "closed"):
             acts = Acts({"get_request": ({"status": status, "version": 4}, None)}, entries=held, caller="wldn-design")
@@ -2222,7 +2222,7 @@ class TestPickedUp:
         assert plan.row_card_change(None, "swancloud", self.OWNER, built.deploy_card, dict(self.OFFER, follows=follows),
                                     "Now d35fbf2", self.WHERE, acts) == "req_d2"
         assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
-        assert acts.calls[1][1]["idempotencyKey"] == "deploy/mac-studio:2" and "follows" not in acts.calls[1][1]
+        assert acts.calls[1][1]["idempotencyKey"] == "deploy/mac-studio@swancloud:2" and "follows" not in acts.calls[1][1]
         entries = self.held(entries, acts)
         assert built.card_under(entries, "deploy/mac-studio", self.OWNER) == "req_d2"
 
