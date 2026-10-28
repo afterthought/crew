@@ -25,4 +25,4 @@
 
 ## 5. Integration
 
-- [ ] 5.1 `tests/moon-tasks` leaves `tests/moon.yml` in step with the tests, and the tests the change affects pass: Verify `tests/suite --affected` ends with "0 failed".
+- [x] 5.1 `tests/moon-tasks` leaves `tests/moon.yml` in step with the tests, and the tests the change affects pass: Verify `tests/suite --affected` ends with "0 failed".
