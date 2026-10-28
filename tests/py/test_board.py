@@ -1258,8 +1258,8 @@ class TestViews:
 
     def test_a_landing_queued_is_said_on_its_bolts_head_line_with_sluices_number(self):
         """crew-board "A landing queued": on the lane and in its conductor's band."""
-        assert view("swb-1-conductor", logs=self.QUEUED)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing queued as #412  0 of 2 merged"
-        assert "  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing queued as #412" in lane(
+        assert view("swb-1-conductor", logs=self.QUEUED)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing queued as #412  0 of 2 merged  {TE_TIME}"
+        assert f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing queued as #412  {TE_TIME}" in lane(
             board.board_text(data(logs=self.QUEUED)), "Construction")
 
     def test_a_close_refused_is_said_on_its_head_line_in_the_attention_gutter_to_its_conductor_and_main_level_ops(self):
@@ -1267,10 +1267,11 @@ class TestViews:
         words of its last refused close, which its conductor's attention names too."""
         said = f"landed on main, not closed: {self.READY}"
         mine = view("swb-1-conductor", logs=self.UNCLOSED)
-        assert mine[0] == f"! switchboard-kit  ◑◔  tenant-environments  {said}  0 of 2 merged"
+        assert mine[0] == f"! switchboard-kit  ◑◔  tenant-environments  {said}  0 of 2 merged  {TE_TIME}"
         assert f"! bolt tenant-environments: it landed on main and was not closed: {self.READY}" in mine
-        assert f"! switchboard-kit  swb-1  ◑◔  tenant-environments  {said}  0 of 2 merged" in view("wldn-ops", logs=self.UNCLOSED)
-        assert f"! switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {said}" in lane(board.board_text(data(logs=self.UNCLOSED)), "Construction")
+        assert f"! switchboard-kit  swb-1  ◑◔  tenant-environments  {said}  0 of 2 merged  {TE_TIME}" in view("wldn-ops", logs=self.UNCLOSED)
+        assert f"! switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {said}  {TE_TIME}" in lane(board.board_text(data(logs=self.UNCLOSED)),
+                                                                                                             "Construction")
         assert not [l for l in view("wldn-ops") if "not closed" in l]
 
     def test_a_landing_queued_that_sluices_queue_shows_standing_is_said_once_by_sluices_state(self):
@@ -1278,8 +1279,8 @@ class TestViews:
         sluice's state, and says the record's queued again only once sluice's queue no longer shows it."""
         logs = [dict(self.QUEUED[0], Submission="355")]
         sv = queued(STANDING_SUBS)
-        assert view("swb-1-conductor", sv=sv, logs=logs)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged"
-        assert view("swb-1-conductor", logs=logs)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing queued as #355  0 of 2 merged"
+        assert view("swb-1-conductor", sv=sv, logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged  {QUEUED_TIME}"
+        assert view("swb-1-conductor", logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing queued as #355  0 of 2 merged  {TE_TIME}"
 
     def test_what_a_held_bolts_landing_is_read_from_the_run_record(self):
         """Decision 5 (board.landing_of): queued while its last bolt.submit is, unclosed while its last bolt.land since
@@ -1491,10 +1492,12 @@ class TestSubmissions:
         sv = queued(error="sluice overview exited 2: not a repository sluice serves")
         out = lane(board.board_text(data(sv=sv, logs=TestViews.QUEUED)), "Construction")
         assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  submissions can't be read: sluice overview "
-                          "exited 2: not a repository sluice serves")
+                          "exited 2: not a repository sluice serves  3h 20m; who held its time can't be told: its submissions can't be "
+                          "read: sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in out if "#" in l]
         mine = view("swb-1-conductor", sv=sv, logs=TestViews.QUEUED)
-        assert mine[0] == "  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged"
+        assert mine[0] == ("  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged  3h 20m; who held its time "
+                           "can't be told: its submissions can't be read: sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in mine if "#" in l]
 
     def test_nothing_standing_draws_nothing_new(self):

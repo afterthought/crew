@@ -263,6 +263,7 @@ class TestTheWordsAtAClose:
         monkeypatch.setattr(plan, "LANDINGS", tmp_path)  # this host keeps no words
         monkeypatch.setattr(plan.crew, "on_machine", lambda *a: pytest.fail(f"the close reached a host: {a[1:]}"))
         monkeypatch.setattr(plan.record, "who", lambda: "crw-5-conductor")
+        monkeypatch.setattr(plan, "landing_time", lambda *a: {})  # its age and split are landing_time's own cases
         assert plan.landing_close({}, "swancloud", "y", "412", entries)
         landed = plan.landed_words(NEW, "")
         assert wrote == ["swancloud-ops"]

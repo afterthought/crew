@@ -1508,7 +1508,8 @@ class TestWhoReads:
 
 def test_a_close_by_a_read_records_its_bolt_land_in_ops_name_with_its_why(monkeypatch):
     """Decision 4: crew bolt land's code, run by a read, writes its bolt.land by main-level ops with the Why the read
-    gives it, whatever names the command uses for its own reads on the way."""
+    gives it, whatever names the command uses for its own reads on the way, and with the bolt's age and split as any
+    landing of a held bolt carries them (plan.20)."""
     P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "swb-1", "Repo": "k"}, "work_of": lambda s, b: [], "units": lambda s: []})
     wrote = []
     monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, P()))
@@ -1521,8 +1522,14 @@ def test_a_close_by_a_read_records_its_bolt_land_in_ops_name_with_its_why(monkey
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
     monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
     monkeypatch.setattr(plan, "tidy_after", lambda *a, **k: None)
+    spent = dict(Age="200", Split="team 150, kit 20, user 0, hold 0, nobody 30")
+    monkeypatch.setattr(plan, "landing_time", lambda fleet, t, pl, b, entries, now: spent)
+    fields = []
+    write = plan.write
+    monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: (fields.append(k.get("fields")), write(fleet, label, change, subject, **k)))
     plan.bolt_land({}, argparse.Namespace(bolt="b", label=None), by="wldn-ops", close_why="plan(b): land the bolt, its landing #412 read")
     assert wrote == [("plan(b): land the bolt", "wldn-ops", "plan(b): land the bolt, its landing #412 read")]
+    assert fields[0]["Age"] == "200" and fields[0]["Split"] == spent["Split"]
 
 
 class TestARefusedClose:
