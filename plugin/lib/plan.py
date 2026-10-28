@@ -3521,7 +3521,7 @@ def standing_words(bolt, step, n, at, head):
 WAIT = r"""cd "$1" && exec sluice wait "$2" --timeout 9m --json"""
 
 # A landing's end, on the team's host, once sluice's outcome of its submission is in (SUBMIT, WAIT): the landing's
-# worktree removed; and, when the host's own main moved, the kit's main checkout brought level with it while it is on
+# worktree removed, when it is still there, another act's read of the landing or the tidy having removed it before; and, when the host's own main moved, the kit's main checkout brought level with it while it is on
 # branch main, since sluice moves the branch and not that checkout's files, and left as it is when it is detached, the
 # anchor the fleet's timer moves (plan.18). It decides nothing (code.7): it prints the kit's mains after a fresh fetch
 # (MAINS), whether each holds the bolt's tip that was submitted, HELD_GITHUB and HELD_OWN, "yes", "no", or - when that
@@ -3534,7 +3534,7 @@ WAIT = r"""cd "$1" && exec sluice wait "$2" --timeout 9m --json"""
 # hands it, since bash's %q garbles what is not ASCII in the C locale.
 LANDED = r"""main=$1 path=$2 bolt=$3 tip=$4 old=$5 rc=$6 said=$7
 cd "$main" || exit 2
-kept= why=; why=$(git worktree remove "$path" 2>&1 >/dev/null) || kept=$path
+kept= why=; [ ! -e "$path" ] || why=$(git worktree remove "$path" 2>&1 >/dev/null) || kept=$path
 new=$(git rev-parse --verify -q refs/heads/main) || new=
 level=
 if [ -n "$old" ] && [ -n "$new" ] && [ "$new" != "$old" ]; then
@@ -4393,6 +4393,7 @@ def landing_ended(fleet, label, p, a):
         print(p["standing"], file=sys.stderr)
         return bolt, False
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
+    p = dict(p, Chars=len(getattr(a, "excerpt", None) or "") if p.get("frm") else None)
     again = 0
     while True:
         # sluice's verdict, from what it printed on standard output, its answer to SUBMIT when it refused at once; what
@@ -4410,59 +4411,214 @@ def landing_ended(fleet, label, p, a):
             rc, doc = wait_outcome(int(p["ID"]), w.returncode, w.stdout)
             said = verdict_printed(w.stdout, int(p["ID"]))
             beside = beside_of(w.stderr, said)
-        r = crew.on_machine(fleet, host, ["bash", "-c", LANDED, "crew", main, p["path"], bolt, p["TIP"], p["OLD"], rc,
-                                          base64.b64encode(said.encode()).decode()])
-        READ.drop_kit(host, main)
-        if r.stderr.strip():
-            print(r.stderr.rstrip(), file=sys.stderr)
-        if r.returncode:
-            refused = f"crew can't tell whether bolt/{bolt} landed on {name}'s main: on {host}: " + (
-                (r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
-            landed, words, stopped = False, refused.rstrip(".") + "." + submit_again(bolt), True
+        landed, again_on = landing_close_out(fleet, label, t, bolt, p, rc, said, doc, beside, again)
+        if again_on is None:
             break
-        tip, sub = sluice_failed(r.stdout, p["before"]), None
-        if tip:  # sluice itself failed, the bolt not on main now: its record of the submission says what comes next
-            s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
-            sub = submission_of(tip, s.returncode, s.stdout, s.stderr, after=p["last"])
-            if isinstance(sub, dict):  # its verdict, from its record in the listing, where it is out
-                sub = dict(sub, verdict=verdict_printed(s.stdout, sub["id"]))
-        landed, words, refused, stopped = landing_end(bolt, name, host, r.stdout, p["before"], sub=sub, again=again, doc=doc,
-                                                      beside=beside)
-        n = wait_again(sub, again) if tip else None
-        if n is None:
-            break
-        print(words, flush=True)
+        n, tip = again_on
         f, told = submit_ran(fleet, host, main, p["path"], bolt, "", "", str(n), tip)
         if f is None:
             refused = (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: crew could not wait on #{n} "
                        f"again on {host}: {told}")
-            words, stopped = refused + "." + submit_again(bolt), True
-            break
+            landing_not_landed(fleet, label, t, bolt, p, refused + "." + submit_again(bolt), refused, True)
+            return bolt, False
         p, again = dict(p, **f), again + 1
+    if landed:
+        closing = argparse.Namespace(cmd="bolt", sub="land", bolt=bolt, label=label)
+        try:
+            may_write(fleet, ("bolt", "land"), closing)
+            bolt_land(fleet, closing)
+        except Refusal as e:
+            print(f"bolt/{bolt} landed and was not closed: {e}; crew bolt land {bolt} closes it", file=sys.stderr)
+    return bolt, landed
+
+
+def landing_close_out(fleet, label, t, bolt, p, rc, said, doc, beside, again=0):
+    """A submission's outcome read on the team's host, recorded (Decision 2): sluice's exit for it (rc) and its verdict
+    (said), what sluice said beside it (beside) and its record (doc), where it gave one, handed to the landing's end
+    there (LANDED), which removes its worktree and reads the mains, and what it came to judged (landing_end); when
+    sluice itself failed with the bolt's tip not on main now, sluice's own record of the submission read on the team's
+    host (SUBMISSIONS, submission_of, among those made since the landing began, newer than p's last), its verdict with
+    it, and while it has the submission standing, crew says so and records nothing, its caller waiting on it again
+    (wait_again). A landed bolt is marked landed on its branch (LANDED_MARK) and recorded so, with the head submitted
+    (bolt.submit, Outcome landed), naming the transcript record and the words' length of a landing on the user's words
+    in ops's pane (p's frm and Chars); one that did not land, as landing_not_landed records it. p is the landing as
+    landing_submitted gave it, or as a read rebuilt it from its queued entry (landing_read): its path, TIP, OLD,
+    before, last, frm and Chars, and, for a submission sluice queued, ID, recorded on its outcome as Submission so no
+    later read records it again. (landed, None), its words printed, standard error for one that did not land; or (None,
+    (the submission to wait on again, the tip it submitted))."""
+    name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
+    r = crew.on_machine(fleet, host, ["bash", "-c", LANDED, "crew", main, p["path"], bolt, p["TIP"], p["OLD"], rc,
+                                      base64.b64encode(said.encode()).decode()])
+    READ.drop_kit(host, main)
+    if r.stderr.strip():
+        print(r.stderr.rstrip(), file=sys.stderr)
+    if r.returncode:
+        refused = f"crew can't tell whether bolt/{bolt} landed on {name}'s main: on {host}: " + (
+            (r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
+        return landing_not_landed(fleet, label, t, bolt, p, refused.rstrip(".") + "." + submit_again(bolt), refused, True), None
+    tip, sub = sluice_failed(r.stdout, p["before"]), None
+    if tip:  # sluice itself failed, the bolt not on main now: its record of the submission says what comes next
+        s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
+        sub = submission_of(tip, s.returncode, s.stdout, s.stderr, after=p["last"])
+        if isinstance(sub, dict):  # its verdict, from its record in the listing, where it is out
+            sub = dict(sub, verdict=verdict_printed(s.stdout, sub["id"]))
+    landed, words, refused, stopped = landing_end(bolt, name, host, r.stdout, p["before"], sub=sub, again=again, doc=doc,
+                                                  beside=beside)
+    n = wait_again(sub, again) if tip else None
+    if n is not None:
+        print(words, flush=True)
+        return None, (n, tip)
     if not landed:
-        # its pull request a draft, so no merge into the bolt lands it
-        words, refused = landing_unheld(fleet, t, bolt, words, refused)
-        if stopped:  # nothing of the bolt's: its row keeps its box, saying what stopped it (stopped_at)
-            record.emit(label, "bolt.submit", [f"bolt/{bolt}"], why=refused, Outcome="stopped", Head=p["TIP"])
-        else:
-            record.emit(label, "bolt.submit", [f"bolt/{bolt}"], refused=refused, Head=p["TIP"])
-        print(words, file=sys.stderr)
-        land_hand(fleet, label, name)  # its row held on its kit's landings card at the head submitted (refused_at), or not
-        return bolt, False
+        return landing_not_landed(fleet, label, t, bolt, p, words, refused, stopped), None
     m = crew.on_machine(fleet, host, ["bash", "-c", LANDED_MARK, "crew", main, bolt])
     _, words = landing_said(bolt, name, host, r.stdout, p["before"], mark_said(m.returncode, m.stdout, m.stderr))
     now, _ = main_held(name, host, r.stdout)
-    frm, excerpt = p.get("frm") or [], getattr(a, "excerpt", None)
-    record.emit(label, "bolt.submit", [f"bolt/{bolt}"], why=f"bolt({bolt}): landed on main at {now[:7]}", Head=p["TIP"],
-                **(dict(frm=frm, Chars=len(excerpt)) if frm else {}))
+    frm = p.get("frm") or []
+    record.emit(label, "bolt.submit", [f"bolt/{bolt}"], why=f"bolt({bolt}): landed on main at {now[:7]}", Outcome="landed",
+                Submission=p.get("ID"), Head=p["TIP"], **(dict(frm=frm, Chars=p.get("Chars")) if frm else {}))
     print(words)
-    closing = argparse.Namespace(cmd="bolt", sub="land", bolt=bolt, label=label)
-    try:
-        may_write(fleet, ("bolt", "land"), closing)
-        bolt_land(fleet, closing)
-    except Refusal as e:
-        print(f"bolt/{bolt} landed and was not closed: {e}; crew bolt land {bolt} closes it", file=sys.stderr)
-    return bolt, True
+    return True, None
+
+
+def landing_not_landed(fleet, label, t, bolt, p, words, refused, stopped):
+    """A landing that did not land (landing_close_out): its pull request drafted first, so no merge into the bolt lands
+    it (landing_unheld); recorded with the head that was submitted, and its submission's number when sluice queued it
+    (p's ID), stopped, nothing of the bolt's, with what stopped it as Why and no refusal, so its row keeps its box,
+    saying so (stopped_at), or refused, in the words it holds its row with (refused_at); words printed on standard
+    error, and the kit's landings card raised so (land_hand). False."""
+    words, refused = landing_unheld(fleet, t, bolt, words, refused)
+    if stopped:
+        record.emit(label, "bolt.submit", [f"bolt/{bolt}"], why=refused, Outcome="stopped", Submission=p.get("ID"), Head=p["TIP"])
+    else:
+        record.emit(label, "bolt.submit", [f"bolt/{bolt}"], refused=refused, Submission=p.get("ID"), Head=p["TIP"])
+    print(words, file=sys.stderr)
+    land_hand(fleet, label, t["kit"]["name"])  # its row held on its kit's landings card at the head submitted, or not
+    return False
+
+
+def landing_pending(entries, bolt):
+    """The bolt's landing a read is to record (Decision 2), from the run record's entries, oldest first: its last
+    bolt.submit marked Outcome queued, unless an entry after it records that submission's outcome, a bolt.submit
+    naming the same Submission with another Outcome; else None. An outcome crew bolt submit's own wait recorded with no
+    Submission, once sluice itself failed again each time it waited (landing_ended), leaves the submission to a later
+    read, which records what sluice's record then has. A decision of facts alone (code.7)."""
+    mine = [e for e in entries if e.get("Act") == "bolt.submit" and f"bolt/{bolt}" in (e.get("On") or [])]
+    i = next((i for i in range(len(mine) - 1, -1, -1) if mine[i].get("Outcome") == "queued"), None)
+    if i is None or not mine[i].get("Submission"):
+        return None
+    n = mine[i]["Submission"]
+    return None if any(e.get("Submission") == n and e.get("Outcome") != "queued" for e in mine[i + 1:]) else mine[i]
+
+
+def landing_team(fleet, plan, entries, bolt):
+    """The team a landing's read reads on: the one holding the bolt in the plan, else the one its last queued
+    submission names (On team/<name>), a read after a close by another; None for neither."""
+    b = plan.bolt(bolt) if plan else None
+    t = bolt_team(fleet, b) if b else None
+    if t:
+        return t
+    q = next((e for e in reversed(entries) if e.get("Act") == "bolt.submit" and e.get("Outcome") == "queued"
+              and f"bolt/{bolt}" in (e.get("On") or [])), None)
+    name = next((o[5:] for o in (q.get("On") or []) if o.startswith("team/")), None) if q else None
+    t = fleet["teams"].get(name) if name else None
+    return crew.with_kit(t, q["Repo"]) if t and q.get("Repo") else t
+
+
+def landing_mark(t, bolt, n):
+    """Where the team's host keeps what its read said of a submission's outcome, once it recorded it (Decision 2): in
+    team state, keyed by the submission's number, so a later submission of the bolt is never taken for it."""
+    return team_state(t) / "landings" / f"{bolt}.{n}"
+
+
+def landing_read(fleet, label, bolt):
+    """crew _landing-read <label> <bolt>: the bolt's landing read from sluice's own record (plan.21, Decision 2), on the
+    team's host alone (code.3), refused on any other, naming it, one read of a bolt at a time there under a lock in team
+    state. Under it, the plan and the run record read afresh, the submission to record taken from the run record
+    (landing_pending): when the team's host has kept what an earlier read said of it (landing_mark), that is said, and
+    nothing read or recorded again; else sluice's record of it read in the kit's main checkout (SUBMISSION_STATUS,
+    landing_due), and while it stands, nothing is recorded, said so; once it is out, its outcome recorded as crew bolt
+    submit records it (landing_close_out), with sluice's exit for its state and its verdict, and what was said kept on
+    the host; when it can't be read, nothing is recorded, said naming the host and sluice's words (read.1). With nothing
+    to record, a bolt whose last bolt.submit landed is read landed. (whether the bolt reads landed, what was said)."""
+    pl = plan_of(fleet, label)
+    pl is not None or fail(f"crew can't read bolt {bolt}'s landing: {label}/main could not be read")
+    t = landing_team(fleet, pl, partition_entries(fleet, label), bolt)
+    t or fail(f"no team holds bolt {bolt}, and no landing of it is queued in {label}'s run record, so it has no landing to read")
+    here = crew.this_host()
+    t["machine"] == here or fail(f"bolt {bolt}'s landing is read on {t['machine']}, where {t['name']}, which holds it, runs, not on {here}")
+    name, main = t["kit"]["name"], t["kit"]["main"]
+    lock = team_state(t) / "landings" / f"{bolt}.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock, "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)  # one read of a bolt at a time on its team's host, so an outcome is recorded once
+        fetch(*state_of(fleet, label), fresh=True)  # what a read before this one recorded, which it waited on
+        entries = partition_entries(fleet, label)
+        q = landing_pending(entries, bolt)
+        if not q:
+            last = last_submits(entries).get(bolt)
+            landed = bool(last and last.get("Outcome") == "landed")
+            said = (f"bolt/{bolt} landed as #{last.get('Submission') or '?'}, as {label}'s run record has it" if landed else
+                    f"no landing of bolt {bolt} is queued in {label}'s run record")
+            print(said)
+            return landed, said
+        n, mark = q["Submission"], landing_mark(t, bolt, q["Submission"])
+        try:
+            kept = json.loads(mark.read_text())
+        except FileNotFoundError:
+            kept = None
+        except (OSError, ValueError) as e:
+            fail(f"crew can't read what {here} kept of bolt {bolt}'s landing #{n} in {mark}: {e}")
+        if kept is not None:
+            print(kept["words"], file=sys.stdout if kept["landed"] else sys.stderr)
+            return kept["landed"], kept["words"]
+        r = crew.on_machine(fleet, here, ["bash", "-c", SUBMISSION_STATUS, "crew", main, n])
+        due = landing_due(int(n), r.returncode, r.stdout)
+        if due[0] == "standing":
+            said = (f"bolt/{bolt}'s landing is still queued: sluice's record has #{n} {STANDING[due[1]]} on {name}'s main, "
+                    "so nothing of it is recorded yet")
+            print(said)
+            return False, said
+        if due[0] == "unread":
+            said = f"crew can't read sluice's record of #{n} on {here}, so nothing of bolt/{bolt}'s landing is recorded: {due[1]}"
+            print(said, file=sys.stderr)
+            return False, said
+        _, rc, doc = due
+        verdict = verdict_of(doc)
+        p = dict(bolt=bolt, t=t, path=f"{t['kit']['dir']}/places/land-{bolt}", TIP=q.get("Head") or "", OLD=q.get("Base") or "",
+                 before=q.get("Base") or "", last=int(n) - 1, ID=n, frm=q.get("From") or [], Chars=q.get("Chars"))
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            landed, _ = landing_close_out(fleet, label, t, bolt, p, rc, verdict, doc, beside_of(r.stderr, verdict))
+        sys.stdout.write(out.getvalue())
+        sys.stderr.write(err.getvalue())
+        said = (out.getvalue() if landed else err.getvalue()).strip()
+        tmp = mark.with_name(f".{mark.name}.{os.getpid()}")
+        tmp.write_text(json.dumps({"landed": bool(landed), "words": said}, ensure_ascii=False))
+        tmp.replace(mark)
+        return bool(landed), said
+
+
+def landing_read_cmd(fleet, a):
+    """crew _landing-read <label> <bolt>: landing_read, exiting 0 when it reads the bolt landed and 1 when not."""
+    landed, _ = landing_read(fleet, a.label, a.bolt)
+    if not landed:
+        raise Stopped(1)
+
+
+def landing_read_on(fleet, t, label, bolt):
+    """The landing's read run on the team's host (code.3): in this process when that is this host, else crew
+    _landing-read there as the one asking, what it said passed through; whether it read the bolt landed. A read
+    refused is said, and reads it not landed."""
+    if t["machine"] == crew.this_host():
+        try:
+            return landing_read(fleet, label, bolt)[0]
+        except Refusal as e:
+            print(e, file=sys.stderr)
+            return False
+    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_landing-read", label, bolt))
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    return r.returncode == 0
 
 
 def bolt_submit(fleet, a):
@@ -16519,6 +16675,9 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("bolt")
     x.add_argument("head")
+    x = sub.add_parser("_landing-read")
+    x.add_argument("label")
+    x.add_argument("bolt")
     x = sub.add_parser("_land-row")
     x.add_argument("label")
     x.add_argument("bolt")
@@ -16597,7 +16756,7 @@ COMMANDS = {
     ("chore", "move"): direct(("chore", "move")), ("chore", "drop"): direct(("chore", "drop")),
     ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
     ("_construct-again", None): construct_hand, ("_preview", None): preview_handed,
-    ("_land-row", None): land_row_cmd, ("_land-card", None): land_card_cmd,
+    ("_land-row", None): land_row_cmd, ("_land-card", None): land_card_cmd, ("_landing-read", None): landing_read_cmd,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
     ("_review", None): review_cmd, ("_console", None): console_cmd, ("_revive", None): revive_cmd,

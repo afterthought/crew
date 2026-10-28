@@ -497,6 +497,10 @@ case $cmd in
     # the partition's main machine: the kit's landings card raised from each row, which every event that changes a row
     # hands there (Decision 2 of one-landings-card-lands-the-proven-bolts-in-order, code.3)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _landing-read)  # crew _landing-read <label> <bolt>, on the bolt's team's host: its landing read from sluice's record
+    # of its queued submission, its outcome recorded once sluice has it out (plan.21), run by the landing's waiter as it
+    # stops and by every crew act that reads the bolt after
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   main)
     need_label "${3:-}"
     case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;
