@@ -6,13 +6,14 @@ and keeping the words on its host; and crew bolt land's reads of it, plan.pane_w
 plan.landing_word_read from the kept file. Reading the words in a transcript is test_transcript's; the cards' close,
 test_landing's, test_landings' and test_card_commands'."""
 import argparse
+import json
 
 import pytest
 
 import transcript
 
 import plan
-from test_landing import NONE_YET, QUEUED, TAKES_NONE, policy, ran_as, said
+from test_landing import NONE_YET, QUEUED, RAN, TAKES_NONE, policy, ran_as, said
 
 WORDS = "Land crw-5's bolt"
 HEAD = "crew submits nothing of bolt y"
@@ -144,7 +145,7 @@ class TestTheSubmission:
         assert not (plan.LANDINGS / "swancloud" / "y.json").exists()
 
     def test_a_submission_that_did_not_land_keeps_no_words(self, submit):
-        submit["outs"][1:] = [ran_as(1, "{}"), ran_as(0, said(1, new=OLD, github=OLD, held="no"))]
+        submit["outs"][1:] = [ran_as(1, json.dumps(dict(RAN, id=7))), ran_as(0, said(1, new=OLD, github=OLD, held="no"))]
         with pytest.raises(plan.Stopped):
             submit["run"](WORDS)
         assert submit["emitted"][0].get("refused") and "frm" not in submit["emitted"][0]

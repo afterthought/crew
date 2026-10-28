@@ -145,10 +145,23 @@ def test_a_landing_left_standing_in_sluice_holds_its_row_for_no_fix():
     assert row["box"] and plan.refused_at([standing], "y", head) is None
 
 
+def test_a_landing_stopped_at_the_bolts_present_head_keeps_its_box_saying_what_stopped_it():
+    """rail-cards "A landing sluice or its host stopped keeps its box": recorded stopped, its row a box whose facts
+    carry the head it was stopped at and what stopped it; once its head moves, its row says nothing of it."""
+    head = "d" * 40
+    stop = dict(submitted("y", head), Why="check:dagger could not run: the Dagger engine did not answer", Outcome="stopped")
+    entries = [submitted("y", "c" * 40, "bolt/y did not land: sluice found a conflict"), stop]
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, plan.refusals(entries), plan.stops(entries))
+    assert (row["box"], row["facts"]["stopped"]) == (True, (head, "check:dagger could not run: the Dagger engine did not answer"))
+    moved, = plan.landing_rows(["y"], {"y": facts("y", "e" * 40)}, plan.refusals(entries), plan.stops(entries))
+    assert moved["box"] and "stopped" not in moved["facts"]
+    assert "stopped" not in plan.landing_rows(["y"], {"y": facts("y", head)}, {})[0]["facts"]
+
+
 def test_a_bolt_forecast_to_conflict_with_main_takes_main_first_with_no_box():
     """rail-cards "Main landed a change the bolt also made"."""
     rows = plan.landing_rows(["y", "z"], {"y": dict(facts("y"), conductor="crw-1-conductor"), "z": facts("z")}, {},
-                             {"y": ("e4f5a6b", ["openspec/specs/artifact-buckets/spec.md"])})
+                             takes_main={"y": ("e4f5a6b", ["openspec/specs/artifact-buckets/spec.md"])})
     assert [(r["bolt"], r["box"], r.get("why"), r.get("takes_main")) for r in rows] == [
         ("y", False, "takes main first: forecast to conflict with main on openspec/specs/artifact-buckets/spec.md at "
                      "e4f5a6b; crw-1-conductor takes main in by a fix", True),
@@ -159,14 +172,14 @@ def test_a_conflict_a_wait_recorded_holds_the_row_when_the_cards_own_forecast_wa
     """rail-cards "A wait found it first": the record's conflict at the bolt's present head (main_conflict)."""
     head = "d" * 40
     recorded = [dict(Act="forecast", On=["bolt/y"], Heads=f"bolt/y@{head[:7]} main@2222222", Paths="README.md", Reached="wait")]
-    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, {}, {"y": plan.main_conflict(recorded, "y", head)})
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, {}, takes_main={"y": plan.main_conflict(recorded, "y", head)})
     assert (row["box"], row["why"], row["takes_main"]) == (
         False, "takes main first: forecast to conflict with main on README.md at 2222222; its team takes main in by a fix", True)
 
 
 def test_a_conflict_only_with_a_row_above_holds_nothing():
     """rail-cards "Only a bolt above it": a forecast against a row above is said on the row, not held."""
-    rows = plan.landing_rows(["y", "z"], {"y": facts("y"), "z": dict(facts("z"), forecast=[("y", ["plan.py"])])}, {}, {})
+    rows = plan.landing_rows(["y", "z"], {"y": facts("y"), "z": dict(facts("z"), forecast=[("y", ["plan.py"])])}, {}, takes_main={})
     assert [r["box"] for r in rows] == [True, True]
 
 
@@ -184,7 +197,7 @@ def test_a_new_head_with_no_conflict_forecast_has_its_box_again():
     """rail-cards "The fix merges": the record's conflict was at the head the fix moved the bolt from."""
     recorded = [dict(Act="forecast", On=["bolt/y"], Heads="bolt/y@ccccccc main@2222222", Paths="README.md", Reached="told")]
     takes = {b: c for b in ["y"] for c in [plan.main_conflict(recorded, b, "d" * 40)] if c}
-    row, = plan.landing_rows(["y"], {"y": facts("y", "d" * 40)}, {}, takes)
+    row, = plan.landing_rows(["y"], {"y": facts("y", "d" * 40)}, {}, takes_main=takes)
     assert row["box"] and "takes_main" not in row
 
 
@@ -586,6 +599,49 @@ def test_a_bolt_proven_after_the_answer_is_no_row_of_it_and_a_new_card_follows_i
     step = plan.landings_step([box("y"), box("z"), box("w")], answered("y@abc1234", "z@abc1234"), ["y"], {"y", "z", "w"})
     assert step == ("follow", "Landing as you ticked: y. Left: z. Since your send, w reads proven, and the card that "
                               "follows asks for it.", ["z"], [("y", "abc1234")])
+
+
+STOP = "check:dagger could not run: the Dagger engine did not answer"
+
+
+def stopped_box(bolt, head=H1, words=STOP):
+    """A row that can land whose last landing at its head sluice or its host stopped (landing_rows)."""
+    return dict(bolt=bolt, box=True, facts=dict(facts(bolt, head), stopped=(head, words)))
+
+
+def test_an_answered_card_is_left_while_a_ticked_bolt_whose_landing_was_stopped_still_lands_on_the_send():
+    """rail-cards "Checks that never ran": the stop holds nothing, so the user's send still lands it, and the card
+    they answered is left as it is."""
+    assert plan.landings_step([stopped_box("z")], answered("z@abc1234"), ["z"], {"z"}) == ("leave",)
+
+
+def test_a_card_that_follows_names_a_stopped_bolt_as_still_landing_with_what_stopped_it_and_has_no_row_for_it():
+    """rail-cards "A new card while it is stopped": the closed card's outcome names z as still landing on the send,
+    with what stopped it, and the card that follows does not ask for z again."""
+    step = plan.landings_step([stopped_box("z"), box("w")], answered("z@abc1234"), ["z"], {"z", "w"})
+    assert step == ("follow", f"Landing as you ticked: z. z's last landing at abc1234 was stopped, nothing of the bolt's: {STOP}; "
+                              "it lands on your send once that is cleared. Since your send, w reads proven, and the card that "
+                              "follows asks for it.", [], [("z", "abc1234")])
+    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="z@abc1234")]
+    assert plan.rows_unsent([stopped_box("z"), box("w")], plan.landings_sent(closes, "land/crew", "swancloud-ops")) == (
+        [box("w")], ["z"], [])
+
+
+def test_crew_card_read_says_what_stopped_a_bolt_the_send_lands_beside_the_command_that_lands_it():
+    """rail-cards "Checks that never ran": crew card read land/crew names z as still landing on the send, saying what
+    stopped its last landing and at which head, with the command that lands it; a bolt it does not land says nothing,
+    nor does one whose last landing was not stopped."""
+    sent = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:y", "land:z"]}}
+    heads = plan.card_heads("y@abc1234 z@abc1234")
+    stopped = plan.stops([dict(submitted("z", H2), Why=STOP, Outcome="stopped"), dict(submitted("w", H1), Why="x", Outcome="stopped"),
+                          dict(submitted("y", H1), Why="x", Outcome="stopped"), submitted("y", H1, "sluice: y conflicts")])
+    assert plan.landing_lines("swancloud", sent, heads, [], [], stopped) == [
+        "  to land, in the card's order: y and z",
+        f"  z's last landing at def5678 was stopped, nothing of the bolt's: {STOP}; once that is cleared, the submit below "
+        "lands it on the user's send",
+        "  lands them: crew bolt submit y z --label swancloud"]
+    assert plan.landing_lines("swancloud", sent, heads) == plan.landing_lines("swancloud", sent, heads, [], [], {})
+    assert plan.landing_lines("swancloud", {}, [], ["z"], [], stopped)[1].startswith("  z's last landing at def5678 was stopped")
 
 
 def test_a_ticked_bolt_proven_again_at_a_new_head_is_asked_again_rather_than_waited_for():

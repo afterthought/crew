@@ -1530,6 +1530,30 @@ class TestLandings:
         one = landings(1, held=[{"bolt": "w", "why": "held"}])["card"]
         assert [a["title"] for a in one["artifacts"]][1] == "Held on crew's main, with no box"
 
+    STOP = ("abc1234def", "sluice itself failed (could not release try/1a2b3c4, whose worktree no longer exists)")
+    STOPPED = ("Its last landing at abc1234 was stopped, nothing of the bolt's: sluice itself failed (could not release "
+               "try/1a2b3c4, whose worktree no longer exists). wldn-ops submits it again once that is cleared.")
+
+    def test_one_row_stopped_says_so_on_its_face_and_keeps_its_approval(self):
+        """rail-cards "A landing sluice or its host stopped keeps its box": the one row's card is today's approve, its
+        summary saying what stopped its last landing at its head and who submits it again."""
+        b = built.landings_card(dict(kit="crew", rows=[landings_row("b1", stopped=self.STOP)], ops="wldn-ops"))
+        c = b["card"]
+        assert c["kind"] == "approve" and self.STOPPED in c["summary"] and b["heads"] == ["b1@abc1234"]
+        assert landings(1)["card"]["summary"] == built.landings_card(dict(kit="crew", rows=[landings_row("b1")], ops="wldn-ops"))["card"]["summary"]
+        assert "stopped" not in landings(1)["card"]["summary"]
+
+    def test_a_stopped_row_of_three_says_so_on_its_paragraph_and_in_its_boxs_detail(self):
+        rows = [landings_row("b1"), landings_row("b2", stopped=self.STOP), landings_row("b3")]
+        c = built.landings_card(dict(kit="crew", rows=rows, ops="wldn-ops"))["card"]
+        assert c["recommendedIds"] == ["land:b1", "land:b2", "land:b3"]
+        face = "\n".join(c["artifacts"][0]["lines"])
+        assert face.count(self.STOPPED) == 1 and face.index(self.STOPPED) > face.index("**2. b2**")
+        assert c["options"][1]["detail"].startswith("Its last landing at abc1234 was stopped, nothing of the bolt's: sluice itself failed")
+        assert len(c["options"][1]["detail"]) <= built.DETAIL
+        assert c["options"][0]["detail"] == "2 units and 1 chore; read in batch 7; green at abc1234 since 10:02; swc-1-conductor"
+        assert f"2. b2 (swc-1-conductor): {self.STOPPED} 2 units and 1 chore" in c["context"]["background"]
+
     def test_a_bolt_cleared_on_the_last_send_is_unticked_and_said_so(self):
         c = landings(3, left=["b2"])["card"]
         assert c["recommendedIds"] == ["land:b1", "land:b3"]
