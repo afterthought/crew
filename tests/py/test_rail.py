@@ -7,6 +7,7 @@ post, and plan.sweep_cards, which acts on a stand-in for Pending You, herdr and 
 all of it from the branch and the hosts and sweeps on every host is the review journey's (t-journey-review), and the
 sweep's acts through the stubs the cards journey's (t-cards)."""
 import datetime
+import types
 
 import pytest
 
@@ -311,7 +312,14 @@ class TestTheBranchAlone:
     branch alone, so a host that does not answer hides no card's post or close."""
     SV = {"macbook-pro": {"ok": False, "error": "ssh: connect to host macbook-pro port 22: Operation timed out"}}
 
+    class AtNow(datetime.datetime):
+        """The clock rail_record reads its window from, at NOW, so the cards posted at START stay inside it."""
+        @classmethod
+        def now(cls, tz=None):
+            return NOW
+
     def read(self, monkeypatch, entries):
+        monkeypatch.setattr(plan, "datetime", types.SimpleNamespace(**{**vars(datetime), "datetime": self.AtNow}))
         monkeypatch.setattr(crew, "on_machine", lambda *a, **k: pytest.fail(f"a host was asked for the run record: {a}"))
         monkeypatch.setattr(plan.record, "on_branch", lambda fleet, label, since, tips=None: entries)
         found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
