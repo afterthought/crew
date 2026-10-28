@@ -19,5 +19,5 @@
 
 ## 5. Docs and the suite
 
-- [ ] 5.1 README and the crew skill say what a bolt's head line and land line show (design, Decision 5; Task notes 5.1); `tests/suite t-docs` ends with "0 failed".
+- [x] 5.1 README and the crew skill say what a bolt's head line and land line show (design, Decision 5; Task notes 5.1); `tests/suite t-docs` ends with "0 failed".
 - [ ] 5.2 `tests/moon.yml` is in step with the tests and the change's affected tests pass (Task notes 5.2); Verify `tests/suite --affected` ends with "0 failed".
