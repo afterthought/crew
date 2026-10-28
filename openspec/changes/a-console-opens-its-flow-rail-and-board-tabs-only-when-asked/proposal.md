@@ -52,5 +52,6 @@ tests/py/**
 tests/t-journey-main.sh
 tests/t-journey-board.sh
 tests/t-briefs.sh
+tests/t-hold.sh
 tests/moon.yml
 ```
