@@ -1484,6 +1484,19 @@ class TestSubmissions:
                            "can't be told: its submissions can't be read: sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in mine if "#" in l]
 
+    def test_a_landing_queued_whose_queue_cant_be_read_shows_no_number(self):
+        """crew-board "A queue that can't be read": the run record has its landing queued as #412, and sluice's queue
+        could not be read on the team's host, so its head line says its submissions can't be read and no line shows
+        the record's number (read.1)."""
+        sv = queued(error="sluice overview exited 2: not a repository sluice serves")
+        out = lane(board.board_text(data(sv=sv, logs=TestViews.QUEUED)), "Construction")
+        assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  submissions can't be read: sluice overview "
+                          "exited 2: not a repository sluice serves")
+        assert not [l for l in out if "#" in l]
+        mine = view("swb-1-conductor", sv=sv, logs=TestViews.QUEUED)
+        assert mine[0] == "  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged"
+        assert not [l for l in mine if "#" in l]
+
     def test_nothing_standing_draws_nothing_new(self):
         assert view("swb-1-conductor", sv=queued([])) == view("swb-1-conductor")
 

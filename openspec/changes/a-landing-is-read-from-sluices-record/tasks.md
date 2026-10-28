@@ -19,7 +19,7 @@
 ## 4. The bolt's head line and the agents' views
 
 - [x] 4.1 A held bolt's head line says its landing is queued with its submission number, or that it landed on main and was not closed with its refused close's words, and main-level ops's band shows the latter (design, Decision 5; Task notes 4.1); passes `tests/py/test_board.py`, and Verify `tests/suite mod` ends with "0 failed".
-- [ ] 4.2 The run record's queued number is said on a bolt's head line only when sluice's queue was read and shows no landing of it standing; a queue that can't be read shows no number (design, Decision 5; Task notes 4.2); passes `tests/py/test_board.py`.
+- [x] 4.2 The run record's queued number is said on a bolt's head line only when sluice's queue was read and shows no landing of it standing; a queue that can't be read shows no number (design, Decision 5; Task notes 4.2); passes `tests/py/test_board.py`.
 
 ## 5. ops's brief
 

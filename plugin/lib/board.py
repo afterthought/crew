@@ -587,12 +587,12 @@ def landing_of(entries, bolt):
 def head_said(b):
     """A held bolt's state as its head line says it, from what the run record holds of its landing (its record,
     landing_of): landed on main and not closed, in its last refused close's words; its landing queued, with sluice's
-    number, while sluice's queue shows no landing of it standing, which landing_said says in its stead; else its
-    state (state_said)."""
+    number, only while sluice's queue was read and shows no landing of it standing, which landing_said says in its
+    stead, a queue that can't be read showing no number (queue_said, read.1); else its state (state_said)."""
     record = b.get("record") or {}
     if record.get("unclosed"):
         return f"landed on main, not closed: {record['unclosed']}"
-    if record.get("queued") and not b.get("landing"):
+    if record.get("queued") and not b.get("landing") and not b.get("submissions_error"):
         return f"landing queued as #{record['queued']}"
     return state_said(b["state"])
 
