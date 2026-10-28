@@ -338,7 +338,7 @@ eq "$(drafted "$pr")" false
 # told from any made before by sluice's record of main read before the pull request is readied, and read again after.
 has "$out" "bolt/tenant-environments submitted to switchboard-kit's main, sluice's #"
 has "$out" " from pull request #$pr"
-eq "$(calls | grep -c "^$box sluice status main --all --json in ")" 2
+eq "$(calls | grep -c "^exec sluice status main --all --json$")" 2
 eq "$(calls | grep -E "^$box (gh pr ready|wt submit) " | cut -d' ' -f2-4)" $'gh pr ready\nwt submit main'
 eq "$(calls | grep -c "^$box gh pr ready .* --undo$")" 0
 grep -v "copy of bolt/tenant-environments" <<<"$out" | grep -q level && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
@@ -369,6 +369,9 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(act_tip)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
+# The stub's record of a submission keeps no time it was submitted or told, so the bolt's age and split can't be told
+# and the entry carries neither, the landing going on (run-record "sluice's record can't be read at the landing").
+eq "$(field mac-studio bolt.land Age)$(field mac-studio bolt.land Split)" ""
 ok "a drop frees the last slot and closes the units workspace; the bolt, submitted again on the user's word once its checks can run, lands at GitHub's head, its worktree removed and the detached main checkout left as it was, and is closed as it lands, recording the commit main holds, sluice deleting its branch from GitHub and the host, closing the kit's landings card with where GitHub's main holds it and the timer, ending its row's reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
 
 # swb-1's other bolt dropped: the team holds none, its pane carries no branch, and each of its conductor and ops, whose

@@ -678,32 +678,31 @@ def overview(main):
     """sluice's overview of a kit's queue, read in its main checkout on this host: `sluice overview --json`, sluice's
     one contract for a reader (sluice ADR 0023), as (its document, None), or (None, why) when sluice is not on the
     host, fails, prints no JSON, or does not answer within SLUICE_ANSWER seconds (read.1)."""
-    doc, why, _ = sluice_json(main, ["overview", "--json"], "sluice overview")
-    return doc, why
+    ran, why = sluice_ran(main, ["overview", "--json"], "sluice overview")
+    if why:
+        return None, why
+    code, out, err = ran
+    if code:
+        return None, sluice_said("sluice overview", code, out, err)
+    try:
+        return json.loads(out), None
+    except ValueError:
+        return None, "sluice overview printed no JSON"
 
 
-def sluice_json(main, args, what):
-    """A sluice command's one JSON document, run in a kit's main checkout on this host, as (document, None, None), or
-    (None, why, its refusal's error under --json, or None) when sluice is not on the host, fails, prints no JSON, or
-    does not answer within SLUICE_ANSWER seconds (read.1); what names the command in why."""
+def sluice_ran(main, args, what):
+    """A sluice command run in a kit's main checkout on this host, as ((exit, stdout, stderr), None), or (None, why)
+    when sluice is not on the host, can't be run, or does not answer within SLUICE_ANSWER seconds (read.1); what names
+    the command in why."""
     try:
         r = subprocess.run(["sluice", *args], cwd=main, capture_output=True, text=True, timeout=SLUICE_ANSWER)
     except FileNotFoundError:
-        return None, "this host has no sluice on its path", None
+        return None, "this host has no sluice on its path"
     except subprocess.TimeoutExpired:
-        return None, f"{what} did not answer within {SLUICE_ANSWER} seconds", None
+        return None, f"{what} did not answer within {SLUICE_ANSWER} seconds"
     except OSError as e:
-        return None, f"{what} could not run: {e}", None
-    if r.returncode:
-        try:
-            error = json.loads(r.stdout)["error"]
-        except (ValueError, TypeError, KeyError):
-            error = None
-        return None, sluice_said(what, r.returncode, r.stdout, r.stderr), error if isinstance(error, dict) else None
-    try:
-        return json.loads(r.stdout), None, None
-    except ValueError:
-        return None, f"{what} printed no JSON", None
+        return None, f"{what} could not run: {e}"
+    return (r.returncode, r.stdout, r.stderr), None
 
 
 def sluice_said(what, code, out, err):
@@ -790,13 +789,30 @@ def decided_of(doc):
 
 def status_all(main, branch):
     """sluice's record of every submission a branch has had, read in a kit's main checkout on this host, `sluice status
-    <branch> --all --json`, as decided_of reads it: (submissions, None), [] for a branch sluice holds no record of yet,
-    which sluice 0.51.3 refuses as not_found (a bolt given and nothing submitted to it), or (None, why) (read.1)."""
-    doc, why, error = sluice_json(main, ["status", branch, "--all", "--json"], f"sluice status {branch}")
-    said = error.get("message") if error else None
-    if error and error.get("kind") == "not_found" and isinstance(said, str) and (said == f"no branch {branch}" or said.startswith(f"no branch {branch};")):
-        return [], None
-    return (None, why) if why else decided_of(doc)
+    <branch> --all --json`, as status_read reads what it printed; (None, why) when it can't be run (read.1)."""
+    ran, why = sluice_ran(main, ["status", branch, "--all", "--json"], f"sluice status {branch}")
+    return (None, why) if why else status_read(branch, *ran)
+
+
+def status_read(branch, code, out, err):
+    """What `sluice status <branch> --all --json` printed, its exit and its standard output and error, read as
+    decided_of reads its document: (submissions, None), [] for a branch sluice holds no record of yet, which sluice
+    0.51.3 refuses as not_found (a bolt given and nothing submitted to it), or (None, why) in sluice's words (read.1). A
+    decision on plain facts, the landing's as much as the gather's."""
+    if code:
+        try:
+            error = json.loads(out)["error"]
+        except (ValueError, TypeError, KeyError):
+            error = None
+        said = error.get("message") if isinstance(error, dict) else None
+        if isinstance(said, str) and error.get("kind") == "not_found" and (said == f"no branch {branch}" or said.startswith(f"no branch {branch};")):
+            return [], None
+        return None, sluice_said(f"sluice status {branch}", code, out, err)
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        return None, f"sluice status {branch} printed no JSON"
+    return decided_of(doc)
 
 
 def history(main, bolts):

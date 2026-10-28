@@ -15,7 +15,7 @@
 
 ## 4. The landing's entry
 
-- [ ] 4.1 `bolt.land` records `Age` and `Split` to the landing's decision, and neither when a fact can't be read, the landing going on (design, Decision 6; Task notes 4.1); passes `tests/py/test_landing.py`, `tests/suite logic`, and `tests/suite t-journey-land` ends with "0 failed".
+- [x] 4.1 `bolt.land` records `Age` and `Split` to the landing's decision, and neither when a fact can't be read, the landing going on (design, Decision 6; Task notes 4.1); passes `tests/py/test_landing.py`, `tests/suite logic`, and `tests/suite t-journey-land` ends with "0 failed".
 
 ## 5. Docs and the suite
 

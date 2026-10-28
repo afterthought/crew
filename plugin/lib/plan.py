@@ -3310,7 +3310,9 @@ def bolt_land(fleet, a):
     on the user's word in ops's pane (pane_word_of), that word and their words kept on this host (landing_word_read),
     as answered there (pane_landed); the words kept are removed once the landing is written. A bolt no team holds,
     built outside a team, is read on the host and main checkout of a team of the partition building its kit, and lands
-    the same way once main holds each of its units' changes and chores, on the user's word (roles.2)."""
+    the same way once main holds each of its units' changes and chores, on the user's word (roles.2). A bolt a team
+    held records its Age and Split with its landing, read from sluice's record on its team's host (landing_time), and
+    neither when that can't be read, the landing going on (plan.20)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
     t = held = bolt_team(fleet, b)
@@ -3352,8 +3354,10 @@ def bolt_land(fleet, a):
             w.on.append(f"{kind_of(u)}/{u.name()}")
         w.plan.remove(w.plan.bolt(a.bolt))
         return [a.bolt]
+    # A bolt a team held records its age and who held its time, or neither when that can't be read (plan.20).
+    spent = landing_time(fleet, t, plan, b, entries, datetime.datetime.now(datetime.timezone.utc)) if held else {}
     write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"],
-          fields=dict(Repo=t["kit"]["name"], Head=head))
+          fields=dict(Repo=t["kit"]["name"], Head=head, **spent))
     if b.get("Team"):
         after = plan_of(fleet, label)
         print(landed_line(a.bolt, t["kit"]["name"], head, t["name"], [x.name() for x in held_by(after, t["name"])] if after else None))
@@ -3556,6 +3560,68 @@ printf 'MARKED=%q\n' "$marked"
 SUBMISSIONS = r"""cd "$1" || exit 2
 exec sluice status main --all --json
 """
+
+# sluice's record of every submission a bolt's branch and its kit's main have had, read on the team's host in the kit's
+# main checkout as a landing is recorded (landing_time): for bolt/<bolt> and then main, a line of `sluice status <branch>
+# --all --json`'s exit and its standard output and error, each base64 after an x, so an empty one is still a word.
+HISTORY = r"""cd "$1" || exit 2
+for b in "bolt/$2" main; do
+  err=$(mktemp) || exit 2
+  out=$(sluice status "$b" --all --json 2>"$err"); rc=$?
+  printf '%s x%s x%s\n' "$rc" "$(printf '%s' "$out" | base64 | tr -d '\n')" "$(base64 < "$err" | tr -d '\n')"
+  rm -f "$err"
+done
+"""
+
+
+def history_read(printed, bolt):
+    """sluice's record of a bolt's submissions as HISTORY printed it on the team's host, read as the gather reads it
+    (gather.status_read), of main the bolt's landing alone, a submission from bolt/<bolt> or a pull request opened from
+    it: (submissions, None), or (None, why) for a record that can't be read, or a print crew can't read (read.1)."""
+    lines = (printed or "").splitlines()
+    if len(lines) != 2:
+        return None, f"sluice's record of bolt/{bolt} and main was not printed whole on the team's host"
+    out = []
+    for branch, line in zip((f"bolt/{bolt}", "main"), lines):
+        words = line.split(" ")
+        if len(words) != 3 or not words[0].isdigit() or not all(w.startswith("x") for w in words[1:]):
+            return None, f"sluice's record of {branch} was printed as crew can't read it: {cut(line, 120)}"
+        try:
+            said = [base64.b64decode(w[1:]).decode(errors="replace") for w in words[1:]]
+        except ValueError:
+            return None, f"sluice's record of {branch} was printed as crew can't read it: {cut(line, 120)}"
+        subs, why = gather.status_read(branch, int(words[0]), *said)
+        if why:
+            return None, why
+        out += subs if branch != "main" else [x for x in subs if f"bolt/{bolt}" in (x["worktree"], x["pull_head"])]
+    return out, None
+
+
+def landing_split(entries, plan_, b, host, kit_name, history, now):
+    """The fields a held bolt's bolt.land entry records of its time (run-record "A bolt's landing entry records its time
+    by holder", plan.20), a decision of facts alone (code.7): Age, its whole minutes from its newest give to its
+    landing, and Split, those minutes by holder in HOLDERS' order, each named, `team 200, kit 25, user 125, hold 0,
+    nobody 20`, made by the board's own rule (bolt_facts, bolt_time) from the partition's run record (entries) and
+    sluice's record of the bolt's submissions (history, history_read's), nothing standing since it landed. Its landing
+    is when sluice told the newest of its landings on main that landed, or now when none did. {} when its give or
+    sluice's record can't be read, so the entry carries neither and the landing goes on (read.1)."""
+    subs, why = history
+    told = max((x["told"] for x in subs or [] if x.get("branch") == "main" and x.get("state") == "landed" and x.get("told")), default=None)
+    tm = time_at(bolt_facts(entries, plan_, b.name(), b.get("Team"), host, kit_name, ([], None), history), utc(told) if told else now)
+    if "unknown" in tm:
+        return {}
+    return {"Age": str(tm["age"]), "Split": ", ".join(f"{h} {tm['shares'][h]}" for h in HOLDERS)}
+
+
+def landing_time(fleet, t, plan_, b, entries, now):
+    """A held bolt's Age and Split for its landing's entry (landing_split), sluice's record of its submissions read on
+    its team's host (HISTORY, history_read), the one process it starts there; {} when that can't be read."""
+    try:
+        history = history_read(host_run(fleet, t["machine"], HISTORY, t["kit"]["main"], b.name()), b.name())
+    except Refusal as e:
+        history = (None, str(e))
+    return landing_split(entries, plan_, b, t["machine"], t["kit"]["name"], history, now)
+
 
 # A submission's states in sluice 0.36.4 (sluice-core records.rs, State): those it stands in, in the queue or a chain
 # under test, as crew says them, and those it is out in, where sluice's wait ends.

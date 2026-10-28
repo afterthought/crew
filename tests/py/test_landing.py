@@ -5,10 +5,13 @@ plan.deleted_said makes of sluice's delete of the bolt's branch at crew bolt lan
 raised by crew once the bolt reads proven, held by a fix and closed at the landing (record 0031 §1)."""
 import argparse
 import base64
+import datetime
 import json
 import pathlib
 
 import pytest
+
+from facts import START, at
 
 import plan
 
@@ -1697,3 +1700,62 @@ class TestThePullRequest:
         with pytest.raises(plan.Refusal, match="cannot fetch k from GitHub on box"):
             self.hold(monkeypatch, "ORIGIN=yes\nFETCHED=fatal: could not read\nGITHUB=-\nOWN=-\n", [])
         assert [s for s, _, _ in self.ran] == [plan.POLICY]
+
+
+class TestAgeAndSplit:
+    """run-record "A bolt's landing entry records its time by holder" (plan.20): what plan.landing_split gives the
+    bolt.land entry of a bolt a team held, from the run record and sluice's record of its submissions as HISTORY prints
+    it on the team's host (plan.history_read), recorded by sluice 0.51.3 (tests/py/sluice-0.51.3/)."""
+
+    RECORDED = pathlib.Path(__file__).parent / "sluice-0.51.3"
+
+    @staticmethod
+    def printed(*lines):
+        return "\n".join(f"{rc} x{base64.b64encode(out.encode()).decode()} x{base64.b64encode(err.encode()).decode()}" for rc, out, err in lines)
+
+    def test_sluices_record_of_the_bolt_and_its_landing_on_main_is_read_as_the_gather_reads_it(self):
+        out = self.printed((0, (self.RECORDED / "status-bolt-all.json").read_text(), ""), (0, (self.RECORDED / "status-main-all.json").read_text(), ""))
+        subs, why = plan.history_read(out, "crew-costs-an-idle-host-nothing")
+        assert why is None and [(s["id"], s["branch"], s["state"]) for s in subs] == [
+            (356, "bolt/crew-costs-an-idle-host-nothing", "landed"), (357, "bolt/crew-costs-an-idle-host-nothing", "landed"),
+            (358, "bolt/crew-costs-an-idle-host-nothing", "withdrawn"), (359, "bolt/crew-costs-an-idle-host-nothing", "withdrawn"),
+            (361, "bolt/crew-costs-an-idle-host-nothing", "landed"), (362, "bolt/crew-costs-an-idle-host-nothing", "landed"),
+            (363, "main", "landed")]
+
+    def test_a_branch_sluice_holds_no_record_of_is_none_and_one_it_refuses_or_a_print_crew_cant_read_says_why(self):
+        missing = (self.RECORDED / "status-not-found.json").read_text().replace("bolt/no-such-bolt-here", "bolt/b")
+        assert plan.history_read(self.printed((1, missing, ""), (0, '{"branch": "main", "submissions": []}', "")), "b") == ([], None)
+        refused = self.printed((0, '{"branch": "bolt/b", "submissions": []}', ""), (2, "", "error: unexpected argument '--all' found\n"))
+        assert plan.history_read(refused, "b") == (None, "sluice status main exited 2: error: unexpected argument '--all' found")
+        assert plan.history_read("", "b")[1] == "sluice's record of bolt/b and main was not printed whole on the team's host"
+        assert plan.history_read(self.printed((0, '{"submissions": []}', "")) + "\n0 nonsense", "b")[1] == (
+            "sluice's record of main was printed as crew can't read it: 0 nonsense")
+
+    # b, given to swb-1: its code ran 200 minutes, its landing card was open 125, nothing of it was held 20, and its
+    # landing #9 stood in sluice 25 minutes until sluice landed it, 6h 10m after the give.
+    PLAN = plan.Plan("%rec: Bolt\n\nBolt: b\nRepo: switchboard-kit\nTeam: swb-1\n\n%rec: Unit\n\nUnit: a\nRepo: switchboard-kit\nBolt: b\n")
+    ENTRIES = [{"Act": "bolt.give", "On": ["bolt/b", "team/swb-1"], "At": at(0)},
+               {"Act": "stage.start", "On": ["stage/a/code", "unit/a", "agent/swb-1-unit-1"], "At": at(0)},
+               {"Act": "stage.end", "On": ["stage/a/code", "unit/a", "agent/swb-1-unit-1"], "At": at(200)},
+               {"Act": "card.post", "On": ["bolt/b"], "Card": "req_l", "Key": "land/b", "By": "swb-1-conductor", "At": at(200)},
+               {"Act": "card.close", "On": ["land/b"], "Card": "req_l", "Key": "land/b", "State": "closed", "At": at(325)}]
+    LANDED = [{"id": 9, "branch": "main", "head": None, "state": "landed", "submitted": at(345), "told": at(370), "worktree": "pull/4",
+               "pull_head": "bolt/b"}]
+
+    def test_a_bolt_lands_with_its_age_and_split_to_sluices_landing(self):
+        later = START + datetime.timedelta(hours=9)
+        assert plan.landing_split(self.ENTRIES, self.PLAN, self.PLAN.bolt("b"), "chuck-herdr-alpha", "switchboard-kit", (self.LANDED, None), later) == {
+            "Age": "370", "Split": "team 200, kit 25, user 125, hold 0, nobody 20"}
+
+    def test_a_bolt_no_landing_of_which_landed_is_timed_to_the_entry(self):
+        now = START + datetime.timedelta(minutes=330)
+        got = plan.landing_split(self.ENTRIES, self.PLAN, self.PLAN.bolt("b"), "chuck-herdr-alpha", "switchboard-kit", ([], None), now)
+        assert got == {"Age": "330", "Split": "team 200, kit 0, user 125, hold 0, nobody 5"}
+
+    def test_sluices_record_that_cant_be_read_or_a_give_that_cant_leaves_both_off(self):
+        """sluice status fails on the team's host as b's landing is recorded."""
+        later = START + datetime.timedelta(hours=9)
+        b = self.PLAN.bolt("b")
+        assert plan.landing_split(self.ENTRIES, self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit",
+                                  (None, "sluice status main exited 1: sluice is not running here"), later) == {}
+        assert plan.landing_split(self.ENTRIES[1:], self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit", (self.LANDED, None), later) == {}
