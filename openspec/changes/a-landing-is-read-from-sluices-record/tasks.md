@@ -13,8 +13,8 @@
 ## 3. Every crew act that reads the bolt after its landing runs the read
 
 - [x] 3.1 `crew bolt submit`'s own end hands the outcome to the read on the team's host and prints what it said, and exits non-zero for a bolt that did not land (design, Decision 3; Task notes 3.1); passes `tests/py/test_landing.py`.
-- [ ] 3.2 The team's read runs the landing's read for a bolt whose landing worktree stands with no waiter alive, or whose every unit and chore has landed while the plan holds it, and for no other (design, Decision 3; Task notes 3.2); passes `tests/py/test_landing.py`.
-- [ ] 3.3 `crew bolt land` reads a queued landing first, so a hand close of an unrecorded landing records it before closing (design, Decision 3; Task notes 3.3); passes `tests/py/test_landing.py`.
+- [x] 3.2 The team's read runs the landing's read for a bolt whose landing worktree stands with no waiter alive, or whose every unit and chore has landed while the plan holds it, and for no other (design, Decision 3; Task notes 3.2); passes `tests/py/test_landing.py`.
+- [x] 3.3 `crew bolt land` reads a queued landing first, so a hand close of an unrecorded landing records it before closing (design, Decision 3; Task notes 3.3); passes `tests/py/test_landing.py`.
 
 ## 4. The bolt's head line and the agents' views
 

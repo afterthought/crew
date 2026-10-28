@@ -101,6 +101,7 @@ def submit(monkeypatch, tmp_path):
         return out
     monkeypatch.setattr(plan.crew, "on_machine", on_machine)
     monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+    monkeypatch.setattr(plan.crew, "crew_argv", lambda fleet, host, *args: ["crew", *args])
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: Plan())
     monkeypatch.setattr(plan, "team_state", lambda t: tmp_path / "team")
     monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", f"{label}/main"))
