@@ -557,9 +557,9 @@ def stamp(req):
     """A kit's stamp, what moves whenever anything kit() reads of it moves, read with os.stat and os.scandir alone so a
     check that nothing moved starts no process (plan.12): the size and time of every file of the kit's git folder the
     gather reads through git (HEAD, packed-refs, config, every loose ref, each worktree's HEAD and gitdir), of every file
-    of each unit's place's change folder and its archive and openspec config, and of each slots file the request
-    names, hashed to one value. None when a file it reads can't be read (read.1); a kit with no checkout stamps as
-    such, and its gather says so."""
+    of each unit's place's change folder and its archive and openspec config, of each slots file the request names,
+    and of sluice's records of the kit's queue (sluice_records), hashed to one value. None when a file it reads can't
+    be read (read.1); a kit with no checkout stamps as such, and its gather says so."""
     main, kdir = req["main"], os.path.realpath(req["dir"])
     seen = []
 
@@ -623,9 +623,28 @@ def stamp(req):
                 note(os.path.join(path, "openspec", f))
         for path in sorted(req.get("slots", {}).values()):
             note(os.path.expanduser(path))
+        records = os.path.join(common, "sluice")
+        note(os.path.join(records, ".next-id"))
+        for d in sluice_records(records):
+            tree(d)
     except OSError:
         return None
     return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:32]
+
+
+def sluice_records(records):
+    """The folders of sluice's records of a kit's queue in its git folder's sluice/, which sluice overview reads for the
+    rows' submissions: each branch's, main/ and bolt/<bolt>/, its version, branch.json, finished.jsonl, log.jsonl and
+    submissions/ (read on mac-studio, 2026-10-28, in crew.git/sluice/). The top level's dot-named entries, .logs,
+    .runs, .progress, .tmp, .places, .intake and .lock, are sluice's running state and logs, and its other files, as
+    results.jsonl, its runs' results, are no branch's queue: left out, so a test run moves no stamp until a
+    submission's record does; .next-id, which a new submission moves, is noted beside them. Empty with no sluice/, whose
+    absence the stamp notes by .next-id's."""
+    try:
+        with os.scandir(records) as it:
+            return sorted(e.path for e in it if e.is_dir(follow_symlinks=False) and not e.name.startswith("."))
+    except (FileNotFoundError, NotADirectoryError):
+        return []
 
 
 def kit(req, sites=False, running=None, board=False, fetch=False):
