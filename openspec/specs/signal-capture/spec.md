@@ -47,7 +47,7 @@ When `crew signal` refuses an agent's excerpt, its message SHALL say the words a
 An excerpt that is a tool's output as the session received it, a crew command's own output among them, SHALL be graded `verified` and asserted by a tool, whether the command ran in the foreground or its output was read from a background task's file. The words SHALL match as printed, whitespace aside; words with any other change SHALL be refused.
 
 #### Scenario: A crew command's own line
-- **WHEN** a conductor quotes, as printed, a line `crew card wait` printed in its shell
+- **WHEN** a conductor quotes, as printed, a line `crew card read` printed in its shell
 - **THEN** the signal is written `verified`, asserted by a tool
 
 #### Scenario: A background task's output read from its file

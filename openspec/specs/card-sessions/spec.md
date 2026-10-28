@@ -94,41 +94,49 @@ While a session started for a key, and for an old batch key a unit, is running, 
 - **THEN** the command prints the same link, one session runs for batch 3, and the batch's folder is not written again
 
 ### Requirement: The session's decision reaches the owner as the card's answer
-`crew card wait <key>` SHALL return when the card is answered or its session has the user's decision, whichever is first, and print which: for a batch, the card's note and every annotation word for word, closing the card with the outcome and ending the session; for a long proposal, approved, annotated with every annotation, closed by the user with no decision, or ended with no decision, the planner acting on it as on the card; for a landing, the session's decision alone, annotations word for word as notes on the landing card and an approval said to land nothing, the card left as it is and the decided session forgotten so the next `crew card session` starts it anew. A decision reached while nobody waited SHALL be returned by the next wait for that key. A wait for a key with no session and no card SHALL be refused.
+`crew card read <key>`, run by the card's owner, SHALL give what the user decided in the key's session beside the card's answer, and print which: for a batch, the card's note and every annotation word for word, closing the card with the outcome and ending the session; for a long proposal, approved, annotated with every annotation, or closed by the user with no decision, the planner acting on it as on the card, and a decided session forgotten; for a landing, `land/<bolt>`, run by the bolt's conductor on the team's host, the session's decision alone, annotations word for word as notes on the bolt's row and an approval said to land nothing, the card left as it is and the decided session forgotten so the next `crew card session land/<bolt>` starts it anew. A decision reached while nobody read SHALL be given by the next read of that key. crew SHALL keep no process waiting on a session or a card: `crew card wait` SHALL be refused at once, naming `crew card read <key>`, with nothing started.
 
 #### Scenario: Approved in the session
-- **WHEN** the user opens the link on the card of a proposal of more than fifteen new units on the phone and presses Approve
-- **THEN** the planner's `crew card wait proposal/4` returns `approved`, and the planner acts on it as an approval on the card
+- **WHEN** the user opens the link on the card of a proposal of more than fifteen new units on the phone and presses Approve, and the planner runs `crew card read proposal/4`
+- **THEN** the read prints `approved` for its reading beside the card's answer, and the planner acts on it as an approval on the card
 
 #### Scenario: Annotated in the session
-- **WHEN** the user annotates two passages of a proposal's page and sends them as feedback
-- **THEN** the wait returns `annotated` with both annotations and the user's words
+- **WHEN** the user annotates two passages of a proposal's page and sends them as feedback, and the planner runs `crew card read proposal/4`
+- **THEN** the read prints `annotated` with both annotations and the user's words
 
 #### Scenario: Annotated in a batch's session
-- **WHEN** the user sends batch 3's session with two annotations and the planner runs `crew card wait batch/3`
+- **WHEN** the user sends batch 3's session with two annotations and the planner runs `crew card read batch/3`
 - **THEN** the command prints both annotations word for word, the card is closed "Read; 2 notes sent to their teams", and the session is ended
 
 #### Scenario: Decided while the owner was down
-- **WHEN** the user taps batch 3's card while the planner is restarting, and the restarted planner runs `crew card wait batch/3`
-- **THEN** the wait returns at once with the card's note, if any, and closes the card
+- **WHEN** the user taps batch 3's card while the planner is restarting, and the restarted planner runs `crew card read batch/3`
+- **THEN** the read prints the card's note, if any, at once and closes the card
 
 #### Scenario: Closed with no decision
-- **WHEN** the user closes a long proposal's session without approving or sending feedback
-- **THEN** the wait returns that the session was closed with no decision, and the card is still the user's to answer
+- **WHEN** the user closes a long proposal's session without approving or sending feedback, and the planner runs `crew card read proposal/4`
+- **THEN** the read says the session was closed with no decision, and the card is still the user's to answer
 
 #### Scenario: Annotated in a landing's session
-- **WHEN** the user annotates a line of bolt `y`'s diff in its landing's session, "this drops the retry", and sends it, and swb-1-conductor's `crew card wait land/y` is running
-- **THEN** the wait prints the annotation word for word as a note on `y`'s landing card, the landing card is still open and unanswered, and `crew card session land/y` then starts a new session
+- **WHEN** the user annotates a line of bolt `y`'s diff in its landing's session, "this drops the retry", and sends it, and swb-1-conductor runs `crew card read land/y`
+- **THEN** the read prints the annotation word for word as a note on `y`'s landing row, the landing card is still open and unanswered, and `crew card session land/y` then starts a new session
 
 #### Scenario: Approved in a landing's session
-- **WHEN** the user presses Approve in bolt `y`'s landing's session
-- **THEN** the conductor's wait says the reading was approved and that this lands nothing, the card's approval being the word to land, and nobody is told to land `y`
+- **WHEN** the user presses Approve in bolt `y`'s landing's session and swb-1-conductor runs `crew card read land/y`
+- **THEN** the read says the reading was approved and that this lands nothing, the card's approval being the word to land, and nobody is told to land `y`
+
+#### Scenario: Nothing decided yet
+- **WHEN** swb-1-conductor runs `crew card read land/y` while its reading runs and the user has sent nothing from it
+- **THEN** the read says the reading waits on the user, and nothing is forgotten or ended
+
+#### Scenario: The old wait run
+- **WHEN** an agent runs `crew card wait batch/3`
+- **THEN** it is refused at once, naming `crew card read batch/3`, and no process is left running
 
 ### Requirement: The session ends when its card closes
 When crew closes or withdraws a card, the session started for its key SHALL be ended, and the rail's sweep SHALL end the session of any closed card or gone row. `crew card end <key>` SHALL end it as well. crew SHALL end only a plannotator process it started for that key, and only while plannotator lists that process as serving that document; a key with no session ends nothing and is not an error. When plannotator's list of sessions cannot be read, crew SHALL end nothing, SHALL keep the key's session as recorded, and SHALL say so, so a later rail read ends it.
 
 #### Scenario: A review card closed after approval
-- **WHEN** batch 3's card is closed by the planner's wait after the user's annotations
+- **WHEN** batch 3's card is closed by the planner's `crew card read batch/3` after the user's annotations
 - **THEN** the plannotator session for `batch/3` is no longer running, and its link no longer opens
 
 #### Scenario: A card withdrawn when its row ends
@@ -144,7 +152,7 @@ When crew closes or withdraws a card, the session started for its key SHALL be e
 - **THEN** crew ends nothing, says it could not read plannotator's sessions, and keeps the key's session, which the next rail read ends
 
 #### Scenario: A batch card tapped on the phone
-- **WHEN** the user taps batch 3's card and the planner's wait returns
+- **WHEN** the user taps batch 3's card, the planner is woken, and it runs `crew card read batch/3`
 - **THEN** the session for `batch/3` is no longer running, and its link no longer opens
 
 #### Scenario: A bolt landed
@@ -299,25 +307,6 @@ When a bolt's reading refuses to open as crew puts its row on the kit's landings
 - **WHEN** `y`'s row is put on the card again after a fix, by the rail's sweep, or at a preview's end, and its first start fails
 - **THEN** crew tries the reading a second time before the card is posted or changed, as at a merge's end
 
-### Requirement: A wait on a landing card starts its reading when none runs
-`crew card wait land/<bolt>`, run by the bolt's conductor on the team's host while the bolt is a row of its kit's landings card, SHALL wait on the bolt's reading and return what the user sends from it, each annotation a note on that row, an approval in it landing nothing. When it finds no session of the key, it SHALL start the reading as `crew card session land/<bolt>` does, printing its link and changing the kit's card to carry it while the card waits on the user, and SHALL then wait on it. When the reading will not open, it SHALL be refused, saying why and naming `crew card session land/<bolt>`. While the bolt is no row of an open landings card, it SHALL be refused, saying so.
-
-#### Scenario: A card raised without its reading
-- **WHEN** bolt `y`'s row says its reading could not be opened, and swb-1-conductor runs `crew card wait land/y` once the cause has passed
-- **THEN** a session starts on `y` at its head, its link is printed, `land/crew` is changed in place to carry it, and the wait waits on that session
-
-#### Scenario: Waiting again after a decision
-- **WHEN** the wait on `land/y` printed the user's annotations and forgot the decided session, and swb-1-conductor runs `crew card wait land/y` again while `y` is a row
-- **THEN** a new session starts on `y` at its head, the card carries its new link, and the wait waits on it, saying nothing about no session having been started
-
-#### Scenario: The reading still will not open
-- **WHEN** swb-1-conductor runs `crew card wait land/y`, no session of `land/y` runs, and plannotator is not on the team's host's path
-- **THEN** the wait is refused, saying the reading could not be opened and why, and naming `crew card session land/y`, and the card is not changed
-
-#### Scenario: No landing card held
-- **WHEN** swb-1-conductor runs `crew card wait land/y` and `y` is no row of an open landings card, and no session of it runs
-- **THEN** the wait is refused, saying `y` is no row of its kit's landings card, and nothing is started
-
 ### Requirement: A session takes a free port of plannotator's range wherever it is started
 crew SHALL start every card's reading session on a port range, so plannotator takes the first port in it no other session holds, whether crew runs in an agent's pane, in a shell outside any agent, or in a raise within another command. The range SHALL be the one the environment's `PLANNOTATOR_PORT` names when it names a range, and otherwise crew's own, 19432–19451.
 
@@ -363,17 +352,6 @@ When `crew card session batch/<n>` or `crew card session proposal/<n>` starts th
 - **WHEN** the planner runs `crew card session batch/3` while its session runs
 - **THEN** the same link is printed and the card is not changed
 
-### Requirement: A batch's wait starts its reading when none runs
-When `crew card wait batch/<n>` finds the planner's card of the batch open on the main level's host and no session of the key, the wait SHALL start the reading as `crew card session batch/<n>` does, changing the card to carry its link, and SHALL then wait on the card and the session together. When the reading will not open, the wait SHALL say why once, naming `crew card session batch/<n>`, and SHALL go on waiting on the card alone.
-
-#### Scenario: A card raised without its reading
-- **WHEN** batch 3's card was raised saying its reading could not be opened, and the planner runs `crew card wait batch/3` once the cause has passed
-- **THEN** a session starts on batch 3's folder, the card is changed in place to carry its link, and the wait returns on the user's word in either
-
-#### Scenario: The reading still will not open
-- **WHEN** the planner runs `crew card wait batch/3`, no session of `batch/3` runs, and plannotator is not on the main level's host's path
-- **THEN** the wait says once that the reading could not be opened and why, naming `crew card session batch/3`, leaves the card as it is, and returns when the user sends the card back
-
 ### Requirement: The rail's read tries a reading its card stands without
 On each rail read, crew's sweep SHALL try the reading of each batch card, long proposal card and kit's landings card posted on this host that waits on the user and that the run record shows standing without its reading, or a row's, its last post, change or try of the reading having refused to open it: a batch's and a proposal's as `crew card session <key>` does, a landings card's by raising it again, which tries each row's reading as `crew card session land/<bolt>` does, on the host of the team holding the bolt with the bolt read afresh; each changing the card to carry the link. A card whose last try refused under ten minutes before SHALL be left for a later read. The rail SHALL list each such try with what came of it.
 
@@ -406,7 +384,7 @@ On each rail read, crew's sweep SHALL try the reading of each batch card, long p
 - **THEN** that read does not try it
 
 ### Requirement: A later try of a reading is recorded
-Each try of a batch's, a long proposal's or a bolt's reading that is not part of its card's post or change, by `crew card session` starting it anew, by the batch's or the bolt's wait or by the rail's sweep, SHALL append one `card.reading` entry to the run record on the reading's key, in the name of its owner, the planner's for a batch's and a proposal's and the bolt's conductor's for a bolt's, `land/<bolt>`, done, or refused with crew's own message saying why. The sweep's try of a kit's landings card is its raise, recorded as the card's change.
+Each try of a batch's, a long proposal's or a bolt's reading that is not part of its card's post or change, by `crew card session` starting it anew or by the rail's sweep, SHALL append one `card.reading` entry to the run record on the reading's key, in the name of its owner, the planner's for a batch's and a proposal's and the bolt's conductor's for a bolt's, `land/<bolt>`, done, or refused with crew's own message saying why. The sweep's try of a kit's landings card is its raise, recorded as the card's change.
 
 #### Scenario: A try that refuses
 - **WHEN** the rail's sweep tries batch 3's reading and plannotator does not list it within its start time
@@ -423,3 +401,22 @@ Each try of a batch's, a long proposal's or a bolt's reading that is not part of
 #### Scenario: A landing's try off its team's host
 - **WHEN** the planner on mac-studio runs `crew card session land/y --label wldn`, and `y` is held by swb-1 on the box
 - **THEN** it is refused as before, and no entry is appended, since no reading was tried
+
+### Requirement: The rail's refresh tells a reading's owner once that the user sent it
+On each rail read and follower refresh, crew's sweep on each host SHALL tell the owner of each reading there that the user sent, approved or annotated, and the owner has not read, once, through `crew tell`, naming `crew card read <key>` and no word of the user's; it SHALL mark the reading told once the tell goes through, and try again at the next refresh when it does not. A reading closed undecided, read or told SHALL be told nothing.
+
+#### Scenario: A landing's reading sent
+- **WHEN** the user sends bolt `y`'s reading with one annotation, and the follower on swb-1's host refreshes
+- **THEN** swb-1-conductor is told once that `land/y`'s reading was sent and to run `crew card read land/y`, the tell holds none of the annotation's words, and the next refresh tells nothing
+
+#### Scenario: The owner is down
+- **WHEN** the user sends batch 3's reading with notes while the planner is not up, and the refresh's tell to it fails
+- **THEN** the reading stays untold, and the first refresh after the planner is up tells it
+
+#### Scenario: Read before the refresh
+- **WHEN** the planner runs `crew card read batch/3` after the user sent its reading and before any refresh
+- **THEN** no refresh tells the planner of it
+
+#### Scenario: Closed with no decision
+- **WHEN** the user closes proposal 4's reading without approving or sending feedback
+- **THEN** no refresh tells the planner anything

@@ -25,8 +25,10 @@ crew trace, the batches, the rail, the board and the page, reads the branch alon
                 [--id I]                  append one entry, with the id a commit already names if given; prints its id
   record.py session                       the caller's Claude session as <host>:<id>, what a forwarded command carries
   record.py events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-                                          the entries on the partition's branch, in time order; --follow reads it again
-                                          every five seconds
+                                          the entries on the partition's branch, in time order; --follow reads the
+                                          branch as this host's cache holds it each time its tip moves, which this
+                                          host's writes move at once, and fetches it once a minute where the host's
+                                          follower does not, so another host's entries show within the minute
   record.py events --push [--label L]     push what of this host's entries a refused push left, each a commit of its own
   record.py trace <object> [--label L]    one bolt's, unit's, chore's or signal's history, read from the entries alone
 
@@ -46,6 +48,9 @@ import crew  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 ROOT = pathlib.Path.home() / ".local/state/crew"
+# The clock the host's follower (board.py) and crew events --follow fetch a partition's branch on, never faster
+# (plan.12's reading of 2026-10-28); crew's tests set CREW_TEST_PERIOD, so no tick of it falls inside a step (tests.8).
+PERIOD = 60
 DESCRIPTOR = """\
 # crew's run record: one entry per act of crew's that moved work, appended by crew on this host and never
 # rewritten. Read it with recsel, or with crew events and crew trace.
@@ -341,7 +346,7 @@ def on_branch(fleet, label, since_day, tips=None):
     if not tip:
         return []
     out = []
-    for path in plan.git(repo, "ls-tree", "-r", "--name-only", tip, "--", "runs/").splitlines():
+    for path in plan.paths_at(repo, tip, "runs/"):
         if path.endswith(".rec") and pathlib.PurePath(path).stem >= since_day:
             out += parse(plan.show(repo, tip, path) or "")
     return out
@@ -475,27 +480,66 @@ def fresh(seen, entries):
     return sorted((e for e in entries if e["Id"] not in seen), key=lambda e: (e["At"], e["Id"]))
 
 
+def follow_fetches(label, followed_here, follower, last, now, period=PERIOD):
+    """Whether crew events --follow fetches a partition's branch now (plan.12's reading of 2026-10-28): never while the
+    host's follower fetches it, the partition being one it follows (followed_here, board.labels_here) while someone
+    holds the host's follower lock (follower, board.follower_here: job, tab, or unknown, a holder whose line is not
+    written yet); else once its own clock is due, period seconds after its last fetch (last, None when it has made none
+    since a SIGUSR1). A decision on plain facts (code.7)."""
+    if label in followed_here and follower != "none":
+        return False
+    return last is None or now - last >= period
+
+
+def changed_files(was, now, day):
+    """The run-record files a follow reads again at a moved tip: each of the day the follow began or later whose blob is
+    not the one it last read ({path: blob} then and now), in order."""
+    return sorted(p for p, b in now.items() if p.endswith(".rec") and pathlib.PurePath(p).stem >= day and was.get(p) != b)
+
+
 def follow(fleet, labels, about):
-    """Each entry of the labels as it reaches their branches, one line each, until interrupted: every five seconds
-    each branch is fetched afresh and read from the day the follow began, and what it has not printed is printed
-    (fresh). A branch's first read prints nothing, being what was there before. A branch that cannot be read is said
-    once, until it reads again. It asks no host for anything (read.5)."""
+    """Each entry of the labels as it reaches their branches, one line each, until interrupted. Each second it reads
+    each branch's tip as this host's cache holds it, with no process (plan.tip_here), and when the tip moved, reads
+    again only the run-record files of the day the follow began or later whose blob changed (changed_files), printing
+    what it has not printed (fresh). It fetches each branch at its start, and then once a minute only for a partition
+    the host's follower does not fetch (follow_fetches), which moves the cache itself, as a write on this host does;
+    SIGUSR1 makes its next fetch now. A branch's first read prints nothing, being what was there before. A branch that
+    cannot be read is said once, until it reads again. It asks no host for anything (read.5)."""
     import time
+    import board  # board.py imports this module; the host's follower's lock and partitions are its
     import plan  # plan.py imports this module; its git layer is only needed here
 
     def stop(*_):
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGHUP, stop)
+    tick = {"now": False}
+    signal.signal(signal.SIGUSR1, lambda *_: tick.update(now=True))
+    period, here = int(os.environ.get("CREW_TEST_PERIOD") or PERIOD), crew.this_host()
     day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-    seen, said = {}, {}
+    seen, said, tips, files, last = {}, {}, {}, {}, {}
     try:
         while True:
-            new = []
+            again, tick["now"] = tick["now"], False
+            followed, follower, new = set(board.labels_here(fleet, here)), None, []
             for l in labels:
+                repo, ref = plan.state_of(fleet, l)
                 try:
-                    with plan.READ.fresh():
-                        got = on_branch(fleet, l, day)
+                    if l not in last:
+                        fetch = True
+                    else:
+                        follower = follower or board.follower_here()
+                        fetch = follow_fetches(l, followed, follower, None if again else last[l], time.monotonic(), period)
+                    if fetch:
+                        last[l] = time.monotonic()
+                        plan.fetch(repo, ref, fresh=True)
+                    tip = plan.tip_here(repo, ref)
+                    tip is not None or fail(f"its tip in crew's cache of {repo} can't be read")
+                    if l in seen and tip == tips.get(l):
+                        continue
+                    listing = plan.blobs_at(repo, tip, "runs/") if tip else {}
+                    changed = changed_files(files.get(l, {}), listing, day)
+                    got = [e for t in plan.cat_file(repo, [listing[p] for p in changed]) for e in parse(t or "")]
                 except Refusal as e:
                     why = " ".join(str(e).split())
                     if said.get(l) != why:
@@ -505,11 +549,11 @@ def follow(fleet, labels, about):
                 said.pop(l, None)
                 if l in seen:
                     new += fresh(seen[l], got)
-                seen[l] = seen.get(l, set()) | {e["Id"] for e in got}
+                seen[l], tips[l], files[l] = seen.get(l, set()) | {e["Id"] for e in got}, tip, listing
             for e in fresh((), new):
                 if not about or names(e, about):
                     print(line(e), flush=True)
-            time.sleep(5)
+            time.sleep(1)
     except KeyboardInterrupt:
         pass
 

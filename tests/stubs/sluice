@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Stub sluice for crew's tests, answering the reads crew makes of it as sluice 0.18.0 does, and its previews as sluice
 # 0.29.3 does. `sluice overview --json` prints $CREW_TEST_ROOT/sluice-overview.json while it exists, else the document
-# sluice prints for a repository whose branches have no records yet; `sluice status <id> --json` prints
+# sluice prints for a repository whose branches have no records yet; `sluice overview --json --watch` prints that
+# document as one line at once and again whenever it changes but for its time, as sluice 0.51.3 does, until it is
+# ended, reading no git, so a test's shims on git see the follower's own calls alone; `sluice status <id> --json` prints
 # $CREW_TEST_ROOT/sluice-status-<id>.json while it exists, else sluice's not-found error on standard output, exiting 1.
 # `sluice preview <branch> <revision> [--wait] --json` refuses, as sluice does, a revision whose .config/sluice.toml has
 # no [preview] table, exiting 2; else it gives back the preview of that revision when one is recorded, starting
@@ -31,7 +33,9 @@
 # names, a line `<task>: <why>`, with no hash and its why as `not_run`; a conflict's carries `conflict`, its paths the
 # ones the stub wt-submit names and `with` empty; the record listed by `sluice status` the same; `sluice wait` of an
 # id it never gave exits 1
-# with sluice's not-found error. To a branch whose policy takes pull requests (route.py --pulls) it answers as sluice
+# with sluice's not-found error, but for one the test left standing in the queue, $CREW_TEST_ROOT/sluice-stands-<id>
+# naming the place it came from, which the first wait on it lands onto main from that place, as sluice's round lands a
+# queued submission, and answers as it answers any (a wait beside it waiting on that one's record). To a branch whose policy takes pull requests (route.py --pulls) it answers as sluice
 # 0.36.4 does once intake has queued the pull request (crates/sluice/src/lib.rs submit_pull): the open one from this
 # worktree's branch into it, the stub gh's, opened when there is none, its number and no submission,
 # {"branch","pull_request","state"}, its submission made from the place pull/<n>, and the pull request merged when it
@@ -57,6 +61,28 @@ set -uo pipefail
 if [[ $* == --version ]]; then
   if [[ -e ${CREW_TEST_ROOT:-}/sluice-version ]]; then cat "$CREW_TEST_ROOT/sluice-version"; else echo "sluice 0.36.4"; fi
   exit 0
+fi
+if [[ $* == "overview --json --watch" ]]; then
+  exec python3 -c '
+import json, os, sys, time
+path, host, here = sys.argv[1:]
+last = None
+while True:
+    try:
+        with open(path) as f:
+            doc = json.load(f)
+    except FileNotFoundError:
+        doc = {"branches": [], "host": host, "previews": [], "repository": here, "schema": "sluice/overview@1", "sessions": []}
+    doc["at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    same = {k: v for k, v in doc.items() if k != "at"}
+    if same != last:
+        last = same
+        try:
+            print(json.dumps(doc), flush=True)
+        except BrokenPipeError:
+            sys.exit(0)
+    time.sleep(0.2)
+' "${CREW_TEST_ROOT:?}/sluice-overview.json" "${CREW_TEST_HOST:-?}" "$(pwd -P)"
 fi
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
   printf '{"error":{"kind":"internal","message":"opening the repository at %s: not a git repository","next":[]}}\n' "$(pwd -P)"
@@ -149,6 +175,18 @@ print(p["number"], "draft" if p["isDraft"] else "ready")' "$CREW_TEST_ROOT/gh-pu
     ;;
   wait\ *\ --timeout\ *\ --json)
     f=$common/stub-sluice-wait-${2:-}.json
+    stands=${CREW_TEST_ROOT:?}/sluice-stands-${2:-}
+    if [[ ! -e $f ]] && mkdir "$stands.lock" 2>/dev/null; then
+      if [[ -e $stands && ! -e $f ]]; then  # a submission the test left standing, landed now from its place, as a round lands one
+        (cd "$(cat "$stands")" && CREW_TEST_LOG= wt-submit main --no-remove) >/dev/null 2>&1; rc=$?
+        state=landed; (( rc == 1 )) && state=failed; (( rc == 2 )) && state=conflict
+        jq -n --argjson id "$2" --arg state "$state" --arg path "$(cat "$stands")" --argjson rc "$rc" \
+          '{schema: "sluice/submission@1", id: $id, branch: "main", state: $state, from: {path: $path}, rc: $rc}' > "$f.new" && mv "$f.new" "$f"
+        rm -f "$stands"
+      fi
+      rmdir "$stands.lock"
+    fi
+    for _ in $(seq 6000); do [[ -e $f || ! -e $stands.lock ]] && break; read -rt 0.1 _ <> <(:) || true; done  # another wait landing it
     if [[ ! -e $f ]]; then
       printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "${2:-}"
       exit 1
