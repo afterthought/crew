@@ -6,10 +6,12 @@
 # goes with the host's next entry, crew events --push pushes what is left, and an entry cut short stops the record's
 # push, not the write; an agent's entry names its session as herdr has it; a refused write is an entry and a read none;
 # crew events and crew trace read the branch alone, a host that does not answer hiding nothing it pushed, and --follow
-# prints what another host pushes; none of them asks a host. What an entry holds, which entries a push takes and how their commits are worded, how a
+# prints what another host pushes once it fetches, at its start and on its clock, which a signal moves; none of them
+# asks a host. What an entry holds, which entries a push takes and how their commits are worded, how a
 # trace walks and what events shows, the act and objects of each plan write, and how plans are joined are logic cases
 # (tests/py/test_record.py); two processes appending at once, and a chain of entries landing on a moved branch, contract
 # cases (tests/contract/test_record.py); each step here checks a command's wiring once.
+# Reads: plugin/lib/board.py plugin/lib/sites.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 box=chuck-herdr-alpha
@@ -174,19 +176,29 @@ HOST=$box expect_ok crew events --push
 eq "$(onbranch $box | wc -l | tr -d ' ')" "$(( $(wc -w <<<"$carried") + 1 ))"
 ok "a host that lost its run record after pushing it keeps its entries on the branch, and adds new ones beside them"
 
+# The follow, with no follower on mac-studio, fetches wldn's branch at its start and on its own clock, which the test
+# sets past the test's length so only its signal moves it (tests.8); a shim on git counts its fetches of the branch.
 cache=$(home_of mac-studio)/.cache/crew/git/WilldanGroup/crew-state.git
-rm -f "$cache/FETCH_HEAD"; : > "$CREW_TEST_LOG"
-( export CREW_TEST_HOST=mac-studio HOME=$(home_of mac-studio); cd "$HOME" && exec "$CREW/plugin/bin/crew" events --follow ) > "$T/follow" 2>&1 &
+rm -f "$cache/FETCH_HEAD"; : > "$CREW_TEST_LOG"; : > "$T/fetches"; mkdir -p "$T/shim"
+printf '#!/usr/bin/env bash\nif [[ " $* " == *" fetch "*refs/crew/wldn/main* ]]; then echo fetch >> %q; fi\nexec %q "$@"\n' \
+  "$T/fetches" "$(command -v git)" > "$T/shim/git"; chmod +x "$T/shim/git"
+fetches() { wc -l < "$T/fetches" | tr -d ' '; }
+( export CREW_TEST_HOST=mac-studio HOME=$(home_of mac-studio) CREW_TEST_PERIOD=3600 PATH="$T/shim:$PATH"
+  cd "$HOME" && exec "$CREW/plugin/bin/crew" events --follow ) > "$T/follow" 2>&1 &
 fpid=$!
 # Its first read is made once it has fetched the branch: what the branch held then is not printed.
 fetched() { [[ -f $cache/FETCH_HEAD ]]; }
 until_ok fetched || fail "crew events --follow never read the branch"
 emit $box --act stage.start --on stage/a/construct --on unit/a --why "unit(a): start construct" >/dev/null
+eq "$(fetches)" "1"
+lacks "$(cat "$T/follow")" "stage.start"
+kill -USR1 "$fpid"
 follows() { grep -q "stage.start" "$T/follow"; }; until_ok follows || true
 kill "$fpid"; wait "$fpid" 2>/dev/null || true
 has "$(cat "$T/follow")" "stage/a/construct unit/a"; lacks "$(cat "$T/follow")" "unit.add"
+eq "$(fetches)" "2"
 lacks "$(calls)" " ssh "
-ok "crew events --follow prints an entry another host pushes while it runs, and asks no host for it"
+ok "crew events --follow prints an entry another host pushes once it is told to tick, fetching at its start and once per tick and never otherwise, and asks no host for it"
 
 # An entry cut short in the host's run record fails recfix --check: the record's push is refused, naming the file, with
 # nothing of it pushed, while the write whose entry it held back lands; once the entry is gone the record is pushed.

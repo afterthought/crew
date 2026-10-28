@@ -1,7 +1,7 @@
 // crew's mod: each crew agent's view of its partition's board, drawn in the band above its prompt. The views are
 // crew's (board.py agent_views): the host's follower, swancloud's job running crew _follow or else the console's rail
-// tab, writes them beside the board's frame each time it refreshes (crew _views), and this module finds its own agent's
-// and draws it, deciding nothing itself (code.7). It
+// tab, writes them beside the board's frame each time it refreshes (board.py Follower), and this module finds its own
+// agent's and draws it, deciding nothing itself (code.7). It
 // starts no process and costs no tokens: every few seconds it looks at the file's time, and reads the file only when
 // that has moved (state.4: a frame is one redraw, not state).
 //
@@ -9,7 +9,9 @@
 // changes this module and board.agent_views together, each with its cases: tests/py/test_board.py pins every key this
 // reads from the views file, and plugin/tests/status.test.ts what it draws (code.8).
 
-// How often the file's time is looked at; the host's follower writes it every 30 seconds and on each run-record entry.
+// How often the file's time is looked at; the host's follower writes it once a minute on its clock, and within seconds
+// of a write on this host or a kit's queue moving in sluice's overview watch; a frame is stale after three minutes
+// (its stale_after_ms).
 const EVERY_MS = 5000
 
 // Who this session is, where its partition's views are, and what was last read from them.
