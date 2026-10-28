@@ -18,11 +18,11 @@ What is still open now that every page is written. A working file: an item leave
 
 - **Move 1, sluice (now):** landed read from sluice's record (0044's unit, in flight); one driver per host bound by swancloud and outcomes pushed (sluice 0068, 0046 part 5).
 - **Move 2, crew's lasting reading (now):** no waiting process of crew's, a session's start listing its open waits, submission numbers on rows (0046 parts 1 to 4); one follower per host (`plan.12`).
-- **Move 3, Flume (when its first release runs a kind on a host):** stages as Flume places, waits, stuck and lost reads, and a team's room from Flume's status (0045 point 5); the slot machinery and the transcript reads leave crew whole.
+- **Move 3: skipped (record 0049).** Flume's first build carries its record 0011, so crew goes from move 2 to move 5.
 - **Move 4, Tailrace (when its push profile holds):** the deployer's mechanics leave swancloud.
 - **Move 5, teams out of crew (when Flume runs a unit's whole state machine):** the conductor, team ops, the team, the dispatcher, the slot bound, the give and team tells leave crew; capacity is Flume's room per host; the user chooses on the rail what runs and lands (record 0047 as amended 2026-10-28, accepted; the user's order: fires, Flume, then this).
-- **Move 6, roles on demand (after move 5):** no crew role stands; each is a kind Flume launches on a nudge naming a record, one run at a time per role and partition; the operator folds into `crew send` (record 0047 as amended, accepted).
-- **Stopgaps until move 3:** a slot lent to its bolt's fix (0045); a held unit's wait on the row (0044).
+- **Move 6, roles on demand (after move 5):** no crew role stands; each is a kind Flume launches on a nudge naming a record, one run at a time per role and partition; every place's waiter is a role's address, a role with no live run woken by Flume on an end untold to it or a carrier's `flume wake`, and a role's work that lands is a place (record 0049; flume record 0013); the operator folds into `crew send` (record 0047 as amended, accepted).
+- **Stopgaps until move 5 (record 0049):** a slot lent to its bolt's fix (0045); a held unit's wait on the row (0044).
 
 ## Accepted, not built
 
