@@ -582,6 +582,24 @@ class TestRefresh:
         assert len(self.reads) == 2 and self.handed[-1] == {(BOX, "/kit/main"): [answer["submissions"], None]}
         assert w.opened == [(BOX, "/kit/main")] and w.closed == [], "a watch was opened twice"
 
+    def test_a_new_watch_starts_from_the_overview_its_kits_gather_read_so_its_first_line_moves_nothing(self, follower, monkeypatch):
+        """A kit's queue is read once: the gather's own overview is the kept line the watch's first is compared with."""
+        self.req = {"main": "/kit/main", "bolts": ["te"]}
+        follower.watches = w = self.Watching()
+        gathered = board.flow_read
+
+        def with_overview(fleet, labels, sweep=False):
+            got = gathered(fleet, labels, sweep)
+            plan.READ.follower.used[BOX]["/kit/main"][1]["overview"] = self.QUEUED
+            return got
+        monkeypatch.setattr(board, "flow_read", with_overview)
+        follower.refresh()
+        assert w.states == {(BOX, "/kit/main"): {"doc": self.QUEUED}}
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:30:00Z")}
+        assert follower.look(self.FLEET) == follower.seen, "the watch's first line woke the follower"
+        follower.refresh()
+        assert len(self.reads) == 1 and "submissions" not in follower.kept.kits[BOX]["/kit/main"][1], "the first line was taken as a move"
+
     def test_a_watch_that_ended_says_why_on_its_rows_and_is_opened_and_asked_once_at_the_next_tick(self, follower, monkeypatch):
         """The crew-board spec, A watch ends: the ssh holding it dropped."""
         self.req = {"main": "/kit/main", "bolts": ["te"]}
@@ -604,7 +622,7 @@ class TestRefresh:
     def test_every_refresh_reckons_a_batch_from_the_kept_read_and_one_told_is_not_reckoned_again_at_that_tip(self, follower, monkeypatch):
         """The crew-board spec, A batch made due by the hours: nothing moves, and each refresh reckons from the kept read."""
         reckoned = []
-        monkeypatch.setattr(plan, "reckon_batches", lambda fleet, found, read, skip=(): reckoned.append(set(skip)) or (["wldn"] if not skip else []))
+        monkeypatch.setattr(plan, "reckon_batches", lambda fleet, found, read, skip=(): reckoned.append(set(skip)) or ({"wldn": True} if not skip else {}))
         self.found = [("wldn", "o/state", "a" * 40, None)]
         follower.refresh()
         follower.refresh()
@@ -615,6 +633,19 @@ class TestRefresh:
         follower.refresh()
         follower.refresh()
         assert len(self.reads) == 2 and reckoned[-1] == set(), "a partition told at an older tip was not reckoned at the new one"
+
+    def test_a_tell_that_did_not_go_through_is_tried_again_at_the_next_tick_and_not_between(self, follower, monkeypatch):
+        """wldn's planner is not up: the tell starts herdr, so it is not made at every refresh."""
+        reckoned = []
+        monkeypatch.setattr(plan, "reckon_batches", lambda fleet, found, read, skip=(): reckoned.append(set(skip)) or ({} if skip else {"wldn": False}))
+        monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
+        monkeypatch.setattr(type(follower), "ask", lambda self, fleet: None)
+        self.found = [("wldn", "o/state", "a" * 40, None)]
+        follower.refresh()
+        follower.refresh()
+        follower.refresh()
+        follower.tick()
+        assert len(self.reads) == 1 and reckoned == [set(), {"wldn"}, set()]
 
     def test_a_dev_server_started_by_hand_is_drawn_after_the_next_tick_with_nothing_gathered(self, follower, monkeypatch):
         """The crew-board spec, A dev server started by hand: the tick reads the box's portless routes again."""

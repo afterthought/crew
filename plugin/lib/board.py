@@ -1262,6 +1262,15 @@ class Watches:
         self.ended.add(key)
         self.states[key] = {"why": f"its overview watch ended ({why}), and is opened again at the follower's next tick"}
 
+    def seed(self, kits):
+        """Each watched kit nothing has read the queue of yet takes the overview its gather read (gather.kit's
+        overview), so the watch's first line, the same but for its time, moves nothing: a kit's queue is read once.
+        Whether any did."""
+        new = {key: {"doc": answer["overview"]} for host, ks in kits.items() for m, (_, answer) in ks.items()
+               if (key := (host, m)) in self.running and key not in self.states and isinstance((answer or {}).get("overview"), dict)}
+        self.states.update(new)
+        return bool(new)
+
     def took(self, asked):
         """The overviews the clock's tick asked (stamps_now), each the kit's queue now."""
         self.states.update(asked)
@@ -1303,7 +1312,8 @@ class Follower:
         self.labels, self.fleet_, self.tick_at, self.seen, self.unfetched, self.here = [], None, 0.0, None, {}, {}
         # the overview watches, None for a follower that keeps none (crew _follow --once), whose gathers read the queues
         self.watches = Watches() if watch else None
-        # the partitions whose planner a refresh told a batch is due, by the state tip its read held (plan.batch_told)
+        # the partitions a refresh found a batch due for, by the state tip its read held and whether the tell went
+        # through (plan.batch_told)
         self.told = {}
         # the clock's ticks, whether the last card sweep left a card, and the cards' stamp (cards_stamp) as of the last tick
         self.ticks, self.left, self.cards = 0, False, None
@@ -1409,12 +1419,15 @@ class Follower:
         if how == "read":
             self.read(fleet, looked, stamps)
         else:
-            self.render(fleet, m, stamps)
+            self.render(fleet, m, stamps, tick)
         if self.last["read"] is not None:
             self.reroute(routes, now["routes"])
         if self.watches is not None and self.last["read"] is not None:
             self.requeue(m.get("queues", ()))
             self.watches.sync(fleet, queue_kits(self.kept.kits), tick=False)
+            if self.watches.seed(self.kept.kits):  # the overviews the read's gathers made, each new watch's first line
+                self.last["stamps"] = dict(self.last["stamps"], queues=self.watches.stamp())
+                self.seen = dict(self.seen, queues=self.watches.stamp())
         self.write(fleet)
 
     def reroute(self, hosts, routes):
@@ -1462,19 +1475,20 @@ class Follower:
             self.cards = cards_stamp(*self.kept.cards, False, self.ticks, self.kept.listed)
         if read is not None:
             self.left = card_left(read.get("swept"))
-            self.told = {l: tip for l, _, tip, _ in read["found"] if l in (read.get("told") or ())}
+            self.told = {l: (tip, read["told"][l]) for l, _, tip, _ in read["found"] if l in (read.get("told") or {})}
             self.last = {"read": read, "stamps": dict(looked, kits=kept_stamps(self.kept.kits), readings=stamps["readings"], cards=self.cards),
                          "said": said.getvalue().strip()}
         else:
             self.last = {"read": None, "stamps": None, "said": said.getvalue().strip()}
 
-    def render(self, fleet, m, stamps):
+    def render(self, fleet, m, stamps, tick=False):
         """Nothing the read rests on moved: the kept read stands, its sweeps' acts are not said again, and only the sweeps
         of what moved run against it (sweeps_after, the card-sessions spec): the card sweep with the clock's last answers
         when the cards moved, and the card sessions swept on each host whose readings folder moved and each the last
         refresh could not check; what they did is said, and the stamps they rest on kept. Whatever moved, a batch due by
         the hours is reckoned from the kept read and the time now, reading nothing (plan.reckon_batches), and a partition
-        told at its read's tip is not told again (plan.batch_told)."""
+        told at its read's tip is not told again, nor one whose tell did not go through before the clock's next tick
+        (plan.batch_told)."""
         read = self.last["read"]
         todo = sweeps_after(m, readings_hosts(fleet, self.labels), read.get("unchecked"))
         swept = {"done": [], "unswept": []}
@@ -1487,8 +1501,8 @@ class Follower:
                                                read.get("batched") or {}, todo["sessions"]) if todo["sessions"] else ([], [])
         said = io.StringIO()
         with contextlib.redirect_stderr(said):
-            told = plan.reckon_batches(fleet, read["found"], read, plan.batch_told(self.told, read["found"]))
-        self.told.update({l: tip for l, _, tip, _ in read["found"] if l in told})
+            told = plan.reckon_batches(fleet, read["found"], read, plan.batch_told(self.told, read["found"], tick))
+        self.told.update({l: (tip, told[l]) for l, _, tip, _ in read["found"] if l in told})
         self.last = dict(self.last, said=said.getvalue().strip(), read=dict(read, swept=swept, moved={"raised": [], "unread": []}, ended=ended, unchecked=unchecked),
                          stamps=dict(self.last["stamps"], readings=stamps["readings"], cards=self.cards, queues=stamps.get("queues", {})))
 

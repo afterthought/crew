@@ -11705,27 +11705,32 @@ def reckon_batches(fleet, found, read=None, skip=()):
     of its teams that tells the planner, since a batch is told once; what crew can't read is said on standard error and
     the rail read stands. With read, the rail read's, the plan, the run record and the stages are taken from it and
     nothing is read again, as the host's follower reckons at every refresh, its read kept; a partition in skip, one the
-    follower told at its read's tip already (batch_told), is not reckoned. Returns the partitions whose planner it told."""
-    told = []
+    follower told at its read's tip already (batch_told), is not reckoned. Returns each partition a batch was due for,
+    with whether its planner was told, {label: told}."""
+    told = {}
     for label, names in batch_reckoners(found, fleet["teams"], crew.this_host()).items():
         if label in skip:
             continue
         for name in names:
             try:
-                if batch_check(fleet, fleet["teams"][name], read):
-                    told.append(label)
-                    break
+                said = batch_check(fleet, fleet["teams"][name], read)
             except Refusal as e:
                 print(f"no batch reckoned for {name}: {e}", file=sys.stderr)
+                break
+            if said is not None:
+                told[label] = said
+            if said:
                 break
     return told
 
 
-def batch_told(told, found):
-    """The partitions the host's follower told a batch is due at the tip its read still holds, {label: tip} the tips it
-    told at: not reckoned again until the read takes in the batch.due entry that tell wrote, which moves the tip. A
-    decision on plain facts (code.7)."""
-    return {label for label, _, tip, _ in found if tip and told.get(label) == tip}
+def batch_told(told, found, tick):
+    """The partitions the host's follower reckons no batch for at a refresh (Decision 8 of
+    a-rail-refresh-after-no-change-reads-nothing), from what it told at which tip, {label: (tip, whether the tell went
+    through)}: one told at the tip its read still holds, until the read takes in the batch.due entry that tell wrote,
+    which moves the tip; and one whose tell did not go through, its planner not up, until the clock's next tick (tick),
+    so it is tried again once a minute and not at every refresh. A decision on plain facts (code.7)."""
+    return {label for label, _, tip, _ in found if tip and label in told and told[label][0] == tip and (told[label][1] or not tick)}
 
 
 def batch_check(fleet, t, read=None):
