@@ -2123,6 +2123,63 @@ def card_heads(text):
     return out
 
 
+def at_head(head, now):
+    """Whether a head recorded short or whole (head) is the bolt's head now (now), either a prefix of the other."""
+    return bool(head and now) and (now.startswith(head) or head.startswith(now))
+
+
+def left_marks(entries, key):
+    """What the run record holds of the bolts the user left on a kit's landings card (rail-cards "A bolt the user left
+    stays left until they tick it"), from the entries, oldest first: the last set a raise of the card under key recorded
+    (a landing.left not refused with that Key, its Heads <bolt>@<head7> each), {bolt: head7}, and each stop main-level
+    ops recorded after it on the user's words in its pane (bolt.leave, its Head), [(bolt, head)]; less any bolt landed
+    on the user's words in ops's pane since (a bolt.submit not refused naming the transcript record they were read
+    from). The bolts of every kit are among the stops, which the kit's heads sort out (left_now, left_of)."""
+    recorded, stops = {}, []
+    for e in entries:
+        act = e.get("Act")
+        if e.get("Refused") or act not in ("landing.left", "bolt.leave", "bolt.submit"):
+            continue
+        bolt = next((o[5:] for o in e.get("On") or [] if o.startswith("bolt/")), None)
+        if act == "landing.left" and e.get("Key") == key:
+            recorded, stops = {b: h for b, h, _ in card_heads(e.get("Heads"))}, []
+        elif act == "bolt.leave" and bolt and e.get("Head"):
+            stops.append((bolt, e["Head"]))
+        elif act == "bolt.submit" and bolt and e.get("From"):
+            recorded.pop(bolt, None)
+            stops = [(b, h) for b, h in stops if b != bolt]
+    return recorded, stops
+
+
+def left_now(card, ticked, heads, recorded, stops):
+    """The bolts of a kit's landings card the user left, at a raise of it (rail-cards "A bolt the user left stays left
+    until they tick it", "A bolt stopped in ops's pane is shown as left"), from facts alone (code.7): card, the card ops
+    holds as kit_card_state reads it, {status, heads}, or None; ticked, the bolts the user ticked on it once answered;
+    heads, {bolt: its head now} of each row of the kit read now; recorded and stops, as left_marks gives them. A bolt at
+    its head now is left when it is marked left on the card held while it waits, the card held is answered and the user
+    did not tick its row, or the record names it left or stopped and the card held has not ticked it; one the user
+    ticked, one at another head and one that is no row are not. {bolt: head7}."""
+    status = (card or {}).get("status")
+    ticks = set(ticked or []) if status == "answered" else set()
+    out = {}
+    for b, h, marked in (card or {}).get("heads") or []:
+        if at_head(h, heads.get(b)) and (marked if status == "waiting" else status == "answered" and b not in ticks):
+            out[b] = heads[b][:7]
+    for b, h in list(recorded.items()) + list(stops):
+        if b not in ticks and at_head(h, heads.get(b)):
+            out.setdefault(b, heads[b][:7])
+    return out
+
+
+def left_of(entries, key, heads):
+    """The bolts of a kit's landings card the user left, as the run record holds them (left_marks): the last set its
+    raise recorded and each stop recorded since, kept only at the bolt's head now (heads, {bolt: head}); a tick on a
+    send, read by the raise that recorded the set, a moved head or a landing on the user's words ending one. Which a
+    conductor's wait and the rail read, neither seeing the card. {bolt: head7}."""
+    recorded, stops = left_marks(entries, key)
+    return {b: heads[b][:7] for b, h in list(recorded.items()) + stops if at_head(h, heads.get(b))}
+
+
 def landings_sent(entries, key, owner):
     """The bolts the user's send on a kit's landings card still landed when a new card followed it (landings_step's
     follow), from the run record's entries, oldest first: {bolt: the head they ticked}, from the Heads of each close of

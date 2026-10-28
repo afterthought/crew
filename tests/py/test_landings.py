@@ -834,6 +834,74 @@ def test_the_ticked_bolts_are_read_in_the_cards_order_from_each_form_of_answer()
     assert plan.ticked_of({"status": "pending", "turn": "you"}, heads) is None
 
 
+# ------------------------------------------------------------------------------------- which bolts are left
+
+def left_set(heads, at="2026-10-24T10:00:00Z"):
+    """A raise's record of the bolts the user left on land/crew, as landing.left."""
+    return dict(Act="landing.left", On=["kit/crew"], Key="land/crew", At=at, **({"Heads": heads} if heads else {}))
+
+
+def stop(bolt, head=H1):
+    """main-level ops's record of the user's words stopping a bolt's landing, as bolt.leave."""
+    return dict(Act="bolt.leave", On=[f"bolt/{bolt}"], Head=head, From=["session/s-1/u-7"], Chars=38)
+
+
+def pane_landed(bolt):
+    return dict(Act="bolt.submit", On=[f"bolt/{bolt}"], Head=H1, From=["session/s-1/u-9"], Chars=20)
+
+
+NOW = {"y": H1, "z": H1}
+
+
+class TestWhichBoltsAreLeft:
+    """rail-cards "A bolt the user left stays left until they tick it" and "A bolt stopped in ops's pane is shown as
+    left": plan.left_now at a raise, from the card held, the ticks, the heads and the run record; plan.left_of from the
+    run record alone, as a conductor's wait and the rail read it."""
+
+    def test_a_bolt_marked_left_on_a_waiting_card_is_left_at_its_head(self):
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234:left"), None, NOW, {}, []) == {"z": "abc1234"}
+
+    def test_a_bolt_the_user_did_not_tick_on_an_answered_card_is_left(self):
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), ["y"], NOW, {}, []) == {"z": "abc1234"}
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), [], NOW, {}, []) == {"y": "abc1234", "z": "abc1234"}
+
+    def test_a_left_bolt_stays_left_across_the_close_of_one_card_and_the_post_of_the_next(self):
+        assert plan.left_now(None, None, NOW, {"z": "abc1234"}, []) == {"z": "abc1234"}
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234"), None, NOW, {"z": "abc1234"}, []) == {"z": "abc1234"}
+
+    def test_a_stop_in_ops_pane_is_left(self):
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234"), None, NOW, {}, [("z", H1)]) == {"z": "abc1234"}
+        assert plan.left_now(None, None, NOW, {}, [("z", H1)]) == {"z": "abc1234"}
+
+    def test_a_tick_on_the_card_held_ends_it(self):
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), ["y", "z"], NOW, {"z": "abc1234"}, [("y", H1)]) == {}
+
+    def test_a_moved_head_ends_it(self):
+        moved = {"y": H1, "z": H2}
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234:left"), None, moved, {"z": "abc1234"}, [("z", H1)]) == {}
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), ["y"], moved, {}, []) == {}
+
+    def test_a_bolt_that_is_no_row_now_is_not_left(self):
+        assert plan.left_now(waiting("z@abc1234:left"), None, {"y": H1}, {"z": "abc1234"}, [("z", H1)]) == {}
+
+    def test_the_record_gives_the_last_set_and_each_stop_since_at_the_bolts_head_now(self):
+        entries = [left_set("y@abc1234"), stop("w"), left_set("z@abc1234"), stop("y"), stop("v", H2)]
+        assert plan.left_marks(entries, "land/crew") == ({"z": "abc1234"}, [("y", H1), ("v", H2)])
+        assert plan.left_of(entries, "land/crew", {"y": H1, "z": H1, "v": H1, "w": H1}) == {"z": "abc1234", "y": "abc1234"}
+        assert plan.left_of(entries, "land/swancloud", {"y": H1, "z": H1}) == {"y": "abc1234"}
+
+    def test_a_set_with_none_left_ends_every_one_before_it_and_a_refused_one_ends_none(self):
+        assert plan.left_of([left_set("z@abc1234"), left_set("")], "land/crew", NOW) == {}
+        assert plan.left_of([left_set("z@abc1234"), dict(left_set(""), Refused="no")], "land/crew", NOW) == {"z": "abc1234"}
+
+    def test_a_landing_on_the_users_words_in_ops_pane_ends_a_stop_and_one_before_it_ends_none(self):
+        assert plan.left_of([stop("z"), pane_landed("z")], "land/crew", NOW) == {}
+        assert plan.left_of([left_set("z@abc1234"), pane_landed("z")], "land/crew", NOW) == {}
+        assert plan.left_of([pane_landed("z"), stop("z")], "land/crew", NOW) == {"z": "abc1234"}
+        refused = dict(pane_landed("z"), Refused="sluice refused it", From=[])
+        assert plan.left_of([stop("z"), refused], "land/crew", NOW) == {"z": "abc1234"}
+
+
 # ------------------------------------------------------------- the raise on the main machine, from each row's host
 
 import json  # noqa: E402
