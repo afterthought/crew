@@ -3212,7 +3212,10 @@ def bolt_land(fleet, a):
 # While sluice has it the worktree's git dir holds, in crew-landing, the process id of a `sluice wait` on it kept
 # running on the host until its outcome is in, then emptied, which no stage starts on the bolt beside (landing_now): a
 # wait on the submission, or, for a pull request, `sluice wait main` from the place, which follows the pull request to
-# its submission's outcome; an answer naming neither empties it at once. It decides nothing (code.7): it prints, as
+# its submission's outcome; an answer naming neither empties it at once. That wait ends with the Claude session that
+# ran the landing, CLAUDE_PID as Claude Code gives it (wait_session), its process looked at every ten seconds and the
+# wait ended once it is gone, so no wait of crew's outlives its caller (teams.24); one run from a shell, or over ssh,
+# which carries no CLAUDE_PID, runs to its outcome or its day. It decides nothing (code.7): it prints, as
 # shell assignments, RC, the submission's exit; TIP, the bolt's tip that was submitted; OLD, the host's own main before,
 # empty when it has none; ID, the submission's number from sluice's JSON, and PULL, the pull request's, each empty when
 # it gave none; ANSWER, what sluice printed on standard output, base64, for crew to name an answer it can't read, and
@@ -3263,11 +3266,14 @@ pull=; [[ $(cat "$out") =~ \"pull_request\":[[:space:]]*([0-9]+) ]] && pull=${BA
 answer=$(base64 < "$out" | tr -d '\n')
 said=$(base64 < "$out.err" | tr -d '\n')
 rm -f "$out" "$out.err"
+held='"$@" >/dev/null 2>&1 & w=$!
+if [ -n "$S" ]; then { while kill -0 "$S" && kill -0 "$w"; do sleep 10; done; kill "$w"; } 2>/dev/null & g=$!; fi
+wait "$w"; : > "$M"; [ -z "$S" ] || kill "$g" 2>/dev/null'
 if [ "$rc" = 0 ] && [ -n "$id" ]; then
-  nohup bash -c 'sluice wait "$1" --timeout 24h --json >/dev/null 2>&1; : > "$2"' crew "$id" "$mark" >/dev/null 2>&1 </dev/null &
+  S=${CLAUDE_PID:-} M=$mark nohup bash -c "$held" crew sluice wait "$id" --timeout 24h --json >/dev/null 2>&1 </dev/null &
   echo $! > "$mark"
 elif [ "$rc" = 0 ] && [ -n "$pull" ]; then
-  nohup bash -c 'cd "$1" && sluice wait main --timeout 24h --json >/dev/null 2>&1; : > "$2"' crew "$path" "$mark" >/dev/null 2>&1 </dev/null &
+  (cd "$path" && S=${CLAUDE_PID:-} M=$mark exec nohup bash -c "$held" crew sluice wait main --timeout 24h --json) >/dev/null 2>&1 </dev/null &
   echo $! > "$mark"
 else
   : > "$mark"
@@ -9477,6 +9483,30 @@ def waiting_for(unit, entries):
 # ------------------------------------------------------------------------------------------------- the wait
 
 POLL = 10  # seconds between a wait's reads
+ENDED_WITH = "the session that started this wait has ended, so the wait ends with it"
+
+
+def wait_session():
+    """The Claude Code session a wait runs in on this host, by the process id Claude Code gives every command its Bash
+    tool runs, a background one's included, in CLAUDE_PID (read against Claude Code 2.1.308 on deneb, 2026-10-28);
+    None for a wait no session of this host started: a person's at a terminal, or one forwarded from another host,
+    since ssh carries no CLAUDE_PID (code.3)."""
+    pid = os.environ.get("CLAUDE_PID", "")
+    return int(pid) if pid.isdigit() and int(pid) > 1 else None
+
+
+def session_ended(pid):
+    """Whether the session a wait runs in (wait_session) has ended, its process gone, so the wait ends with it rather
+    than outliving its caller (teams.24); never for a wait no session started."""
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:  # alive, as another user's
+        return False
+    except OSError:
+        return True
+    return False
 
 
 def handed(t, slot, eid):
@@ -9726,8 +9756,9 @@ def sluice_read(main, *args, timeout=POLL):
 
 def stage_wait(fleet, a):
     """Wait on the stage a slot's agent, or ops, owes, until it ends at its deliverable, stops short, is stuck, its agent
-    is gone, a verify's agent has ended its turn with no report (ended_turn), or the timeout passes, and print the one
-    line that says which. A delivered end is recorded here; nothing else is. The wait holds waits/<slot>.lock for its
+    is gone, a verify's agent has ended its turn with no report (ended_turn), the timeout passes, or the session that
+    started the wait has ended (wait_session), and print the one line that says which. A delivered end is recorded
+    here; nothing else is. The wait holds waits/<slot>.lock for its
     life, so crew needs knows a wait is there to hand its words to. A unit's settle that ends delivered or short orders
     or lifts its unit's forecast orders, and its line says so (settle_said). Each look also reads sluice's overview,
     and says at once, before that line, each conflict or blame sluice records for a submission from the stage's place
@@ -9757,7 +9788,7 @@ def stage_wait(fleet, a):
         return
     o.start or fail(f"crew can't tell when {o.phrase()} began: its start entry's id, {o.eid}, holds no time it reads")
     place = held.get(a.slot, [None] * 4)[3]
-    deadline = time.monotonic() + a.timeout / 1000
+    deadline, session = time.monotonic() + a.timeout / 1000, wait_session()
     stuck = datetime.timedelta(milliseconds=a.stuck)
     seen_quiet = seen_working = None
     sluice_seen, here, main = {}, os.path.realpath(place) if place else None, t["kit"]["main"]
@@ -9786,7 +9817,8 @@ def stage_wait(fleet, a):
                 quiet = (*quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working), unread)
                 over = ended_turn(o, status, pending, turn_of(info) if o.stage == "verify" and pending == [] else None)
             remaining = deadline - time.monotonic()
-            how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0, over)
+            how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0, over,
+                             session_ended(session))
             if how == "ended":
                 print(ended_said(t, agent))
                 return
@@ -9854,14 +9886,15 @@ def settle_said(fleet, t, unit, said):
     return " ".join([said if said.endswith(".") else f"{said}."] + [f"{x}." for x in more])
 
 
-def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time, over=False):
+def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time, over=False, orphaned=False):
     """One look of a wait at the stage o its agent owes, as facts (teams.4): the words a stop-short handed it, whether
     the stage is still owed, whether the agent is gone, what it delivered (got, and missing: what the wait says of the
-    deliverable, or of what it lacks), quiet, (stuck, what the agent is doing, what crew could not read of it), and
-    over, whether a verify's agent has ended its turn with nothing of its own running (ended_turn): with no report, the
-    verify has not ended, and the wait says so then, never calling it stuck (record 0007). Returns how the wait ends
-    and the line it prints, "ended" when something else recorded the end, or (None, what the agent is doing) to look
-    again."""
+    deliverable, or of what it lacks), quiet, (stuck, what the agent is doing, what crew could not read of it), over,
+    whether a verify's agent has ended its turn with nothing of its own running (ended_turn): with no report, the
+    verify has not ended, and the wait says so then, never calling it stuck (record 0007), and orphaned, whether the
+    session that started the wait has ended (session_ended): a wait that would look again, or has run out of time,
+    then ends with it, recording nothing (teams.24). Returns how the wait ends and the line it prints, "ended" when
+    something else recorded the end, or (None, what the agent is doing) to look again."""
     if words is not None:
         return "short", f"{agent} stopped short in {o.phrase()}. It needs: {words}"
     if not owed:
@@ -9877,6 +9910,8 @@ def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time,
     if stuck:
         return "stuck", (f"{agent} is stuck in {o.phrase()}: {doing}, with {missing} and nothing it needs said"
                          + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
+    if orphaned:
+        return "orphaned", f"{ENDED_WITH}: {o.phrase()} is still running, {agent} {doing}; nothing is recorded yet"
     if out_of_time:
         return "running", f"{o.phrase()} is still running after the wait's {timeout} ms: {agent} {doing}; nothing is recorded yet"
     return None, doing
@@ -10273,16 +10308,17 @@ def unit_wait(fleet, a):
     """crew unit wait <unit> [--timeout <ms>] [--stuck <ms>], on the host of the team whose bolt holds the unit: first,
     while a construct an amendment handed there is starting, its start (handed_state), saying why when it did not
     start; then the wait on the stage the slot holding it owes (stage_wait), within what is left of the timeout, whose
-    merge look reads the bolt the plan places the unit in at each look (merge_bolt)."""
+    merge look reads the bolt the plan places the unit in at each look (merge_bolt). Either ends with the session that
+    started it (session_ended)."""
     t = team_of_unit(fleet, a)
     team = on_team_host(fleet, t)
-    until = time.monotonic() + a.timeout / 1000
+    until, session = time.monotonic() + a.timeout / 1000, wait_session()
     state, said = construct_handed_state(t, a.unit)
-    while state == "starting" and time.monotonic() < until:
+    while state == "starting" and time.monotonic() < until and not session_ended(session):
         time.sleep(1)
         state, said = construct_handed_state(t, a.unit)
     if state == "starting":
-        print(f"{said}, past the wait's timeout: wait again")
+        print(f"{ENDED_WITH}: {said}" if session_ended(session) else f"{said}, past the wait's timeout: wait again")
         return
     if state:
         handed_path(t, a.unit).unlink(missing_ok=True)
@@ -11471,7 +11507,8 @@ def review_wait(fleet, a):
     read at), its card raised with its reading session in the planner's name (raise_batch), and the file's path
     returned. A batch already recorded is returned at once, its card raised if the planner holds none on this host,
     so a batch's card is never changed in place. Stopped with exit 3 when the
-    timeout passes first, refused when the reviewer is gone with no summary written."""
+    timeout passes first or the session that started the wait has ended (session_ended), refused when the reviewer is
+    gone with no summary written."""
     label = crew.partition_of(fleet, a.label)["label"]
     CONTEXT["label"] = label
     entries = local_entries(label, BATCH_DAYS)
@@ -11483,7 +11520,7 @@ def review_wait(fleet, a):
         if not cards.card_under(cards.host_entries(record, label, crew.this_host()), f"batch/{n}", f"{label}-planner"):
             raise_batch(fleet, {"label": label, "key": f"batch/{n}"})
         return f
-    begun, deadline = utc(s["At"]), time.monotonic() + a.timeout / 1000
+    begun, deadline, session = utc(s["At"]), time.monotonic() + a.timeout / 1000, wait_session()
     while True:
         try:
             written = f.stat().st_mtime >= begun.timestamp()
@@ -11496,6 +11533,9 @@ def review_wait(fleet, a):
             return f
         if crew.agent_status(fleet, f"{label}-reviewer") is None:
             fail(f"{label}-reviewer is no longer running, and batch {n}'s summary {f} was not written")
+        if session_ended(session):
+            print(f"{ENDED_WITH}: batch {n}'s review is still running; nothing is recorded yet", file=sys.stderr)
+            raise Stopped(3)
         if time.monotonic() >= deadline:
             print(f"batch {n}'s review is still running after the wait's {a.timeout} ms: nothing is recorded yet", file=sys.stderr)
             raise Stopped(3)

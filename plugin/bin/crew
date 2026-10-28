@@ -80,7 +80,8 @@
 #                                      the agent has been quiet past --stuck (15 minutes) with nothing of its own
 #                                      running, or is gone, or a verify's agent has ended its turn with nothing of
 #                                      its own running and no report saved, which has not ended, said then and never
-#                                      stuck, or the timeout (an hour) passes, and says which
+#                                      stuck, or the timeout (an hour) passes, or the Claude session that started
+#                                      the wait ends, recording nothing, and says which
 #                                      first saying, in sluice's words, each conflict or failed check sluice's
 #                                      overview shows for a submission from the stage's place
 #   crew fix     <team> <name> "<what is wrong>" [--bolt <bolt>]
@@ -251,7 +252,8 @@
 #                                      the partition's reviewer, started fresh for the batch of changes due, in a
 #                                      review tab beside the planner; --wait waits for its summary, records the batch,
 #                                      raises its card with its reading session in the planner's name, and closes the
-#                                      tab
+#                                      tab; it ends sooner, recording nothing, when the Claude session that started it
+#                                      ends
 #   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
 #                                      kit's main: the status recorded with its commit; --proposed raises the record's
