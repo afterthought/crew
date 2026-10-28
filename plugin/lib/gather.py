@@ -739,7 +739,7 @@ def submissions_of(doc):
     return out, None
 
 
-def kit(req, sites=False, running=None, board=False, fetch=False):
+def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
         return {"ok": False, "error": f"no checkout at {main}"}
@@ -808,9 +808,16 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
     out["fix_branches"] = {b: f for b, f in facts.items() if b not in worked}
     # What stands in sluice's queue, read once for a kit this host holds a bolt of (teams.22): each submission's number
     # on its bolt's row, a queue that can't be read said there, never read as empty (read.1).
-    # The host's follower hands in what its overview watch of the kit last read (queued), so sluice is not run again.
+    # The host's follower hands in what its overview watch of the kit last read (queued), so sluice is not run again;
+    # where it has none, the overview read here goes back with the answer, the document its new watch starts from.
     if req.get("bolts"):
-        subs, why = req["queued"] if req.get("queued") else queue(main)
+        if req.get("queued"):
+            subs, why = req["queued"]
+        else:
+            doc, why = overview(main)
+            subs, why = (None, why) if why else submissions_of(doc)
+            if stamped and doc is not None:
+                out["overview"] = doc
         out["submissions"] = subs
         if why:
             out["submissions_error"] = why
@@ -828,8 +835,9 @@ def read(request, running=None):
     """The answer to a request: with stamp, each kit's stamp alone by its main checkout and the stamp of the card readings
     folders of the partitions it names, the follower's check that nothing moved, and, at its clock's tick, each named
     kit's overview (overview, [document, why]) and the host's portless routes (routes) when asked; else, by each kit's
-    main checkout, each kit as kit() reads it, with stamped its stamp too, taken before the kit is read, so anything
-    that moves while it is read moves the stamp the follower next compares."""
+    main checkout, each kit as kit() reads it, with stamped, the host's follower's, its stamp too, taken before the kit
+    is read, so anything that moves while it is read moves the stamp the follower next compares, and the overview it
+    read of the kit's queue (overview), which its watch of the kit starts from."""
     if request.get("stamp"):
         return {"kits": {k["main"]: stamp(k) for k in request["kits"]}, "readings": readings_stamp(request.get("labels", [])),
                 **({"overviews": {m: list(overview(m)) for m in request["overview"]}} if request.get("overview") else {}),
@@ -837,7 +845,8 @@ def read(request, running=None):
     out = {}
     for k in request["kits"]:
         s = stamp(k) if request.get("stamped") else None
-        out[k["main"]] = dict(kit(k, request.get("sites"), running, request.get("board"), request.get("fetch")), **({"stamp": s} if request.get("stamped") else {}))
+        out[k["main"]] = dict(kit(k, request.get("sites"), running, request.get("board"), request.get("fetch"), request.get("stamped")),
+                              **({"stamp": s} if request.get("stamped") else {}))
     return out
 
 

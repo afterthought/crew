@@ -51,12 +51,17 @@ def test_a_kits_queue_handed_in_is_its_submissions_and_sluice_is_not_run(repo, t
     """The host's follower hands a kit's gather its queue as its overview watch read it (the crew-board spec, One watch
     for each kit), so the gather runs no sluice; with none handed it reads the overview itself."""
     k = Kit(repo, tmp_path)
-    monkeypatch.setattr(gather, "queue", lambda main: (None, "sluice overview ran"))
+    doc = {"schema": "sluice/overview@1", "branches": []}
+    ran = []
+    monkeypatch.setattr(gather, "overview", lambda main: ran.append(main) or (doc, None))
     req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"]}
-    got = gather.kit(dict(req, queued=[[{"id": 41, "branch": "bolt/te"}], None]))
-    assert got["submissions"] == [{"id": 41, "branch": "bolt/te"}] and "submissions_error" not in got
+    got = gather.kit(dict(req, queued=[[{"id": 41, "branch": "bolt/te"}], None]), stamped=True)
+    assert got["submissions"] == [{"id": 41, "branch": "bolt/te"}] and "submissions_error" not in got and "overview" not in got
     assert gather.kit(dict(req, queued=[None, "its overview watch ended"]))["submissions_error"] == "its overview watch ended"
-    assert gather.kit(req)["submissions_error"] == "sluice overview ran"
+    assert ran == []
+    got = gather.kit(req)
+    assert got["submissions"] == [] and "overview" not in got and ran == [str(repo.path)]
+    assert gather.kit(req, stamped=True)["overview"] == doc, "the follower's gather did not give back the overview its watch starts from"
 
 
 def test_main_holds_its_open_and_archived_changes_an_archived_one_without_its_date(repo, tmp_path):
