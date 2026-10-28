@@ -9,7 +9,7 @@
 ## 2. The console opens its tabs on the user's word
 
 - [x] 2.1 A decision names the console's tabs to open, keep and forget from the tabs named, the tabs open and who follows: a shell tab always, each tab named, the rail tab while no host job follows, every open tab kept, a closed one forgotten (design, Decision 1; Task notes 2.1); passes `tests/py/test_console.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 2.2 `crew console up <label> [flow] [rail] [board]` opens what the decision names, refuses a word that is no tab naming the three, and `crew go` and `crew operator up` open it with no tab named (design, Decision 1; Task notes 2.2); passes `tests/py/test_console.py` and `tests/py/test_hold.py`, `tests/suite logic` ending with "0 failed".
+- [x] 2.2 `crew console up <label> [flow] [rail] [board]` opens what the decision names, refuses a word that is no tab naming the three, and `crew go` and `crew operator up` open it with no tab named (design, Decision 1; Task notes 2.2); passes `tests/py/test_console.py` and `tests/py/test_hold.py`, `tests/suite logic` ending with "0 failed".
 
 ## 3. What crew says
 

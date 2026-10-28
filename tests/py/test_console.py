@@ -74,3 +74,8 @@ def test_the_words_after_the_label_are_the_tabs_in_any_order():
 def test_a_word_that_is_no_tab_or_a_tab_named_twice_is_refused(words, said):
     with pytest.raises(Refusal, match=said):
         plan.console_asked(words)
+
+
+def test_the_tabs_are_the_words_after_the_label_and_none_when_none_is_named():
+    assert plan.parser().parse_args(["_console", "up", "wldn"]).tabs == []
+    assert plan.parser().parse_args(["_console", "up", "wldn", "board", "rail"]).tabs == ["board", "rail"]

@@ -10963,30 +10963,39 @@ def console_tabs(asked, recorded, follower):
 
 
 def console_cmd(fleet, a):
-    """crew console up|down <label>: the partition's console on this host, the flow, rail and board tabs in the
-    `console` workspace of this host's `<label>` session, starting no agent (record 0035): flow, following the run
-    record; rail, what waits on the user above and a shell below with this crew on its path; and board, drawn from what
-    the rail's loop read. Up opens each tab once, and a tab whose pane holds its shell alone, as herdr brings each pane
-    back after a restart, runs its command there again, while one running anything else is left and said
-    (crew.tab_holds, read.4); swancloud's timer runs it every five minutes, so a restart leaves the agents' bands
-    unrefreshed no longer than that. An operator agent this host's console held before the operator was a main-level
-    role is ended and its workspace closed once it is not working (retire_operator). Down closes the console's tabs."""
+    """crew console up|down <label> [flow] [rail] [board]: the partition's console on this host, in the `console`
+    workspace of this host's `<label>` session, starting no agent (record 0035): a shell tab with this crew on its path,
+    and the tabs named after the label: flow, following the run record; rail, the rail the host's follower writes
+    above and a shell below; and board, drawn from the same read. The rail tab opens of itself too while no host job
+    follows (board.follower_here), since its loop is then the host's follower (console_tabs). Up keeps each tab already
+    open, named or not, and a tab whose pane holds its shell alone, as herdr brings each pane back after a restart, runs
+    its command there again, while one running anything else is left and said (crew.tab_holds, read.4); a tab the
+    user closed is forgotten and opened again only when named. swancloud's timer runs it every five minutes. An operator
+    agent this host's console held before the operator was a main-level role is ended and its workspace closed once it
+    is not working (retire_operator). Down closes the console's tabs."""
+    import board  # board imports this module
     c = crew.standing(fleet, "console", a.label)
     c.ensure()
     label, crew_cmd = a.label, shlex.quote(str(crew.HOME / "plugin/bin/crew"))
     if a.act == "down":
+        not a.tabs or fail(f"crew console down {label} closes every tab of the console, and names none")
         c.teardown()
         print(f"{label}'s console on {crew.this_host()} is closed")
         return
+    asked = console_asked(a.tabs)
     retire_operator(fleet, label)
+    words = {"flow": ["events", "--follow", "--label", label], "rail": ["_rail", label], "board": ["_board", label]}
+    path = f"export PATH={shlex.quote(str(crew.HOME / 'plugin/bin'))}:$PATH"
+    opens, keeps, forgets = console_tabs(asked, {t: c.herdr.live(c.pane(t)) for t in CONSOLE_TABS if c.pane(t)}, board.follower_here())
 
-    def keep(tab, words):
-        run, pane = f"bash {crew_cmd} {shlex.join(words)}", c.pane(tab)
-        if not c.herdr.live(pane):
-            c.opened("console", tab, c.cwd, tab)
-            c.herdr.run("pane", "run", c.pane(tab), run)
-            return
-        held, what = crew.tab_holds(c.herdr.process_info(pane), words)
+    def shell_below():
+        if not c.herdr.live(c.pane("rail-shell")):
+            c.put("panes", "rail-shell", c.split(c.pane("rail"), "down", c.cwd))
+            c.herdr.run("pane", "run", c.pane("rail-shell"), path)
+
+    def keep(tab):
+        run, pane = f"bash {crew_cmd} {shlex.join(words[tab])}", c.pane(tab)
+        held, what = crew.tab_holds(c.herdr.process_info(pane), words[tab])
         if held == "shell":
             c.herdr.run("pane", "run", pane, run)
             print(f"{label}'s {tab} tab ({pane}) held its shell alone; its {tab} runs there again")
@@ -10994,12 +11003,18 @@ def console_cmd(fleet, a):
             print(f"{label}'s {tab} tab ({pane}) runs {what}, not crew's {tab}; crew left it", file=sys.stderr)
         elif held is None:
             print(f"{label}'s {tab} tab ({pane}): {what}; crew left it", file=sys.stderr)
-    keep("flow", ["events", "--follow", "--label", label])
-    keep("rail", ["_rail", label])
-    if not c.herdr.live(c.pane("rail-shell")):
-        c.put("panes", "rail-shell", c.split(c.pane("rail"), "down", c.cwd))
-        c.herdr.run("pane", "run", c.pane("rail-shell"), f"export PATH={shlex.quote(str(crew.HOME / 'plugin/bin'))}:$PATH")
-    keep("board", ["_board", label])
+    for tab in CONSOLE_TABS:
+        if tab in forgets:
+            c.drop("panes", tab)
+            if tab == "rail":
+                c.drop("panes", "rail-shell")
+        elif tab in opens:
+            c.opened("console", tab, c.cwd, tab)
+            c.herdr.run("pane", "run", c.pane(tab), path if tab == "shell" else f"bash {crew_cmd} {shlex.join(words[tab])}")
+        elif tab in keeps and tab != "shell":
+            keep(tab)
+        if tab == "rail" and tab in opens + keeps:
+            shell_below()
 
 
 def retire_operator(fleet, label):
@@ -15592,6 +15607,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("_console")
     x.add_argument("act", choices=("up", "down"))
     x.add_argument("label")
+    x.add_argument("tabs", nargs="*")
     sub.add_parser("_revive")
     return ap
 

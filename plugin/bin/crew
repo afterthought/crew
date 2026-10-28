@@ -497,9 +497,9 @@ case $cmd in
   revive) one _revive ;;
   console)
     need_label "${3:-}"
-    case ${2:-} in up | down) one _console "$2" "$3" ;; *) echo "usage: crew console up|down <label>" >&2; exit 2 ;; esac ;;
+    case ${2:-} in up | down) one _console "$2" "$3" "${@:4}" ;; *) echo "usage: crew console up|down <label> [flow] [rail] [board]" >&2; exit 2 ;; esac ;;
   operator)  # the console's name before record 0035, which a host's timer may still run: it opens the console
-    [[ ${2:-} == up ]] || { echo "usage: crew console up|down <label> (crew operator up is crew console up now)" >&2; exit 2; }
+    [[ ${2:-} == up ]] || { echo "usage: crew console up|down <label> [flow] [rail] [board] (crew operator up is crew console up now)" >&2; exit 2; }
     echo "crew operator up is crew console up now; the operator is <label>-operator, at the main level" >&2
     need_label "${3:-}"
     one _console up "$3" ;;
