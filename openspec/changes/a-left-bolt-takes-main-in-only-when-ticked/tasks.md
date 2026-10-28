@@ -19,7 +19,7 @@
 
 ## 5. The conductor's wait
 
-- [ ] 5.1 A conductor's wait says a left bolt's conflict with main once, gives no fix and records it as found while left, and gives the fix at the same heads once the bolt is ticked (design, Decision 5; Task notes 5.1); passes `tests/py/test_forecast.py`, `tests/suite logic` ending with "0 failed".
+- [x] 5.1 A conductor's wait says a left bolt's conflict with main once, gives no fix and records it as found while left, and gives the fix at the same heads once the bolt is ticked (design, Decision 5; Task notes 5.1); passes `tests/py/test_forecast.py`, `tests/suite logic` ending with "0 failed".
 
 ## 6. Reading the send
 

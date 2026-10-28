@@ -8947,7 +8947,21 @@ def reach(fleet, t):
         bolts = held_by(plan, t["name"])
         st = stages_for(fleet, plan, bolts)
     entries = local_entries(label)
-    done = {e.get("Heads") for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Heads")}
+    # The bolts the user left on their kits' landings cards (left_of), read from the partition's run record on its branch
+    # (read.5) and this host's entries it does not hold yet, which no fix is given for (bolt_forecast); while the branch
+    # can't be read, no bolt's forecast against main is said, since whether its fix is due can't be told (read.1).
+    left, unread_left = set(), None
+    try:
+        whole = partition_entries(fleet, label)
+    except Refusal as e:
+        whole, unread_left = [], str(e)
+    ids = {e["Id"] for e in whole if e.get("Id")}
+    whole += [e for e in entries if not e.get("Id") or e["Id"] not in ids]
+    for b in bolts:
+        k, _ = st.kit(b)
+        if k and left_of(whole, f"land/{b.get('Repo') or t['kit']['name']}", {b.name(): k["bolts"].get(b.name(), {}).get("head")}):
+            left.add(b.name())
+    done = said_heads(whole, left)
     for bolt, name, paths, left_out in met:
         k, _ = st.kit(plan.bolt(bolt))
         pl = (k or {"places": {}})["places"].get(name)
@@ -8997,6 +9011,10 @@ def reach(fleet, t):
         k, _ = st.kit(b)
         if not k:
             continue  # said above
+        if unread_left:
+            say(f"no forecast of bolt/{b.name()} against main is said: crew can't tell whether the user left it on its kit's "
+                f"landings card: {unread_left}")
+            continue
         checked, kept = bolt_check(k["team"]["kit"], b.name())
         if kept:
             say(kept)
@@ -9011,25 +9029,28 @@ def reach(fleet, t):
                                 Heads=heads, Reached="wait")
                     done.add(heads)
             continue
-        bolt_said(fleet, t, b, doc, done, len(bolts) > 1, say)
+        bolt_said(fleet, t, b, doc, done, len(bolts) > 1, say, b.name() in left)
 
 
-def bolt_said(fleet, t, b, doc, done, two, say):
+def bolt_said(fleet, t, b, doc, done, two, say, left=False):
     """What a conductor's wait does with sluice's forecast of a bolt against main (teams.21), doc as bolt_forecast_read
     gives it: said once (bolt_forecast) and recorded on bolt/<bolt> with its Heads and Paths; and a conflict with what
     main has landed, meeting no submission queued there, changes the kit's landings card at once (land_hand), so the
     bolt's row takes main first without waiting for main to move again (bolt-teams "A wait's forecast conflict with main
-    changes the kit's landings card"); one with a queued submission hands nothing."""
-    told = bolt_forecast(t["name"], t["label"], b.name(), doc, done, two)
+    changes the kit's landings card"); one with a queued submission hands nothing. For a bolt the user left (left), a
+    conflict with what main has landed gives no fix and is recorded as found while it is left (Reached: left), its card
+    changed with a note saying it would take main first (left_said), since its row keeps its box (landing_rows)."""
+    told = bolt_forecast(t["name"], t["label"], b.name(), doc, done, two, left)
     if not told:
         return
     heads, paths, words = told
     say(words)
+    landed = "#" not in heads
     record.emit(t["label"], "forecast", [f"bolt/{b.name()}"], why=f"bolt({b.name()}): forecast to conflict with main",
-                Heads=heads, Paths=" ".join(paths), Reached="wait")
+                Heads=heads, Paths=" ".join(paths), Reached="left" if left and landed else "wait")
     done.add(heads)
-    if "#" not in heads:  # with no note of its own: the card changes only when the bolt's row does
-        land_hand(fleet, t["label"], b.get("Repo") or t["kit"]["name"])
+    if landed:  # a waiting bolt's with no note of its own: the card changes only when the bolt's row does
+        land_hand(fleet, t["label"], b.get("Repo") or t["kit"]["name"], note=left_said(b.name(), doc["onto"], paths) if left else None)
 
 
 def sluice_check(main, bolt):
@@ -9196,14 +9217,16 @@ def bolt_forecast_read(code, out, err):
     return None, f"it exited {code}" + (f": {line}" if line else "")
 
 
-def bolt_forecast(team, label, bolt, doc, done, two=False):
+def bolt_forecast(team, label, bolt, doc, done, two=False, left=False):
     """What the forecast of a bolt against its kit's main tells the conductor, once (teams.21): doc as
-    bolt_forecast_read gives it, done the Heads already recorded. None when the bolt merges with no conflict onto main
-    and everything queued there, or when the same forecast, for the same bolt head, revision of main and submissions
-    queued on main it meets, was said; else (heads, paths, words). A conflict with what main has landed is taken into
-    the bolt now, by the fix the conductor starts when main-ops says a landing conflicts (plan.8); one with a
-    submission queued on main is waited out, since that submission may yet fail and leave the queue. While the team
-    holds two bolts (two), the fix's command names its bolt (teams.16)."""
+    bolt_forecast_read gives it, done the Heads already recorded (said_heads). None when the bolt merges with no
+    conflict onto main and everything queued there, or when the same forecast, for the same bolt head, revision of main
+    and submissions queued on main it meets, was said; else (heads, paths, words). A conflict with what main has landed
+    is taken into the bolt now, by the fix the conductor starts when main-ops says a landing conflicts (plan.8), but in
+    a bolt the user left on its kit's landings card (left), which takes nothing in until they tick it, when crew tells
+    the fix (bolt-teams "A bolt the user left"); one with a submission queued on main is waited out, since that
+    submission may yet fail and leave the queue. While the team holds two bolts (two), the fix's command names its bolt
+    (teams.16)."""
     c = doc.get("conflict")
     if not c:
         return None
@@ -9213,6 +9236,10 @@ def bolt_forecast(team, label, bolt, doc, done, two=False):
     if heads in done:
         return None
     on = ", ".join(paths)
+    if not met and left:
+        return heads, paths, (
+            f"bolt/{bolt}, which the user left on its kit's landings card, is forecast to conflict with main on {on}. Take "
+            "nothing in while it is left: crew tells you the take-main fix once they tick it.")
     if not met:
         return heads, paths, (
             f"bolt/{bolt} is forecast to conflict with main on {on}: main has landed work on them since the bolt took it. "
