@@ -52,7 +52,10 @@ tests/py/test_landings.py
 tests/py/test_card_commands.py
 tests/py/test_rail.py
 tests/py/test_made.py
+tests/py/test_batch_answer.py
+tests/py/test_batches.py
 tests/t-journey-land.sh
 tests/t-briefs.sh
+tests/t-docs.sh
 tests/moon.yml
 ```
