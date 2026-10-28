@@ -13,7 +13,8 @@ Rules this design rests on:
 - `plan.8`: no unit starts on a bolt whose landing is queued. `plan.14`: a landing records the commit main holds. `plan.16`: one procedure, ops's submission on the user's word. `plan.18`: main now is `origin/main` after a fetch.
 - `read.1`: what can't be read is refused or leaves things as they were, named. `read.5`: the run record is read from the flywheel's branch, and a host is read over ssh only for its own kits. `state.4`: no view writes on refresh. `code.3`: commands about a team forward to its host. `code.7`: decisions are functions of facts. `code.8`: a change to what crew models updates `board.agent_views` and `status.js` with it. `code.9`: a write answers once it is made, and longer work waits with its own wait.
 - `roles.1`, `roles.2`: the landing is ops's act on the user's word, and recording sluice's fact is crew's (see Decision 4).
-- `roles.5`: crew builds no mechanism its tools are designed to hold. This change adds no wait of crew's. It reshapes the waiter that already exists and moves the recording into a read, which record 0044 names as crew's part: "a landing known the moment sluice records it is sluice's to tell and crew's to read".
+- `roles.5`: crew builds no mechanism its tools are designed to hold. This change adds no wait of crew's. It reshapes the waiter that already exists and moves the recording into a read, which record 0044 names as crew's part: "a landing known the moment sluice records it is sluice's to tell and crew's to read". The waiter itself is the background wait record 0046 part 5 allows on a host where nothing pushes a submission's outcome, and record 0048 pattern 5 ends it once a push does; so it is a stopgap, listed as one (Decision 8).
+- Record 0048 pattern 1: records are the truth and are pulled. The user's words to land are on the card they answered, which any host reads, and the run record names the transcript they came from (Decision 7).
 
 Pages whose area this touches: `plan.md` (`plan.py`), `record.md` (`record.py`), `teams.md` (`plugin/bin/crew`), `briefs.md` (`main-ops.md`), `tests.md` (`tests/`).
 
@@ -76,18 +77,27 @@ Considered: leaving the close to ops's `crew bolt land`, with the refusal on the
 
 ### 5. The bolt's head line
 
-`board_data` adds to each ledger `landing`: `{"queued": n}` while the bolt's last `bolt.submit` is queued, `{"unclosed": words}` while the bolt has landed and its last `bolt.land` since is refused, else None. It reads this from the run record entries `rail_read` already holds (`landing_of(entries, bolt)`, a decision of facts). `bolt_row` says "landing queued as #<n>", or "landed on main, not closed: <words>" with the attention gutter. The existing "landed" attention's why becomes the refused close's words when there are some, and `ops_view` draws the "landed" attention rows beside host and plan, so main-level ops's band shows it. `status.js` draws the views' rows as text and reads no new key. Its cases and `tests/py/test_board.py`'s pin of the keys it reads follow (`code.8`).
+`board_data` adds to each ledger `landing`: `{"queued": n}` while the bolt's last `bolt.submit` is queued, `{"unclosed": words}` while the bolt has landed and its last `bolt.land` since is refused, else None. It reads this from the run record entries `rail_read` already holds (`landing_of(entries, bolt)`, a decision of facts). `bolt_row` says "landed on main, not closed: <words>" with the attention gutter. A landing standing in sluice's queue is already said from that queue (`landing #<n> <state>`, `landing_said`, from the archived `crew-keeps-no-card-wait-and-a-row-carries-its-submission-number`), so the run record's queued number is said, "landing queued as #<n>", only when sluice's queue was read and shows no landing of the bolt standing: sluice has it out and no read has recorded it yet. When the queue can't be read, the head line says so and shows no number, as that change has it (`read.1`). The existing "landed" attention's why becomes the refused close's words when there are some, and `ops_view` draws the "landed" attention rows beside host and plan, so main-level ops's band shows it. `status.js` draws the views' rows as text and reads no new key. Its cases and `tests/py/test_board.py`'s pin of the keys it reads follow (`code.8`).
 
 ### 6. ops's brief
 
 `main-ops.md` step 3: when the submission says a bolt landed and was not closed, crew's read closes it once what it named is mended, at the team's next read or at `crew bolt land <bolt>`, which ops may run. `tests/t-briefs.sh` is updated if it pins the old words.
 
+### 7. The user's words are not fetched at a close on another host
+
+A landing on the user's words in ops's pane keeps the words on the host `crew bolt submit` ran on (Decision 1). The read that closes the bolt runs on the team's host, which may be another. There it closes as `bolt_land` closes today: the landing card closes naming ops's pane and the time the word was given (`pane_landed` with no words), and crew prints which host keeps the words. Nothing reaches the submitting host for them. The words already live on the card the user answered, which any host reads, and the queued entry and its outcome name the transcript record and the words' length (record 0048 pattern 1; design's ruling, relayed by swancloud-planner, 2026-10-28). The line naming where the words are moves out of `bolt_land`'s body into a decision of facts, `words_kept_where(pane_host, here)`, so the logic tier pins it (`code.7`).
+
+Considered: fetching the words over ssh from the submitting host at the close. Ruled out by design: a host that does not answer would hold the close or lose the words, and the card already holds them (`read.5`).
+
+### 8. The waiter is a stopgap under `roles.5`
+
+The background loop on the team's host (Decision 3) is the wait record 0046 part 5 allows where nothing pushes a submission's outcome. It is not a landing mechanism: the landing is ops's submission and the record is sluice's. Once sluice's round pushes outcomes into the submitter's session on the fleet's hosts, or Flume submits landings as a role's place (`roles.7`), the waiter goes, and the read stays as the act that records what sluice's record shows. `roles.5` asks a stopgap be listed in `_open.md` with the move that retires it, so this change adds one line there, under *Moves to the tools*, beside the stopgaps record 0049 lists: the landing's background waiter (records 0044, 0046 part 5), retired when sluice's push runs on the fleet's hosts (move 1) or Flume submits landings (move 6), whichever first. `docs.7`, which has the design pages one writer and a unit never editing them, is proposed and not accepted; the line is the design agent's own ruling for this unit. A conflict on `_open.md` at merge or landing takes main's side and adds the line again.
+
 ## Risks / Trade-offs
 
 - **The waiter reads with crew's code on the team's host.** That host's crew must be one that has `_landing-read`. A waiter started by an older `SUBMIT` makes no read, and the team's read covers it (Decision 3).
 - **A submission sluice keeps standing forever.** If `crew bolt submit` is gone and sluice never decides, the bolt reads queued on its head line and nothing records it. That is the truth sluice's record tells, and it is said, not hidden.
-- **The card's close with the user's words.** The words are kept on the submitting host. A read on the team's host closes the card through `tidy_after` and `landing_cards_closed` as today. When the words are not on the host that closes it, the card closes naming the pane, the time and the host where they are kept, as `bolt_land` already says. Whether that close should fetch the words from the submitting host is left to the design agent.
-- **Stopgap under `roles.5`.** The waiter and its read are crew's until Flume submits a role's landing as a place (`roles.7`). Listing that in `_open.md` is the design agent's (`docs.7`).
+- **The card's close without the user's words.** A close on another host than the submitting one sends Pending You the pane and the time, not the words (Decision 7). The user reads their words on the card they answered.
 
 ## After deploy
 
@@ -115,6 +125,12 @@ None. Every behaviour here is proved by the logic tier, the mod's cases and the 
 
 **4.1** `board.py`: `landing_of(entries, bolt)` (a decision of facts), the ledger's `landing` key, `bolt_row`'s words, the "landed" attention's why, and `ops_view`'s attention filter taking "landed". `tests/py/test_board.py`: the views pin, and cases for a queued and an unclosed bolt in a conductor's and ops's view. `plugin/tests/status.test.ts`: a band drawing an unclosed bolt's row.
 
+**4.2** `board.py` `head_said`: the record's queued number only when `b` carries no `submissions_error` as well as no `landing`. Case in `tests/py/test_board.py`: a bolt whose run record has its landing queued and whose queue can't be read says its submissions can't be read and shows no number.
+
 **5.1** `plugin/roles/main-ops.md` step 3, as Decision 6. `tests/t-briefs.sh` if it checks those words.
 
 **6.1** `tests/t-journey-land.sh` (its `# Reads:` line already names what it starts). Add three journeys: the submitter killed after the queue, the stub's record then landed, the waiter's read recording and closing it; the waiter stopped, and the conductor's next command recording it; and a landed bolt with a chore at ready, its refused `bolt.land` recorded once over two reads, `crew board` showing "landed on main, not closed", then the chore dropped and the next read closing it. Run `tests/moon-tasks` if any test's reads changed, and commit `tests/moon.yml`.
+
+**7.1** `plan.py`: `words_kept_where(pane_host, here)` returns the line `bolt_land` prints today ("are kept on <host>, where it was submitted, not on <here>", or "are not kept on <here>"), and `bolt_land` prints from it. Cases in `tests/py/test_pane_landing.py`: words kept on another host name that host; words kept nowhere here say so; and a read closing a pane-word landing on a host whose `landing_word_read` finds nothing closes with `pane_landed(landed, by, at, None)`, naming the pane and the time and none of the words, and starts no ssh (monkeypatch `crew.on_machine` to fail the case if called).
+
+**7.2** `docs/architecture/_open.md`, under *Moves to the tools*, after the *Stopgaps until move 5* line: one bullet naming the landing's background waiter as a stopgap under `roles.5` (records 0044, 0046 part 5), retired when sluice's push runs on the fleet's hosts (move 1) or Flume submits landings (move 6), whichever first.

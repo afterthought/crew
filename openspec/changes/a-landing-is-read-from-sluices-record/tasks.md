@@ -19,6 +19,7 @@
 ## 4. The bolt's head line and the agents' views
 
 - [x] 4.1 A held bolt's head line says its landing is queued with its submission number, or that it landed on main and was not closed with its refused close's words, and main-level ops's band shows the latter (design, Decision 5; Task notes 4.1); passes `tests/py/test_board.py`, and Verify `tests/suite mod` ends with "0 failed".
+- [ ] 4.2 The run record's queued number is said on a bolt's head line only when sluice's queue was read and shows no landing of it standing; a queue that can't be read shows no number (design, Decision 5; Task notes 4.2); passes `tests/py/test_board.py`.
 
 ## 5. ops's brief
 
@@ -28,3 +29,8 @@
 
 - [ ] 6.1 The landing journey proves a submitter killed after the queue with the waiter's read recording and closing the bolt, a stopped waiter with the conductor's next command recording it, and a refused close recorded once, shown on the bolt's head line and lifted by a later read (design, Decision 2 to 5; Task notes 6.1); Verify `tests/suite t-journey-land` ends with "0 failed".
 - [ ] 6.2 The tests the change affects pass; Verify `tests/suite --affected` ends with "0 failed".
+
+## 7. The user's words, and the waiter as a stopgap
+
+- [ ] 7.1 A read that closes a landing given on the user's words on another host closes its card naming ops's pane and the time, says which host keeps the words, and fetches nothing from it; the line naming where the words are is a decision of facts (design, Decision 7; Task notes 7.1); passes `tests/py/test_pane_landing.py`.
+- [ ] 7.2 The open-items page lists the landing's background waiter as a stopgap under `roles.5`, retired when sluice's push runs on the fleet's hosts or Flume submits landings, whichever first (design, Decision 8; Task notes 7.2); Verify `tests/suite --affected` ends with "0 failed".

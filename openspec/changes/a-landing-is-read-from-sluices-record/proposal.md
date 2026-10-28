@@ -12,6 +12,8 @@ Today a bolt's landing is recorded and closed only by the one `crew bolt submit`
 - Every crew act that reads the bolt after its landing runs that read: the waiter as it ends, `crew bolt submit`'s own end, the team's read on its host (every team command and the conductor's wait), and `crew bolt land`. `crew bolt land` by hand still closes a bolt, but it is never the only way.
 - A close crew refuses is recorded as a refused `bolt.land` entry with crew's words, recorded again only when the words change. The bolt's head line on the board, and its conductor's and ops's bands, say the bolt landed on main and was not closed, with those words. This lasts until a later read closes the bolt.
 - While a landing is queued, the bolt's head line says so, with sluice's submission number.
+- When the read that closes a bolt runs on another host than the one where the user gave their words to land it in ops's pane, crew does not fetch the words from there. The landing card closes naming ops's pane and the time, and crew says which host keeps the words, as `crew bolt land` says today. The words live on the card the user answered, which any host reads, and the run record names the transcript they came from.
+- The background waiter is the wait record 0046 allows on a host where nothing pushes a submission's outcome, not a landing mechanism of crew's. The open-items page lists it as a stopgap under `roles.5`, retired when sluice's push runs on the fleet's hosts or Flume submits landings, whichever comes first.
 - Main-level ops's brief stops telling ops to run `crew bolt land` once a refused close is mended. crew's next read closes it, and ops may still run it.
 - sluice changes nothing. Every submission's state is readable from every host that submits to its branch (sluice statement 26), which is madswan-design's reading of 2026-10-27.
 
@@ -33,6 +35,7 @@ None.
 - `plugin/lib/board.py` and `plugin/hooks/status.js`: the bolt's head line and the agents' views (`code.8`).
 - `plugin/bin/crew`: the `_landing-read` command's route to the team's host.
 - `plugin/roles/main-ops.md`: what ops does when a bolt landed and was not closed.
+- `docs/architecture/_open.md`: one line listing the waiter as a stopgap under `roles.5`.
 - Tests: logic (`tests/py/test_landing.py`, `tests/py/test_board.py`), the mod's cases (`plugin/tests/status.test.ts`), and the end-to-end landing journey (`tests/t-journey-land.sh`) on the stub sluice (`tests/stubs/sluice`).
 
 ## Touches
@@ -45,6 +48,7 @@ plugin/hooks/status.js
 plugin/bin/crew
 plugin/roles/main-ops.md
 plugin/tests/**
+docs/architecture/_open.md
 tests/py/**
 tests/stubs/sluice
 tests/t-journey-land.sh
