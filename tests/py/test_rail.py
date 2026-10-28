@@ -305,18 +305,33 @@ class TestText:
                                            "  5m       a question (wldn), asked by swb-1-conductor on mac-studio (req_q2)"]
         assert "title" not in out and "open cards whose row is gone" not in out
 
+    def test_one_partitions_rail_of_a_read_of_two_is_the_rail_a_read_of_it_alone_gives(self):
+        """The host's follower reads every partition on the host at once (the crew-board spec, Two partitions on one
+        host): each partition's rail is made from that one read, with nothing of the other's."""
+        mine = rows([proposal(4)])
+        theirs = [dict(r, label="swancloud", what=["swancloud's " + r["what"][0], *r["what"][1:]]) for r in rows([proposal(7)])]
+        card = dict(label="swancloud", card="req_s7", key="proposal/7", by="swancloud-planner", host=BOX, at=NOW)
+        ended = [dict(label="swancloud", host=BOX, key="proposal/7", unit=None, why="its row is gone", said="ended")]
+        alone = text(mine)
+        both = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan()), ("swancloud", "afterthought/crew-state", "tip2", the_plan())],
+                    rows=mine + theirs, cards=[card], sv=survey(), unread={"swancloud": {"swancloud/main": "unread"}}, ended=ended,
+                    unchecked=[dict(label="swancloud", host=BOX, why="did not answer")],
+                    swept={"done": [], "unswept": [dict(label="swancloud", why="this host can't ask through Pending You")]})
+        assert plan.rail_text(FLEET, ["wldn"], both, NOW) == alone
+        assert "swancloud's" in plan.rail_text(FLEET, ["swancloud"], both, NOW) and "swancloud's" not in alone
+
     def test_a_read_that_swept_lists_each_card_it_closed_withdrew_or_posted_again_and_what_it_could_not_sweep(self):
         done = [dict(label="wldn", key="proposal/4", card="req_p4", by="wldn-planner", did="closed", words="its proposal was applied", new=None),
                 dict(label="wldn", key="land/y", card="req_l1", by="swb-1-conductor", did="withdrawn", words="its bolt was dropped", new=None),
                 dict(label="wldn", key=None, card="req_q1", by="crw-3-conductor", did="withdrawn", words="crw-3-conductor ended", new=None),
                 dict(label="wldn", key="proposal/17", card="req_1", by="wldn-planner", did="lost", words="posted again as req_2", new="req_2")]
-        out = text([], swept={"done": done, "unswept": [dict(label="madswan", why="this host can't ask through Pending You")]})
+        out = text([], swept={"done": done, "unswept": [dict(label="wldn", why="this host can't ask through Pending You")]})
         assert out.split("cards swept:\n")[1].split("\n\n")[0].splitlines() == [
             "  proposal/4 (wldn), wldn-planner's req_p4: closed: its proposal was applied",
             "  land/y (wldn), swb-1-conductor's req_l1: withdrawn: its bolt was dropped",
             "  a question (wldn), crw-3-conductor's req_q1: withdrawn: crw-3-conductor ended",
             "  proposal/17 (wldn), wldn-planner's req_1: lost: posted again as req_2"]
-        assert out.endswith("cards not swept:\n  madswan: this host can't ask through Pending You")
+        assert out.endswith("cards not swept:\n  wldn: this host can't ask through Pending You")
 
     def test_a_batch_crew_closed_with_no_card_is_named_so_beside_its_card_withdrawn(self):
         """review-batches, "Its card is already open": the read says both what it closed and the card it withdrew."""
@@ -916,14 +931,15 @@ class Acts:
         return None
 
 
-def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), **kw):
+def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), handed=None, herdr=None, **kw):
     """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards, its
-    plan holding the proposals numbered proposed."""
+    plan holding the proposals numbered proposed; handed, the host's follower's answers from its clock's last ask, and
+    herdr, its listing of the askers read on that tick."""
     fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
     read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=list(rows_), cards=list(cards_),
                 unread=unread or {}, logs={"wldn": list(entries)}, proposed={"wldn": set(proposed)})
     acts = Acts(entries=[{"Act": "card.post", "Key": c["key"], "By": c["by"], "Card": c["card"]} for c in cards_], **kw)
-    return plan.sweep_cards(fleet, read, acts), acts
+    return plan.sweep_cards(fleet, read, acts, handed, herdr), acts
 
 
 NOT_FOUND = (None, "Not found: request:req_x.")
@@ -974,6 +990,16 @@ class TestSweep:
         assert acts.emitted == [dict(Act="card.close", On=["agent/crw-3-conductor"], by="crw-3-conductor", Card="req_q1", Key="ask/crw-3-conductor/hold",
                                      State="withdrawn", Outcome="crw-3-conductor ended; ask again if it still matters")]
         assert [(d["did"], d["words"]) for d in out["done"]] == [("withdrawn", "crw-3-conductor ended")]
+
+    def test_the_followers_sweep_judges_a_question_by_the_listing_its_tick_read_and_none_it_did_not_list(self):
+        """The crew-board spec, An asker's agent gone: between ticks the sweep asks herdr nothing, judging with the
+        listing the tick read; a question whose asker that listing lacks is left for the next tick."""
+        q = card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
+        r = card("ask/swb-1-conductor/x", "req_q2", "swb-1-conductor")
+        answers = ({"req_q1": ({"status": "pending", "version": 2}, None), "req_q2": ({"status": "pending", "version": 2}, None)}, None)
+        out, acts = swept(cards_=[q, r], handed=answers, herdr={"crw-3-conductor": (False, None)},
+                          listed={"crw-3-conductor": (True, None), "swb-1-conductor": (False, None)})
+        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("ask/crw-3-conductor/hold", "withdrawn", "crw-3-conductor ended")]
 
     def test_a_question_pending_you_already_ended_when_its_asker_is_gone_is_recorded_closed_and_sent_nothing(self):
         """The rail-cards scenario: crw-3-conductor's question, which Pending You reports resolved, after crw-3's team
@@ -1190,6 +1216,34 @@ class TestSweep:
         assert seen == ["batch/3"] and acts.raised == []
         assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "posted again as req_b4")]
 
+    def test_the_followers_answers_handed_in_are_acted_on_with_no_ask_of_its_own(self):
+        """The crew-board spec, The follower asks Pending You about cards on its clock: a sweep between ticks judges the
+        cards as the tick last answered, asking nothing in crew's own name, and acts as it would on its own ask."""
+        p4 = card("proposal/4", "req_p4", "wldn-planner")
+        out, acts = swept(cards_=[p4], entries=[did("plan.approve", On=["proposal/4"])], handed=({"req_p4": ({"status": "pending", "version": 2}, None)}, None))
+        assert [c for c in acts.calls if c[0] == "crew"] == []
+        assert [(d["key"], d["did"]) for d in out["done"]] == [("proposal/4", "closed")]
+
+    def test_a_card_the_ticks_ask_did_not_answer_for_waits_for_the_next_tick(self):
+        """A question opened since the tick: neither asked after nor acted on until the next tick asks after it."""
+        q = card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
+        out, acts = swept(cards_=[q], listed={"crw-3-conductor": (False, None)}, handed=({}, None))
+        assert (out, acts.calls, acts.emitted) == ({"done": [], "unswept": []}, [], [])
+
+    def test_a_ticks_failed_ask_handed_in_leaves_the_partition_unswept_and_asks_nothing_again(self):
+        said = "Pending You did not answer whoami within 30 seconds. " + plan.SWEEP_LATER
+        out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], entries=[did("plan.approve", On=["proposal/4"])], handed=({}, said))
+        assert out == {"done": [], "unswept": [dict(label="wldn", why=said)]} and acts.calls == [] and acts.emitted == []
+
+    def test_the_cards_asked_on_the_clock_are_those_the_sweep_would_ask_after(self):
+        """plan.cards_asked, the follower's tick's ask: the cards of rows gone, held with their row, and questions."""
+        p4, q = card("proposal/4", "req_p4", "wldn-planner"), card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
+        fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
+        read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=[], cards=[p4, q], unread={},
+                    logs={"wldn": [did("plan.approve", On=["proposal/4"])]}, proposed={"wldn": {4, 5}})
+        assert plan.cards_asked(fleet, read, "mac-studio", NOW) == ["req_p4", "req_q1"]
+        assert plan.cards_asked(fleet, dict(read, cards=[]), "mac-studio", NOW) == []
+
     def test_a_host_not_signed_in_changes_nothing_and_says_so(self):
         said = "this host can't ask through Pending You: it is not signed in. The user signs it in with pendingyou-signin. " + plan.SWEEP_LATER
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], entries=[did("plan.approve", On=["proposal/4"])], opening=said)
@@ -1389,7 +1443,7 @@ class TestBolts:
         b = {x["bolt"]: x for x in self.data()["partitions"][0]["plans"][0]["bolts"]}
         assert {u["unit"]: u["stage"] for u in b["tenant-environments"]["units"]} == {"early": "planned", "checked": "verify", "stale": "verify"}
         assert (b["tenant-environments"]["team"], b["tenant-environments"]["host"], b["tenant-environments"]["state"]) == ("swb-1", BOX, "active")
-        assert b["apex-zones"]["state"] == "waits" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None)]
+        assert b["apex-zones"]["state"] == "waits" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None, submission=None)]
 
     def test_the_text_names_the_branch_each_bolt_and_each_units_stage_and_place(self):
         out = plan.bolts_text(self.data())

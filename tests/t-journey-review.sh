@@ -2,12 +2,13 @@
 # due, told to the planner once, and crew review starts the reviewer, while a host of the partition does not answer,
 # since both read the run record from the partition's branch (read.5); the reviewer's summary ends the batch, raising
 # its card with its reading session in the planner's name, tried twice when its first start fails, and raised without
-# it, naming crew card session, when both fail, the planner's wait then starting it and changing the card to carry its
-# link; crew rail lists what waits, with each row's card; crew's card hook refuses an agent's card under crew's own
-# key; a batch card's one reading session is written from every team's host and started on the main level's, an old
-# batch card's on its unit's team's host, and none for a verify report, which no row has; a wait returns the user's
-# words and closes the batch's card, ending its session, crew card end ends an old card's, and a rail read sweeps what
-# is dead; and writes and tells reach the agents they should, never one waiting on a question. Which changes are due,
+# it, naming crew card session, when both fail, the planner's crew card session then starting it and changing the
+# card to carry its link; crew rail lists what waits, with each row's card; crew's card hook refuses an agent's card
+# under crew's own key; a batch card's one reading session is written from every team's host and started on the main
+# level's, an old batch card's on its unit's team's host, and none for a verify report, which no row has; the rail's
+# refresh tells the planner once that the user sent the reading, its crew card read returns the user's words and
+# closes the batch's card, ending its session, and a reading approved with no words is recorded read at the refresh;
+# crew card end ends an old card's, and a rail read sweeps what is dead; and writes and tells reach the agents they should, never one waiting on a question. Which changes are due,
 # what each row and card says, whose key a card may take and in what form, and what a session does are logic cases
 # (tests/py/test_batches.py, test_rail.py, test_cards.py, test_review.py); each step here checks a command's wiring
 # once.
@@ -147,14 +148,23 @@ eq "$(stub $box "$p1" .skip_browser)" "true"
 HOST=$box CREW_AGENT=wldn-planner expect_ok crew card session batch/1; eq "$out" "$u1"; eq "$(listed $box)" "$p1"
 notes=$'# Annotations\n\n1. Say what z means.'
 decide $box "$p1" "$(jq -nc --arg f "$notes" '{decision: "annotated", feedback: $f, annotationCount: 1}')"
-HOST=$box CREW_AGENT=wldn-planner expect_ok crew card wait batch/1
+told() { grep -c "^$box wldn-3 agent prompt wldn-planner '\[crew\] The user sent batch/1'\"'\"'s reading. Run crew card read batch/1 for what they sent.'\$" "$CREW_TEST_LOG" || true; }
+: > "$CREW_TEST_LOG"
+expect_ok crew rail --label wldn
+has "$out" "readings sent:"$'\n'"  batch/1 (wldn) on $box: its reading was sent; the user sent its reading, and wldn-planner was told to run crew card read batch/1"
+lacks "$(grep "agent prompt wldn-planner" "$CREW_TEST_LOG")" "Say what z means"
+expect_ok crew rail --label wldn
+lacks "$out" "readings sent:"
+eq "$(told)" "1"
+HOST=$box CREW_AGENT=wldn-planner expect_fail "crew card wait is gone: crew keeps no process waiting on a card or its reading. Run crew card read batch/1" crew card wait batch/1
+HOST=$box CREW_AGENT=wldn-planner expect_ok crew card read batch/1
 eq "$out" "batch/1: annotated
 $notes
 card batch/1: req_stub-1 withdrawn
 batch/1's session had ended as the user sent it, and batch/1 is forgotten"
 [[ ! -e $(home_of $box)/$cards/batch/1 ]] || fail "batch/1's session folder outlived its card"
 eq "$(entries $box card.close | jq -r '[.Card, .Key, .State, .Outcome] | join(" ")')" "req_stub-1 batch/1 withdrawn Read; 1 note sent to its team"
-ok "a batch card's one session reads the summary and every unit's change from each team's host, the link on its card and the same again while it serves; a wait returns the user's words and closes the card, which forgets the session"
+ok "a batch card's one session reads the summary and every unit's change from each team's host, the link on its card and the same again while it serves; the rail's refresh tells the planner once that it was sent, with none of the user's words, crew card wait is refused naming the read, and the planner's crew card read returns the words and closes the card, which forgets the session"
 
 # A batch posted as cards of five before a batch was one card: its sessions are its units', each on its team's host.
 CREW_AGENT=wldn-reviewer as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act review.batch --on batch/2 --field Batch=2 \
@@ -170,8 +180,8 @@ gone "$p3"
 ok "an old batch card's session of a unit is started on that unit's team's host, on its change's files, and crew card end ends it there"
 
 # A later batch whose reading will not open at either start: its card is raised without it, saying so and naming crew
-# card session, with why in the run record; the planner's wait then starts the reading and changes the card to carry
-# its link, and waits on both.
+# card session, with why in the run record; the planner's crew card session then starts the reading and changes the
+# card to carry its link, and the user's approval with no words is recorded read at the next refresh.
 for act in review.start review.batch; do
   CREW_AGENT=wldn-planner as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act $act --on batch/3 --field Batch=3 \
     --field "Units=x1:swb-1@$(git -C "$k" rev-parse unit/x1)" >/dev/null
@@ -190,20 +200,20 @@ eq "$(entries $box card.post | jq -r --arg c "$c3" 'select(.Card == $c) | .Unrea
 [[ ! -e $(home_of $box)/$cards/batch/3/session.json ]] || fail "a session of batch/3 is recorded though neither start opened"
 ok "a batch's card whose reading will not open at either start is raised without it, saying so and naming crew card session as the planner's, with why in the run record"
 rm "$refusals"
-HOST=$box CREW_AGENT=wldn-planner crew card wait batch/3 > "$T/batch-wait.out" 2>&1 &
-waiting=$!
-until_ok test -s "$(home_of $box)/$cards/batch/3/session.json" || fail "the wait started no reading:"$'\n'"$(cat "$T/batch-wait.out")"
+HOST=$box CREW_AGENT=wldn-planner expect_ok crew card session batch/3
 p6=$(rec $box batch/3 .pid); u3=$(rec $box batch/3 .url)
-relinked() { calls | grep "^$box pendingyou update_request " | grep -q "$u3"; }
-until_ok relinked || fail "the card was not changed to carry the reading's link:"$'\n'"$(cat "$T/batch-wait.out")"
+eq "$(head -1 <<<"$out")" "$u3"
 changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
-has "$changed" "\"requestId\": \"$c3\""; has "$changed" "\"changeNote\": \"Its reading is open again at a new link\""
+has "$changed" "\"requestId\": \"$c3\""; has "$changed" "\"changeNote\": \"Its reading is open again at a new link\""; has "$changed" "$u3"
 eq "$(entries $box card.reading | jq -r '[.Key, .Card, .Refused // "done"] | join(" ")')" "batch/3 $c3 done"
-kill -0 "$waiting" 2>/dev/null || fail "the wait returned rather than waiting:"$'\n'"$(cat "$T/batch-wait.out")"
-decide $box "$p6" '{"decision": "approved"}'
-wait "$waiting" || fail "the planner's wait failed:"$'\n'"$(cat "$T/batch-wait.out")"
-has "$(cat "$T/batch-wait.out")" "batch/3: approved"
-ok "the planner's wait on a batch card raised without its reading starts the reading, records the try, changes the card to carry its link and waits on both"
+decide $box "$p6" '{"decision": "approved", "annotationCount": 0}'
+: > "$CREW_TEST_LOG"
+expect_ok crew rail --label wldn
+has "$out" "  batch/3 (wldn) on $box: its reading was sent; the user approved its reading with no notes, so crew recorded it read, Read; no notes: card batch/3: $c3 withdrawn"
+lacks "$(grep "agent prompt wldn-planner" "$CREW_TEST_LOG")" "batch/3"
+eq "$(entries $box card.close | jq -r --arg c "$c3" 'select(.Card == $c) | [.Key, .State, .Outcome] | join(" ")')" "batch/3 withdrawn Read; no notes"
+[[ ! -e $(home_of $box)/$cards/batch/3 ]] || fail "batch/3's reading outlived its card"
+ok "the planner's crew card session on a batch card raised without its reading starts the reading, records the try and changes the card to carry its link; the user's approval with no words is recorded read at the next refresh, its card closed, with nobody told"
 
 # A verify report's card, whose row went with record 0027: crew refuses the conductor's post, and its key starts no session.
 deny=$(jq -nc --arg k "verify/v1/$stamp" '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",

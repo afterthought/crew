@@ -12,8 +12,9 @@
 # can land, is withdrawn naming it, the row's reading ended and its preview released, its pull request, ready again,
 # drafted, and once the fix merges and the bolt reads proven again, the dispatcher told its team is free for its next
 # bolt, a new card is posted, following nothing, with a preview of the new head, raised without its reading when both
-# its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's wait then
-# starts, changing the card to carry its link, and waits on until the landing ends it; the bolt read proven, its team
+# its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's read
+# finds not running and its crew card session then starts, changing the card to carry its link, until the landing
+# ends it; the bolt read proven, its team
 # is given its next bolt beside it and refused a third (teams.16); on the user's send a landing whose checks the host
 # could not run takes up the place a stopped landing left on the bolt's branch, levels the host's copy, which the
 # fix's merge sluice landed on GitHub left behind, to GitHub's head first and says so (plan.19), and is stopped, nothing
@@ -39,7 +40,8 @@
 # held, the third landing all the same, the command exiting non-zero naming the held one, and the card closed with
 # what landed and what was held, keeping the user's send for the held one; its team's fix takes main into it, and once
 # that merges no card asks for it, ops reads it under the earlier send with no card open, and the command that read
-# prints lands it on that send (record 0031 as amended 2026-10-24).
+# prints lands it on that send (record 0031 as amended 2026-10-24), run again after its landing stood in sluice when
+# ops's session ended, so it waits on that landing again and submits nothing (bolt-teams).
 # Last, main moving under a proven row makes crew rail on the main level's host raise the kit's landings card again,
 # holding the row taking main first and telling its conductor the take-main fix, recorded once, and a second crew
 # rail, main not having moved, tells and raises nothing. And a bolt the user left on a send: main moving under it keeps
@@ -237,20 +239,20 @@ has "$(grep "^$box wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha " "$CREW_
   "swb-1 can take its next bolt: bolt tenant-environments reads proven. Give a free team its next bolt."
 ok "a fix started on the bolt drafts its ready pull request and holds its row, ending its reading and releasing its preview, the card withdrawn with no row left that can land, and once the fix merges a new card is posted with a preview of the new head, raised without its row's reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
 
-# The conductor's wait finds no reading and starts it, changing the card to carry its link, then waits on it until the
-# landing's close ends it.
-HOST=$box crew card wait land/tenant-environments > "$T/land-wait.out" 2>&1 &
-waiting=$!
-until_ok test -s "$reading/session.json" || fail "the wait started no reading:"$'\n'"$(cat "$T/land-wait.out")"
+# The conductor's read finds no reading running, and its crew card session starts it, changing the card to carry its
+# link; the reading runs until the landing's close ends it, with nothing of crew's waiting on it.
+HOST=$box expect_ok crew card read land/tenant-environments
+eq "$out" "land/tenant-environments: no reading of it runs on this host: crew card session land/tenant-environments starts it"
+HOST=$box expect_ok crew card session land/tenant-environments
 pid2=$(jq -r .pid "$reading/session.json"); url2=$(jq -r .url "$reading/session.json")
+eq "$(head -1 <<<"$out")" "$url2"
 [[ $pid2 != "$pid" ]] || fail "the landing card raised again has its old reading"
-relinked() { calls | grep "^$box pendingyou update_request " | grep -q "$url2"; }
-until_ok relinked || fail "the card was not changed to carry the reading's link:"$'\n'"$(cat "$T/land-wait.out")"
 changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
-has "$changed" "\"requestId\": \"$again\""; has "$changed" "\"changeNote\": \"tenant-environments: Its reading is open again at a new link\""
+has "$changed" "\"requestId\": \"$again\""; has "$changed" "\"changeNote\": \"tenant-environments: Its reading is open again at a new link\""; has "$changed" "$url2"
 eq "$(listed)" "$pid2"
-kill -0 "$waiting" 2>/dev/null || fail "the wait returned rather than waiting on the reading:"$'\n'"$(cat "$T/land-wait.out")"
-ok "the conductor's wait on its bolt's row with no reading starts it, prints its link, changes the kit's card to carry it and waits on it"
+HOST=$box expect_ok crew card read land/tenant-environments
+eq "$out" "land/tenant-environments: its reading waits on the user, who has sent nothing from it"
+ok "the conductor's read of its bolt's row with no reading says so, and its crew card session starts it, prints its link and changes the kit's card to carry it"
 unset CREW_AGENT
 
 # The bolt reads proven, so its team is free for its next bolt while it waits to land (teams.16): the give hands swb-1
@@ -280,7 +282,8 @@ done
 greeted=$(calls | grep "^$box wldn-1 agent prompt swb-1-conductor '\[crew\] crew restarted you")
 has "$greeted" "bolt is now bolt/ssh-fix, which sluice"
 has "$greeted" "Your team now builds the bolt ssh-fix. Bolt tenant-environments waits to land, a row of switchboard-kit"  # the log quotes each '
-has "$greeted" "run crew card wait land/tenant-environments in the background for its reading"
+has "$greeted" "crew card read land/tenant-environments then gives its notes"
+lacks "$greeted" "card wait"
 lacks "$greeted" "get_request"
 eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
 ok "a give beside a waiting bolt restarts its conductor and ops at their next stop, the conductor greeted with both bolts and the waiting one's row"
@@ -356,9 +359,6 @@ has "$out" "released land/tenant-environments's preview of ${h2:0:7}"
 eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid2"
 ended "$pid2"; eq "$(listed)" ""
-wait "$waiting" || fail "the conductor's wait failed:"$'\n'"$(cat "$T/land-wait.out")"
-eq "$(head -1 "$T/land-wait.out")" "$url2"
-eq "$(tail -1 "$T/land-wait.out")" "land/tenant-environments: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run"
 [[ ! -e $reading ]] || fail "the landing's reading outlived its card"
 has "$out" "sluice deleted bolt/tenant-environments from GitHub at $tip"
 git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still on GitHub"
@@ -590,12 +590,26 @@ out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 
 eq "$out" "card land/switchboard-kit: no landings card of switchboard-kit is open
   to land on the user's send of an earlier card: south
   lands them: crew bolt submit south --label wldn"
+# Ops's session ended while its crew bolt submit south waited on the landing, #90, still queued on main at south's head
+# (bolt-teams "Ops restarted while its landing stood"): run again, it reads sluice's queue, submits nothing and waits on
+# #90 again, and once sluice lands it south is landed and closed as any landing is.
+sh=$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/south)
+jq -n --arg h "$sh" '{schema: "sluice/overview@1", at: "2026-10-28T16:00:00Z", host: "chuck-herdr-alpha", hosts: [], previews: [],
+  sessions: [], repository: "/kit/.git", branches: [{branch: "main", submissions: [{schema: "sluice/submission@1", id: 90,
+  branch: "main", head: $h, state: "queued", from: {agent: "wldn-ops", worktree: "pull/9", head: "bolt/south"}}]}]}' \
+  > "$CREW_TEST_ROOT/sluice-overview.json"
+echo "$kd/places/land-south" > "$CREW_TEST_ROOT/sluice-stands-90"
+: > "$CREW_TEST_LOG"
 expect_ok crew bolt submit south
+rm "$CREW_TEST_ROOT/sluice-overview.json"
+has "$out" "bolt/south's landing #90 stands in sluice at ${sh:0:7}, its head: crew waits on #90 again and submits nothing"
+grep -q "^$box wt submit main" "$CREW_TEST_LOG" && fail "crew submitted south again though its landing stood in sluice:"$'\n'"$(calls)"
+[[ ! -e $CREW_TEST_ROOT/sluice-stands-90 ]] || fail "crew's wait on #90 again did not reach sluice"
 has "$out" "bolt/south landed on switchboard-kit's main at"
 eq "$(plan -t Bolt -e "Bolt = 'south'" -c)" "0"
 eq "$(field mac-studio bolt.land Repo bolt/south)" "switchboard-kit"
 calls | grep -q "^$box pendingyou post_request " && fail "a landings card was posted for south's landing"
-ok "a ticked bolt sluice refused keeps the user's send through a fix that only takes main in: no card asks for it, ops reads it with no card open under the earlier send, and the command it prints lands it"
+ok "a ticked bolt sluice refused keeps the user's send through a fix that only takes main in: no card asks for it, ops reads it with no card open under the earlier send, and the command it prints, run again after its landing stood in sluice, waits on that landing again, submitting nothing, and lands it"
 
 # Main moving under a proven row: GitHub's main lands a change to the file far's unit added, and the builder's host
 # has it as origin/main, as the fleet's timer fetches it; crew rail on the main level's host, the partition's main

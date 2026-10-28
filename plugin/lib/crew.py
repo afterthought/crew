@@ -823,6 +823,11 @@ def herdr_in(session):
     return _SESSIONS.setdefault(session, Herdr(session))
 
 
+def herdr_fresh():
+    """herdr's sessions listed again at their next read: a long-lived process's, the host's follower at its tick."""
+    _SESSIONS.clear()
+
+
 def waits_on_question(fleet, name):
     """Whether an agent crew starts waits on a question in its pane, as a tell and a greeting read it: (herdr's status
     of it, None when it is not up; whether it waits; what crew could not read to know, or None). It waits when herdr
@@ -1726,6 +1731,62 @@ def held_said(host, h):
     """What crew says of a start a host's hold refuses."""
     since = f" since {h['at']}" if h.get("at") else ""
     return f"{host} is held by {h['by']}{since}: {h['why']}. crew starts no agent there until crew go {host}"
+
+
+SHA = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
+
+
+def files_ref(common, name):
+    """A ref's commit read from a git folder's files, with no process: its loose file, else its line in packed-refs;
+    "" when neither holds it, in a folder whose refs are files; None when the files can't say, a symbolic ref, a
+    reftable folder or a file that can't be read, for the caller to ask git (read.1)."""
+    common = pathlib.Path(common)
+    if (common / "reftable").exists():
+        return None
+    try:
+        text = (common / name).read_text().strip()
+        return text if SHA.fullmatch(text) else None
+    except (FileNotFoundError, NotADirectoryError):
+        pass
+    except OSError:
+        return None
+    try:
+        lines = (common / "packed-refs").read_text().splitlines()
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return None
+    for line in lines:
+        sha, _, ref = line.partition(" ")
+        if ref == name and SHA.fullmatch(sha):
+            return sha
+    return ""
+
+
+def head_here(root=None):
+    """crew's checkout's commit, read from its files with no process (files_ref): its .git, a folder or a linked
+    worktree's file naming one, its HEAD, and the branch HEAD names in the folder its worktrees share; through git
+    rev-parse only when the files can't say. None when neither can read it."""
+    root = pathlib.Path(root or HOME)
+    try:
+        dot = root / ".git"
+        if dot.is_dir():
+            gitdir = dot
+        else:
+            line = dot.read_text().strip()
+            gitdir = root / line[len("gitdir: "):] if line.startswith("gitdir: ") else None
+        if gitdir:
+            head = (gitdir / "HEAD").read_text().strip()
+            if SHA.fullmatch(head):
+                return head
+            common = gitdir / (gitdir / "commondir").read_text().strip() if (gitdir / "commondir").exists() else gitdir
+            got = files_ref(common, head[len("ref: "):]) if head.startswith("ref: ") else None
+            if got:
+                return got
+    except OSError:
+        pass
+    r = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True)
+    return (r.stdout.strip() or None) if r.returncode == 0 else None
 
 
 def crew_version(root=None):

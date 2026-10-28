@@ -67,7 +67,7 @@ A kit's landings card SHALL never be landed from a key in Herdr's popup. With on
 - **THEN** the card is one list of three boxes with `highStakes` set, and no `approve` block
 
 ### Requirement: An answer wakes the owner, which acts on the user's word
-An answer on a crew card SHALL be acted on by the role whose row it is, woken in its session by the card it adopted, and by no other: the planner applies or rewrites the proposal; main-level ops lands the bolts the user ticked on a kit's landings card, in the card's order, and passes a note naming a defect in a bolt to that bolt's conductor, who starts a fix on it; main-level ops runs the deploy's approval or the step's state; the design agent sets the record's status. crew SHALL then close the card at that act's event.
+An answer on a crew card SHALL be acted on by the role whose row it is, woken in its session by the card it adopted, and by no other: the planner applies or rewrites the proposal, and reads a batch's answer with `crew card read batch/<n>`; main-level ops lands the bolts the user ticked on a kit's landings card, in the card's order, and passes a note naming a defect in a bolt to that bolt's conductor, who starts a fix on it; main-level ops runs the deploy's approval or the step's state; the design agent sets the record's status. crew SHALL then close the card at that act's event. No process of crew's SHALL wait on a card's answer.
 
 #### Scenario: A proposal approved from the phone
 - **WHEN** the user approves the card for proposal 4 on the phone
@@ -75,7 +75,7 @@ An answer on a crew card SHALL be acted on by the role whose row it is, woken in
 
 #### Scenario: Changes asked for on a review card
 - **WHEN** the user writes a note on a batch's card asking for changes to unit `x`
-- **THEN** the planner's wait returns the note, the conductor runs construct again with its words, and no approval is asked
+- **THEN** the planner is woken, `crew card read batch/<n>` prints the note and closes the card, the conductor runs construct again with its words, and no approval is asked
 
 #### Scenario: Landing approved
 - **WHEN** the user leaves `a` and `c` ticked on `land/crew`, clears `b`, and sends
@@ -691,7 +691,7 @@ A proposal's card SHALL hold the proposal whole, picture, text and case, linking
 
 #### Scenario: Answered in the session rather than on the card
 - **WHEN** the user annotates a unit's change in the batch's session and sends the annotations
-- **THEN** the planner's `crew card wait batch/3` returns them, they go to the unit's conductor as the user's words, and the batch's card is closed
+- **THEN** the rail's refresh tells the planner to read batch 3, its `crew card read batch/3` prints them, they go to the unit's conductor as the user's words, and the batch's card is closed
 
 #### Scenario: A proposal's card holds the proposal whole
 - **WHEN** crew raises the card for proposal 4, which adds two units
