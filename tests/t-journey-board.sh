@@ -122,7 +122,7 @@ crew plan drop 1 "Not now." >/dev/null
 expect_ok crew board --label wldn
 kill -0 "$pid" 2>/dev/null || fail "crew board ended a card session"
 frame=$(home_of mac-studio)/.cache/crew/board/wldn.json
-expect_ok crew _board wldn --once; has "$out" "No board for wldn yet: the rail tab's loop writes it each time it refreshes"
+expect_ok crew _board wldn --once; has "$out" "No board for wldn yet: the host's follower writes it each time it refreshes"
 mkdir -p "$T/shim"
 shim() {  # shim <command> <bash test of "$@" that logs <what>> <what>
   printf '#!/usr/bin/env bash\nif %s; then echo "${CREW_TEST_HOST:-?} %s" >> %q; fi\nexec %q "$@"\n' "$2" "$3" "$T/reads.log" "$(command -v "$1")" > "$T/shim/$1"

@@ -439,7 +439,7 @@ def board_text(data, width=None, color=False, stale=None):
         if i:
             out.append("")
         answered = [h for h, v in p["hosts"].items() if v is True]
-        line([(f"{p['label']} board, as of {read_at.astimezone():%H:%M:%S}" + (f" ({stale} ago: the rail tab has not refreshed it since)" if stale else "")
+        line([(f"{p['label']} board, as of {read_at.astimezone():%H:%M:%S}" + (f" ({stale} ago: the host's follower has not refreshed it since)" if stale else "")
                       + f", read from {', '.join(answered) or 'no host'}", None)])
 
         heading("Inception")
@@ -718,8 +718,8 @@ def agent_views(data):
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
     the lines the mod draws above its view. With them, the line the mod draws in place of the view and the cards once
     the frame is stale_after_ms old, so a band names no bolt that has landed since, nor a card closed since (read.1):
-    the day and time it was read, since a frame a restart or a rail tab that stopped left can be days old, and that the
-    rail tab has not refreshed it since.
+    the day and time it was read, since a frame a restart or a follower that stopped left can be days old, and that the
+    host's follower has not refreshed it since.
 
     A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows)
     changes these views and plugin/hooks/status.js with it, each with its cases (code.8)."""
@@ -738,7 +738,7 @@ def agent_views(data):
         if here["held"]:
             views = {name: [held_row(here["host"], here["held"])] + v for name, v in views.items()}
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
-            "stale": row([(f"crew: the board was last read at {local(data['read_at'])}, too long ago to show; the rail tab on "
+            "stale": row([(f"crew: the board was last read at {local(data['read_at'])}, too long ago to show; crew's follower on "
                            f"{data['from']} has not refreshed it since", "dim")]),
             "views": views, "cards": {a: lines for a, lines in cards.items() if a in views}}
 
@@ -795,9 +795,8 @@ def write_frame(label, data, path=None):
 
 
 def no_frame(label):
-    return (f"No board for {label} yet: the rail tab's loop writes it each time it refreshes, and has not written one. A rail tab "
-            f"opened before crew board existed draws no board: close the console's rail tab and run "
-            f"crew console up {label}, which opens the rail tab and this board tab afresh.")
+    return (f"No board for {label} yet: the host's follower writes it each time it refreshes, swancloud's job or the console's "
+            f"rail tab, which crew console up {label} opens while no job runs.")
 
 
 def frame_text(label, data, width, color, now):

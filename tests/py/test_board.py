@@ -1,6 +1,6 @@
 """The board of a partition's flow (the crew-board spec): board.board_data on one read of the plan, proposals, signals,
 kits and run record, as plan.rail_read and board.signals give it, and board.board_text, board.frame_text and
-board.stamp on what that makes. That crew board reads it all and writes nothing, and the rail tab's refresh writes the
+board.stamp on what that makes. That crew board reads it all and writes nothing, and the host's follower's refresh writes the
 frame the board tab draws, are the board journey's (t-journey-board)."""
 import datetime
 import json
@@ -262,15 +262,15 @@ class TestData:
 
 
 class TestFrame:
-    def test_with_no_frame_the_board_tab_says_how_to_open_both_tabs_afresh(self):
-        said = board.frame_text("wldn", None, None, False, NOW)
-        assert said.startswith("No board for wldn yet: the rail tab's loop writes it each time it refreshes")
-        assert "close the console's rail tab and run crew console up wldn" in said
+    def test_with_no_frame_the_board_tab_says_the_hosts_follower_writes_it(self):
+        assert board.frame_text("wldn", None, None, False, NOW) == (
+            "No board for wldn yet: the host's follower writes it each time it refreshes, swancloud's job or the console's rail tab, "
+            "which crew console up wldn opens while no job runs.")
 
     def test_a_frame_read_five_minutes_ago_is_headed_with_its_age(self):
         d = data()
         d["read_at"] = board.iso(NOW - datetime.timedelta(minutes=5))
-        assert "(5m ago: the rail tab has not refreshed it since)" in board.frame_text("wldn", d, None, False, NOW).splitlines()[0]
+        assert "(5m ago: the host's follower has not refreshed it since)" in board.frame_text("wldn", d, None, False, NOW).splitlines()[0]
         d["read_at"] = board.iso(NOW)
         assert " ago" not in board.frame_text("wldn", d, None, False, NOW).splitlines()[0]
 
@@ -643,9 +643,9 @@ class TestViews:
         assert sorted(v["views"]) == sorted(["swb-1-conductor", "swb-2-conductor", "brd-1-conductor", "atl-1-conductor", "wldn-planner", "wldn-design",
                                              "wldn-ops", "wldn-operator"])
         assert v["read_at"] == data()["read_at"] and v["stale_after_ms"] == board.STALE * 1000
-        assert v["stale"] == [(f"crew: the board was last read at {board.local(data()['read_at'])}, too long ago to show; the rail tab on mac-studio "
+        assert v["stale"] == [(f"crew: the board was last read at {board.local(data()['read_at'])}, too long ago to show; crew's follower on mac-studio "
                                "has not refreshed it since", "dim")]
-        # a day with it: a restart, or a rail tab that stopped, can leave it days old
+        # a day with it: a restart, or a follower that stopped, can leave it days old
         assert re.fullmatch(r"crew: the board was last read at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}, .*", v["stale"][0][0])
 
     @pytest.mark.parametrize("stages, shown", [(["queued", "waiting", "ready"], "○○○"), (["amended", "construct", "planned"], "◔◔◔"),

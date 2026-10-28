@@ -1,6 +1,7 @@
 // crew's mod: each crew agent's view of its partition's board, drawn in the band above its prompt. The views are
-// crew's (board.py agent_views): the console's rail tab writes them beside the board's frame each time it
-// refreshes (crew _views), and this module finds its own agent's and draws it, deciding nothing itself (code.7). It
+// crew's (board.py agent_views): the host's follower, swancloud's job running crew _follow or else the console's rail
+// tab, writes them beside the board's frame each time it refreshes (crew _views), and this module finds its own agent's
+// and draws it, deciding nothing itself (code.7). It
 // starts no process and costs no tokens: every few seconds it looks at the file's time, and reads the file only when
 // that has moved (state.4: a frame is one redraw, not state).
 //
@@ -8,7 +9,7 @@
 // changes this module and board.agent_views together, each with its cases: tests/py/test_board.py pins every key this
 // reads from the views file, and plugin/tests/status.test.ts what it draws (code.8).
 
-// How often the file's time is looked at; the rail tab writes it every 30 seconds and on each run-record entry.
+// How often the file's time is looked at; the host's follower writes it every 30 seconds and on each run-record entry.
 const EVERY_MS = 5000
 
 // Who this session is, where its partition's views are, and what was last read from them.
@@ -54,13 +55,13 @@ async function look($) {
 }
 
 // The lines the band shows: the agent's open cards, its questions among them, then its view; once the views are old,
-// the stale line alone, since views the rail tab has stopped refreshing name the bolt and cards as they stood then, a
+// the stale line alone, since views the host's follower has stopped refreshing name the bolt and cards as they stood then, a
 // bolt landed since among them (read.1); one line while no views are written on this host; nothing for an agent crew
 // gives no view, or a session that is no crew agent.
 function lines() {
   if (!live.path) return undefined
   if (!live.frame) {
-    return [[['crew: no board for ' + live.label + ' on this host yet; its console writes it (crew console up ' + live.label + ')', 'dim']]]
+    return [[['crew: no board for ' + live.label + " on this host yet; the host's follower writes it (crew console up " + live.label + ' while no job runs)', 'dim']]]
   }
   const view = live.frame.views[live.agent]
   if (!view) return undefined
