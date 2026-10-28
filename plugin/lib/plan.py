@@ -11739,7 +11739,8 @@ def record_reading(l, entries, plan, fresh, missing=None):
     held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
                 due=None if missing else {u for u, *_ in due_changes(plan, entries)},
                 unanswered=None if missing else awaiting_answer(entries), refused=refusals(entries), stopped=stops(entries),
-                forecasts=[e for e in entries if e.get("Act") == "forecast"])
+                forecasts=[e for e in entries if e.get("Act") == "forecast"],
+                left=[e for e in entries if e.get("Act") in ("landing.left", "bolt.leave", "bolt.submit")])
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
 
 
@@ -11760,8 +11761,10 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     change has been in a batch whose card the user has answered, no fix is in flight on it, sluice did not refuse its
     landing at its head (refusals, held's refused) and the run record holds no conflict with main forecast at its head
     (main_conflict, held's forecasts); until then its line says which units no batch has held, which batches wait on the
-    user's answer, the fix, sluice's words, or that it takes main first (briefs.12). The row's answer tells ops to land
-    those that can, in order, and offers nothing while none can."""
+    user's answer, the fix, sluice's words, or that it takes main first (briefs.12), or for a bolt the user left on the
+    kit's landings card (left_of, held's left), that it takes main first once ticked (crew-rail "A left bolt's land line
+    says it would take main first once ticked"). The row's answer tells ops to land those that can, in order, and
+    offers nothing while none can."""
     rows, here, held = [], crew.this_host(), held or {}
     for d in props:
         l, n = d["label"], d["proposal"]
@@ -11822,16 +11825,19 @@ def rail_rows(fleet, found, sv, props, times, held=None):
             refused = held_at(held.get(l, {}).get("refused") or {}, b.name(), head)
             stop = stopped_at(held.get(l, {}).get("stopped") or {}, b.name(), head)
             conflict = main_conflict(held.get(l, {}).get("forecasts") or [], b.name(), head)
+            kit_name = b.get("Repo") or k["kit"]["name"]
             if not lands and fixes:  # a fix started on the bolt holds its landing (landing_held)
                 lands = [f"lands once {either(sorted(fixes))} has merged or been dropped"]
             elif not lands and refused:  # sluice refused its landing at this head (refused_at)
                 lands = [f"held: sluice refused its landing at {head[:7]}, until its team's fix moves its head: {refused}"]
+            elif not lands and conflict and left_of(held.get(l, {}).get("left") or [], f"land/{kit_name}", {b.name(): head}):
+                lands = [f"left by the user: takes main first once ticked, forecast to conflict with main on {joined(conflict[1])}"]
             elif not lands and conflict:  # forecast at this head to conflict with what main holds (main_conflict)
                 lands = [f"takes main first: forecast to conflict with main on {joined(conflict[1])}, until its team's "
                          "take-main fix moves its head"]
             can = ["can land"] + ([f"its last landing at {head[:7]} was stopped, nothing of the bolt's: {stop.rstrip('.')}; "
                                    f"{l}-ops submits it again once that is cleared"] if stop else [])  # stopped_at, holding nothing
-            kits.setdefault(b.get("Repo") or k["kit"]["name"], []).append(
+            kits.setdefault(kit_name, []).append(
                 dict(bolt=b.name(), team=team, host=host, at=at, can=not lands, line=f"{b.name()}, {team} on {host}: "
                      + "; ".join(said + (lands or can))))
         for kit_name, bolts in kits.items():

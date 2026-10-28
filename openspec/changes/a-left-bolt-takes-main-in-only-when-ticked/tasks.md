@@ -27,7 +27,7 @@
 
 ## 7. The rail
 
-- [ ] 7.1 The rail's land row says a left bolt in conflict with main takes main first once ticked and leaves it out of the tell that lands (design, Decision 7; Task notes 7.1); passes `tests/py/test_rail.py`, `tests/suite logic` ending with "0 failed".
+- [x] 7.1 The rail's land row says a left bolt in conflict with main takes main first once ticked and leaves it out of the tell that lands (design, Decision 7; Task notes 7.1); passes `tests/py/test_rail.py`, `tests/suite logic` ending with "0 failed".
 
 ## 8. The command's wiring
 
