@@ -4,14 +4,18 @@
   python3 gather.py '<request>'      or, sent over ssh:  python3 - '<request>' < gather.py
 
 The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
-"slots": {<team>: <its slots file, ~ allowed>}}],
+"slots": {<team>: <its slots file, ~ allowed>}, "queued": <the host's follower's [submissions, why] of the kit's queue,
+read from its overview watch, in place of running sluice>}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
 "board": <true to also read each team's slots file and the explorations on the kit's main>,
 "fetch": <true to fetch each kit's GitHub, its origin, before reading it>,
 "stamped": <true to also give each kit's stamp, taken before it is read>,
 "stamp": <true to give each kit's stamp alone and read nothing else: the host's follower's check that nothing moved,
 answered {"kits": {<main>: <stamp>}, "readings": <the stamp of the card readings folders of the partitions named>}>,
-"labels": <with stamp, the partitions whose card readings folders on the host to stamp>}.
+"labels": <with stamp, the partitions whose card readings folders on the host to stamp>,
+"overview": <with stamp, the main checkouts whose sluice overview to read once, answered "overviews": {<main>:
+[<document>, <why it can't be read>]}>,
+"routes": <with stamp, true to read the host's portless routes too, answered "routes">}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
@@ -668,10 +672,10 @@ def readings_stamp(labels):
 SLUICE_ANSWER = 15  # seconds the gather gives sluice overview to answer
 
 
-def queue(main):
-    """The submissions standing in sluice's queue for a kit, read in its main checkout on this host (teams.22, record
-    0046 part 2): `sluice overview --json`, read by submissions_of; (None, why) when sluice is not on the host, fails,
-    or does not answer within SLUICE_ANSWER seconds (read.1)."""
+def overview(main):
+    """sluice's overview of a kit's queue, read in its main checkout on this host: `sluice overview --json`, sluice's
+    one contract for a reader (sluice ADR 0023), as (its document, None), or (None, why) when sluice is not on the
+    host, fails, prints no JSON, or does not answer within SLUICE_ANSWER seconds (read.1)."""
     try:
         r = subprocess.run(["sluice", "overview", "--json"], cwd=main, capture_output=True, text=True, timeout=SLUICE_ANSWER)
     except FileNotFoundError:
@@ -680,17 +684,29 @@ def queue(main):
         return None, f"sluice overview did not answer within {SLUICE_ANSWER} seconds"
     except OSError as e:
         return None, f"sluice overview could not run: {e}"
-    if r.returncode:  # sluice says why as {"error": {"message": ...}} under --json, clap on standard error
-        try:
-            said = json.loads(r.stdout)["error"]["message"]
-        except (ValueError, TypeError, KeyError):
-            said = next((l.strip() for l in r.stderr.splitlines() if l.strip()), "")
-        return None, f"sluice overview exited {r.returncode}" + (f": {said}" if isinstance(said, str) and said else "")
+    if r.returncode:
+        return None, sluice_said("sluice overview", r.returncode, r.stdout, r.stderr)
     try:
-        doc = json.loads(r.stdout)
+        return json.loads(r.stdout), None
     except ValueError:
         return None, "sluice overview printed no JSON"
-    return submissions_of(doc)
+
+
+def sluice_said(what, code, out, err):
+    """Why a sluice command failed, in its words: sluice says why as {"error": {"message": ...}} under --json, clap on
+    standard error."""
+    try:
+        said = json.loads(out)["error"]["message"]
+    except (ValueError, TypeError, KeyError):
+        said = next((l.strip() for l in (err or "").splitlines() if l.strip()), "")
+    return f"{what} exited {code}" + (f": {said}" if isinstance(said, str) and said else "")
+
+
+def queue(main):
+    """The submissions standing in sluice's queue for a kit, read in its main checkout on this host (teams.22, record
+    0046 part 2): its overview, read by submissions_of; (None, why) when it can't be read (overview, read.1)."""
+    doc, why = overview(main)
+    return (None, why) if why else submissions_of(doc)
 
 
 def submissions_of(doc):
@@ -792,8 +808,9 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
     out["fix_branches"] = {b: f for b, f in facts.items() if b not in worked}
     # What stands in sluice's queue, read once for a kit this host holds a bolt of (teams.22): each submission's number
     # on its bolt's row, a queue that can't be read said there, never read as empty (read.1).
+    # The host's follower hands in what its overview watch of the kit last read (queued), so sluice is not run again.
     if req.get("bolts"):
-        subs, why = queue(main)
+        subs, why = req["queued"] if req.get("queued") else queue(main)
         out["submissions"] = subs
         if why:
             out["submissions_error"] = why
@@ -809,11 +826,14 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
 
 def read(request, running=None):
     """The answer to a request: with stamp, each kit's stamp alone by its main checkout and the stamp of the card readings
-    folders of the partitions it names, the follower's check that nothing moved; else, by each kit's main checkout, each
-    kit as kit() reads it, with stamped its stamp too, taken before the kit is read, so
-    anything that moves while it is read moves the stamp the follower next compares."""
+    folders of the partitions it names, the follower's check that nothing moved, and, at its clock's tick, each named
+    kit's overview (overview, [document, why]) and the host's portless routes (routes) when asked; else, by each kit's
+    main checkout, each kit as kit() reads it, with stamped its stamp too, taken before the kit is read, so anything
+    that moves while it is read moves the stamp the follower next compares."""
     if request.get("stamp"):
-        return {"kits": {k["main"]: stamp(k) for k in request["kits"]}, "readings": readings_stamp(request.get("labels", []))}
+        return {"kits": {k["main"]: stamp(k) for k in request["kits"]}, "readings": readings_stamp(request.get("labels", [])),
+                **({"overviews": {m: list(overview(m)) for m in request["overview"]}} if request.get("overview") else {}),
+                **({"routes": routes()} if request.get("routes") else {})}
     out = {}
     for k in request["kits"]:
         s = stamp(k) if request.get("stamped") else None
