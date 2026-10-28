@@ -9,6 +9,8 @@ consulted: madswan-design (sluice and Flume), swancloud-planner, swancloud-ops
 
 Status: accepted by the user on 2026-10-28, on their card (req_a2bd279a0778447e8e3d, "Approved").
 
+Amended 2026-10-28: the words are now delivered/pending, collect, notice, recipient, stalled (agentplot/sluice record 0070, agentplot/flume record 0014).
+
 Amended 2026-10-28 by record 0049, accepted by the user: pattern 5 adds that a role's work that lands is a Flume place, and a session's start (pattern 4) is a role run's start.
 
 Deciders: the user, in the design agent's pane on 2026-10-28: "we've got this model now where crew sends messages around using tell and that's working okay. We have a sluice Claude Code mod that, I believe, sends messages to the session itself. It's not clear whether agents are supposed to submit and wait in the background or just submit and then let the mod send messages through. We're talking about sluice running as a daemon and sending messages, and crew doing waits. Stepping back, there's a general topology of message sending: client-server versus broadcast versus hub-sub/pub-sub. I don't know that we've actually sat down and defined the patterns that we should be using. We just keep writing fucking code"; and their note to sluice the same day that sluice must stay a simple CLI and nobody is told to set up a daemon. Their words settle what they said; the patterns below are the design agent's, asked on this card.

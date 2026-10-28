@@ -9,6 +9,8 @@ consulted: the design review of crew, Flume and sluice of 2026-10-28
 
 Status: accepted by the user on 2026-10-28, in their design session ("i agree with these changes"), on the recommendations R1, R3, R4 and R5 of a review that read crew records 0045 to 0048, Flume records 0002 to 0011 and sluice records 0056, 0065 and 0068 together and drew them as one picture.
 
+Amended 2026-10-28: the words are now delivered/pending, collect, notice, recipient, stalled (agentplot/sluice record 0070, agentplot/flume record 0014).
+
 Deciders: the user; the shape is the reviewing agent's.
 Amends: record 0046 parts 4 and 6, record 0047 moves 3 and 6 and the order, record 0048 pattern 5; `core.md` gains `roles.7`; `_open.md`'s moves.
 Sources: record 0047 move 6 (no crew role stands; each is a kind Flume launches on a nudge naming a record); record 0048 patterns 3 to 5; record 0046 part 3 (no SessionStart hook of crew's; a launched role's own start asks); flume records 0011 (a kind runs through on its own), 0012 (a submission read at the settles that follow it; the merge queue removes no place) and 0013 (a waiter may be a role's address; an end untold to it wakes the role); agentplot/blueprints `design/flume/requirements.md` clauses 43, 132, C.7, S38 and the callers table's crew row, as amended at 4074bf9; sluice records 0065 and 0068; `state.4`, `roles.5`, `roles.6`.
