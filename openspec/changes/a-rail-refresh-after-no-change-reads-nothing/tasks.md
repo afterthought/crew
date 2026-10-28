@@ -16,7 +16,7 @@
 ## 3. The run record's follow on the same clock
 
 - [x] 3.1 `crew events --follow` reads the branch as this host's cache holds it, rereads only the files whose blob changed when its tip moves, and fetches once a minute only for a partition no follower on the host fetches, at once on SIGUSR1 (design, Decision 6; Task notes 3.1); passes `tests/py/test_record.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 3.2 The follow prints an entry another host pushes once it is told to tick, fetching once at its start and once per tick and never otherwise (design, Decision 6; Task notes 3.2); passes `tests/suite t-journey-state` ending with "0 failed".
+- [x] 3.2 The follow prints an entry another host pushes once it is told to tick, fetching once at its start and once per tick and never otherwise (design, Decision 6; Task notes 3.2); passes `tests/suite t-journey-state` ending with "0 failed".
 
 ## 4. On the stubs, and in the words
 
