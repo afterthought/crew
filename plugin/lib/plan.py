@@ -649,7 +649,7 @@ def fetch(repo, ref, fresh=False):
         if "couldn't find remote ref" in r.stderr:
             return None
         fail(f"could not fetch {ref} of {repo} over https: {r.stderr.strip()}")
-    tip = git(repo, "rev-parse", f"refs/crew/{ref}")
+    tip = tip_here(repo, ref) or git(repo, "rev-parse", f"refs/crew/{ref}")  # the cache's files, else git
     READ.keep_tip(repo, ref, tip)
     return tip
 

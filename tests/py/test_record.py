@@ -92,11 +92,26 @@ class TestEmit:
         with pytest.raises(crew.Refusal, match="^nothing reached wldn/main: /x/teams.json is missing"):
             record.reach("wldn")
 
-    def test_a_fetch_that_lost_the_caches_ref_to_another_command_on_this_host_is_made_again(self, monkeypatch):
+    def test_a_fetchs_tip_is_read_from_the_caches_files_with_no_git_after_the_fetch(self, monkeypatch, tmp_path):
+        """The host's follower fetches on its clock, and the tip a fetch moved is read from the cache's files
+        (plan.tip_here), so the clock's fetch starts nothing beside git's fetch (plan.12's reading of 2026-10-28)."""
+        import types
+        calls = []
+        (tmp_path / "WilldanGroup/crew-state.git/refs/crew/wldn").mkdir(parents=True)
+        (tmp_path / "WilldanGroup/crew-state.git/HEAD").write_text("ref: refs/heads/main\n")
+        (tmp_path / "WilldanGroup/crew-state.git/refs/crew/wldn/main").write_text("d" * 40 + "\n")
+        monkeypatch.setattr(plan, "CACHE", tmp_path)
+        monkeypatch.setattr(plan, "git", lambda repo, *args, input=None, env=None, check=True: calls.append(args[0]) or types.SimpleNamespace(
+            returncode=0, stdout="", stderr=""))
+        monkeypatch.setattr(plan, "READ", plan.Reading())
+        assert plan.fetch("WilldanGroup/crew-state", "wldn/main") == "d" * 40 and calls == ["fetch"]
+
+    def test_a_fetch_that_lost_the_caches_ref_to_another_command_on_this_host_is_made_again(self, monkeypatch, tmp_path):
         """Every act pushes its entry, so two commands on one host fetch the branch into crew's cache side by side, and
         git refuses the one whose ref the other moved meanwhile: it fetches again, and refuses only what is no race."""
         import types
         calls = []
+        monkeypatch.setattr(plan, "CACHE", tmp_path)  # no cache's files hold the ref, so its tip is asked of git
 
         def git(repo, *args, input=None, env=None, check=True):
             calls.append(args[0])
