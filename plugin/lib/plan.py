@@ -13565,27 +13565,47 @@ def card_held(label, who, key):
         f"{who} holds no open card under {key} on {crew.this_host()}")
 
 
-def landing_lines(label, got, heads, earlier=(), unknown=(), stopped=None):
+def landing_lines(label, got, heads, earlier=(), unknown=(), stopped=None, main_first=()):
     """What crew card read land/<kit> prints beside the answer once the user sent the kit's landings card (rail-cards
     "An answer wakes the owner"): the bolts they ticked in the card's order (ticked_of, heads its rows as card_heads
     gives them), and the one crew bolt submit that lands them in that order, or that none was ticked, so nothing lands;
     nothing while it waits on them, nor with no card open (got {}, heads []). The bolts an earlier send still lands
     (earlier, sent_left), its card closed, come first, said while this one waits too or with none open, and the submit
     lands them before this card's; each sent bolt crew can't tell of (unknown, [(bolt, why)]) is said, and left out of
-    it (main-level "Ops lands a bolt on a send that still stands"). Each of them whose last landing sluice or its host
-    stopped (stopped, {bolt: (head, words)}, stops) is said with what stopped it and the head it was at, the same
-    submit landing it once that is cleared (rail-cards "Checks that never ran")."""
+    it (main-level "Ops lands a bolt on a send that still stands"). Each ticked bolt the run record holds forecast to
+    conflict with main at the head the card showed (main_first, main_conflict) is left out of it too, said to take main
+    first with the user's send standing for it (rail-cards "Ticking a left bolt that conflicts with main starts its
+    take-main fix"). Each bolt it lands whose last landing sluice or its host stopped (stopped, {bolt: (head, words)},
+    stops) is said with what stopped it and the head it was at, the same submit landing it once that is cleared
+    (rail-cards "Checks that never ran")."""
     ticked, earlier, stopped = ticked_of(got, heads), list(earlier), stopped or {}
+    lands = [b for b in ticked or [] if b not in main_first]
     lines = [f"  can't tell whether the user's earlier send still lands {b}: {why}" for b, why in unknown]
     lines += [f"  to land on the user's send of an earlier card: {joined(earlier)}"] if earlier else []
     if ticked == []:
         lines += ["  no bolt ticked on this card: nothing of it lands" if earlier else "  no bolt ticked: nothing lands"]
-    elif ticked:
-        lines += [f"  to land, in the card's order: {joined(ticked)}"]
-    both = earlier + (ticked or [])
+    elif lands:
+        lines += [f"  to land, in the card's order: {joined(lands)}"]
+    lines += [f"  {b} takes main first: its team takes main in by a fix, and the user's send stands for it"
+              for b in ticked or [] if b in main_first]
+    both = earlier + lands
     lines += [f"  {b}'s last landing at {stopped[b][0][:7]} was stopped, nothing of the bolt's: {stopped[b][1].rstrip('.')}; "
               "once that is cleared, the submit below lands it on the user's send" for b in both if b in stopped]
     return lines + ([f"  lands them: crew bolt submit {' '.join(both)} --label {label}"] if both else [])
+
+
+def main_firsts(fleet, label, entries, heads):
+    """The bolts of a kit's landings card the run record holds forecast to conflict with main at the head the card
+    showed (main_conflict), heads its rows as card_heads gives them: read from the partition's branch (read.5) and this
+    host's entries (entries) it does not hold yet. A branch that can't be read is said, and this host's alone read."""
+    try:
+        whole = partition_entries(fleet, label)
+    except Refusal as e:
+        print(f"crew reads only this host's run record for which ticked bolt takes main first: {e}", file=sys.stderr)
+        whole = []
+    ids = {e["Id"] for e in whole if e.get("Id")}
+    whole = whole + [e for e in entries if not e.get("Id") or e["Id"] not in ids]
+    return {b for b, h, _ in heads if main_conflict(whole, b, h)}
 
 
 def landings_earlier(fleet, label, kit, key, who, entries, heads, acts=None):
@@ -13626,9 +13646,12 @@ def card_read(fleet, a):
     landings card, land/<kit>, the bolts they ticked in the card's order and the crew bolt submit that lands them,
     those an earlier send still lands, whose card closed as this one followed it, first (landings_earlier,
     landing_lines), each whose last landing sluice or its host stopped said with what stopped it (stops), and with no
-    card of the kit open, those alone (landings_unopened). An approval the user declined is then closed with their
-    words, and the close recorded (record 0031 §1), with what they answered in crew's words (cards.answer_said);
-    nothing else is."""
+    card of the kit open, those alone (landings_unopened). A kit's landings card the user sent is raised first, here on
+    the partition's main machine (land_hand), what it says on standard error, so the send is acted on at once: a bolt
+    ticked that was left and conflicts with main is held taking main first and its conductor told the take-main fix,
+    and the bolts the read gives to land leave out each the run record holds so (main_firsts). An approval the user
+    declined is then closed with their words, and the close recorded (record 0031 §1), with what they answered in
+    crew's words (cards.answer_said); nothing else is."""
     import cards
     label, who = card_asker(fleet, a)
     kind = land_key(a.key, partition_kits(fleet, label))
@@ -13643,6 +13666,9 @@ def card_read(fleet, a):
         if words is not None:
             tool, args, _ = cards.close_call(got, card, who, cards.declined_outcome(words))
             py.call(tool, args)
+    if kind and kind[0] == "kit" and words is None and got.get("status") == "answered":
+        with contextlib.redirect_stdout(sys.stderr):  # the read's own output is the answer; a raise that fails is said
+            land_hand(fleet, label, kind[1])
     if a.json:
         print(json.dumps(got, indent=1, ensure_ascii=False))
     else:
@@ -13650,8 +13676,10 @@ def card_read(fleet, a):
         heads = card_heads(next((e.get("Heads") for e in reversed(entries) if e.get("Card") == card and e.get("Heads")
                                  and not e.get("Refused")), None))
         earlier, unknown = landings_earlier(fleet, label, kind[1], a.key, who, entries, heads) if kind and kind[0] == "kit" else ([], [])
+        first = main_firsts(fleet, label, entries, heads) if kind and kind[0] == "kit" and ticked_of(got, heads) else set()
         print("\n".join(cards.answer_lines(a.key, card, got)
-                        + (landing_lines(label, got, heads, earlier, unknown, stops(entries)) if kind and kind[0] == "kit" else [])))
+                        + (landing_lines(label, got, heads, earlier, unknown, stops(entries), first)
+                           if kind and kind[0] == "kit" else [])))
     if words is not None:
         record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words), Answer=cards.answer_said(got))

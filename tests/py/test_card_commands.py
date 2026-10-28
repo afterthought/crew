@@ -999,3 +999,85 @@ def test_a_lone_row_approved_lands_it_and_a_send_ticking_none_lands_nothing():
     none = {"status": "answered", "turn": "agent", "answer": {"choiceIds": []}}
     assert plan.landing_lines("wldn", none, one) == ["  no bolt ticked: nothing lands"]
     assert plan.landing_lines("wldn", {"status": "pending", "turn": "you"}, one) == []
+
+
+def test_a_bolt_ticked_that_the_record_holds_taking_main_first_is_left_out_of_the_submit_its_send_standing():
+    """rail-cards "Ticked after being left": z takes main first, y lands."""
+    heads = plan.card_heads("y@abc1234 z@abc1234")
+    got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:y", "land:z"]}}
+    assert plan.landing_lines("swancloud", got, heads, main_first={"z"}) == [
+        "  to land, in the card's order: y",
+        "  z takes main first: its team takes main in by a fix, and the user's send stands for it",
+        "  lands them: crew bolt submit y --label swancloud"]
+    assert plan.landing_lines("swancloud", got, heads, main_first={"y", "z"})[-1] == (
+        "  z takes main first: its team takes main in by a fix, and the user's send stands for it")
+
+
+class ReadSent:
+    """crew card read land/crew as swancloud-ops on the partition's main machine, holding req_k1 under it, with the
+    user's send (got) read from Pending You; the kit's card raised in its stead, the raise adding what it records (told)
+    to this host's run record."""
+    FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio", "teams": ["crw-1"]}},
+             "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "mac-studio",
+                                 "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}}
+
+    def __init__(self, monkeypatch, got, told=(), branch=()):
+        import argparse
+        self.entries = [post("land/crew", "swancloud-ops", "req_k1", Heads="y@abc1234 z@abc1234")]
+        self.raised, self.calls = [], []
+        acts = self
+
+        class Bridge(Py):
+            def __init__(self, name, later, held=None):
+                Py.__init__(self, acts, {"get_request": (got, None)})
+
+        def raised(fleet, label, kit, note=None, pane=None):
+            print("card land/crew: req_k1 is left as it is, the user having answered it")
+            self.raised.append(kit)
+            self.entries += list(told)
+        monkeypatch.setattr(cards, "Bridge", Bridge)
+        monkeypatch.setattr(cards, "host_entries", lambda record, label, host: list(self.entries))
+        monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", "swancloud-ops"))
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "land_hand", raised)
+        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: list(branch))
+        self.run = lambda json=False: plan.card_read(self.FLEET, argparse.Namespace(key="land/crew", label=None, json=json, sub="read"))
+
+
+TICKED = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+Z_TOLD = dict(Act="forecast", On=["bolt/z"], Heads="bolt/z@abc1234 main@e4f5a6b", Paths="README.md", Reached="told")
+
+
+def test_reading_a_sent_landings_card_raises_it_first_and_leaves_a_bolt_taking_main_first_out_of_the_submit(monkeypatch, capsys):
+    """rail-cards "Ticking a left bolt that conflicts with main starts its take-main fix": the raise tells z's conductor
+    the fix, recorded on this host, and the read gives y alone to land."""
+    read = ReadSent(monkeypatch, TICKED, told=[Z_TOLD])
+    read.run()
+    out, err = capsys.readouterr()
+    assert read.raised == ["crew"] and "is left as it is" in err and "is left as it is" not in out
+    assert out.splitlines()[-3:] == [
+        "  to land, in the card's order: y",
+        "  z takes main first: its team takes main in by a fix, and the user's send stands for it",
+        "  lands them: crew bolt submit y --label swancloud"]
+
+
+def test_a_conflict_a_wait_recorded_on_the_branch_leaves_the_bolt_out_too(monkeypatch, capsys):
+    read = ReadSent(monkeypatch, TICKED, branch=[dict(Z_TOLD, Reached="wait", Id="e-1")])
+    read.run()
+    assert capsys.readouterr().out.splitlines()[-1] == "  lands them: crew bolt submit y --label swancloud"
+
+
+def test_a_ticked_bolt_with_no_conflict_lands_as_any_and_the_json_answer_is_left_clean(monkeypatch, capsys):
+    """rail-cards "Ticked and clean"."""
+    read = ReadSent(monkeypatch, TICKED)
+    read.run()
+    assert capsys.readouterr().out.splitlines()[-1] == "  lands them: crew bolt submit y z --label swancloud"
+    read.run(json=True)
+    out, err = capsys.readouterr()
+    assert json.loads(out) == TICKED and "is left as it is" in err
+
+
+def test_a_card_still_waiting_on_the_user_is_not_raised(monkeypatch, capsys):
+    read = ReadSent(monkeypatch, {"status": "pending", "turn": "you", "version": 2})
+    read.run()
+    assert read.raised == []

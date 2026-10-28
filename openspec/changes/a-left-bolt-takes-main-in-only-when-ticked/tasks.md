@@ -23,7 +23,7 @@
 
 ## 6. Reading the send
 
-- [ ] 6.1 `crew card read` of an answered landings card raises it first, so a ticked bolt that was left and conflicts is held taking main first and its conductor told the fix, and leaves that bolt out of the command it prints, saying the send stands for it (design, Decision 6; Task notes 6.1); passes `tests/py/test_card_commands.py`, `tests/suite logic` ending with "0 failed".
+- [x] 6.1 `crew card read` of an answered landings card raises it first, so a ticked bolt that was left and conflicts is held taking main first and its conductor told the fix, and leaves that bolt out of the command it prints, saying the send stands for it (design, Decision 6; Task notes 6.1); passes `tests/py/test_card_commands.py`, `tests/suite logic` ending with "0 failed".
 
 ## 7. The rail
 
