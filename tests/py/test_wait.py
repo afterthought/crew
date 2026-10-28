@@ -15,8 +15,10 @@ import plan
 WORKING, QUIET = (False, "is working", None), (False, "has been quiet for 3 minutes, under the limit of 15 minutes", None)
 
 
-def look(o=None, words=None, owed_=True, gone=False, got=None, missing="", quiet=WORKING, out_of_time=False, over=False):
-    return plan.look(o or owed("construct"), "swb-1-unit-1", 0, words, owed_, gone, got, missing, quiet, out_of_time, over)
+def look(o=None, words=None, owed_=True, gone=False, got=None, missing="", quiet=WORKING, out_of_time=False, over=False,
+         orphaned=False):
+    return plan.look(o or owed("construct"), "swb-1-unit-1", 0, words, owed_, gone, got, missing, quiet, out_of_time, over,
+                     orphaned)
 
 
 class TestLook:
@@ -62,6 +64,21 @@ class TestLook:
     def test_out_of_time_it_is_still_running_and_nothing_is_recorded(self, quiet, doing):
         assert look(quiet=quiet, out_of_time=True) == (
             "running", f"construct on a is still running after the wait's 0 ms: swb-1-unit-1 {doing}; nothing is recorded yet")
+
+    @pytest.mark.parametrize("out_of_time", [False, True])
+    @pytest.mark.parametrize("quiet, doing", [(WORKING, "is working"), (QUIET, QUIET[1])])
+    def test_a_wait_whose_session_ended_ends_with_it_and_records_nothing(self, quiet, doing, out_of_time):
+        # nine batch waits ran orphaned for 33 hours on deneb, 2026-10-28, each started in a session that had ended
+        # (teams.24, record 0046)
+        assert look(quiet=quiet, out_of_time=out_of_time, orphaned=True) == (
+            "orphaned", "the session that started this wait has ended, so the wait ends with it: construct on a is "
+                        f"still running, swb-1-unit-1 {doing}; nothing is recorded yet")
+
+    def test_a_wait_whose_session_ended_still_answers_an_end_it_sees(self):
+        assert look(got="unit/a@abc1234", missing="its change is committed at abc1234", orphaned=True)[0] == "delivered"
+        assert look(words="a decision", orphaned=True)[0] == "short"
+        assert look(gone=True, orphaned=True)[0] == "gone"
+        assert look(owed_=False, orphaned=True) == ("ended", None)
 
     def test_else_it_looks_again(self):
         assert look(quiet=QUIET) == (None, QUIET[1])
