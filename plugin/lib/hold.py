@@ -334,7 +334,7 @@ def go(fleet, a):
     for label in sorted(fleet["partitions"]):
         if label in fleet["hosts"].get(host, {}).get("sessions", {}):
             try:
-                plan.console_cmd(fleet, argparse.Namespace(act="up", label=label))
+                plan.console_cmd(fleet, argparse.Namespace(act="up", label=label, tabs=[]))
             except Refusal as e:
                 print(e, file=sys.stderr)
     update_here(fleet, argparse.Namespace(label=None))
