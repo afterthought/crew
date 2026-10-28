@@ -264,10 +264,20 @@
 #                                      left, or lost to the design agent, is posted again saying the older copy is
 #                                      dead; --accepted or --rejected closes it with the commit. A status the file
 #                                      does not hold is refused
-#   crew console  up|down <label>      the partition's console in this host's operator session <label>, starting no
-#                                      agent: a flow tab following the run record, a rail tab (crew rail above, a shell
-#                                      below) and a board tab drawn from the rail tab's read, each tab's command run
-#                                      again where a restart left its pane a shell; down closes them
+#   crew console  up|down <label> [flow] [rail] [board]
+#                                      the partition's console in this host's operator session <label>, starting no
+#                                      agent: a shell tab with crew on its path, and only the tabs named, a flow tab
+#                                      following the run record, a rail tab (the rail the host's follower writes above,
+#                                      a shell below) and a board tab drawn from the follower's read; the rail tab opens
+#                                      of itself too while no host job follows, since it then follows itself. Each tab
+#                                      already open is kept, named or not, its command run again where a restart left
+#                                      its pane a shell, and one the user closed stays closed unless named; down closes
+#                                      them
+#   crew _follow  [--once]             the host's follower with no tab, the command swancloud's job runs on each host:
+#                                      every 30 seconds and on each run-record entry, for each partition with an
+#                                      operator session here, due restarts handed out once crew's checkout or the teams
+#                                      file moved, then one read, writing the rail's frame, the board's and the agents'
+#                                      views; one follower to a host, holding its lock, a second waiting for it
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
 #   crew tell     --board < word.json  a word from a dock of the board, as its listener pipes it ({label, key, to,
@@ -298,7 +308,7 @@
 #   crew update   [<host>|--all]       every standing agent whose start crew's update, or its brief's, has made due
 #                                      restarted on crew as it now is once it is idle, a conductor fresh and every
 #                                      other with its conversation; crew's Stop hook does the same at the end of a due
-#                                      agent's turn, and each console's rail tab once crew's checkout moves
+#                                      agent's turn, and the host's follower once crew's checkout moves
 #
 # Operations on a partition's environments, a deploy being one kind (plan.14), run where the partition's main level
 # runs (lib/ops.py says each in full):

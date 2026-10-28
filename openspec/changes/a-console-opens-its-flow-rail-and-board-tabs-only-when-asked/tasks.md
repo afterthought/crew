@@ -14,7 +14,7 @@
 ## 3. What crew says
 
 - [x] 3.1 The board tab's no-board words, the agents' stale line and crew's mod name the host's follower as the writer, with the views file's shape unchanged (design, Decision 4; Task notes 3.1); passes `tests/py/test_board.py` and the mod's cases, `tests/suite logic mod` ending with "0 failed".
-- [ ] 3.2 README, the crew skill, `plugin/bin/crew`'s usage and the operator's brief say the console opens with a shell, its tabs on request, and `crew _follow` as the host's follower (design, Decision 4; Task notes 3.2); passes `tests/suite t-briefs t-docs` ending with "0 failed".
+- [x] 3.2 README, the crew skill, `plugin/bin/crew`'s usage and the operator's brief say the console opens with a shell, its tabs on request, and `crew _follow` as the host's follower (design, Decision 4; Task notes 3.2); passes `tests/suite t-briefs t-docs` ending with "0 failed".
 
 ## 4. On the stubs
 

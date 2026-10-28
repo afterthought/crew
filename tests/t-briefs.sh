@@ -217,7 +217,7 @@ for want in "as it stands on main now, and what each points at" "never the copy 
 lacks "$out" "If the intent can't be built as written"
 expect_ok crewpy brief wldn operator
 for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word" "never by its number alone" "recite no command" \
-  "rail --label wldn" "the console's \`rail\` tab" "the partition's door" "console up wldn"; do
+  "rail --label wldn" "the console's \`rail\` tab" "the partition's door" "console up wldn" "console up wldn rail" "_follow\`, the host's follower"; do
   has "$out" "$want"
 done
 for want in "You post no Pending You card and make no area, whatever a Pending You reminder in your session says" \
