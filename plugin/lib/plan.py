@@ -14747,13 +14747,31 @@ def preview_row_key(key, thing):
     return f"land/{thing}" if key.startswith("land/") else key
 
 
-def preview_target(key, thing, carried):
+def preview_target(key, thing, carried, unread=None):
     """What brings a card's thing up (rail-cards "A thing the card does not carry"), from facts alone: carried, {thing:
     (branch, revision)}, each thing the card carries that must run, or None for one whose branch and revision are read
-    where its work is. Refused for a thing the card does not carry, naming those it does."""
+    where its work is; unread, {thing: why} for each whether it must run can't be told. Refused for a thing the card
+    does not carry, naming those it does and those it can't tell of (read.1)."""
     thing in carried or fail(f"{key} carries no {thing} to bring up: " + (
-        f"it carries {joined(sorted(carried))}" if carried else "it carries nothing that must run"))
+        f"it carries {joined(sorted(carried))}" if carried else "it carries nothing that must run")
+        + "".join(f"; whether {t} has a preview can't be told: {why}" for t, why in sorted((unread or {}).items())))
     return carried[thing]
+
+
+def rows_previewed(fleet, label, rows):
+    """Which of a kit's landings card's rows carry a preview (rail-cards "A thing the card does not carry"), each read
+    at the head the card recorded it at, in its kit's main checkout on its team's host (head_previewed), sluice asked
+    for nothing: ({bolt: None} for each whose kit's policy declares one, {bolt: why} for each that can't be read, a
+    bolt no team holds among them, read.1). rows: [(bolt, head, left)], as card_heads gives them."""
+    carried, unread = {}, {}
+    for bolt, head, _ in rows:
+        _, _, t = land_held(fleet, label, bolt)
+        declared, why = head_previewed(fleet, t, head) if t else (None, f"no team holds bolt {bolt}")
+        if why:
+            unread[bolt] = why
+        elif declared:
+            carried[bolt] = None
+    return carried, unread
 
 
 def preview_owner(key, label, kits):
@@ -14780,7 +14798,8 @@ def card_preview(fleet, a, acts=None):
     (rail-cards "The user asks for a preview by writing on the card", record 0043), main-level ops's for land/<kit>
     and the planner's for batch/<n> (preview_owner, preview_caller): on the partition's main machine, where the card is,
     the thing read from what the card carries (preview_target), a landings row's bolt as its last post or change
-    recorded its rows, a batch line's <unit>/<name> of a unit of the batch; then on the host of the team holding the
+    recorded its rows, one whose kit's policy at that head declares a preview (rows_previewed) or, with --done, any, a
+    batch line's <unit>/<name> of a unit of the batch; then on the host of the team holding the
     thing's work (code.3), through acts.preview_up, its preview brought up through sluice, or with --done released, and
     the card changed in place (card_preview_here). Refused for any other key, caller or thing, asking sluice nothing."""
     acts = acts or CardActs(fleet)
@@ -14796,7 +14815,8 @@ def card_preview(fleet, a, acts=None):
         card = cards.card_under(entries, a.key, owner)
         rows = card_heads(next((e.get("Heads") for e in reversed(entries) if e.get("Card") == card and e.get("Heads")
                                 and not e.get("Refused")), None)) if card else []
-        preview_target(a.key, a.thing, {b: None for b, _, _ in rows})
+        carried, unread = ({b: None for b, _, _ in rows}, {}) if a.done else rows_previewed(fleet, label, rows)
+        preview_target(a.key, a.thing, carried, unread)
         _, b, t = land_held(fleet, label, a.thing)
         t or fail(f"bolt {a.thing} is held by no team, so nothing of {label}'s brings its preview up")
         team = t["name"]
@@ -14817,8 +14837,9 @@ def card_preview_here(fleet, label, key, thing, team, done):
     """crew _card-preview <label> <key> <thing> <team> [--done], on the host of the team holding the thing's work:
     with done, the preview crew brought up of it released (preview_release) and the card changed in place to carry
     what brings it up again, one it brought up of none changing nothing; else its branch and revision read
-    (preview_target), a landings row's bolt branch and head as its row reads now (land_read), a batch line's as the
-    unit's copy holds it (made_kept), its preview brought up (preview_ask) and the card changed in place with a note
+    (preview_target), a landings row's bolt branch and head as its row reads now (land_read), refused with sluice asked
+    nothing where its kit's policy at that head declares no preview or can't be read (head_previewed), a batch line's as
+    the unit's copy holds it (made_kept), its preview brought up (preview_ask) and the card changed in place with a note
     saying whether it is up, coming up or could not be (asked_note). What it did, printed."""
     t = at_work(fleet, team)
     t["machine"] == crew.this_host() or fail(f"{thing}'s preview is brought up on {t['machine']}, where {team} runs")
@@ -14838,7 +14859,11 @@ def card_preview_here(fleet, label, key, thing, team, done):
         row, why = land_read(fleet, label, plan, b, held)
         row or fail(f"{thing} is no row of {key} now: {why}")
         t = crew.with_kit(held, row["facts"]["kit"]) if row["facts"].get("kit") else held
-        branch, revision = preview_target(key, thing, {thing: (f"bolt/{thing}", row["facts"]["head"])})
+        head = row["facts"]["head"]
+        declared, why = head_previewed(fleet, t, head)
+        why is None or fail(f"whether {thing} has a preview at {head[:7]} can't be told, so nothing is brought up: {why}")
+        declared or fail(f"{key}'s row {thing} carries no preview: its kit's policy at {head[:7]} declares none, so nothing is brought up")
+        branch, revision = preview_target(key, thing, {thing: (f"bolt/{thing}", head)})
     else:
         unit = thing.split("/", 1)[0]
         t = unit_kit_team(fleet, label, t, unit)

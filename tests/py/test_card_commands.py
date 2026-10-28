@@ -1207,7 +1207,7 @@ PKIT = {"name": "crew", "repo": "agentplot/crew", "main": "/crew/main", "dir": "
 PFLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "deneb", "teams": ["crw-1"]}},
           "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "deneb", "kit": PKIT}}, "hosts": {}}
 PHEAD = "abc1234" + "0" * 33
-CARD = [post("land/crew", "swancloud-ops", "req_k1", Heads="y@abc1234 z@abc1234")]
+CARD = [post("land/crew", "swancloud-ops", "req_k1", Heads="y@abc1234 z@def5678 x@1234567")]
 DEMO = '{"name": "demo", "kind": "preview", "branch": "unit/a", "revision": "abc1234"}'
 
 
@@ -1242,9 +1242,13 @@ def asked(key, thing, done=False):
 
 
 class TestCardPreview:
+    # each row's kit's policy at the head the card recorded: y's and x's declare a preview, z's none
+    POLICY = {"abc1234": (True, None), "def5678": (False, None), "1234567": (True, None)}
+
     @pytest.fixture(autouse=True)
     def held(self, monkeypatch):
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt)]), PFLEET["teams"]["crw-1"]))
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: self.POLICY[head])
 
     def test_the_owner_hands_a_rows_bolt_to_its_teams_host(self):
         """rail-cards "The user asks on the landings card"."""
@@ -1262,14 +1266,37 @@ class TestCardPreview:
             plan.card_preview(PFLEET, asked("batch/7", "a/demo"), PreviewActs(caller="swancloud-ops"))
         assert acts.up == []
 
-    def test_a_thing_the_card_does_not_carry_is_refused_naming_its_rows(self):
+    def test_a_thing_the_card_does_not_carry_is_refused_naming_the_rows_that_carry_a_preview(self):
         """rail-cards "A thing the card does not carry": sluice asked for nothing."""
         acts = PreviewActs()
-        with pytest.raises(plan.Refusal, match="land/crew carries no w to bring up: it carries y and z"):
+        with pytest.raises(plan.Refusal, match="land/crew carries no w to bring up: it carries x and y$"):
             plan.card_preview(PFLEET, asked("land/crew", "w"), acts)
         with pytest.raises(plan.Refusal, match="land/crew carries no y to bring up: it carries nothing that must run"):
             plan.card_preview(PFLEET, asked("land/crew", "y"), PreviewActs(entries=()))
         assert acts.up == []
+
+    def test_a_row_whose_kit_declares_no_preview_is_refused_naming_the_rows_that_carry_one(self):
+        """rail-cards "A thing the card does not carry": a row reading "No preview." brings nothing up."""
+        acts = PreviewActs()
+        with pytest.raises(plan.Refusal, match="land/crew carries no z to bring up: it carries x and y$"):
+            plan.card_preview(PFLEET, asked("land/crew", "z"), acts)
+        assert acts.up == []
+
+    def test_a_row_whose_policy_cant_be_read_is_named_and_carries_nothing(self, monkeypatch):
+        """read.1: a row crew can't tell of is said, never taken as carrying a preview or as carrying none."""
+        monkeypatch.setitem(self.POLICY, "1234567", (None, "git show in /crew/main on deneb failed: bad object"))
+        acts = PreviewActs()
+        with pytest.raises(plan.Refusal, match="carries no x to bring up: it carries y; whether x has a preview can't be "
+                                               "told: git show in /crew/main on deneb failed: bad object"):
+            plan.card_preview(PFLEET, asked("land/crew", "x"), acts)
+        assert acts.up == []
+
+    def test_done_reads_no_policy_and_puts_away_on_any_row(self, monkeypatch):
+        """rail-cards "The user is done": what crew brought up is put away whatever the row's policy says now."""
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: pytest.fail("--done reads no policy"))
+        acts = PreviewActs()
+        plan.card_preview(PFLEET, asked("land/crew", "z", done=True), acts)
+        assert acts.up == [("deneb", "land/crew", "z", "crw-1", True)]
 
     def test_off_the_main_machine_it_runs_there(self):
         acts = PreviewActs(host="mac-studio")
@@ -1306,6 +1333,8 @@ class Sluice:
         monkeypatch.setattr(plan, "unit_kit_team", lambda fleet, label, t, unit: t)
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: ("p", plan.Rec("Bolt", [("Bolt", bolt)]), PFLEET["teams"]["crw-1"]))
         monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: ({"box": True, "facts": {"head": PHEAD, "kit": "crew"}}, None))
+        self.policy = (True, None)
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: self.policy)
         monkeypatch.setattr(plan, "preview_hand", self.hand)
         monkeypatch.setattr(plan, "preview_alive", lambda r, label: False)
         monkeypatch.setattr(plan, "sluice_read", self.read)
@@ -1328,6 +1357,19 @@ class Sluice:
 
 
 class TestBroughtUp:
+    @pytest.mark.parametrize("policy, why", [
+        ((False, None), "land/crew's row y carries no preview: its kit's policy at abc1234 declares none, so nothing is brought up"),
+        ((None, "git show in /crew/main on deneb failed: bad object"),
+         "whether y has a preview at abc1234 can't be told, so nothing is brought up: git show in /crew/main on deneb failed: bad object")])
+    def test_a_row_with_no_preview_at_its_head_now_is_refused_with_sluice_asked_nothing(self, monkeypatch, tmp_path, policy, why):
+        """rail-cards "A thing the card does not carry", read at the row's head as it reads now on the team's host."""
+        s = Sluice(monkeypatch, tmp_path)
+        s.policy = policy
+        with pytest.raises(plan.Refusal) as e:
+            plan.card_preview_here(PFLEET, "swancloud", "land/crew", "y", "crw-1", False)
+        assert str(e.value) == why
+        assert s.handed == [] and s.notes == [] and plan.preview_recorded("swancloud", "land/crew", "y") is None
+
     def test_the_rows_preview_is_brought_up_once_listed_on_the_card_and_put_away_on_done(self, monkeypatch, tmp_path, capsys):
         """rail-cards "Brought up", "Asked twice" and "The user is done"."""
         s = Sluice(monkeypatch, tmp_path)
