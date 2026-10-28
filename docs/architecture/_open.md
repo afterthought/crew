@@ -23,6 +23,7 @@ What is still open now that every page is written. A working file: an item leave
 - **Move 5, teams out of crew (when Flume runs a unit's whole state machine):** the conductor, team ops, the team, the dispatcher, the slot bound, the give and team tells leave crew; capacity is Flume's room per host; the user chooses on the rail what runs and lands (record 0047 as amended 2026-10-28, accepted; the user's order: fires, Flume, then this).
 - **Move 6, roles on demand (after move 5):** no crew role stands; each is a kind Flume launches on a nudge naming a record, one run at a time per role and partition; every place's waiter is a role's address, a role with no live run woken by Flume on an end untold to it or a carrier's `flume wake`, and a role's work that lands is a place (record 0049; flume record 0013); the operator folds into `crew send` (record 0047 as amended, accepted).
 - **Stopgaps until move 5 (record 0049):** a slot lent to its bolt's fix (0045); a held unit's wait on the row (0044).
+- **Stopgap under `roles.5`, the landing's background waiter (records 0044, 0046 part 5):** `sluice wait` a call at a time on the team's host, then crew's read of the landing (`a-landing-is-read-from-sluices-record`); retired when sluice's push runs on the fleet's hosts (move 1) or Flume submits landings (move 6), whichever first, the read staying.
 
 ## Accepted, not built
 
