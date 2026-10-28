@@ -14,7 +14,13 @@ What is still open now that every page is written. A working file: an item leave
 
 - **mac-studio's Pending You sign-in**: the host has had none since its credential file was cleared (2026-10-10 09:05Z), so the headers helper gives no token and every session uses Claude Code's own sign-in, one per account's settings folder, which minted the connection of 2026-10-11; sessions of an account never signed in so have no Pending You tools. Ruled by the user 2026-10-12: they sign the host in again with `pendingyou-signin` at a quiet moment, approving the code on their phone. Every card open then is lost to its owner and posted again under its key, the older copy named dead (`a-card-reaches-the-user-when-the-tools-drop`'s design); after it, the three test cards, then `every-crew-card-goes-through-crew`. Record 0031 (accepted 2026-10-14) restates it: one sign-in per host for crew and every session, the Claude Code logins removed from the account folders (swancloud's part).
 
-- **What a team holds at once, with Flume's kinds** (the user, 2026-10-27, rejecting record 0041): a fix, a unit and a chore are Flume's kinds, not crew's three; what a team is bound to, one unit of work or several, is decided with Flume's integration and not by a slot rule of crew's. Until then `teams.1` stands as it is, and a bolt whose slots are all held waits as it does; records 0041 and 0042 are the point solutions the user declined, and the deadlocks they answered (madswan signals 7afa4cff/01 and the profiles bolt's give) are read against that design when it is written. Record 0045 (proposed 2026-10-28, on the user's card) answers it: a team is bound to one bolt, works as many pieces as its host has room for, and until Flume a slot with no agent running is lent to its bolt's fix; the item leaves when the record is accepted.
+## Moves to the tools (record 0047, proposed 2026-10-28)
+
+- **Move 1, sluice (now):** landed read from sluice's record (0044's unit, in flight); one driver per host bound by swancloud and outcomes pushed (sluice 0068, 0046 part 5).
+- **Move 2, crew's lasting reading (now):** no waiting process of crew's, a session's start listing its open waits, submission numbers on rows (0046 parts 1 to 4); one follower per host (`plan.12`).
+- **Move 3, Flume (when its first release runs a kind on a host):** stages as Flume places, waits, stuck and lost reads, and a team's room from Flume's status (0045 point 5); the slot machinery and the transcript reads leave crew whole.
+- **Move 4, Tailrace (when its push profile holds):** the deployer's mechanics leave swancloud.
+- **Stopgaps until move 3:** a slot lent to its bolt's fix (0045); a held unit's wait on the row (0044).
 
 ## Accepted, not built
 
