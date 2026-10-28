@@ -13,6 +13,7 @@ RUNS = [
     ["_team", "restart", "swb-1", "ops", "--no-greet"],
     ["bolt", "submit", "b", "--label", "wldn"],
     ["bolt", "submit", "b", "--excerpt", "Land crw-5's bolt"],
+    ["bolt", "leave", "b", "c", "--excerpt", "Hold the phone bolt", "--label", "wldn"],
     ["_unit-run", "a", "construct", "--force", "--", "-x is the tenant"],
     ["_fix-run", "swb-1", "tidy", "wait", "--timeout", "0"],
 ]
@@ -30,6 +31,14 @@ def test_a_landing_takes_the_users_words_and_has_none_by_default():
     """plan.16: the word to land given in ops's pane goes with the submission; without it, the word is the card's."""
     assert plan.parser().parse_args(["bolt", "submit", "b", "--excerpt", "Land it"]).excerpt == "Land it"
     assert plan.parser().parse_args(["bolt", "submit", "b"]).excerpt is None
+
+
+def test_a_stop_takes_the_users_words_and_none_is_refused(capsys):
+    """main-level "A landing stopped in ops's pane is recorded as the user's words": a stop is only ever on them."""
+    assert plan.parser().parse_args(["bolt", "leave", "b", "--excerpt", "Hold it"]).excerpt == "Hold it"
+    with pytest.raises(SystemExit):
+        plan.parser().parse_args(["bolt", "leave", "b"])
+    assert "--excerpt" in capsys.readouterr().err
 
 
 def test_a_name_that_is_no_command_is_not_built():

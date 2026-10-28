@@ -569,7 +569,10 @@ def raise_deploy(fleet, row, acts=None, note=None):
     main-level ops's name, following the card follows_of names, or changed in place when the card ops holds asks for
     an older offer still unanswered, or for this one when it is offered again with other files, note naming what
     changed; once the user answered it, left as it is unless a newer head is offered since the head it asked about,
-    when it is followed by a new card (cards.head_anew); posted again when Pending You no longer finds it, and saying
+    when it is followed by a new card (cards.head_anew); a card that follows one the user answered, declined or
+    approved, saying first what they answered and that the offer is now at another head, or that the commit offered
+    was handed other files (note), and withheld when neither, their answer standing (cards.deploy_since,
+    plan.card_posted); posted again when Pending You no longer finds it, and saying
     first that an older copy was lost when the rail's sweep hands it the older copy this host can't reach as the row's
     dead (plan.built_again); built from the open offer, the files it was handed and the partition's run record. None,
     saying why, when no offer waits on a card; the offer's own call and the rail's sweep alike. A card not posted or
@@ -596,8 +599,11 @@ def raise_deploy(fleet, row, acts=None, note=None):
     facts = deploy_facts(env, offer, lands, ranged, kept_text(d / "notes.md"), steps)
     facts["follows"] = cards.follows_of("deploy", {"env": env, "head": offer["Head"]}, gathered, owner)
     anew = cards.head_anew(mine, held, offer["Head"])
+    earlier = cards.head_asked(mine, facts["follows"]) if facts["follows"] else (anew or {}).get("approved")
+    since = cards.deploy_since(earlier, offer["Head"]) + ([note] if note else [])
     build = plan.built_again(cards.deploy_card) if row.get("dead") else cards.deploy_card
-    return plan.row_card_change(fleet, label, owner, build, facts, said or "Raised again", ops_where(fleet, label), acts, anew=anew)
+    return plan.row_card_change(fleet, label, owner, build, facts, said or "Raised again", ops_where(fleet, label), acts, anew=anew,
+                                since=since)
 
 
 def stages_working(fleet, env):
@@ -619,8 +625,11 @@ def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
     (record 0031 §5): posted in main-level ops's name, following the deploy's card or the step card before it, once its
     point has come (step_point), and posted again when Pending You no longer finds it, saying first that an older copy
     was lost when the rail's sweep hands it the older copy this host can't reach as the row's dead (plan.built_again);
-    while its card is open, changed with note, or followed by a new card when its kind changed (step_again). None,
-    saying why, before then; the step's own call and the rail's sweep alike. The card's id, or None."""
+    while its card is open, changed with note, or followed by a new card when its kind changed (step_again). A card
+    that follows one the user answered, its deploy's or the step's before it, says first what they answered and that
+    the deploy ended, or the step before is behind them, and this is its step (cards.step_since), and one following
+    its own card the user answered, its note (plan.row_card_change). None, saying why, before then; the step's own call
+    and the rail's sweep alike. The card's id, or None."""
     import cards, plan
     acts = acts or plan.CardActs(fleet)
     label, key = row["label"], row["key"]
@@ -632,8 +641,12 @@ def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
     n, _, e = step
     facts = step_facts(env, n, e, label, stages_working(fleet, env) if held(e) else None)
     facts["follows"] = cards.follows_of("step", {"env": env, "key": key}, mine, f"{label}-ops")
+    followed = next((x.get("Key") for x in mine if x.get("Act") == "card.post" and x.get("Card") == facts["follows"]
+                     and not x.get("Refused")), None) if facts["follows"] else None
+    since = None if cards.card_under(mine, key, f"{label}-ops") else cards.step_since(followed, env, n, facts.get("to"))
     build = plan.built_again(cards.step_card) if row.get("dead") else cards.step_card
-    return plan.row_card_change(fleet, label, f"{label}-ops", build, facts, note, ops_where(fleet, label), acts, kind_changed)
+    return plan.row_card_change(fleet, label, f"{label}-ops", build, facts, note, ops_where(fleet, label), acts, kind_changed,
+                                since=since)
 
 
 def raise_next_step(fleet, label, env, k=None):

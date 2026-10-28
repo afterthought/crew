@@ -53,7 +53,7 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form Answer
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
@@ -64,7 +64,8 @@ DESCRIPTOR = """\
 # conflicting Paths and how it Reached the later unit (told, prompt or settle) or the conductor (wait), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
 # Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's Count, a
 # card act's Card (the Pending You card's id), Key (the rail row's card key) and Unread (why its reading could not open,
-# crew's own message, on a card's post or change raised without it), a landing's Repo (the kit it landed on)
+# crew's own message, on a card's post or change raised without it), a card's close's Answer (what the user answered
+# on it, in crew's words made from names alone, cards.answer_said), a landing's Repo (the kit it landed on)
 # and Head (the commit that kit's main holds afterwards, plan.14), a branch.kept's Head (the commit a unit's, chore's or
 # fix's branch the tidy kept is at) and Count (its commits whose patch its bolt, or main, lacks, plan.10), crew's own
 # order of two units a forecast found in conflict, the unit.after that puts one After the other or the one that Lifted
@@ -74,7 +75,7 @@ DESCRIPTOR = """\
 # suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
          "Forecast", "Batch", "Units", "Count", "Card", "Key", "Unread", "Base", "Phase", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
-         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form")
+         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form", "Answer")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
