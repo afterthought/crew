@@ -16,6 +16,8 @@ RUNS = [
     ["bolt", "leave", "b", "c", "--excerpt", "Hold the phone bolt", "--label", "wldn"],
     ["_unit-run", "a", "construct", "--force", "--", "-x is the tenant"],
     ["_fix-run", "swb-1", "tidy", "wait", "--timeout", "0"],
+    ["_console", "up", "wldn"],
+    ["_console", "up", "wldn", "rail", "board"],
 ]
 
 

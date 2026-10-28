@@ -1,9 +1,10 @@
 """The board of a partition's flow (the crew-board spec): board.board_data on one read of the plan, proposals, signals,
 kits and run record, as plan.rail_read and board.signals give it, and board.board_text, board.frame_text and
-board.stamp on what that makes. That crew board reads it all and writes nothing, and the rail tab's refresh writes the
+board.stamp on what that makes. That crew board reads it all and writes nothing, and the host's follower's refresh writes the
 frame the board tab draws, are the board journey's (t-journey-board)."""
 import datetime
 import json
+import os
 import pathlib
 import re
 
@@ -261,17 +262,179 @@ class TestData:
 
 
 class TestFrame:
-    def test_with_no_frame_the_board_tab_says_how_to_open_both_tabs_afresh(self):
-        said = board.frame_text("wldn", None, None, False, NOW)
-        assert said.startswith("No board for wldn yet: the rail tab's loop writes it each time it refreshes")
-        assert "close the console's rail tab and run crew console up wldn" in said
+    def test_with_no_frame_the_board_tab_says_the_hosts_follower_writes_it(self):
+        assert board.frame_text("wldn", None, None, False, NOW) == (
+            "No board for wldn yet: the host's follower writes it each time it refreshes, swancloud's job or the console's rail tab, "
+            "which crew console up wldn opens while no job runs.")
 
     def test_a_frame_read_five_minutes_ago_is_headed_with_its_age(self):
         d = data()
         d["read_at"] = board.iso(NOW - datetime.timedelta(minutes=5))
-        assert "(5m ago: the rail tab has not refreshed it since)" in board.frame_text("wldn", d, None, False, NOW).splitlines()[0]
+        assert "(5m ago: the host's follower has not refreshed it since)" in board.frame_text("wldn", d, None, False, NOW).splitlines()[0]
         d["read_at"] = board.iso(NOW)
         assert " ago" not in board.frame_text("wldn", d, None, False, NOW).splitlines()[0]
+
+
+class TestFollower:
+    """The host's one follower (the crew-board spec, A host has one follower): an OS lock on a file beside the frames,
+    held for the follower's life and saying who holds it. Two open()s are two open file descriptions, so the lock
+    conflicts between them in one process as between two processes."""
+
+    def test_a_held_lock_refuses_a_second_try_and_says_the_tab_holds_it(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        held = board.lock_follower("tab", "wldn", wait=False)
+        assert held
+        assert board.lock_follower("job", wait=False) is None and board.lock_follower("tab", "madswan", wait=False) is None
+        assert board.lock_path().read_text().startswith("tab wldn ")
+        assert board.follower_here() == "tab"
+        held.close()
+        assert board.follower_here() == "none"
+
+    def test_the_job_holding_it_reads_as_the_job(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        held = board.lock_follower("job", wait=False)
+        assert board.lock_path().read_text().split()[0] == "job" and board.follower_here() == "job"
+        held.close()
+
+    def test_a_released_lock_is_free_and_taken_again_with_its_holder_written_anew(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        board.lock_follower("job", wait=False).close()
+        held = board.lock_follower("tab", "wldn", wait=False)
+        assert held and len(board.lock_path().read_text().splitlines()) == 1 and board.follower_here() == "tab"
+        held.close()
+
+    @pytest.mark.parametrize("line, free, who", [("", False, "unknown"), (None, False, "unknown"), ("job 12 2026-10-28T10:00:00Z", False, "job"),
+                                                 ("tab wldn 12 2026-10-28T10:00:00Z", False, "tab"), ("tab 12 2026-10-28T10:00:00Z", False, "unknown"),
+                                                 ("someone else", False, "unknown"), ("job 12 2026-10-28T10:00:00Z", True, "none"), ("", True, "none")])
+    def test_who_follows_is_read_from_the_lock_and_an_unreadable_holder_is_unknown(self, line, free, who):
+        assert board.follower_of(line, free) == who
+
+    def test_it_follows_each_partition_whose_session_of_its_name_on_the_host_is_its_own(self):
+        fleet = {"partitions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"},
+                                "madswan": {"partition": "business"}, "agentplot": {"partition": "agentplot"}},
+                 "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "wldn-5": {"partition": "clients/willdan"},
+                                                       "swancloud": {"partition": "personal"}, "madswan": {"partition": "personal"},
+                                                       "agentplot": {"partition": None}}},
+                           BOX: {"sessions": {"wldn": {"partition": "clients/willdan"}}}}}
+        assert board.labels_here(fleet, "mac-studio") == ["wldn", "swancloud"]
+        assert board.labels_here(fleet, BOX) == ["wldn"] and board.labels_here(fleet, "macbook-pro") == []
+
+    def test_an_entry_wakes_its_partitions_round_a_burst_is_one_round_and_a_follow_that_ends_leaves_the_clock(self, monkeypatch):
+        """Each partition's follow is a pipe here, as a crew events --follow child's output is, and each round is
+        recorded rather than run."""
+        class Follow:
+            def __init__(self):
+                self.r, self.w = os.pipe()
+                self.stdout, self.killed = os.fdopen(self.r, "rb"), False
+
+            def kill(self):
+                self.killed = True
+
+            def wait(self):
+                pass
+
+        class Here(board.Follower):
+            def fleet(self):
+                return {"partitions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}},
+                        "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
+        rounds = []
+        monkeypatch.setattr(board, "follow_round", lambda label, seen: rounds.append(label))
+        monkeypatch.setattr(board, "BURST", 0.05)
+        follows = {"wldn": Follow(), "swancloud": Follow()}
+        f = Here(None)
+        f.follows = dict(follows)
+        f.step(0)
+        assert rounds == ["wldn", "swancloud"]
+        f.step(0)
+        assert rounds == ["wldn", "swancloud"], "a round ran before it was due"
+        for _ in range(3):
+            os.write(follows["wldn"].w, b"2026-10-28T10:00:00Z  unit.run  ...\n")
+        f.step(1)
+        f.step(0)
+        assert rounds == ["wldn", "swancloud", "wldn"], "a burst of entries was not one round of its own partition"
+        os.close(follows["swancloud"].w)
+        f.step(1)
+        assert follows["swancloud"].killed and f.follows["swancloud"] is None
+        f.step(0)
+        assert rounds == ["wldn", "swancloud", "wldn"] and f.follows["swancloud"] is None, "an ended follow woke a round or was started again"
+        assert f.due["swancloud"] > 0
+        os.close(follows["wldn"].w)
+        for x in follows.values():
+            x.stdout.close()
+
+
+class TestRailFrame:
+    """The rail tab draws the rail frame the host's follower writes (the crew-board spec, The rail and the board come
+    from one read)."""
+
+    RAIL = {"read_at": board.iso(NOW), "from": "mac-studio", "text": "What waits on you (wldn), as of 10:00:00\n\nproposals\n  none", "updated": None}
+
+    def test_a_fresh_frame_is_the_rail_as_its_round_printed_it(self):
+        assert board.rail_frame_text("wldn", self.RAIL, NOW) == self.RAIL["text"]
+
+    def test_what_handing_out_the_restarts_said_follows_the_rail(self):
+        said = board.rail_frame_text("wldn", dict(self.RAIL, updated="wldn-planner is due a restart: crew _renew restarts it once idle"), NOW)
+        assert said == self.RAIL["text"] + "\n\nwldn-planner is due a restart: crew _renew restarts it once idle"
+
+    def test_a_frame_read_five_minutes_ago_is_headed_with_its_age(self):
+        said = board.rail_frame_text("wldn", dict(self.RAIL, read_at=board.iso(NOW - datetime.timedelta(minutes=5))), NOW).splitlines()
+        assert said[0].startswith("wldn's rail as read at ")
+        assert said[0].endswith(", 5m ago: the host's follower on mac-studio has not refreshed it since")
+        assert said[1:] == ["", *self.RAIL["text"].splitlines()]
+        assert board.rail_frame_text("wldn", dict(self.RAIL, read_at=board.iso(NOW - datetime.timedelta(seconds=board.STALE - 5))), NOW) == self.RAIL["text"]
+
+    def test_with_no_frame_the_rail_tab_says_the_hosts_follower_writes_it(self):
+        assert board.rail_frame_text("wldn", None, NOW) == (
+            "No rail for wldn yet: the host's follower writes it each time it refreshes, swancloud's job or the console's rail tab, "
+            "which crew console up wldn opens while no job runs.")
+
+    def test_the_rail_tab_draws_the_frame_once_and_follows_nothing(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        board.write_frame("wldn", self.RAIL, board.rail_path("wldn"))
+        board.rail_follow("wldn", once=True)
+        assert capsys.readouterr().out == self.RAIL["text"] + "\n" and board.follower_here() == "none"
+
+    def test_the_rail_tab_draws_the_jobs_frames_and_follows_itself_once_the_job_ends(self, tmp_path, monkeypatch, capsys):
+        """The host's job holds the lock: the tab draws and waits; once the job lets go, the tab takes the lock as a tab
+        and makes the rounds itself."""
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        board.write_frame("wldn", self.RAIL, board.rail_path("wldn"))
+        job, slept, stepped = board.lock_follower("job", wait=False), [], []
+
+        class Done(Exception):
+            pass
+
+        class Stepping:
+            def __init__(self, lock):
+                self.lock = lock
+
+            def step(self, most):
+                stepped.append((board.lock_path().read_text().split()[:2], most))
+                raise Done
+
+            def close(self):
+                self.lock.close()
+
+        def sleep(s):
+            slept.append(s)
+            job.close()
+        monkeypatch.setattr(board, "Follower", Stepping)
+        monkeypatch.setattr(board.time, "sleep", sleep)
+        with pytest.raises(Done):
+            board.rail_follow("wldn")
+        assert slept == [1] and stepped == [(["tab", "wldn"], 1)] and board.follower_here() == "none"
+        assert capsys.readouterr().out == self.RAIL["text"] + "\n"
+
+    def test_half_a_rail_frame_or_one_with_no_text_reads_as_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        assert board.read_rail("wldn") is None
+        (tmp_path / "wldn.rail.json").write_text('{"read_at": ')
+        assert board.read_rail("wldn") is None
+        (tmp_path / "wldn.rail.json").write_text(json.dumps(dict(self.RAIL, text=None)))
+        assert board.read_rail("wldn") is None
+        board.write_frame("wldn", self.RAIL, board.rail_path("wldn"))
+        assert board.read_rail("wldn") == self.RAIL and board.read_frame("wldn") is None
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["wldn.rail.json"]
 
 
 class TestMore:
@@ -480,9 +643,9 @@ class TestViews:
         assert sorted(v["views"]) == sorted(["swb-1-conductor", "swb-2-conductor", "brd-1-conductor", "atl-1-conductor", "wldn-planner", "wldn-design",
                                              "wldn-ops", "wldn-operator"])
         assert v["read_at"] == data()["read_at"] and v["stale_after_ms"] == board.STALE * 1000
-        assert v["stale"] == [(f"crew: the board was last read at {board.local(data()['read_at'])}, too long ago to show; the rail tab on mac-studio "
+        assert v["stale"] == [(f"crew: the board was last read at {board.local(data()['read_at'])}, too long ago to show; crew's follower on mac-studio "
                                "has not refreshed it since", "dim")]
-        # a day with it: a restart, or a rail tab that stopped, can leave it days old
+        # a day with it: a restart, or a follower that stopped, can leave it days old
         assert re.fullmatch(r"crew: the board was last read at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}, .*", v["stale"][0][0])
 
     @pytest.mark.parametrize("stages, shown", [(["queued", "waiting", "ready"], "○○○"), (["amended", "construct", "planned"], "◔◔◔"),

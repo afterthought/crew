@@ -9,19 +9,29 @@
                                      environment's deploys of that week and those still open, and the operations
                                      waiting on it); every rail row a marker on its object, and what needs attention
                                      at the foot
-  crew _views <label>                the rail tab's refresh: one read, the rail printed as crew rail prints it, the
-                                     card sessions of closed cards and gone rows ended as crew rail ends them, and
-                                     the board's data written for the board tab, with each agent's view of it for
+  crew _views <label>                one refresh of the host's follower: one read, the rail printed as crew rail prints
+                                     it, the card sessions of closed cards and gone rows ended as crew rail ends them,
+                                     and the board's data written for the board tab, with each agent's view of it for
                                      the band crew's mod draws above that agent's prompt
-  crew _board <label> [--once]       the board tab: the latest board the rail tab's loop wrote, drawn at the pane's
+  crew _follow [--once]              the host's follower with no tab, the command a job of the host's runs: every 30
+                                     seconds and on each run-record entry, for each partition with an operator session
+                                     here, the due restarts handed out once crew's checkout or the teams file moved
+                                     (crew _update), then crew _views, its output written as the rail's frame; it
+                                     waits for the host's follower lock while a rail tab holds it. --once makes one
+                                     round of each and ends
+  crew _rail <label> [--once]        the rail tab: the latest rail the host's follower wrote, drawn whenever it
+                                     changes, headed with its age once stale; while no one holds the host's follower
+                                     lock, it takes it and follows itself. --once draws once and follows nothing
+  crew _board <label> [--once]       the board tab: the latest board the host's follower wrote, drawn at the pane's
                                      width whenever it or the pane changes
 
 Read from the plan, the proposals, the moves, the signals, the kits and the run record, in one read that also makes the
-rail (plan.rail_read); no state is written, only the frames the rail tab hands the board tab and the agents' mods, in
-crew's cache, each one redraw and not state (state.4). The rail tab's refresh, as it prints the rail, ends the card
-sessions whose card is closed or whose row is gone, as crew rail does; crew board ends nothing. The board answers
-nothing and prints no command: the rail and its shell are where things are answered."""
-import argparse, datetime, json, os, pathlib, re, shutil, subprocess, sys, tempfile, time
+rail (plan.rail_read); no state is written, only the frames the host's follower hands the rail and board tabs and the
+agents' mods, in crew's cache, each one redraw and not state (state.4). A host has one follower, holding its lock while
+it follows: swancloud's job running crew _follow, or, where none runs, a rail tab's own loop. Its refresh, as it prints
+the rail, ends the card sessions whose card is closed or whose row is gone, as crew rail does; crew board ends nothing.
+The board answers nothing and prints no command: the rail and its shell are where things are answered."""
+import argparse, datetime, fcntl, json, os, pathlib, re, select, shutil, signal, subprocess, sys, tempfile, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -38,9 +48,9 @@ PIP = {"queued": "○", "waiting": "○", "ready": "○", "amended": "◔", "con
        "merged": "●", "landed": "●"}
 # How many explorations an agent's view names before it counts the rest.
 SHOWN = 6
-# The frame the rail tab's loop writes for the board tab, by label.
+# The frames the host's follower writes for the rail and board tabs and the agents' mods, by label.
 FRAMES = pathlib.Path.home() / ".cache/crew/board"
-STALE = 90  # seconds: three of the rail tab's periods
+STALE = 90  # seconds: three of the follower's periods
 SIGNAL = re.compile(r"^signals/([^/]+)/([0-9]{2}-[^/]+)\.md$")
 DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 STYLES = {"bold": "\033[1m", "dim": "\033[2m"}
@@ -429,7 +439,7 @@ def board_text(data, width=None, color=False, stale=None):
         if i:
             out.append("")
         answered = [h for h, v in p["hosts"].items() if v is True]
-        line([(f"{p['label']} board, as of {read_at.astimezone():%H:%M:%S}" + (f" ({stale} ago: the rail tab has not refreshed it since)" if stale else "")
+        line([(f"{p['label']} board, as of {read_at.astimezone():%H:%M:%S}" + (f" ({stale} ago: the host's follower has not refreshed it since)" if stale else "")
                       + f", read from {', '.join(answered) or 'no host'}", None)])
 
         heading("Inception")
@@ -708,8 +718,8 @@ def agent_views(data):
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
     the lines the mod draws above its view. With them, the line the mod draws in place of the view and the cards once
     the frame is stale_after_ms old, so a band names no bolt that has landed since, nor a card closed since (read.1):
-    the day and time it was read, since a frame a restart or a rail tab that stopped left can be days old, and that the
-    rail tab has not refreshed it since.
+    the day and time it was read, since a frame a restart or a follower that stopped left can be days old, and that the
+    host's follower has not refreshed it since.
 
     A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows)
     changes these views and plugin/hooks/status.js with it, each with its cases (code.8)."""
@@ -728,7 +738,7 @@ def agent_views(data):
         if here["held"]:
             views = {name: [held_row(here["host"], here["held"])] + v for name, v in views.items()}
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
-            "stale": row([(f"crew: the board was last read at {local(data['read_at'])}, too long ago to show; the rail tab on "
+            "stale": row([(f"crew: the board was last read at {local(data['read_at'])}, too long ago to show; crew's follower on "
                            f"{data['from']} has not refreshed it since", "dim")]),
             "views": views, "cards": {a: lines for a, lines in cards.items() if a in views}}
 
@@ -785,9 +795,8 @@ def write_frame(label, data, path=None):
 
 
 def no_frame(label):
-    return (f"No board for {label} yet: the rail tab's loop writes it each time it refreshes, and has not written one. A rail tab "
-            f"opened before crew board existed draws no board: close the console's rail tab and run "
-            f"crew console up {label}, which opens the rail tab and this board tab afresh.")
+    return (f"No board for {label} yet: the host's follower writes it each time it refreshes, swancloud's job or the console's "
+            f"rail tab, which crew console up {label} opens while no job runs.")
 
 
 def frame_text(label, data, width, color, now):
@@ -831,19 +840,286 @@ def follow(label, once=False):
         time.sleep(1)
 
 
+# ------------------------------------------------------------------------------------------------- the host's follower
+
+def lock_path():
+    """The host's follower lock, beside the frames the follower writes."""
+    return FRAMES / "follower.lock"
+
+
+def lock_follower(kind, label=None, wait=True):
+    """The host's follower lock taken for a follower of kind job (crew _follow) or tab (a rail tab, of label): an OS lock
+    on the open file, which the caller keeps open for as long as it follows, so the OS lifts it when the follower ends,
+    however it ends, and nothing is left to go stale (state.4). Once taken, the file says who holds it, `job <pid>
+    <time>` or `tab <label> <pid> <time>`. With wait it waits for the lock, reading nothing meanwhile; without, None
+    when another holds it."""
+    FRAMES.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path(), "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+    except BlockingIOError:
+        f.close()
+        return None
+    f.truncate(0)
+    f.write(" ".join([kind] + ([label] if kind == "tab" else []) + [str(os.getpid()), iso(datetime.datetime.now(datetime.timezone.utc))]) + "\n")
+    f.flush()
+    return f
+
+
+def follower_of(line, free):
+    """Who follows on the host, from the lock's line and whether the lock was free: none when it was free, job or tab
+    as the line says, and unknown when the line is neither, as one read between a holder's lock and its write would be
+    (read.1)."""
+    if free:
+        return "none"
+    words = (line or "").split()
+    if words[:1] == ["job"] and len(words) == 3:
+        return "job"
+    if words[:1] == ["tab"] and len(words) == 4 and re.fullmatch(r"[a-z0-9][a-z0-9-]*", words[1]):
+        return "tab"
+    return "unknown"
+
+
+def follower_here():
+    """Who follows on this host (follower_of): the lock tried without waiting, and released at once when it was free;
+    when it is held, the holder's line read."""
+    FRAMES.mkdir(parents=True, exist_ok=True)
+    with open(lock_path(), "a+") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            f.seek(0)
+            return follower_of(f.readline(), False)
+        fcntl.flock(f, fcntl.LOCK_UN)
+        return follower_of(None, True)
+
+
+def labels_here(fleet, host):
+    """The partitions with an operator session on the host, which its follower refreshes: each label whose session of
+    that name there is in its partition, as crew.operator_session reads it, in the teams file's order."""
+    sessions = fleet["hosts"].get(host, {}).get("sessions", {})
+    return [l for l, p in fleet["partitions"].items() if (sessions.get(l) or {}).get("partition") == p["partition"]]
+
+
+def rail_path(label):
+    """The rail's frame beside the board's: the rail as the follower's last round printed it, which the rail tab draws."""
+    return FRAMES / f"{label}.rail.json"
+
+
+def read_rail(label):
+    try:
+        data = json.loads(rail_path(label).read_text())
+        return data if isinstance(data, dict) and plan.utc(data.get("read_at")) and isinstance(data.get("text"), str) else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def rail_frame_text(label, data, now):
+    """The rail tab's text: the rail as the follower's last round printed it, with what handing out the due restarts
+    said when that round did; headed with its age once it is older than STALE; and, when there is none, that the host's
+    follower writes it."""
+    if data is None:
+        return (f"No rail for {label} yet: the host's follower writes it each time it refreshes, swancloud's job or the "
+                f"console's rail tab, which crew console up {label} opens while no job runs.")
+    read_at = plan.utc(data["read_at"])
+    head = (f"{label}'s rail as read at {read_at.astimezone():%Y-%m-%d %H:%M:%S}, {plan.age(read_at, now)} ago: the host's follower"
+            f"{' on ' + data['from'] if data.get('from') else ''} has not refreshed it since\n\n") if (now - read_at).total_seconds() > STALE else ""
+    return head + data["text"] + (f"\n\n{data['updated']}" if data.get("updated") else "")
+
+
+def moved_at():
+    """What says crew's code or the teams file has moved since a round: the checkout's commit and the teams file's
+    bytes, each None when it can't be read, as the rail tab's loop read them."""
+    r = subprocess.run(["git", "-C", str(crew.HOME), "rev-parse", "HEAD"], capture_output=True, text=True)
+    try:
+        teams = crew.TEAMS.read_bytes()
+    except OSError:
+        teams = None
+    return (r.stdout.strip() if r.returncode == 0 else None, teams)
+
+
+def follow_round(label, seen):
+    """One round of the follower for a partition, the rail tab's refresh: when crew's checkout or the teams file has
+    moved since its last round, the partition's agents here that it made due a restart handed theirs (crew _update,
+    teams.19); then one read (crew _views), which prints the rail as crew rail does, ending the card sessions crew rail
+    ends, and writes the board's frame and the agents' views; what it printed, standard error with it, written as the
+    rail's frame. Each a child of crew's, so every round reads afresh. seen holds what moved_at read at each label's
+    last round."""
+    cmd, now, updated = ["bash", str(crew.HOME / "plugin/bin/crew")], moved_at(), None
+    if label in seen and seen[label] != now:
+        updated = subprocess.run(cmd + ["_update", "--label", label], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout.strip() or None
+    seen[label] = now
+    out = subprocess.run(cmd + ["_views", label], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout.rstrip("\n")
+    try:
+        write_frame(label, {"read_at": iso(datetime.datetime.now(datetime.timezone.utc)), "from": crew.this_host(), "text": out,
+                            "updated": updated}, rail_path(label))
+    except OSError as e:
+        print(f"crew could not write {label}'s rail frame in {FRAMES}: {e.strerror or e}", file=sys.stderr)
+
+
+PERIOD = 30  # seconds between a partition's rounds
+BURST = 2  # seconds: a wake takes what more arrives within this before its round, so a burst of entries is one round
+
+
+class Follower:
+    """The host's follower once it holds the lock (lock_follower): every PERIOD seconds, and on each run-record entry,
+    one round (follow_round) for each partition with an operator session on the host, read again before each round so
+    a teams or hosts change reaches it. An entry is woken on by a `crew events --follow` child per partition; one whose
+    follow ends is left on the clock alone, as the rail tab's loop left it."""
+
+    def __init__(self, lock):
+        self.lock, self.seen, self.due, self.follows, self.labels = lock, {}, {}, {}, []
+        self.cmd = ["bash", str(crew.HOME / "plugin/bin/crew")]
+
+    def fleet(self):
+        """The teams file and the hosts file read afresh, not as this process first read them."""
+        crew.load.cache_clear()
+        return crew.load()
+
+    def partitions(self):
+        try:
+            self.labels = labels_here(self.fleet(), crew.this_host())
+        except Refusal as e:
+            print(f"crew's follower keeps the partitions it had ({', '.join(self.labels) or 'none'}): {e}", file=sys.stderr)
+        for l in [l for l in self.follows if l not in self.labels]:
+            self.ended(l)
+            del self.follows[l]
+        for l in self.labels:
+            if l not in self.follows:
+                self.follows[l] = subprocess.Popen(self.cmd + ["events", "--follow", "--label", l], stdout=subprocess.PIPE,
+                                                   stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+            self.due.setdefault(l, 0)
+
+    def ended(self, label):
+        p = self.follows.get(label)
+        if p:
+            p.kill()
+            p.wait()
+        self.follows[label] = None
+
+    def rounds(self, labels):
+        for l in labels:
+            follow_round(l, self.seen)
+            self.due[l] = time.monotonic() + PERIOD
+
+    def once(self):
+        """One round of every partition, waiting for nothing: crew _follow --once, for the tiers."""
+        self.labels = labels_here(self.fleet(), crew.this_host())
+        self.rounds(self.labels)
+
+    def step(self, most=None):
+        """The rounds that are due, then a wait for an entry or the next round due, of at most most seconds."""
+        if not self.labels or any(self.due.get(l, 0) <= time.monotonic() for l in self.labels):
+            self.partitions()
+            self.rounds([l for l in self.labels if self.due[l] <= time.monotonic()])
+        wait = max(0.0, min(self.due[l] for l in self.labels) - time.monotonic()) if self.labels else PERIOD
+        woke = self.woken(wait if most is None else min(wait, most))
+        while woke and (more := self.woken(BURST)):
+            woke |= more
+        for l in woke:
+            self.due[l] = 0
+
+    def woken(self, wait):
+        """The labels whose follow printed within wait seconds, what it printed taken; a follow that ended dropped."""
+        by = {p.stdout.fileno(): l for l, p in self.follows.items() if p}
+        if not by:
+            time.sleep(wait)
+            return set()
+        ready, _, _ = select.select(list(by), [], [], wait)
+        woke = set()
+        for fd in ready:
+            if os.read(fd, 65536):
+                woke.add(by[fd])
+            else:
+                self.ended(by[fd])
+        return woke
+
+    def close(self):
+        for l in list(self.follows):
+            self.ended(l)
+        self.lock.close()
+
+
+def run_follow(once=False):
+    """crew _follow: the host's follower with no tab, the command a job of the host's runs (swancloud's): it waits for
+    the lock while another follows, reading nothing, then follows every partition with an operator session here."""
+    lock = lock_follower("job", wait=True)
+    f = Follower(lock)
+    try:
+        if once:
+            f.once()
+            for l in f.labels:
+                print(f"{l}'s rail, board and agents' views written on {crew.this_host()}")
+            return
+        print(f"crew's follower on {crew.this_host()} follows its partitions' rails and boards", flush=True)
+        while True:
+            f.step()
+    finally:
+        f.close()
+
+
+def rail_follow(label, once=False):
+    """The rail tab: the latest rail frame drawn whenever it changes, or how stale it is does; checked once a second.
+    Each second, while no one follows on the host, it takes the follower lock without waiting and is the host's
+    follower itself, for every partition with an operator session here, making each round when it is due; so a tab
+    drawing the job's frames follows itself within a second of the job ending. With once, one draw, following
+    nothing."""
+    tty = sys.stdout.isatty()
+    seen, data, mtime, follower = None, None, False, None
+    try:
+        while True:
+            try:
+                m = rail_path(label).stat().st_mtime_ns
+            except OSError:
+                m = None
+            if m != mtime:
+                mtime, data = m, read_rail(label) if m is not None else None
+            text = rail_frame_text(label, data, datetime.datetime.now(datetime.timezone.utc))
+            if text != seen:
+                seen = text
+                sys.stdout.write(("\033[H\033[2J" if tty else "") + text + "\n")
+                sys.stdout.flush()
+            if once:
+                return
+            if follower is None:
+                lock = lock_follower("tab", label, wait=False)
+                follower = Follower(lock) if lock else None
+            if follower:
+                follower.step(1)
+            else:
+                time.sleep(1)
+    finally:
+        if follower:
+            follower.close()
+
+
+def ended_by_signal():
+    """A follower told to end, by its job's manager or its pane's close, ends its follows and lets go of its lock."""
+    for s in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(s, lambda *_: sys.exit(0))
+
+
 # ------------------------------------------------------------------------------------------------- commands
 
 def main(argv):
     plan.need_recutils()
     sub, argv = (argv[0], argv[1:]) if argv else ("board", [])
-    sub in ("board", "_views", "_board") or fail(f"board.py runs crew board, _views or _board, not {sub}")
+    sub in ("board", "_views", "_board", "_rail", "_follow") or fail(f"board.py runs crew board, _views, _board, _rail or _follow, not {sub}")
     ap = argparse.ArgumentParser(prog=f"crew {sub}")
     fleet = crew.load()
-    if sub == "_board":
+    if sub in ("_board", "_rail"):
         ap.add_argument("label")
         ap.add_argument("--once", action="store_true")
         a = ap.parse_args(argv)
-        follow(crew.partition_of(fleet, a.label)["label"], a.once)
+        if sub == "_rail":
+            ended_by_signal()
+        (follow if sub == "_board" else rail_follow)(crew.partition_of(fleet, a.label)["label"], a.once)
+        return
+    if sub == "_follow":
+        ap.add_argument("--once", action="store_true")
+        a = ap.parse_args(argv)
+        ended_by_signal()
+        run_follow(a.once)
         return
     if sub == "_views":
         ap.add_argument("label")
