@@ -1299,6 +1299,13 @@ class TestTheCardsClose:
         assert plan.landed_words("c" * 40, "46") == (
             "landed on GitHub's main at ccccccc (#46); every host's folder follows by swancloud's timer within minutes")
 
+    def test_the_close_names_the_commit_landed_and_says_nothing_of_a_preview(self):
+        """rail-cards "A landed row" (record 0043): a card about a landed revision carries its commit, and no preview."""
+        landed = plan.landed_words("1a2b3c4" + "0" * 33, "46")
+        assert "1a2b3c4" in landed and "preview" not in landed.lower() and "bring it up" not in landed
+        _, sent = plan.pane_landed(landed, "swancloud-ops", "2026-10-22T21:04:09Z", "Land it")
+        assert "preview" not in sent.lower()
+
     def test_a_head_sluice_did_not_make_is_named_without_a_number(self):
         for n in ("", None, "46 47", "x"):
             assert plan.landed_words("c" * 40, n) == (

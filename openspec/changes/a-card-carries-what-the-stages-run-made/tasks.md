@@ -16,7 +16,7 @@
 
 ## 3. A landed revision's card
 
-- [ ] 3.1 A deploy's card and a landing's close name the commit landed and carry no preview (design, Decision 9; Task notes 3.1): passes `tests/py/test_cards.py` and `tests/py/test_landing.py`, `tests/suite logic` ends with "0 failed".
+- [x] 3.1 A deploy's card and a landing's close name the commit landed and carry no preview (design, Decision 9; Task notes 3.1): passes `tests/py/test_cards.py` and `tests/py/test_landing.py`, `tests/suite logic` ends with "0 failed".
 
 ## 4. Briefs and usage
 

@@ -1676,6 +1676,15 @@ class TestLandings:
 
 
 class TestDeploy:
+    def test_a_deploys_card_names_its_commit_and_carries_no_preview(self):
+        """rail-cards "A deploy's card" (record 0043): a card about a landed revision names the commit it landed as, and
+        carries no preview, no branch to bring one up and no word of one."""
+        c = deploy(head="9f8e7d60123")["card"]
+        assert c["title"] == "Deploy main 9f8e7d6 to srv" and c["approve"]["action"] == "Deploy 9f8e7d6 to srv"
+        said = json.dumps(c).lower()
+        assert "preview" not in said and "bring it up" not in said and "bolt/" not in said and "try it running" not in said
+        assert not any(a["kind"] == "url" for a in c.get("artifacts") or [])
+
     def test_three_landings_since_srvs_last_deploy(self):
         b = deploy()
         c = b["card"]
