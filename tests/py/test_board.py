@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import re
+import sys
 
 import pytest
 
@@ -319,48 +320,131 @@ class TestFollower:
         assert board.labels_here(fleet, "mac-studio") == ["wldn", "swancloud"]
         assert board.labels_here(fleet, BOX) == ["wldn"] and board.labels_here(fleet, "macbook-pro") == []
 
-    def test_an_entry_wakes_its_partitions_round_a_burst_is_one_round_and_a_follow_that_ends_leaves_the_clock(self, monkeypatch):
-        """Each partition's follow is a pipe here, as a crew events --follow child's output is, and each round is
-        recorded rather than run."""
-        class Follow:
-            def __init__(self):
-                self.r, self.w = os.pipe()
-                self.stdout, self.killed = os.fdopen(self.r, "rb"), False
+    @pytest.mark.parametrize("m, kept, crew_read, how", [
+        ({"crew": True, "any": True}, False, True, "read"), ({"crew": True, "any": True}, True, True, "update"),
+        ({"crew": True, "any": True}, True, False, "read"), ({"crew": False, "any": True}, True, True, "read"),
+        ({"crew": False, "any": False}, True, True, "render")])
+    def test_a_refresh_reads_once_with_none_kept_hands_out_restarts_once_crew_moved_and_renders_when_nothing_moved(self, m, kept, crew_read, how):
+        assert board.refresh_plan(m, kept, crew_read) == how
 
-            def kill(self):
-                self.killed = True
+    @pytest.mark.parametrize("now, tick_at, seen, looked, how", [
+        (100.0, 100.0, "a", "a", "tick"), (100.0, 0.0, "a", "b", "tick"), (100.0, 160.0, "a", "b", "refresh"), (100.0, 160.0, "a", "a", None)])
+    def test_a_look_ticks_when_its_clock_is_due_refreshes_when_a_cache_moved_and_else_reads_nothing(self, now, tick_at, seen, looked, how):
+        assert board.wake(now, tick_at, seen, looked) == how
 
-            def wait(self):
-                pass
+    def test_the_clock_is_a_minute_a_frame_is_stale_after_three_and_sigusr1_makes_the_next_tick_now(self):
+        assert board.PERIOD == 60 and board.STALE == 3 * board.PERIOD
+        f = board.Follower(None)
+        f.tick_at = 1e12
+        assert board.wake(100.0, f.tick_at, "a", "a") is None
+        f.tick_now()
+        assert board.wake(100.0, f.tick_at, "a", "a") == "tick"
+
+
+class TestRefresh:
+    """The host's follower's refresh (the crew-board spec, The rail and the board come from one read, A refresh after
+    nothing moved reads nothing, A refresh after a change reads only what moved): one read for every partition with an
+    operator session on the host, kept, and the frames written from it; each step around it stands in here, the read,
+    the views and the stamps, so what is asked is what the case shows."""
+
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan", "state": "o/state", "blueprints": ["o/bp"]},
+                            "swancloud": {"label": "swancloud", "partition": "personal", "state": "o/state", "blueprints": ["o/bp"]}},
+             "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
+
+    @pytest.fixture
+    def follower(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        monkeypatch.setattr(crew, "SESSIONS", tmp_path / "sessions")
+        monkeypatch.setattr(crew, "HOLD", tmp_path / "hold")
+        self.looks = {"crew": ("c" * 40, b"{teams}"), "state": {"wldn": "a" * 40, "swancloud": ""}, "blueprints": {"wldn": "b" * 40, "swancloud": "b" * 40}}
+        self.stamps, self.reads, self.swept, self.again, self.unchecked = {(BOX, "/kit/main"): "s1"}, [], [], [], []
+        monkeypatch.setattr(board, "look", lambda fleet, labels: {k: dict(v) if isinstance(v, dict) else v for k, v in self.looks.items()})
+        monkeypatch.setattr(board, "kit_stamps", lambda fleet, kits: {k: v for k, v in self.stamps.items() if k[1] in kits.get(k[0], {})})
+
+        def flow_read(fleet, labels, sweep=False):
+            kept = plan.READ.follower
+            self.reads.append((list(labels), sweep, plan.READ.tip("o/state", "wldn/main"), plan.READ.tip("o/state", "swancloud/main")))
+            served = kept.served(BOX, "/kit/main", {"main": "/kit/main"})
+            kept.use(BOX, "/kit/main", {"main": "/kit/main"}, served or {"ok": True, "stamp": self.stamps[(BOX, "/kit/main")]})
+            print("crew: a word the read said", file=sys.stderr)
+            return {"found": [], "errors": {"wldn/main of o/state": "a plan it could not read"}, "signals": {}, "unchecked": list(self.unchecked),
+                    "sv": {}, "rows": [], "cards": [], "unread": {}, "batched": {}, "served": served is not None}
+        monkeypatch.setattr(board, "flow_read", flow_read)
+        monkeypatch.setattr(board, "board_data", lambda fleet, labels, read, now: {"read_at": board.iso(now), "from": "mac-studio",
+                                                                                   "partitions": [{"label": labels[0]}], "unread": {}})
+        monkeypatch.setattr(plan, "rail_text", lambda fleet, labels, read, now: f"rail of {labels[0]}" + (", served" if read["served"] else ""))
+        monkeypatch.setattr(board, "here_read", lambda fleet, l: {"host": "mac-studio", "version": None, "held": None, "agents": {}})
+        monkeypatch.setattr(board, "agent_views", lambda data: {"read_at": data["read_at"], "views": {}})
+        monkeypatch.setattr(plan, "sweep_sessions", lambda fleet, found, sv, rows, cards, unread, batched, only=None: self.swept.append(only) or ([], []))
+        test = self
 
         class Here(board.Follower):
             def fleet(self):
-                return {"partitions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}},
-                        "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
-        rounds = []
-        monkeypatch.setattr(board, "follow_round", lambda label, seen: rounds.append(label))
-        monkeypatch.setattr(board, "BURST", 0.05)
-        follows = {"wldn": Follow(), "swancloud": Follow()}
-        f = Here(None)
-        f.follows = dict(follows)
-        f.step(0)
-        assert rounds == ["wldn", "swancloud"]
-        f.step(0)
-        assert rounds == ["wldn", "swancloud"], "a round ran before it was due"
-        for _ in range(3):
-            os.write(follows["wldn"].w, b"2026-10-28T10:00:00Z  unit.run  ...\n")
-        f.step(1)
-        f.step(0)
-        assert rounds == ["wldn", "swancloud", "wldn"], "a burst of entries was not one round of its own partition"
-        os.close(follows["swancloud"].w)
-        f.step(1)
-        assert follows["swancloud"].killed and f.follows["swancloud"] is None
-        f.step(0)
-        assert rounds == ["wldn", "swancloud", "wldn"] and f.follows["swancloud"] is None, "an ended follow woke a round or was started again"
-        assert f.due["swancloud"] > 0
-        os.close(follows["wldn"].w)
-        for x in follows.values():
-            x.stdout.close()
+                self.fleet_, self.labels = test.FLEET, board.labels_here(test.FLEET, "mac-studio")
+                return test.FLEET
+
+            def again(self, fleet):
+                test.again.append(list(self.labels))
+        return Here(None)
+
+    def frame(self, label, kind="rail"):
+        return json.loads((board.FRAMES / f"{label}{'.' + kind if kind != 'board' else ''}.json").read_text())
+
+    def test_one_read_writes_every_partitions_frames_with_what_it_said(self, follower):
+        follower.refresh()
+        assert self.reads == [(["wldn", "swancloud"], True, "a" * 40, "")], "the read was not handed the tips the caches hold"
+        assert self.frame("wldn")["text"] == "rail of wldn\ncrew: a word the read said\na plan it could not read"
+        assert self.frame("swancloud")["text"] == "rail of swancloud\ncrew: a word the read said"
+        assert self.frame("swancloud", "board")["partitions"] == [{"label": "swancloud"}] and self.frame("wldn", "agents")["views"] == {}
+
+    def test_a_refresh_with_nothing_moved_reads_nothing_sweeps_nothing_and_writes_the_frames_again(self, follower):
+        follower.refresh()
+        was = self.frame("wldn")["read_at"]
+        follower.refresh()
+        assert len(self.reads) == 1 and self.swept == []
+        assert self.frame("wldn")["text"] == "rail of wldn\na plan it could not read" and self.frame("wldn")["read_at"] >= was
+
+    def test_a_refresh_after_a_kit_moved_reads_again_with_the_rest_served(self, follower):
+        follower.refresh()
+        self.stamps[(BOX, "/kit/main")] = "s2"
+        follower.refresh()
+        assert len(self.reads) == 2 and self.frame("wldn")["text"].startswith("rail of wldn\n")
+        follower.refresh()
+        assert len(self.reads) == 2, "a kit read at its new stamp was taken as moved again"
+        self.looks["state"] = {"wldn": "d" * 40, "swancloud": ""}
+        follower.refresh()
+        assert len(self.reads) == 3 and self.frame("wldn")["text"].startswith("rail of wldn, served"), "an unmoved kit was not served"
+
+    def test_a_refresh_after_crew_moved_hands_out_the_restarts_and_starts_again(self, follower):
+        follower.refresh()
+        self.looks["crew"] = ("e" * 40, b"{teams}")
+        follower.refresh()
+        assert self.again == [["wldn", "swancloud"]]
+
+    def test_a_refresh_with_nothing_moved_sweeps_the_sessions_only_where_the_last_could_not(self, follower):
+        """The card-sessions spec, A host the last sweep missed."""
+        self.unchecked = [{"label": "wldn", "host": BOX, "why": "did not answer (exit 255)"}]
+        follower.refresh()
+        follower.refresh()
+        assert self.swept == [{"wldn": {BOX}}] and len(self.reads) == 1
+        follower.refresh()
+        assert self.swept == [{"wldn": {BOX}}], "a host the sweep reached was asked again"
+
+
+def test_the_session_sweep_after_nothing_moved_asks_the_host_the_last_could_not_check_and_no_other(monkeypatch):
+    """The card-sessions spec, A host the last sweep missed: unchecked {box} and nothing moved, the box alone is asked."""
+    import subprocess
+    asked = []
+    monkeypatch.setattr(crew, "crew_argv", lambda fleet, h, *a: ["crew", *a])
+    monkeypatch.setattr(crew, "on_machine", lambda fleet, h, argv, input=None: asked.append(h) or subprocess.CompletedProcess(argv, 0, "[]", ""))
+    found = [("wldn", "WilldanGroup/crew-state", "a" * 40, the_plan())]
+    only = plan.sessions_unchecked([{"label": "wldn", "host": BOX, "why": "did not answer (exit 255)"}])
+    assert only == {"wldn": {BOX}}
+    assert plan.sweep_sessions(FLEET, found, {}, [], [], {}, {}, only) == ([], []) and asked == [BOX]
+    asked.clear()
+    plan.sweep_sessions(FLEET, found, {}, [], [], {}, {})
+    assert asked == [BOX, "mac-studio"], "a refresh after a change did not sweep every host"
+    assert plan.sessions_unchecked([]) == {}
 
 
 class TestMoved:

@@ -12354,7 +12354,7 @@ def stranded_said(entries, card, owner, new):
     return (f"lost to {owner}" if state == "lost" else f"held on {host}, which this host's sign-in does not reach") + f": posted again as {new}"
 
 
-def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
+def sweep_sessions(fleet, found, sv, rows, cards, unread, batched, only=None):
     """End the card sessions crew started, and release the landings' previews it asked for, whose card is closed or
     whose row is gone, on every host of each partition
     whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
@@ -12362,15 +12362,19 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge, batch/
     while the record could not be read from its branch, when no key is taken out for being closed either (read.1). A host the survey
     found not answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why
-    "its row is gone" or "its card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
+    "its row is gone" or "its card is closed", and the hosts not checked, each {label, host, why} (read.3). only, when
+    given, {label: hosts}, asks those hosts alone: the follower's refresh after nothing moved, on the hosts its last
+    could not check (sessions_unchecked)."""
     ended, unchecked = [], []
     for l, _, _, plan in found:
-        if not plan:
+        if not plan or (only is not None and not only.get(l)):
             continue
         readings = {f"land/{b['bolt']}" for r in rows if r["label"] == l and r["group"] == "land" for b in r.get("bolts", []) if b["can"]}
         rowed = {r["key"] for r in rows if r["label"] == l} | readings  # each row's, and each landing row's reading and preview
         judged = json.dumps(sweep_judgment(l, rowed, cards, unread.get(l), batched.get(l, {}), readings))
         for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
+            if only is not None and h not in only[l]:
+                continue
             if h in sv and not sv[h]["ok"]:
                 unchecked.append(dict(label=l, host=h, why=f"did not answer ({sv[h]['error']})"))
                 continue
@@ -12394,6 +12398,16 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
             ended += [dict(label=l, host=h, key=x["key"], unit=x.get("unit"), said=x["said"],
                            why="its card is closed" if x["key"] in rowed else "its row is gone") for x in got]
     return ended, unchecked
+
+
+def sessions_unchecked(unchecked):
+    """The hosts a refresh after nothing moved asks to end their card sessions, {label: hosts}: those the last refresh
+    could not check (sweep_sessions), and no other, since every other host was judged on the same facts (the
+    card-sessions spec, A host the last sweep missed)."""
+    out = {}
+    for u in unchecked or []:
+        out.setdefault(u["label"], set()).add(u["host"])
+    return out
 
 
 def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
@@ -12445,7 +12459,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
-                gives=gives, ops=opses, logs=logs, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
+                gives=gives, ops=opses, logs=logs, batched=batched, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
         read["swept"] = sweep_cards(fleet, read)
@@ -12480,7 +12494,9 @@ def rail_text(fleet, labels, read, now):
     closed or left with no card, named so, each partition it changed nothing for and why, each landings card raised
     again as main moved under it and each whose kit's revision of main can't be read (sweep_moved), each card session ended,
     with its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
-    (the board's) gives the same text."""
+    (the board's) gives the same text. Of a read of several partitions, labels may name some: the rail of those alone,
+    as a read of them alone would give it (the host's follower's, which reads every partition on the host at once)."""
+    read = labels_of(read, labels)
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
@@ -12551,6 +12567,21 @@ def rail_text(fleet, labels, read, now):
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
     return "\n".join(lines)
+
+
+def labels_of(read, labels):
+    """A rail read narrowed to some of the partitions it read: its plans, rows, cards, what its sweeps did and the hosts
+    they could not check, each of those labels'; the survey stays whole, since a host serves every partition."""
+    labels = set(labels)
+    swept = read.get("swept")
+    moved = read.get("moved")
+    return dict(read, found=[f for f in read["found"] if f[0] in labels], rows=[r for r in read["rows"] if r["label"] in labels],
+                cards=[c for c in read["cards"] if c["label"] in labels], unread={l: v for l, v in read["unread"].items() if l in labels},
+                logs={l: v for l, v in (read.get("logs") or {}).items() if l in labels},
+                swept=swept and {"done": [d for d in swept["done"] if d["label"] in labels], "unswept": [u for u in swept["unswept"] if u["label"] in labels]},
+                moved=moved and {k: [x for x in v if x["label"] in labels] for k, v in moved.items()},
+                ended=[e for e in read.get("ended") or [] if e["label"] in labels],
+                unchecked=[u for u in read.get("unchecked") or [] if u["label"] in labels])
 
 
 def unread_card_acts(logs, now):

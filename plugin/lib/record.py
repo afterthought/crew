@@ -46,6 +46,9 @@ import crew  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 ROOT = pathlib.Path.home() / ".local/state/crew"
+# The clock the host's follower (board.py) and crew events --follow fetch a partition's branch on, never faster
+# (plan.12's reading of 2026-10-28); crew's tests set CREW_TEST_PERIOD, so no tick of it falls inside a step (tests.8).
+PERIOD = 60
 DESCRIPTOR = """\
 # crew's run record: one entry per act of crew's that moved work, appended by crew on this host and never
 # rewritten. Read it with recsel, or with crew events and crew trace.

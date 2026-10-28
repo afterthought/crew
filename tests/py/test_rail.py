@@ -305,18 +305,33 @@ class TestText:
                                            "  5m       a question (wldn), asked by swb-1-conductor on mac-studio (req_q2)"]
         assert "title" not in out and "open cards whose row is gone" not in out
 
+    def test_one_partitions_rail_of_a_read_of_two_is_the_rail_a_read_of_it_alone_gives(self):
+        """The host's follower reads every partition on the host at once (the crew-board spec, Two partitions on one
+        host): each partition's rail is made from that one read, with nothing of the other's."""
+        mine = rows([proposal(4)])
+        theirs = [dict(r, label="swancloud", what=["swancloud's " + r["what"][0], *r["what"][1:]]) for r in rows([proposal(7)])]
+        card = dict(label="swancloud", card="req_s7", key="proposal/7", by="swancloud-planner", host=BOX, at=NOW)
+        ended = [dict(label="swancloud", host=BOX, key="proposal/7", unit=None, why="its row is gone", said="ended")]
+        alone = text(mine)
+        both = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan()), ("swancloud", "afterthought/crew-state", "tip2", the_plan())],
+                    rows=mine + theirs, cards=[card], sv=survey(), unread={"swancloud": {"swancloud/main": "unread"}}, ended=ended,
+                    unchecked=[dict(label="swancloud", host=BOX, why="did not answer")],
+                    swept={"done": [], "unswept": [dict(label="swancloud", why="this host can't ask through Pending You")]})
+        assert plan.rail_text(FLEET, ["wldn"], both, NOW) == alone
+        assert "swancloud's" in plan.rail_text(FLEET, ["swancloud"], both, NOW) and "swancloud's" not in alone
+
     def test_a_read_that_swept_lists_each_card_it_closed_withdrew_or_posted_again_and_what_it_could_not_sweep(self):
         done = [dict(label="wldn", key="proposal/4", card="req_p4", by="wldn-planner", did="closed", words="its proposal was applied", new=None),
                 dict(label="wldn", key="land/y", card="req_l1", by="swb-1-conductor", did="withdrawn", words="its bolt was dropped", new=None),
                 dict(label="wldn", key=None, card="req_q1", by="crw-3-conductor", did="withdrawn", words="crw-3-conductor ended", new=None),
                 dict(label="wldn", key="proposal/17", card="req_1", by="wldn-planner", did="lost", words="posted again as req_2", new="req_2")]
-        out = text([], swept={"done": done, "unswept": [dict(label="madswan", why="this host can't ask through Pending You")]})
+        out = text([], swept={"done": done, "unswept": [dict(label="wldn", why="this host can't ask through Pending You")]})
         assert out.split("cards swept:\n")[1].split("\n\n")[0].splitlines() == [
             "  proposal/4 (wldn), wldn-planner's req_p4: closed: its proposal was applied",
             "  land/y (wldn), swb-1-conductor's req_l1: withdrawn: its bolt was dropped",
             "  a question (wldn), crw-3-conductor's req_q1: withdrawn: crw-3-conductor ended",
             "  proposal/17 (wldn), wldn-planner's req_1: lost: posted again as req_2"]
-        assert out.endswith("cards not swept:\n  madswan: this host can't ask through Pending You")
+        assert out.endswith("cards not swept:\n  wldn: this host can't ask through Pending You")
 
     def test_a_batch_crew_closed_with_no_card_is_named_so_beside_its_card_withdrawn(self):
         """review-batches, "Its card is already open": the read says both what it closed and the card it withdrew."""

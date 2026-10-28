@@ -31,7 +31,7 @@ agents' mods, in crew's cache, each one redraw and not state (state.4). A host h
 it follows: swancloud's job running crew _follow, or, where none runs, a rail tab's own loop. Its refresh, as it prints
 the rail, ends the card sessions whose card is closed or whose row is gone, as crew rail does; crew board ends nothing.
 The board answers nothing and prints no command: the rail and its shell are where things are answered."""
-import argparse, datetime, fcntl, json, os, pathlib, re, select, shutil, signal, subprocess, sys, tempfile, time
+import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shutil, signal, subprocess, sys, tempfile, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -50,7 +50,7 @@ PIP = {"queued": "○", "waiting": "○", "ready": "○", "amended": "◔", "con
 SHOWN = 6
 # The frames the host's follower writes for the rail and board tabs and the agents' mods, by label.
 FRAMES = pathlib.Path.home() / ".cache/crew/board"
-STALE = 90  # seconds: three of the follower's periods
+STALE = 3 * record.PERIOD  # seconds: three of the follower's periods
 SIGNAL = re.compile(r"^signals/([^/]+)/([0-9]{2}-[^/]+)\.md$")
 DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 STYLES = {"bold": "\033[1m", "dim": "\033[2m"}
@@ -842,7 +842,14 @@ def lock_follower(kind, label=None, wait=True):
     on the open file, which the caller keeps open for as long as it follows, so the OS lifts it when the follower ends,
     however it ends, and nothing is left to go stale (state.4). Once taken, the file says who holds it, `job <pid>
     <time>` or `tab <label> <pid> <time>`. With wait it waits for the lock, reading nothing meanwhile; without, None
-    when another holds it."""
+    when another holds it. A follower started again as crew moved (Follower.again) adopts the lock it held, its open
+    file handed on across the exec, so the host is never without its follower between the two."""
+    held = os.environ.pop("CREW_FOLLOWER_LOCK", None)
+    if held:
+        try:
+            return os.fdopen(int(held), "a+")
+        except (OSError, ValueError):
+            pass
     FRAMES.mkdir(parents=True, exist_ok=True)
     f = open(lock_path(), "a+")
     try:
@@ -945,105 +952,241 @@ def moved_at():
     return (crew.head_here(), teams)
 
 
-def follow_round(label, seen):
-    """One round of the follower for a partition, the rail tab's refresh: when crew's checkout or the teams file has
-    moved since its last round, the partition's agents here that it made due a restart handed theirs (crew _update,
-    teams.19); then one read (crew _views), which prints the rail as crew rail does, ending the card sessions crew rail
-    ends, and writes the board's frame and the agents' views; what it printed, standard error with it, written as the
-    rail's frame. Each a child of crew's, so every round reads afresh. seen holds what moved_at read at each label's
-    last round."""
-    cmd, now, updated = ["bash", str(crew.HOME / "plugin/bin/crew")], moved_at(), None
-    if label in seen and seen[label] != now:
-        updated = subprocess.run(cmd + ["_update", "--label", label], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout.strip() or None
-    seen[label] = now
-    out = subprocess.run(cmd + ["_views", label], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout.rstrip("\n")
+PERIOD = record.PERIOD  # seconds: the follower's clock, on which it fetches the state and blueprints caches (plan.12)
+BURST = 2  # seconds: a look that sees a write waits this long for what follows, so a burst of writes is one refresh
+
+
+def look(fleet, labels):
+    """What the follower's look reads each second, with no process (plan.12): crew's checkout and the teams file
+    (moved_at), and each partition's state and blueprints tips as this host's caches hold them (plan.tip_here)."""
+    return {"crew": moved_at(), "state": {l: plan.tip_here(*plan.state_of(fleet, l)) for l in labels},
+            "blueprints": {l: plan.tip_here(crew.partition_of(fleet, l)["blueprints"][0], "main") for l in labels}}
+
+
+def wake(now, tick_at, seen, looked):
+    """What the follower does at a look (Decision 3 of a-rail-refresh-after-no-change-reads-nothing): "tick" once its
+    clock's tick is due, when it fetches and then refreshes; "refresh" when what the look reads now (looked) is not what
+    its last refresh rested on (seen), a write on this host having moved a cache, crew or the teams file; else None,
+    and it reads nothing. A decision on plain times and tips (code.7)."""
+    if now >= tick_at:
+        return "tick"
+    return "refresh" if looked != seen else None
+
+
+def refresh_plan(m, kept, crew_read=True):
+    """What a refresh does, from what moved since its last read (moved), whether it kept one, and whether crew's checkout
+    and the teams file could be read then and now (crew_read): "read" with none kept, its first, or when something
+    moved, reading only what moved and running every sweep; "update" once crew's checkout or the teams file moved, the
+    due restarts handed out and the follower started again as the new crew, but a read when either can't be read, which
+    hands out nothing on a guess (read.1); "render" when nothing moved, the frames written again from the kept read and
+    the card sessions swept only on the hosts the last refresh could not check (plan.sessions_unchecked). A decision on
+    plain facts (code.7)."""
+    if not kept:
+        return "read"
+    if m["crew"]:
+        return "update" if crew_read else "read"
+    return "read" if m["any"] else "render"
+
+
+def kit_stamps(fleet, kits):
+    """Each kit's stamp now (gather.stamp), of the kits the last read surveyed, {host: {main: (request, answer)}}, by
+    (host, main): in this process on this host, in one ssh to each other; every kit of a host that did not answer None,
+    which moved() takes as moved (read.1)."""
+    out = {}
+    for host, ks in sorted(kits.items()):
+        got, _ = plan.stamped(fleet, host, [req for req, _ in ks.values()])
+        out.update({(host, m): (got or {}).get(m) for m in ks})
+    return out
+
+
+def kept_stamps(kits):
+    """The stamp each kit the last read used was read at, by (host, main), None for one whose host did not answer."""
+    return {(host, m): (answer or {}).get("stamp") for host, ks in kits.items() for m, (_, answer) in ks.items()}
+
+
+def here_key(head):
+    """What here_read rests on besides the partition: crew's checkout and the teams file (moved_at), and the size and
+    time of each agent's start record and of the host's hold file, read with no process; here_read is read again only
+    when it moves."""
     try:
-        write_frame(label, {"read_at": iso(datetime.datetime.now(datetime.timezone.utc)), "from": crew.this_host(), "text": out,
-                            "updated": updated}, rail_path(label))
-    except OSError as e:
-        print(f"crew could not write {label}'s rail frame in {FRAMES}: {e.strerror or e}", file=sys.stderr)
+        starts = sorted((e.name, e.stat().st_size, e.stat().st_mtime_ns) for e in os.scandir(crew.SESSIONS))
+    except FileNotFoundError:
+        starts = []
+    try:
+        st = crew.HOLD.stat()
+        hold = (st.st_size, st.st_mtime_ns)
+    except FileNotFoundError:
+        hold = None
+    return json.dumps([head[0], head[1].decode(errors="replace") if head[1] else None, starts, hold])
 
 
-PERIOD = 30  # seconds between a partition's rounds
-BURST = 2  # seconds: a wake takes what more arrives within this before its round, so a burst of entries is one round
+def label_errors(errors, label):
+    """The plans' errors of one partition's read: its branch's, named <label>/main of <repo>, or its plan's."""
+    return {k: v for k, v in errors.items() if k.startswith(f"{label}/main of ") or k == f"the plan of {label}"}
 
 
 class Follower:
-    """The host's follower once it holds the lock (lock_follower): every PERIOD seconds, and on each run-record entry,
-    one round (follow_round) for each partition with an operator session on the host, read again before each round so
-    a teams or hosts change reaches it. An entry is woken on by a `crew events --follow` child per partition; one whose
-    follow ends is left on the clock alone, as the rail tab's loop left it."""
+    """The host's follower once it holds the lock (lock_follower): on its clock, every PERIOD seconds, it fetches each
+    partition's state branch and blueprints main and refreshes; between ticks it looks each second at what this host's
+    caches hold, crew's checkout and the teams file, with no process, and refreshes within seconds when one moved. A
+    refresh is one read, in this process, for every partition with an operator session on the host (labels_here),
+    kept between refreshes (plan.Kept, state.4): it checks first whether anything the read rests on moved (moved) and
+    then reads nothing when nothing did, or only what moved; each partition's rail, board and agents' views are written
+    from it. SIGUSR1 makes the next tick now."""
 
-    def __init__(self, lock):
-        self.lock, self.seen, self.due, self.follows, self.labels = lock, {}, {}, {}, []
-        self.cmd = ["bash", str(crew.HOME / "plugin/bin/crew")]
+    def __init__(self, lock, period=PERIOD):
+        self.lock, self.period, self.kept, self.last = lock, period, plan.Kept(), None
+        self.labels, self.fleet_, self.tick_at, self.seen, self.unfetched, self.here = [], None, 0.0, None, {}, {}
+        # what handing out the restarts said before the follower started again as the new crew (again)
+        self.updated = json.loads(os.environ.pop("CREW_FOLLOWER_UPDATED", "") or "{}")
 
     def fleet(self):
-        """The teams file and the hosts file read afresh, not as this process first read them."""
+        """The teams file and the hosts file read afresh, not as this process first read them, and the partitions
+        followed with them."""
         crew.load.cache_clear()
-        return crew.load()
-
-    def partitions(self):
         try:
-            self.labels = labels_here(self.fleet(), crew.this_host())
+            self.fleet_ = crew.load()
+            self.labels = labels_here(self.fleet_, crew.this_host())
         except Refusal as e:
             print(f"crew's follower keeps the partitions it had ({', '.join(self.labels) or 'none'}): {e}", file=sys.stderr)
-        for l in [l for l in self.follows if l not in self.labels]:
-            self.ended(l)
-            del self.follows[l]
+        return self.fleet_
+
+    def tick_now(self):
+        self.tick_at = 0.0
+
+    def fetch(self, fleet):
+        """The clock's fetch: each partition's state branch and blueprints main, once each, into this host's caches;
+        what could not be fetched is said in each partition's frames until a fetch of it lands."""
+        self.unfetched, done = {}, {}
         for l in self.labels:
-            if l not in self.follows:
-                self.follows[l] = subprocess.Popen(self.cmd + ["events", "--follow", "--label", l], stdout=subprocess.PIPE,
-                                                   stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
-            self.due.setdefault(l, 0)
-
-    def ended(self, label):
-        p = self.follows.get(label)
-        if p:
-            p.kill()
-            p.wait()
-        self.follows[label] = None
-
-    def rounds(self, labels):
-        for l in labels:
-            follow_round(l, self.seen)
-            self.due[l] = time.monotonic() + PERIOD
+            for repo, ref in (plan.state_of(fleet, l), (crew.partition_of(fleet, l)["blueprints"][0], "main")):
+                if (repo, ref) not in done:
+                    try:
+                        plan.fetch(repo, ref, fresh=True)
+                        done[(repo, ref)] = None
+                    except Refusal as e:
+                        done[(repo, ref)] = " ".join(str(e).split())
+                if done[(repo, ref)]:
+                    self.unfetched.setdefault(l, {})[f"{ref} of {repo}"] = done[(repo, ref)]
 
     def once(self):
-        """One round of every partition, waiting for nothing: crew _follow --once, for the tiers."""
-        self.labels = labels_here(self.fleet(), crew.this_host())
-        self.rounds(self.labels)
+        """One tick, waiting for nothing: crew _follow --once, for the tiers."""
+        self.fetch(self.fleet())
+        self.refresh()
 
     def step(self, most=None):
-        """The rounds that are due, then a wait for an entry or the next round due, of at most most seconds."""
-        if not self.labels or any(self.due.get(l, 0) <= time.monotonic() for l in self.labels):
-            self.partitions()
-            self.rounds([l for l in self.labels if self.due[l] <= time.monotonic()])
-        wait = max(0.0, min(self.due[l] for l in self.labels) - time.monotonic()) if self.labels else PERIOD
-        woke = self.woken(wait if most is None else min(wait, most))
-        while woke and (more := self.woken(BURST)):
-            woke |= more
-        for l in woke:
-            self.due[l] = 0
+        """A look: the clock's tick when it is due, a refresh when a cache, crew or the teams file moved, else nothing;
+        then a wait of a second, or of most seconds when that is less."""
+        how = wake(time.monotonic(), self.tick_at, self.seen, look(self.fleet_, self.labels) if self.fleet_ else None)
+        if how == "tick":
+            self.tick_at = time.monotonic() + self.period
+            self.fetch(self.fleet())
+            self.refresh()
+        elif how == "refresh":
+            time.sleep(BURST)
+            self.refresh()
+        time.sleep(1 if most is None else min(1, most))
 
-    def woken(self, wait):
-        """The labels whose follow printed within wait seconds, what it printed taken; a follow that ended dropped."""
-        by = {p.stdout.fileno(): l for l, p in self.follows.items() if p}
-        if not by:
-            time.sleep(wait)
-            return set()
-        ready, _, _ = select.select(list(by), [], [], wait)
-        woke = set()
-        for fd in ready:
-            if os.read(fd, 65536):
-                woke.add(by[fd])
+    def refresh(self):
+        fleet = self.fleet()
+        looked = look(fleet, self.labels)
+        kept = self.last if self.last and self.last["read"] is not None else None
+        stamps = dict(looked, kits=kit_stamps(fleet, self.kept.kits) if kept else {})
+        self.seen = looked
+        how = refresh_plan(moved(kept and kept["stamps"], stamps), kept is not None,
+                           None not in looked["crew"] and None not in (kept["stamps"]["crew"] if kept else ()))
+        if how == "update":
+            self.again(fleet)
+            how = "read"
+        if how == "read":
+            self.read(fleet, looked, stamps)
+        else:
+            self.render_unchecked(fleet)
+        self.write(fleet)
+
+    def read(self, fleet, looked, stamps):
+        """A read of what moved: the tips this host's caches hold handed in (no fetch), each unmoved kit served from what
+        was kept, and every sweep run; what the read said on standard error kept for the rail's frames."""
+        plan.READ.memory.clear()
+        for l in self.labels:
+            for (repo, ref), tip in ((plan.state_of(fleet, l), looked["state"][l]),
+                                     ((crew.partition_of(fleet, l)["blueprints"][0], "main"), looked["blueprints"][l])):
+                if tip is not None:
+                    plan.READ.keep_tip(repo, ref, tip)
+        self.kept.stamps, plan.READ.follower, said = stamps["kits"], self.kept, io.StringIO()
+        try:
+            with contextlib.redirect_stderr(said):
+                read = flow_read(fleet, self.labels, sweep=True)
+        except Exception as e:  # a read that fails is said in the frames, and the follower goes on
+            print(f"crew's follower could not read: {e}" if isinstance(e, Refusal) else
+                  f"crew's follower could not read: {type(e).__name__}: {e}", file=said)
+            read = None
+        finally:
+            plan.READ.follower = None
+            self.kept.settle()
+        if read is not None:
+            self.last = {"read": read, "stamps": dict(looked, kits=kept_stamps(self.kept.kits)), "said": said.getvalue().strip()}
+        else:
+            self.last = {"read": None, "stamps": None, "said": said.getvalue().strip()}
+
+    def render_unchecked(self, fleet):
+        """Nothing moved: the kept read stands, its sweeps' acts are not said again, and the card sessions are swept only
+        on the hosts the last refresh could not check (the card-sessions spec)."""
+        read = self.last["read"]
+        only = plan.sessions_unchecked(read.get("unchecked"))
+        ended, unchecked = plan.sweep_sessions(fleet, read["found"], read["sv"], read["rows"], read["cards"], read["unread"],
+                                               read.get("batched") or {}, only) if only else ([], [])
+        self.last = dict(self.last, said="", read=dict(read, swept={"done": [], "unswept": []}, moved={"raised": [], "unread": []},
+                                                       ended=ended, unchecked=unchecked))
+
+    def again(self, fleet):
+        """crew's checkout or the teams file moved: each partition's agents here that it made due a restart are handed
+        theirs (crew _update, teams.19), and the follower starts again as the new crew, its lock handed on and what the
+        update said with it; the kept read goes with this process. When it can't start again it reads afresh here."""
+        cmd = ["bash", str(crew.HOME / "plugin/bin/crew")]
+        updated = {l: subprocess.run(cmd + ["_update", "--label", l], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout.strip() or None
+                   for l in self.labels}
+        try:
+            os.set_inheritable(self.lock.fileno(), True)
+            sys.stdout.flush()
+            os.execve(sys.executable, [sys.executable, str(LIB / "board.py"), *sys.argv[1:]],
+                      dict(os.environ, CREW_FOLLOWER_LOCK=str(self.lock.fileno()), CREW_FOLLOWER_UPDATED=json.dumps(updated)))
+        except OSError as e:
+            print(f"crew's follower could not start again as the new crew ({e.strerror or e}); it reads afresh as it is", file=sys.stderr)
+            self.updated, self.last = updated, None
+
+    def write(self, fleet):
+        """Each partition's frames from the one read, as of now: its rail, with what the read said and what could not be
+        read or fetched; its board; and its agents' views, with what this host's agents run of crew."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        last = self.last or {"read": None, "said": ""}
+        for l in self.labels:
+            read, unfetched = last["read"], self.unfetched.get(l, {})
+            if read is None:
+                text = last["said"] or f"crew's follower on {crew.this_host()} has no read of {l}"
+                data = None
             else:
-                self.ended(by[fd])
-        return woke
+                read = dict(read, errors={**read["errors"], **{k: f"could not fetch it, so it is shown as this host last fetched it: {v}"
+                                                               for k, v in unfetched.items() if k.startswith(f"{l}/main of ")}})
+                sigs, sunread = read["signals"].get(l, ([], {}))
+                read["signals"] = dict(read["signals"], **{l: (sigs, {**sunread, **{k: f"could not fetch it: {v}" for k, v in unfetched.items()
+                                                                                       if not k.startswith(f"{l}/main of ")}})})
+                errors = label_errors(read["errors"], l)
+                text = "\n".join([plan.rail_text(fleet, [l], read, now)] + ([last["said"]] if last["said"] else []) + list(errors.values()))
+                data = dict(board_data(fleet, [l], read, now), unread=errors)
+            try:
+                write_frame(l, {"read_at": iso(now), "from": crew.this_host(), "text": text, "updated": self.updated.get(l)}, rail_path(l))
+                if data is not None:
+                    key = here_key(self.seen["crew"])
+                    if self.here.get(l, (None,))[0] != key:
+                        self.here[l] = (key, here_read(fleet, l))
+                    write_frame(l, data)
+                    write_frame(l, agent_views(dict(data, here=self.here[l][1])), agents_path(l))
+            except OSError as e:
+                print(f"crew could not write {l}'s frames in {FRAMES}: {e.strerror or e}", file=sys.stderr)
+        self.updated = {}
 
     def close(self):
-        for l in list(self.follows):
-            self.ended(l)
         self.lock.close()
 
 
@@ -1051,7 +1194,8 @@ def run_follow(once=False):
     """crew _follow: the host's follower with no tab, the command a job of the host's runs (swancloud's): it waits for
     the lock while another follows, reading nothing, then follows every partition with an operator session here."""
     lock = lock_follower("job", wait=True)
-    f = Follower(lock)
+    f = Follower(lock, int(os.environ.get("CREW_TEST_PERIOD") or PERIOD))
+    signal.signal(signal.SIGUSR1, lambda *_: f.tick_now())
     try:
         if once:
             f.once()
@@ -1068,8 +1212,8 @@ def run_follow(once=False):
 def rail_follow(label, once=False):
     """The rail tab: the latest rail frame drawn whenever it changes, or how stale it is does; checked once a second.
     Each second, while no one follows on the host, it takes the follower lock without waiting and is the host's
-    follower itself, for every partition with an operator session here, making each round when it is due; so a tab
-    drawing the job's frames follows itself within a second of the job ending. With once, one draw, following
+    follower itself, for every partition with an operator session here, on the follower's clock and look (Follower); so a
+    tab drawing the job's frames follows itself within a second of the job ending. With once, one draw, following
     nothing."""
     tty = sys.stdout.isatty()
     seen, data, mtime, follower = None, None, False, None
@@ -1091,6 +1235,8 @@ def rail_follow(label, once=False):
             if follower is None:
                 lock = lock_follower("tab", label, wait=False)
                 follower = Follower(lock) if lock else None
+                if follower:
+                    signal.signal(signal.SIGUSR1, lambda *_: follower.tick_now())
             if follower:
                 follower.step(1)
             else:

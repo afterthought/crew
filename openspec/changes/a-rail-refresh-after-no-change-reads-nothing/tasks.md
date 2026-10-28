@@ -9,9 +9,9 @@
 ## 2. The follower reads only what moved, once for every partition, on a one-minute clock
 
 - [x] 2.1 The state branch's files and the kits' answers are served from what the follower kept when their blob or stamp has not moved, and a moved kit is asked of its host alone (design, Decision 2; Task notes 2.1); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 2.2 The follower makes one read in its own process for every partition with an operator session on the host, renders and writes each partition's frames from its kept read when nothing moved, reads only what moved otherwise, and re-executes itself after handing out due restarts when crew moved (design, Decisions 2 and 4; Task notes 2.2); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 2.3 The follower fetches once a minute on its clock and never at an entry, looks at the caches every second with no process, refreshes within seconds of a write on this host, makes its next tick at once on SIGUSR1, and frames go stale after three periods (design, Decision 3; Task notes 2.3); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 2.4 A refresh after nothing moved runs no sweep but the session sweep on the hosts the last refresh could not check (design, Decision 5; Task notes 2.4); passes `tests/suite logic` ending with "0 failed".
+- [x] 2.2 The follower makes one read in its own process for every partition with an operator session on the host, renders and writes each partition's frames from its kept read when nothing moved, reads only what moved otherwise, and re-executes itself after handing out due restarts when crew moved (design, Decisions 2 and 4; Task notes 2.2); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
+- [x] 2.3 The follower fetches once a minute on its clock and never at an entry, looks at the caches every second with no process, refreshes within seconds of a write on this host, makes its next tick at once on SIGUSR1, and frames go stale after three periods (design, Decision 3; Task notes 2.3); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
+- [x] 2.4 A refresh after nothing moved runs no sweep but the session sweep on the hosts the last refresh could not check (design, Decision 5; Task notes 2.4); passes `tests/suite logic` ending with "0 failed".
 
 ## 3. The run record's follow on the same clock
 
