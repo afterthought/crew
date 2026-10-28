@@ -232,17 +232,21 @@ class TestTeamGreetings:
 
     def test_a_conductor_of_a_team_holding_two_bolts_is_told_both_its_bolts_row_and_each_fix_in_flight(self):
         """A give beside a waiting bolt restarts the conductor fresh at its next stop (teams.16); the waiting bolt is a
-        row of its kit's landings card, main-level ops's, and the conductor waits on its reading."""
-        assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", "swancloud", "swancloud", ["take-main"]) == (
+        row of its kit's landings card, main-level ops's, crew tells the conductor when its reading is sent, and it
+        starts no wait (bolt-teams "A give while the conductor waits on its landing card")."""
+        said = plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", "swancloud", "swancloud", ["take-main"])
+        assert said == (
             "Your team now builds the bolt ssh-fix. Bolt doctor-rows waits to land, a row of swancloud's landings card, "
-            "swancloud-ops's: run crew card wait land/doctor-rows in the background for its reading's notes. Fix take-main "
-            "is in flight on it: wait on it with crew fix swc-1 take-main --wait --bolt doctor-rows.")
+            "swancloud-ops's: crew tells you when the user sends land/doctor-rows's reading, and crew card read "
+            "land/doctor-rows then gives its notes. Fix take-main is in flight on it: wait on it with crew fix swc-1 "
+            "take-main --wait --bolt doctor-rows.")
+        assert "card wait" not in said
 
     def test_with_no_fix_it_names_both_bolts_and_a_kit_not_read_is_said(self):
         said = plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", "swancloud", "swancloud", [])
         assert said.startswith("Your team now builds the bolt ssh-fix. Bolt doctor-rows waits to land") and "Fix" not in said
         assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", "swancloud", "swancloud", None, "box did not answer").endswith(
-            "for its reading's notes. crew could not read its fixes (box did not answer): read crew status swc-1.")
+            "then gives its notes. crew could not read its fixes (box did not answer): read crew status swc-1.")
 
     def test_status_names_the_bolt_a_team_builds_and_the_one_waiting_to_land(self):
         assert plan.two_held_said("swc-1", "ssh-fix", "doctor-rows") == "swc-1 builds ssh-fix; doctor-rows waits to land"

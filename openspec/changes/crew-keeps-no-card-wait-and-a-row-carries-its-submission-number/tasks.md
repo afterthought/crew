@@ -5,7 +5,7 @@
 - [x] 1.1 `crew card wait` refuses at once naming `crew card read <key>`, and the waits and the readings they started are gone from `plan.py` (design Decision 1; Task notes 1.1); passes `tests/py/test_card_commands.py`, verify `tests/suite logic` ends with "0 failed".
 - [x] 1.2 `crew card read` gives a batch's card and reading together (closing the card, recording the batch read, ending the session), a landing reading's notes to its conductor, and a long proposal reading's decision, each from a decision of plain facts (design Decisions 2 and 4; Task notes 1.2); passes `tests/py/test_cards.py` and `tests/py/test_landings.py`.
 - [x] 1.3 `crew card sweep` tells a sent reading's owner once, marks it told only when the tell goes through, and records a wordless batch send read (design Decisions 3 and 4; Task notes 1.3); passes `tests/py/test_card_commands.py`, and verify `tests/suite t-journey-review t-cards` ends with "0 failed".
-- [ ] 1.4 A conductor restarted for a give is told of its waiting bolt's reading with no wait to start, and `hold.py` names no `crew card wait` (bolt-teams delta; Task notes 1.4); passes `tests/py/test_teams.py` and `tests/py/test_hold.py`.
+- [x] 1.4 A conductor restarted for a give is told of its waiting bolt's reading with no wait to start, and `hold.py` names no `crew card wait` (bolt-teams delta; Task notes 1.4); passes `tests/py/test_teams.py` and `tests/py/test_hold.py`.
 
 ## 2. Every submission's number on its bolt's row
 

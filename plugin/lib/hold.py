@@ -59,7 +59,8 @@ def hosts_named(fleet, which):
 
 def crew_wait(command):
     """Whether a background command is one of crew's waits, which only reads and which the agent starts again after a
-    restart: crew unit wait, crew chore wait, crew card wait, crew fix ... --wait, crew review ... --wait."""
+    restart: crew unit wait, crew chore wait, crew fix ... --wait, crew review ... --wait, and any other crew command
+    ending in a wait, a card's wait from before crew kept none among them (teams.24)."""
     return bool(command and re.search(r"(^|[\s/;&|(])crew\s", command) and re.search(r"(^|\s)(--)?wait(\s|$)", command))
 
 
