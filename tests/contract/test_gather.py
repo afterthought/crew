@@ -4,6 +4,8 @@ board and crew sites read every host's kits through gather.kit, once per host)."
 import os
 import subprocess
 
+import pytest
+
 import gather
 
 # A kit whose bolts live on GitHub (plan.19): the policy names origin for its bolt branches.
@@ -641,6 +643,51 @@ class TestStamp:
         the stamp their read was made at."""
         self.kit(repo, tmp_path)
         s = gather.stamp(self.req)
-        assert gather.read({"kits": [self.req], "stamp": True}) == {str(repo.path): s}
+        assert gather.read({"kits": [self.req], "stamp": True, "labels": ["wldn"]}) == {"kits": {str(repo.path): s}, "readings": gather.readings_stamp(["wldn"])}
         got = gather.read({"kits": [self.req], "stamped": True, "board": True})[str(repo.path)]
         assert got["ok"] and got["stamp"] == s and "stamp" not in gather.read({"kits": [self.req]})[str(repo.path)]
+
+
+class TestReadingsStamp:
+    """What crew assumes of the file system when the host's follower checks whether a reading was sent back (the
+    card-sessions spec, A reading sent on one host): a host's card readings folders' stamp (gather.readings_stamp),
+    read with no process, moves when plannotator writes a reading's result or crew tells its owner, and on nothing
+    else."""
+
+    @pytest.fixture
+    def cards(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        folder = tmp_path / ".local/state/crew/cards/wldn/batch/3"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text('{"pid": 1}')
+        return folder
+
+    def test_a_result_written_moves_it_and_nothing_written_leaves_it(self, cards):
+        s = gather.readings_stamp(["wldn"])
+        assert s and gather.readings_stamp(["wldn"]) == s
+        (cards / "result.json").write_text('{"decision": "approved"}')
+        assert gather.readings_stamp(["wldn"]) not in (s, None)
+
+    def test_its_owner_told_moves_it(self, cards):
+        s = gather.readings_stamp(["wldn"])
+        (cards / "told.json").write_text("{}")
+        assert gather.readings_stamp(["wldn"]) != s
+
+    def test_another_partitions_folder_moves_it_not(self, cards):
+        s = gather.readings_stamp(["wldn"])
+        other = cards.parents[2] / "swancloud" / "proposal" / "4"
+        other.mkdir(parents=True)
+        (other / "result.json").write_text("{}")
+        assert gather.readings_stamp(["wldn"]) == s and gather.readings_stamp(["wldn", "swancloud"]) != s
+
+    def test_a_missing_folder_stamps_alike_twice(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        s = gather.readings_stamp(["wldn"])
+        assert s and gather.readings_stamp(["wldn"]) == s
+
+    def test_it_starts_no_process(self, cards, monkeypatch):
+        def refuse(*args, **kwargs):
+            raise AssertionError("a readings stamp starts no process")
+        for name in ("run", "Popen", "call", "check_call", "check_output"):
+            monkeypatch.setattr(subprocess, name, refuse)
+        assert gather.readings_stamp(["wldn"])

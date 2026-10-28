@@ -35,7 +35,7 @@ import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shutil,
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import crew, ops, plan, record, sites  # noqa: E402
+import crew, gather, ops, plan, record, sites  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 # Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button. An operation's
@@ -927,19 +927,22 @@ def rail_frame_text(label, data, now):
 def moved(kept, now):
     """What moved between the stamps the follower's last read was made at (kept) and the stamps now (now), each
     {"crew": (crew's head, the teams file's bytes), "state": {label: tip}, "blueprints": {label: tip}, "kits": {(host,
-    main): stamp}}, a tip "" for a branch the cache does not hold: whether crew's checkout or the teams file moved, the
-    labels whose state and whose blueprints tip moved, the kits that moved, and whether anything did. A stamp None,
-    which could not be read, counts as moved, as does one either side lacks (read.1); with no kept read, everything
-    has moved. A decision on plain facts (code.7)."""
+    main): stamp}, "readings": {host: stamp}}, a tip "" for a branch the cache does not hold: whether crew's checkout
+    or the teams file moved, the labels whose state and whose blueprints tip moved, the kits that moved, the hosts
+    whose card readings folders moved, whether anything the read rests on moved (read: a tip, a kit or crew), and
+    whether anything did. A stamp None, which could not be read, counts as moved, as does one either side lacks
+    (read.1); with no kept read, everything has moved. A decision on plain facts (code.7)."""
     if kept is None:
-        return {"crew": True, "state": set(now["state"]), "blueprints": set(now["blueprints"]), "kits": set(now["kits"]), "any": True}
+        return {"crew": True, "state": set(now["state"]), "blueprints": set(now["blueprints"]), "kits": set(now["kits"]),
+                "readings": set(now.get("readings", {})), "read": True, "any": True}
 
     def apart(a, b):
         return {k for k in a.keys() | b.keys() if a.get(k) is None or b.get(k) is None or a[k] != b[k]}
     out = {"crew": None in kept["crew"] or None in now["crew"] or tuple(kept["crew"]) != tuple(now["crew"]),
            "state": apart(kept["state"], now["state"]), "blueprints": apart(kept["blueprints"], now["blueprints"]),
-           "kits": apart(kept["kits"], now["kits"])}
-    return dict(out, any=bool(out["crew"] or out["state"] or out["blueprints"] or out["kits"]))
+           "kits": apart(kept["kits"], now["kits"]), "readings": apart(kept.get("readings", {}), now.get("readings", {}))}
+    read = bool(out["crew"] or out["state"] or out["blueprints"] or out["kits"])
+    return dict(out, read=read, any=read or bool(out["readings"]))
 
 
 def moved_at():
@@ -958,9 +961,11 @@ BURST = 2  # seconds: a look that sees a write waits this long for what follows,
 
 def look(fleet, labels):
     """What the follower's look reads each second, with no process (plan.12): crew's checkout and the teams file
-    (moved_at), and each partition's state and blueprints tips as this host's caches hold them (plan.tip_here)."""
+    (moved_at), each partition's state and blueprints tips as this host's caches hold them (plan.tip_here), and this
+    host's card readings folders (gather.readings_stamp), so a reading sent back here is swept within seconds."""
     return {"crew": moved_at(), "state": {l: plan.tip_here(*plan.state_of(fleet, l)) for l in labels},
-            "blueprints": {l: plan.tip_here(crew.partition_of(fleet, l)["blueprints"][0], "main") for l in labels}}
+            "blueprints": {l: plan.tip_here(crew.partition_of(fleet, l)["blueprints"][0], "main") for l in labels},
+            "readings here": gather.readings_stamp(readings_hosts(fleet, labels).get(crew.this_host(), []))}
 
 
 def wake(now, tick_at, seen, looked):
@@ -988,14 +993,28 @@ def refresh_plan(m, kept, crew_read=True):
     return "read" if m["any"] else "render"
 
 
-def kit_stamps(fleet, kits):
-    """Each kit's stamp now (gather.stamp), of the kits the last read surveyed, {host: {main: (request, answer)}}, by
-    (host, main): in this process on this host, in one ssh to each other; every kit of a host that did not answer None,
-    which moved() takes as moved (read.1)."""
+def readings_hosts(fleet, labels):
+    """The hosts whose card readings folders the follower stamps, with the partitions of each, {host: [labels]}: each
+    partition's main machine and every host its teams run on, where its card sessions are swept (plan.sweep_sessions)."""
     out = {}
-    for host, ks in sorted(kits.items()):
-        got, _ = plan.stamped(fleet, host, [req for req, _ in ks.values()])
-        out.update({(host, m): (got or {}).get(m) for m in ks})
+    for l in labels:
+        for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
+            out.setdefault(h, []).append(l)
+    return out
+
+
+def stamps_now(fleet, kits, readings):
+    """The follower's check of the hosts (plan.stamped): each kit's stamp now (gather.stamp), of the kits the last read
+    surveyed, {host: {main: (request, answer)}}, by (host, main), and each host's card readings folders' stamp
+    (gather.readings_stamp), of the partitions readings names for it, by host: in this process on this host, in one ssh
+    to each other. Every stamp of a host that did not answer is None, which moved() takes as moved (read.1)."""
+    out = {"kits": {}, "readings": {}}
+    for host in sorted(set(kits) | set(readings)):
+        ks = kits.get(host, {})
+        got, _ = plan.stamped(fleet, host, [req for req, _ in ks.values()], readings.get(host, ()))
+        out["kits"].update({(host, m): ((got or {}).get("kits") or {}).get(m) for m in ks})
+        if host in readings:
+            out["readings"][host] = (got or {}).get("readings")
     return out
 
 
@@ -1091,7 +1110,7 @@ class Follower:
         fleet = self.fleet()
         looked = look(fleet, self.labels)
         kept = self.last if self.last and self.last["read"] is not None else None
-        stamps = dict(looked, kits=kit_stamps(fleet, self.kept.kits) if kept else {})
+        stamps = dict(looked, **stamps_now(fleet, self.kept.kits if kept else {}, readings_hosts(fleet, self.labels)))
         self.seen = looked
         how = refresh_plan(moved(kept and kept["stamps"], stamps), kept is not None,
                            None not in looked["crew"] and None not in (kept["stamps"]["crew"] if kept else ()))
@@ -1125,7 +1144,8 @@ class Follower:
             plan.READ.follower = None
             self.kept.settle()
         if read is not None:
-            self.last = {"read": read, "stamps": dict(looked, kits=kept_stamps(self.kept.kits)), "said": said.getvalue().strip()}
+            self.last = {"read": read, "stamps": dict(looked, kits=kept_stamps(self.kept.kits), readings=stamps["readings"]),
+                         "said": said.getvalue().strip()}
         else:
             self.last = {"read": None, "stamps": None, "said": said.getvalue().strip()}
 

@@ -347,8 +347,11 @@ class TestRefresh:
     operator session on the host, kept, and the frames written from it; each step around it stands in here, the read,
     the views and the stamps, so what is asked is what the case shows."""
 
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan", "state": "o/state", "blueprints": ["o/bp"]},
-                            "swancloud": {"label": "swancloud", "partition": "personal", "state": "o/state", "blueprints": ["o/bp"]}},
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan", "state": "o/state", "blueprints": ["o/bp"],
+                                     "machine": "mac-studio", "teams": ["swb-1"]},
+                            "swancloud": {"label": "swancloud", "partition": "personal", "state": "o/state", "blueprints": ["o/bp"],
+                                          "machine": "mac-studio", "teams": []}},
+             "teams": {"swb-1": {"machine": BOX}},
              "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
 
     @pytest.fixture
@@ -358,8 +361,13 @@ class TestRefresh:
         monkeypatch.setattr(crew, "HOLD", tmp_path / "hold")
         self.looks = {"crew": ("c" * 40, b"{teams}"), "state": {"wldn": "a" * 40, "swancloud": ""}, "blueprints": {"wldn": "b" * 40, "swancloud": "b" * 40}}
         self.stamps, self.reads, self.swept, self.again, self.unchecked = {(BOX, "/kit/main"): "s1"}, [], [], [], []
+        self.readings, self.asked = {BOX: "r1", "mac-studio": "r2"}, []
         monkeypatch.setattr(board, "look", lambda fleet, labels: {k: dict(v) if isinstance(v, dict) else v for k, v in self.looks.items()})
-        monkeypatch.setattr(board, "kit_stamps", lambda fleet, kits: {k: v for k, v in self.stamps.items() if k[1] in kits.get(k[0], {})})
+
+        def stamps_now(fleet, kits, readings):
+            self.asked.append(readings)
+            return {"kits": {k: v for k, v in self.stamps.items() if k[1] in kits.get(k[0], {})}, "readings": {h: self.readings[h] for h in readings}}
+        monkeypatch.setattr(board, "stamps_now", stamps_now)
 
         def flow_read(fleet, labels, sweep=False):
             kept = plan.READ.follower
@@ -415,6 +423,13 @@ class TestRefresh:
         follower.refresh()
         assert len(self.reads) == 3 and self.frame("wldn")["text"].startswith("rail of wldn, served"), "an unmoved kit was not served"
 
+    def test_its_check_stamps_the_readings_of_each_partitions_hosts_with_its_kits(self, follower):
+        """The card-sessions spec, A reading sent on one host: every host where a partition's card sessions are swept,
+        its main machine and its teams', has its readings stamped, from its first refresh on."""
+        follower.refresh()
+        follower.refresh()
+        assert self.asked == [{"mac-studio": ["wldn", "swancloud"], BOX: ["wldn"]}] * 2
+
     def test_a_refresh_after_crew_moved_hands_out_the_restarts_and_starts_again(self, follower):
         follower.refresh()
         self.looks["crew"] = ("e" * 40, b"{teams}")
@@ -447,18 +462,38 @@ def test_the_session_sweep_after_nothing_moved_asks_the_host_the_last_could_not_
     assert plan.sessions_unchecked([]) == {}
 
 
+def test_the_check_asks_each_host_once_for_its_kits_and_its_readings(monkeypatch):
+    """The crew-board spec, A refresh after nothing moved reads nothing: a host's kits and its card readings folders are
+    stamped in one request to it, a host with no kit asked for its readings alone, and one that does not answer has
+    every stamp of its None, which counts as moved (read.1)."""
+    asked = []
+
+    def stamped(fleet, host, kits, labels=()):
+        asked.append((host, [k["main"] for k in kits], list(labels)))
+        return (None, "exit 255") if host == "macbook-pro" else ({"kits": {k["main"]: "s" for k in kits}, "readings": "r"}, None)
+    monkeypatch.setattr(plan, "stamped", stamped)
+    got = board.stamps_now({}, {BOX: {"/kit/main": ({"main": "/kit/main"}, {})}, "macbook-pro": {"/b/main": ({"main": "/b/main"}, {})}},
+                           {BOX: ["wldn"], "mac-studio": ["wldn", "swancloud"], "macbook-pro": ["wldn"]})
+    assert asked == [(BOX, ["/kit/main"], ["wldn"]), ("mac-studio", [], ["wldn", "swancloud"]), ("macbook-pro", ["/b/main"], ["wldn"])]
+    assert got == {"kits": {(BOX, "/kit/main"): "s", ("macbook-pro", "/b/main"): None}, "readings": {BOX: "r", "mac-studio": "r", "macbook-pro": None}}
+    fleet = {"partitions": {"wldn": {"machine": "mac-studio", "teams": ["swb-1", "swb-2"]}, "swancloud": {"machine": "mac-studio", "teams": []}},
+             "teams": {"swb-1": {"machine": BOX}, "swb-2": {"machine": BOX}}}
+    assert board.readings_hosts(fleet, ["wldn", "swancloud"]) == {BOX: ["wldn"], "mac-studio": ["wldn", "swancloud"]}
+
+
 class TestMoved:
     """The follower's check before it reads (the crew-board spec, A refresh after nothing moved reads nothing): what moved
     between the stamps its last read was made at and the stamps now."""
 
     KEPT = {"crew": ("c" * 40, b"{teams}"), "state": {"wldn": "a" * 40, "swancloud": ""}, "blueprints": {"wldn": "b" * 40, "swancloud": "b" * 40},
-            "kits": {(BOX, "/kit/main"): "s1", ("mac-studio", "/a/main"): "s2"}}
+            "kits": {(BOX, "/kit/main"): "s1", ("mac-studio", "/a/main"): "s2"}, "readings": {BOX: "r1", "mac-studio": "r2"}}
 
     def now(self, **kw):
         return {k: ({**self.KEPT[k], **kw[k]} if k in kw and isinstance(self.KEPT[k], dict) else kw.get(k, self.KEPT[k])) for k in self.KEPT}
 
     def test_nothing_moved_names_nothing_and_a_branch_the_cache_lacks_stands(self):
-        assert board.moved(self.KEPT, self.now()) == {"crew": False, "state": set(), "blueprints": set(), "kits": set(), "any": False}
+        assert board.moved(self.KEPT, self.now()) == {"crew": False, "state": set(), "blueprints": set(), "kits": set(), "readings": set(),
+                                                      "read": False, "any": False}
 
     def test_one_state_tip_moved_names_its_partition_alone(self):
         m = board.moved(self.KEPT, self.now(state={"wldn": "d" * 40}))
@@ -476,6 +511,15 @@ class TestMoved:
         m = board.moved(self.KEPT, dict(self.KEPT, kits={("mac-studio", "/a/main"): "s2", (BOX, "/b/main"): "s3"}))
         assert m["kits"] == {(BOX, "/kit/main"), (BOX, "/b/main")}
 
+    def test_only_one_hosts_readings_moved_names_that_host_and_nothing_to_read(self):
+        """The crew-board spec, A reading sent back: plannotator wrote a result in the box's readings folder."""
+        m = board.moved(self.KEPT, self.now(readings={BOX: "r9"}))
+        assert m["readings"] == {BOX} and m["kits"] == m["state"] == m["blueprints"] == set() and not m["crew"]
+        assert m["any"] and not m["read"]
+
+    def test_a_host_whose_readings_could_not_be_stamped_counts_as_moved(self):
+        assert board.moved(self.KEPT, self.now(readings={BOX: None}))["readings"] == {BOX}
+
     def test_crews_head_or_the_teams_file_moved_or_unreadable_says_crew_moved(self):
         assert board.moved(self.KEPT, self.now(crew=("e" * 40, b"{teams}")))["crew"]
         assert board.moved(self.KEPT, self.now(crew=("c" * 40, b"{teams, again}")))["crew"]
@@ -483,7 +527,8 @@ class TestMoved:
 
     def test_with_no_read_kept_everything_has_moved(self):
         m = board.moved(None, self.KEPT)
-        assert m["crew"] and m["state"] == {"wldn", "swancloud"} and m["kits"] == set(self.KEPT["kits"]) and m["any"]
+        assert m["crew"] and m["state"] == {"wldn", "swancloud"} and m["kits"] == set(self.KEPT["kits"]) and m["any"] and m["read"]
+        assert m["readings"] == {BOX, "mac-studio"}
 
 
 class TestKept:

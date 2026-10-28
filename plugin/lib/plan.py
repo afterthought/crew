@@ -1027,11 +1027,12 @@ def gathered(fleet, host, req):
     return json.loads(r.stdout), None
 
 
-def stamped(fleet, host, kits):
-    """Each kit's stamp on a host (gather.stamp), {main: stamp, None when it can't be read}, and None; or None and why
-    the host did not answer: in this process on this host, which starts nothing, and in one ssh to another, the
-    follower's check that nothing moved there (plan.12)."""
-    return gathered(fleet, host, {"kits": kits, "stamp": True})
+def stamped(fleet, host, kits, labels=()):
+    """Each kit's stamp on a host (gather.stamp) and the stamp of its card readings folders of the partitions named
+    (gather.readings_stamp), {"kits": {main: stamp}, "readings": stamp}, a stamp None when it can't be read, and None;
+    or None and why the host did not answer: in this process on this host, which starts nothing, and in one ssh to
+    another, the follower's check that nothing moved there (plan.12)."""
+    return gathered(fleet, host, {"kits": kits, "stamp": True, "labels": sorted(labels)})
 
 
 def survey(fleet, held, sites=False, board=False, fetch=False):

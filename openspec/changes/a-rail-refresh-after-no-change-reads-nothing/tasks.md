@@ -6,7 +6,7 @@
 - [x] 1.2 A kit's stamp is read with no process and moves on a commit, a fetched ref, a ticked task, a place made or removed, a slots line and a fix branch's config, and is asked of another host in one ssh per host (design, Decision 1; Task notes 1.2); passes `tests/contract/test_gather.py`, `tests/suite contract` ending with "0 failed".
 - [x] 1.3 The state and blueprints caches' tips and crew's checkout are read from their files, through git only when the files don't hold them (design, Decision 1; Task notes 1.3); passes `tests/suite contract` ending with "0 failed".
 - [x] 1.4 A kit's stamp moves when sluice's records of its queue in the kit's git folder move, a submission queued, changed or finished, and not when sluice writes only its logs or progress (design, Decision 1; Task notes 1.4); passes `tests/contract/test_gather.py`, `tests/suite contract` ending with "0 failed".
-- [ ] 1.5 Each host's card readings folder is stamped with no process, another host's in the same one ssh as its kits, and the check names each host whose readings moved (design, Decision 1; Task notes 1.5); passes `tests/contract/test_gather.py` and `tests/py/test_board.py`, `tests/suite contract logic` ending with "0 failed".
+- [x] 1.5 Each host's card readings folder is stamped with no process, another host's in the same one ssh as its kits, and the check names each host whose readings moved (design, Decision 1; Task notes 1.5); passes `tests/contract/test_gather.py` and `tests/py/test_board.py`, `tests/suite contract logic` ending with "0 failed".
 
 ## 2. The follower reads only what moved, once for every partition, on a one-minute clock
 

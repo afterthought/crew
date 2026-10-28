@@ -9,7 +9,9 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 "board": <true to also read each team's slots file and the explorations on the kit's main>,
 "fetch": <true to fetch each kit's GitHub, its origin, before reading it>,
 "stamped": <true to also give each kit's stamp, taken before it is read>,
-"stamp": <true to give each kit's stamp alone and read nothing else: the host's follower's check that nothing moved>}.
+"stamp": <true to give each kit's stamp alone and read nothing else: the host's follower's check that nothing moved,
+answered {"kits": {<main>: <stamp>}, "readings": <the stamp of the card readings folders of the partitions named>}>,
+"labels": <with stamp, the partitions whose card readings folders on the host to stamp>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
@@ -561,28 +563,8 @@ def stamp(req):
     and of sluice's records of the kit's queue (sluice_records), hashed to one value. None when a file it reads can't
     be read (read.1); a kit with no checkout stamps as such, and its gather says so."""
     main, kdir = req["main"], os.path.realpath(req["dir"])
-    seen = []
-
-    def note(path):
-        try:
-            st = os.stat(path)
-            seen.append((path, st.st_size, st.st_mtime_ns))
-        except FileNotFoundError:
-            seen.append((path, None))
-
-    def tree(top):
-        stack = [top]
-        while stack:
-            d = stack.pop()
-            try:
-                with os.scandir(d) as it:
-                    for e in sorted(it, key=lambda e: e.name):
-                        if e.is_dir(follow_symlinks=False):
-                            stack.append(e.path)
-                        else:
-                            note(e.path)
-            except (FileNotFoundError, NotADirectoryError):
-                seen.append((d, None))
+    seen = Seen()
+    note, tree = seen.note, seen.tree
     try:
         if not os.path.isdir(main):
             return hashlib.sha256(f"no checkout at {main}".encode()).hexdigest()[:32]
@@ -629,7 +611,59 @@ def stamp(req):
             tree(d)
     except OSError:
         return None
-    return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:32]
+    return seen.digest()
+
+
+class Seen:
+    """The size and time of files, read with os.stat and os.scandir alone, a missing one noted as missing, hashed to
+    one value: what a stamp reads."""
+
+    def __init__(self):
+        self.files = []
+
+    def note(self, path):
+        try:
+            st = os.stat(path)
+            self.files.append((path, st.st_size, st.st_mtime_ns))
+        except FileNotFoundError:
+            self.files.append((path, None))
+
+    def tree(self, top):
+        """Every file under a folder, by name."""
+        stack = [top]
+        while stack:
+            d = stack.pop()
+            try:
+                with os.scandir(d) as it:
+                    for e in sorted(it, key=lambda e: e.name):
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(e.path)
+                        else:
+                            self.note(e.path)
+            except (FileNotFoundError, NotADirectoryError):
+                self.files.append((d, None))
+
+    def digest(self):
+        return hashlib.sha256(json.dumps(self.files).encode()).hexdigest()[:32]
+
+
+# Where crew keeps each card's reading session on a host, by partition, as plan.CARDS: its session.json, plannotator's
+# result.json once the user sends a reading back, told.json once its owner is told, a landings card's main.
+CARDS = "~/.local/state/crew/cards"
+
+
+def readings_stamp(labels):
+    """A host's card readings folders' stamp, ~/.local/state/crew/cards/<label>/ for each partition named: every file
+    under each, read with os.stat and os.scandir alone, so the follower sees a reading sent back and sweeps that host's
+    card sessions, where its owner is told (the card-sessions spec, A reading sent on one host). A missing folder stamps
+    alike each time; None when one can't be read (read.1)."""
+    seen = Seen()
+    try:
+        for label in sorted(labels):
+            seen.tree(os.path.join(os.path.expanduser(CARDS), label))
+    except OSError:
+        return None
+    return seen.digest()
 
 
 def sluice_records(records):
@@ -725,11 +759,12 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
 
 
 def read(request, running=None):
-    """The answer to a request, by each kit's main checkout: with stamp, each kit's stamp alone, the follower's check
-    that nothing moved; else each kit as kit() reads it, with stamped its stamp too, taken before the kit is read, so
+    """The answer to a request: with stamp, each kit's stamp alone by its main checkout and the stamp of the card readings
+    folders of the partitions it names, the follower's check that nothing moved; else, by each kit's main checkout, each
+    kit as kit() reads it, with stamped its stamp too, taken before the kit is read, so
     anything that moves while it is read moves the stamp the follower next compares."""
     if request.get("stamp"):
-        return {k["main"]: stamp(k) for k in request["kits"]}
+        return {"kits": {k["main"]: stamp(k) for k in request["kits"]}, "readings": readings_stamp(request.get("labels", []))}
     out = {}
     for k in request["kits"]:
         s = stamp(k) if request.get("stamped") else None
