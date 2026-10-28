@@ -193,6 +193,39 @@ def test_a_take_main_fix_in_flight_holds_its_row_as_taking_main_first_in_its_wor
     assert z["why"] == f'held for a fix: A zone is missing. (fix/z/gap); takes main first: take-main-e4f5a6b taking main in: "{words}"'
 
 
+def test_a_bolt_the_user_left_forecast_to_conflict_with_main_keeps_its_box_marked_that_it_would_take_main_first():
+    """rail-cards "A bolt the user left" and "Left, and main conflicts with it": no fix is started for it, so it is not
+    held taking main first."""
+    rows = plan.landing_rows(["y", "z"], {"y": facts("y"), "z": facts("z")}, {}, takes_main={"z": ("e4f5a6b0", ["README.md"])},
+                             left={"z"})
+    assert [(r["bolt"], r["box"], r["facts"].get("would_main")) for r in rows] == [
+        ("y", True, None), ("z", True, ("e4f5a6b", ["README.md"]))]
+    # a left bolt forecast clean is a row as any
+    assert plan.landing_rows(["z"], {"z": facts("z")}, {}, takes_main={}, left={"z"})[0] == dict(bolt="z", box=True, facts=facts("z"))
+
+
+def test_a_left_bolt_whose_landing_was_stopped_keeps_both_marks():
+    """A stop holds nothing (rail-cards "A landing sluice or its host stopped keeps its box"), and a left bolt forecast
+    to conflict with main keeps its box: its row says both."""
+    head = "a" * 40
+    entries = [dict(submitted("z", head), Why="sluice exited 3", Outcome="stopped")]
+    row, = plan.landing_rows(["z"], {"z": facts("z", head)}, {}, plan.stops(entries),
+                             takes_main={"z": ("e4f5a6b0", ["README.md"])}, left={"z"})
+    assert row["box"] and row["facts"]["would_main"] == ("e4f5a6b", ["README.md"])
+    assert row["facts"]["stopped"] == (head, "sluice exited 3")
+
+
+def test_a_left_bolt_with_a_fix_in_flight_or_sluices_refusal_is_held_as_before():
+    """Those hold whatever the user chose (Decision 2)."""
+    takes = {"y": ("e4f5a6b", ["README.md"]), "z": ("e4f5a6b", ["README.md"])}
+    held = plan.refusals([submitted("z", "a" * 40, "bolt/z did not land: sluice found a conflict")])
+    y, z = plan.landing_rows(["y", "z"], {"y": facts("y", fixes={"fix/y/gap": "A zone is missing."}), "z": facts("z")}, held,
+                             takes_main=takes, left={"y", "z"})
+    assert (y["box"], y["why"]) == (False, "held for a fix: A zone is missing. (fix/y/gap)")
+    assert (z["box"], z["why"]) == (False, "held: sluice refused its landing at aaaaaaa, and it waits for its team's fix: "
+                                           "bolt/z did not land: sluice found a conflict")
+
+
 def test_a_new_head_with_no_conflict_forecast_has_its_box_again():
     """rail-cards "The fix merges": the record's conflict was at the head the fix moved the bolt from."""
     recorded = [dict(Act="forecast", On=["bolt/y"], Heads="bolt/y@ccccccc main@2222222", Paths="README.md", Reached="told")]
@@ -834,6 +867,74 @@ def test_the_ticked_bolts_are_read_in_the_cards_order_from_each_form_of_answer()
     assert plan.ticked_of({"status": "pending", "turn": "you"}, heads) is None
 
 
+# ------------------------------------------------------------------------------------- which bolts are left
+
+def left_set(heads, at="2026-10-24T10:00:00Z"):
+    """A raise's record of the bolts the user left on land/crew, as landing.left."""
+    return dict(Act="landing.left", On=["kit/crew"], Key="land/crew", At=at, **({"Heads": heads} if heads else {}))
+
+
+def stop(bolt, head=H1):
+    """main-level ops's record of the user's words stopping a bolt's landing, as bolt.leave."""
+    return dict(Act="bolt.leave", On=[f"bolt/{bolt}"], Head=head, From=["session/s-1/u-7"], Chars=38)
+
+
+def pane_landed(bolt):
+    return dict(Act="bolt.submit", On=[f"bolt/{bolt}"], Head=H1, From=["session/s-1/u-9"], Chars=20)
+
+
+NOW = {"y": H1, "z": H1}
+
+
+class TestWhichBoltsAreLeft:
+    """rail-cards "A bolt the user left stays left until they tick it" and "A bolt stopped in ops's pane is shown as
+    left": plan.left_now at a raise, from the card held, the ticks, the heads and the run record; plan.left_of from the
+    run record alone, as a conductor's wait and the rail read it."""
+
+    def test_a_bolt_marked_left_on_a_waiting_card_is_left_at_its_head(self):
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234:left"), None, NOW, {}, []) == {"z": "abc1234"}
+
+    def test_a_bolt_the_user_did_not_tick_on_an_answered_card_is_left(self):
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), ["y"], NOW, {}, []) == {"z": "abc1234"}
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), [], NOW, {}, []) == {"y": "abc1234", "z": "abc1234"}
+
+    def test_a_left_bolt_stays_left_across_the_close_of_one_card_and_the_post_of_the_next(self):
+        assert plan.left_now(None, None, NOW, {"z": "abc1234"}, []) == {"z": "abc1234"}
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234"), None, NOW, {"z": "abc1234"}, []) == {"z": "abc1234"}
+
+    def test_a_stop_in_ops_pane_is_left(self):
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234"), None, NOW, {}, [("z", H1)]) == {"z": "abc1234"}
+        assert plan.left_now(None, None, NOW, {}, [("z", H1)]) == {"z": "abc1234"}
+
+    def test_a_tick_on_the_card_held_ends_it(self):
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), ["y", "z"], NOW, {"z": "abc1234"}, [("y", H1)]) == {}
+
+    def test_a_moved_head_ends_it(self):
+        moved = {"y": H1, "z": H2}
+        assert plan.left_now(waiting("y@abc1234", "z@abc1234:left"), None, moved, {"z": "abc1234"}, [("z", H1)]) == {}
+        assert plan.left_now(answered("y@abc1234", "z@abc1234"), ["y"], moved, {}, []) == {}
+
+    def test_a_bolt_that_is_no_row_now_is_not_left(self):
+        assert plan.left_now(waiting("z@abc1234:left"), None, {"y": H1}, {"z": "abc1234"}, [("z", H1)]) == {}
+
+    def test_the_record_gives_the_last_set_and_each_stop_since_at_the_bolts_head_now(self):
+        entries = [left_set("y@abc1234"), stop("w"), left_set("z@abc1234"), stop("y"), stop("v", H2)]
+        assert plan.left_marks(entries, "land/crew") == ({"z": "abc1234"}, [("y", H1), ("v", H2)])
+        assert plan.left_of(entries, "land/crew", {"y": H1, "z": H1, "v": H1, "w": H1}) == {"z": "abc1234", "y": "abc1234"}
+        assert plan.left_of(entries, "land/swancloud", {"y": H1, "z": H1}) == {"y": "abc1234"}
+
+    def test_a_set_with_none_left_ends_every_one_before_it_and_a_refused_one_ends_none(self):
+        assert plan.left_of([left_set("z@abc1234"), left_set("")], "land/crew", NOW) == {}
+        assert plan.left_of([left_set("z@abc1234"), dict(left_set(""), Refused="no")], "land/crew", NOW) == {"z": "abc1234"}
+
+    def test_a_landing_on_the_users_words_in_ops_pane_ends_a_stop_and_one_before_it_ends_none(self):
+        assert plan.left_of([stop("z"), pane_landed("z")], "land/crew", NOW) == {}
+        assert plan.left_of([left_set("z@abc1234"), pane_landed("z")], "land/crew", NOW) == {}
+        assert plan.left_of([pane_landed("z"), stop("z")], "land/crew", NOW) == {"z": "abc1234"}
+        refused = dict(pane_landed("z"), Refused="sluice refused it", From=[])
+        assert plan.left_of([stop("z"), refused], "land/crew", NOW) == {"z": "abc1234"}
+
+
 # ------------------------------------------------------------- the raise on the main machine, from each row's host
 
 import json  # noqa: E402
@@ -1062,8 +1163,69 @@ def test_a_bolt_proven_after_the_answer_gets_a_new_card_following_it_and_the_sen
     assert "card land/crew: y lands on the user's send of an earlier card, so it is no row of this one" in capsys.readouterr().out
 
 
+LEFT = dict(Act="landing.left", On=["kit/crew"], by="swancloud-ops", Key="land/crew", Heads="z@abc1234")
+
+
+def test_the_bolts_the_user_left_are_recorded_once_and_not_again_while_unchanged(monkeypatch):
+    """rail-cards "A bolt the user left stays left until they tick it": the raise records the kit's left set when it
+    changes, and a raise that changes nothing writes nothing (state.1)."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=dict(POSTED, **WAITING))
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.emitted == [LEFT]
+    again = LandActs({"y": row("y"), "z": row("z")}, acts.held, answers=dict(POSTED, **WAITING))
+    raised(monkeypatch, again)
+    assert again.emitted == []
+
+
+def test_a_bolt_left_on_a_closed_card_is_unticked_on_the_card_posted_after_it(monkeypatch):
+    """rail-cards "Left again": the record carries what the user left across the close of one card and the post of
+    the next."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, [LEFT], answers=POSTED)
+    assert raised(monkeypatch, acts) == "req_k1"
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["recommendedIds"] == ["land:y"]
+    assert [e["Act"] for e in acts.emitted] == ["card.post"] and acts.emitted[0]["Heads"] == "y@abc1234 z@abc1234:left"
+
+
+def test_a_left_bolt_whose_host_did_not_answer_stays_left_as_recorded(monkeypatch):
+    """read.1: a row crew could not read ends nothing the user left."""
+    acts = LandActs({"y": row("y")}, [LEFT], answers=POSTED)
+    raised(monkeypatch, acts)
+    assert not [e for e in acts.emitted if e["Act"] == "landing.left"]
+
+
+def test_a_bolt_left_whose_head_moved_is_left_no_more_and_recorded_so(monkeypatch):
+    """rail-cards "Its head moves": the card asks for it as a row at its new head."""
+    acts = LandActs({"y": row("y"), "z": row("z", H2)}, [LEFT], answers=POSTED)
+    raised(monkeypatch, acts)
+    assert [e for e in acts.emitted if e["Act"] == "landing.left"] == [dict(LEFT, Heads="")]  # none left: the run record writes no Heads
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["recommendedIds"] == ["land:y", "land:z"]
+
+
+def test_a_stop_in_ops_pane_shows_the_bolt_unticked_on_the_waiting_card_and_is_recorded(monkeypatch):
+    """rail-cards "A bolt stopped in ops's pane is shown as left": crew bolt leave's note changes the card in place."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, partition=[stop("z")], answers=dict(POSTED, **WAITING))
+    assert raised(monkeypatch, acts, note="z was stopped on your words in swancloud-ops's pane") == "req_k1"
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert change["changeNote"] == "z was stopped on your words in swancloud-ops's pane"
+    assert change["recommendedIds"] == ["land:y"]
+    assert acts.emitted[0] == LEFT and acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234:left"
+
+
+def test_a_tick_on_a_send_ends_what_the_user_left_and_is_recorded(monkeypatch):
+    """rail-cards "Ticked after a stop": the answered card ticks z, and the raise records none left."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left"), LEFT]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers={"get_request": (answer, None)})
+    raised(monkeypatch, acts)
+    assert [e for e in acts.emitted if e["Act"] == "landing.left"] == [dict(LEFT, Heads="")]  # none left: the run record writes no Heads
+
+
 WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}
-MAIN_FIRST = "takes main first: forecast to conflict with main on README.md at e4f5a6b; crw-1-conductor takes main in by a fix"
+MAIN_FIRST ="takes main first: forecast to conflict with main on README.md at e4f5a6b; crw-1-conductor takes main in by a fix"
 
 
 def test_main_moving_so_one_of_two_conflicts_follows_the_card_with_the_other_as_its_one_box(monkeypatch):
@@ -1146,6 +1308,39 @@ def test_a_conductor_that_cannot_be_told_has_nothing_recorded_and_its_row_stays_
     assert "crw-1-conductor was not told z takes main first, so it is told at the next raise" in capsys.readouterr().err
     post = next(a for t, a in acts.calls if t == "post_request")
     assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
+
+
+WOULD = "z, which you left, would take main first: forecast to conflict with main on README.md at e4f5a6b"
+
+
+def test_a_left_bolt_main_conflicts_with_is_told_nothing_and_the_waiting_card_says_so_once(monkeypatch):
+    """bolt-teams "A left bolt"; rail-cards "Left, and main conflicts with it" and "Raised again at the same heads"."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=dict(POSTED, **WAITING), against_main={"z": [("main", ["README.md"])]})
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert [n for n, _ in acts.told if n == "crw-1-conductor"] == []
+    assert [e for e in acts.emitted if e["Act"] == "forecast"] == [dict(TOLD, Reached="left")]
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert change["changeNote"] == WOULD and change["recommendedIds"] == ["land:y"]
+    assert change["options"][1]["consequence"].startswith("It would take main first if you tick it")
+    assert acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234:left"
+    again = LandActs({"y": row("y"), "z": row("z")}, acts.held, answers=dict(POSTED, **WAITING),
+                     against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, again)
+    assert again.told == [] and again.emitted == [] and [t for t, _ in again.calls] == ["get_request"]
+
+
+def test_a_left_bolt_ticked_at_the_same_heads_has_its_conductor_told_the_fix_and_takes_main_first(monkeypatch):
+    """bolt-teams "A left bolt ticked"; rail-cards "Ticked after being left": the send stands for it."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left"), LEFT,
+            dict(TOLD, Reached="left")]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers={"get_request": (answer, None)},
+                    against_main={"z": [("main", ["README.md"])]})
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert [w for n, w in acts.told if n == "crw-1-conductor"][0].endswith(f"{FIX} --bolt z")
+    assert [e for e in acts.emitted if e["Act"] == "forecast"] == [TOLD]
+    assert [t for t, _ in acts.calls] == ["get_request"]  # the card is left as it is, the send standing for z
 
 
 ONLY_Z = "%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"

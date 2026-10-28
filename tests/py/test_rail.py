@@ -171,6 +171,32 @@ class TestRows:
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land" and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
 
+    def test_a_left_bolt_forecast_to_conflict_with_main_takes_main_first_once_ticked_and_is_left_out_of_the_tell(self):
+        """crew-rail "Left and forecast to conflict" and "Ticked"."""
+        conflict = dict(Act="forecast", On=["bolt/apex-zones"], Heads="bolt/apex-zones@abc1234 main@e4f5a6b", Paths="README.md",
+                        Reached="left")
+        left = dict(Act="landing.left", On=[f"kit/{KIT}"], Key=f"land/{KIT}", Heads="apex-zones@abc1234")
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {}, "forecasts": [conflict],
+                         "left": [left]}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: left by the user: takes main first once ticked, forecast to "
+                                   "conflict with main on README.md")
+        assert land["cmds"] == [] and land["bolts"][0]["can"] is False
+        # ticked: the raise records none left, and the line takes main first until the fix moves its head
+        held["wldn"]["left"] = [left, dict(left, Heads="")]
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1].endswith(": takes main first: forecast to conflict with main on README.md, until its team's "
+                                        "take-main fix moves its head")
+        # left and clean: as today
+        held["wldn"].update(forecasts=[], left=[left])
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land"
+
+    def test_the_record_reading_keeps_what_says_which_bolts_the_user_left(self):
+        left = [dict(Act="landing.left", On=["kit/k"], Key="land/k", Heads="b@abc1234"), dict(Act="bolt.leave", On=["bolt/b"], Head="a" * 40),
+                dict(Act="bolt.submit", On=["bolt/b"], Head="a" * 40)]
+        assert plan.record_reading("wldn", left + [dict(Act="tell", On=["agent/x"])], the_plan(), NOW)["held"]["left"] == left
+
     def test_the_record_reading_keeps_the_forecasts_the_land_row_reads(self):
         e = dict(Act="forecast", On=["bolt/b"], Heads="bolt/b@abc1234 main@e4f5a6b", Paths="README.md")
         assert plan.record_reading("wldn", [e, dict(Act="tell", On=["agent/x"])], the_plan(), NOW)["held"]["forecasts"] == [e]

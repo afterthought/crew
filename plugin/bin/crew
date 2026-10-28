@@ -144,6 +144,14 @@
 #                                      next submit readies it; with --excerpt, on the user's words in ops's pane,
 #                                      submitted only once crew reads them in ops's own transcript as the user's, no
 #                                      words in the run record
+#   crew bolt  leave <bolt>... --excerpt "<the user's words>" [--label L]
+#                                      main-level ops's record of the user's words in its pane stopping the bolts'
+#                                      landing, read in ops's own transcript as the user's as submit's are, refused
+#                                      as it refuses, no words in the run record; the kit's landings card raised,
+#                                      showing each unticked as left. A bolt the user left, so or by clearing it on
+#                                      their send, is forecast against main as any, its row keeping its box and saying
+#                                      whether it would take main first, and no take-main fix is told for it until they
+#                                      tick it, ops lands it on their words or its head moves
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
@@ -209,7 +217,9 @@
 #                                      card (land/<kit>), the bolts the user ticked in its order and the crew bolt
 #                                      submit that lands them, after those an earlier send still lands at their head
 #                                      now; what an earlier send still lands, with or without a card open, naming a
-#                                      bolt it can't tell of
+#                                      bolt it can't tell of; a sent card is raised first, so a ticked bolt that was
+#                                      left and conflicts with main takes main first, its conductor told the fix, and
+#                                      the submit leaves it out
 #   crew card  answer batch/<n> --excerpt "<words>" [--label L]
 #                                      the planner's or the operator's: the user's answer to a batch in their own words
 #                                      in its pane, recorded once crew reads the words in that agent's own session
