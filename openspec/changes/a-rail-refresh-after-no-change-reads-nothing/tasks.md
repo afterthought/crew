@@ -19,7 +19,7 @@
 
 - [x] 2.7 The follower keeps one `sluice overview --json --watch` for each kit whose queue its read shows, a child here and one ssh to another host, takes a line that differs but for its time as the queue's move and remakes that kit's rows' submissions from it with nothing gathered, hands a kit's gather its kept line in place of running sluice, and asks `sluice overview --json` once at each tick for a kit no watch can follow, opening an ended watch again at the next tick (design, Decision 7; Task notes 2.7); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
 - [x] 2.8 At each tick the follower reads each host's portless routes again, here with one `portless list` and on another host in the tick's one ssh, and herdr's listing of the cards' askers beside Pending You's answers; routes that moved are drawn with nothing gathered, and an asker's listing that moved counts the cards as moved (design, Decision 8; Task notes 2.8); passes `tests/py/test_board.py` and `tests/py/test_rail.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 2.9 Every refresh, whether or not anything moved, works out from the kept read's run record and the time now whether a batch is due by hours, and tells the planner once when one is, reading nothing to find it (design, Decision 8; Task notes 2.9); passes `tests/suite logic` ending with "0 failed".
+- [x] 2.9 Every refresh, whether or not anything moved, works out from the kept read's run record and the time now whether a batch is due by hours, and tells the planner once when one is, reading nothing to find it (design, Decision 8; Task notes 2.9); passes `tests/suite logic` ending with "0 failed".
 
 ## 3. The run record's follow on the same clock
 

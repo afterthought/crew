@@ -393,7 +393,7 @@ class TestRefresh:
                     "routes": {h: r for h, r in self.routes.items() if h in kits} if routes else {}}
         monkeypatch.setattr(board, "stamps_now", stamps_now)
 
-        self.req, self.handed = {"main": "/kit/main"}, []
+        self.req, self.handed, self.found = {"main": "/kit/main"}, [], []
 
         def flow_read(fleet, labels, sweep=False):
             kept = plan.READ.follower
@@ -404,7 +404,7 @@ class TestRefresh:
             if kept.cards is None:  # the tick's ask, which rail_read makes when the follower kept no read to ask from
                 kept.cards = ({}, None)
             print("crew: a word the read said", file=sys.stderr)
-            return {"found": [], "errors": {"wldn/main of o/state": "a plan it could not read"}, "signals": {}, "unchecked": list(self.unchecked),
+            return {"found": list(self.found), "errors": {"wldn/main of o/state": "a plan it could not read"}, "signals": {}, "unchecked": list(self.unchecked),
                     "sv": {}, "rows": [], "cards": [], "unread": {}, "batched": {}, "served": served is not None}
         monkeypatch.setattr(board, "flow_read", flow_read)
         monkeypatch.setattr(board, "board_data", lambda fleet, labels, read, now: {"read_at": board.iso(now), "from": "mac-studio",
@@ -600,6 +600,21 @@ class TestRefresh:
         assert w.opened == [(BOX, "/kit/main")] * 2 and self.overviews_asked == [(BOX, "/kit/main")]
         assert [s["id"] for s in follower.kept.kits[BOX]["/kit/main"][1]["submissions"]] == [41] and len(self.reads) == 1
 
+
+    def test_every_refresh_reckons_a_batch_from_the_kept_read_and_one_told_is_not_reckoned_again_at_that_tip(self, follower, monkeypatch):
+        """The crew-board spec, A batch made due by the hours: nothing moves, and each refresh reckons from the kept read."""
+        reckoned = []
+        monkeypatch.setattr(plan, "reckon_batches", lambda fleet, found, read, skip=(): reckoned.append(set(skip)) or (["wldn"] if not skip else []))
+        self.found = [("wldn", "o/state", "a" * 40, None)]
+        follower.refresh()
+        follower.refresh()
+        follower.refresh()
+        assert len(self.reads) == 1 and reckoned == [set(), {"wldn"}]
+        self.looks["state"] = {"wldn": "d" * 40, "swancloud": ""}
+        self.found = [("wldn", "o/state", "d" * 40, None)]
+        follower.refresh()
+        follower.refresh()
+        assert len(self.reads) == 2 and reckoned[-1] == set(), "a partition told at an older tip was not reckoned at the new one"
 
     def test_a_dev_server_started_by_hand_is_drawn_after_the_next_tick_with_nothing_gathered(self, follower, monkeypatch):
         """The crew-board spec, A dev server started by hand: the tick reads the box's portless routes again."""

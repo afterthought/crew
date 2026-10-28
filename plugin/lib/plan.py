@@ -11700,38 +11700,62 @@ def batch_reckoners(found, teams, here):
     return out
 
 
-def reckon_batches(fleet, found):
+def reckon_batches(fleet, found, read=None, skip=()):
     """The rail's sweep reckons each partition's batch on this host (batch_reckoners, batch_check), stopping at the first
     of its teams that tells the planner, since a batch is told once; what crew can't read is said on standard error and
-    the rail read stands."""
+    the rail read stands. With read, the rail read's, the plan, the run record and the stages are taken from it and
+    nothing is read again, as the host's follower reckons at every refresh, its read kept; a partition in skip, one the
+    follower told at its read's tip already (batch_told), is not reckoned. Returns the partitions whose planner it told."""
+    told = []
     for label, names in batch_reckoners(found, fleet["teams"], crew.this_host()).items():
+        if label in skip:
+            continue
         for name in names:
             try:
-                if batch_check(fleet, fleet["teams"][name]):
+                if batch_check(fleet, fleet["teams"][name], read):
+                    told.append(label)
                     break
             except Refusal as e:
                 print(f"no batch reckoned for {name}: {e}", file=sys.stderr)
                 break
+    return told
 
 
-def batch_check(fleet, t):
+def batch_told(told, found):
+    """The partitions the host's follower told a batch is due at the tip its read still holds, {label: tip} the tips it
+    told at: not reckoned again until the read takes in the batch.due entry that tell wrote, which moves the tip. A
+    decision on plain facts (code.7)."""
+    return {label for label, _, tip, _ in found if tip and told.get(label) == tip}
+
+
+def batch_check(fleet, t, read=None):
     """On each wait of a conductor of the partition, at the end of a construct or a merge it waited on
     (after_delivery), and on the rail's sweep (reckon_batches): the changes due across the partition, counted from the run
     record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
     one due, or at once when the team's bolt has every unit merged and some unit's latest change has been in no batch.
     crew then tells the partition's planner once, `batch.due` in the run record, until the next batch is delivered
-    (briefs.12). What crew can't read is said on standard error, and the wait goes on. Returns whether it told the planner."""
+    (briefs.12). What crew can't read is said on standard error, and the wait goes on. With read, a rail read, the plan,
+    the run record and the stages are its, read nothing again (the host's follower's, every refresh, Decision 8 of
+    a-rail-refresh-after-no-change-reads-nothing). Returns whether it told the planner."""
     label = t["label"]
     setting = fleet["partitions"][label]["review"]
-    plan = plan_of(fleet, label)
-    if plan is None:
-        return
-    entries = partition_entries(fleet, label)
+    if read is not None:
+        plan = next((p for l, _, _, p in read["found"] if l == label), None)
+        if plan is None:
+            return
+        if (read.get("unread") or {}).get(label):
+            fail(unread_batches(state_of(fleet, label)[0], read["unread"][label]))
+        entries = read["logs"].get(label, [])
+    else:
+        plan = plan_of(fleet, label)
+        if plan is None:
+            return
+        entries = partition_entries(fleet, label)
     due = due_changes(plan, entries)
     if not due or told_since_last_batch(entries):
         return
     held = held_by(plan, t["name"])
-    st = stages_for(fleet, plan, held) if held else None
+    st = (Stages(fleet, plan, read["sv"]) if read is not None else stages_for(fleet, plan, held)) if held else None
     bolts = [(b.name(), bool(plan.work_of(b.name())) and all(st.of(u.name())["stage"] in ("merged", "landed") for u in plan.work_of(b.name())),
               [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]) for b in held]
     why = batch_due(due, entries, setting, datetime.datetime.now(datetime.timezone.utc), bolts)
@@ -12611,7 +12635,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
                                     {l: partition_kits(fleet, l) for l, *_ in found})
         read["moved"] = sweep_moved(fleet, read)
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
-        reckon_batches(fleet, found)
+        read["told"] = reckon_batches(fleet, found, read)
     return read
 
 

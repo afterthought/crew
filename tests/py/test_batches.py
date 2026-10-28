@@ -9,6 +9,7 @@ import datetime
 import pytest
 
 from facts import FLEET, START, at, card_closed, constructed, plan_of, reviewed, told
+from facts import told as told_entry
 
 import plan
 
@@ -481,3 +482,31 @@ def test_the_rails_sweep_reckons_a_batch_for_the_teams_on_its_host():
     assert plan.batch_reckoners(found, teams, "mac-studio") == {"wldn": ["swb-1"]}
     assert plan.batch_reckoners(found, teams, "chuck-herdr-alpha") == {"wldn": ["swb-2"]}
     assert plan.batch_reckoners(found, teams, "deneb") == {}
+
+
+def test_the_followers_reckoning_takes_its_read_and_tells_the_planner_once(monkeypatch):
+    """The crew-board spec, A batch made due by the hours: nothing moved, the last batch's hours have passed, and the
+    follower's refresh tells the planner from its kept read, reading nothing to find it; once its read holds the entry
+    that tell wrote it tells nothing, and at the tip it told at it does not reckon again."""
+    told, emitted = [], []
+    monkeypatch.setattr(plan.crew, "this_host", lambda: "chuck-herdr-alpha")
+    monkeypatch.setattr(plan.crew, "tell", lambda fleet, name, text: told.append(name) or True)
+    monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **kw: emitted.append(act))
+    for read_again in ("plan_of", "partition_entries", "stages_for", "survey"):
+        monkeypatch.setattr(plan, read_again, lambda *a, **k: pytest.fail("the reckoning read again"))
+    found = [("wldn", "WilldanGroup/crew-state", "a" * 40, PLAN)]
+    read = {"found": found, "logs": {"wldn": [constructed("x1", "bbb1")]}, "unread": {"wldn": {}}, "sv": {}}
+    assert plan.reckon_batches(FLEET, found, read) == ["wldn"] and told == ["wldn-planner"] and emitted == ["batch.due"]
+    assert plan.reckon_batches(FLEET, found, dict(read, logs={"wldn": read["logs"]["wldn"] + [told_entry()]})) == [] and told == ["wldn-planner"]
+    assert plan.batch_told({"wldn": "a" * 40}, found) == {"wldn"} and plan.batch_told({"wldn": "b" * 40}, found) == set()
+    assert plan.reckon_batches(FLEET, found, read, skip={"wldn"}) == [] and told == ["wldn-planner"]
+
+
+def test_a_reckoning_whose_record_could_not_be_read_tells_nothing_and_says_why(monkeypatch, capsys):
+    monkeypatch.setattr(plan.crew, "this_host", lambda: "chuck-herdr-alpha")
+    monkeypatch.setattr(plan.crew, "tell", lambda *a: pytest.fail("told on a record it could not read"))
+    found = [("wldn", "WilldanGroup/crew-state", "a" * 40, PLAN)]
+    monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("WilldanGroup/crew-state", "wldn/main"))
+    read = {"found": found, "logs": {"wldn": []}, "unread": {"wldn": {"wldn/main": "it could not be fetched"}}, "sv": {}}
+    assert plan.reckon_batches(FLEET, found, read) == []
+    assert "no batch reckoned for swb-1: crew can't tell which changes have been in a batch" in capsys.readouterr().err
