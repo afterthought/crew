@@ -22,7 +22,7 @@
 
 ## 5. ops's brief
 
-- [ ] 5.1 Main-level ops's brief says crew's next read closes a bolt that landed and was not closed once what it named is mended, and that ops may run `crew bolt land` (design, Decision 6; Task notes 5.1); Verify `tests/suite t-briefs` ends with "0 failed".
+- [x] 5.1 Main-level ops's brief says crew's next read closes a bolt that landed and was not closed once what it named is mended, and that ops may run `crew bolt land` (design, Decision 6; Task notes 5.1); Verify `tests/suite t-briefs` ends with "0 failed".
 
 ## 6. Journeys
 
