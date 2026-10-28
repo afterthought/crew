@@ -31,7 +31,7 @@
 
 ## 8. The command's wiring
 
-- [ ] 8.1 On the stubs, main moving under a left bolt keeps its row and tells its conductor nothing, and a send ticking it then read by `crew card read` tells the take-main fix and submits nothing of it, with `tests/moon.yml` in step with the test's reads (design, Decisions 1 to 6; Task notes 8.1); verify `tests/suite t-journey-land` ends with "0 failed".
+- [x] 8.1 On the stubs, main moving under a left bolt keeps its row and tells its conductor nothing, and a send ticking it then read by `crew card read` tells the take-main fix and submits nothing of it, with `tests/moon.yml` in step with the test's reads (design, Decisions 1 to 6; Task notes 8.1); verify `tests/suite t-journey-land` ends with "0 failed".
 
 ## 9. The words
 

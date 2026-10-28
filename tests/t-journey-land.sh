@@ -42,7 +42,9 @@
 # prints lands it on that send (record 0031 as amended 2026-10-24).
 # Last, main moving under a proven row makes crew rail on the main level's host raise the kit's landings card again,
 # holding the row taking main first and telling its conductor the take-main fix, recorded once, and a second crew
-# rail, main not having moved, tells and raises nothing.
+# rail, main not having moved, tells and raises nothing. And a bolt the user left on a send: main moving under it keeps
+# its row's box, the card changed in place saying it would take main first, and tells its conductor nothing; a send
+# ticking it, read by crew card read, tells the take-main fix and submits nothing of it (rail-cards, bolt-teams).
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -634,3 +636,42 @@ eq "$(told swb-1-conductor)" ""
 calls | grep -q "^$box pendingyou \(post\|update\|cancel\)_request " && fail "a second rail read changed the landings card:"$'\n'"$(calls)"
 eq "$(record_of $box | grep -c "^Heads: bolt/far@")" "1"
 ok "main moving under a proven row makes crew rail on the main level's host raise the kit's landings card again, holding the row taking main first and telling its conductor the take-main fix, recorded once; a second crew rail tells and raises nothing"
+
+# A bolt the user left: near joins west on a card of two boxes, and the user sends it ticking none, which ops's crew
+# card read acts on at once, closing it and following it with both rows unticked as left, the set recorded. Main then
+# lands a change to the file west's unit added: crew rail's raise keeps west's box, changes the waiting card in place
+# saying it would take main first, records the forecast as found while left, and tells swb-1-conductor nothing of
+# west. The user ticks west on the card that follows: crew card read raises it first, so swb-1-conductor is told the
+# take-main fix for west, recorded as told, and the read leaves west out of the command that lands, its send standing.
+crew bolt new near "The near regions." --repo switchboard-kit >/dev/null; crew bolt give swb-2 near >/dev/null 2>&1
+crew unit add near-files "Near's files." --bolt near >/dev/null
+proven near near-files near.txt near || fail "near's unit did not merge"
+expect_ok on_box _land-card wldn switchboard-kit
+two=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | tail -1 | cut -d' ' -f3)
+eq "$(field $box card.post Heads kit/switchboard-kit)" "west@$(short bolt/west) near@$(short bolt/near)"
+echo '{"answer": {"choiceIds": []}}' > "$(home_of $box)/.stub-pendingyou/answered/$two.json"
+out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
+has "$out" "no bolt ticked: nothing lands"
+eq "$(field $box landing.left Heads kit/switchboard-kit)" "west@$(short bolt/west) near@$(short bolt/near)"
+eq "$(field $box card.post Heads kit/switchboard-kit)" "west@$(short bolt/west):left near@$(short bolt/near):left"
+left=$(field $box card.post Card kit/switchboard-kit)
+[[ $left != "$two" ]] || fail "no card followed the send that left west and near"
+echo "main's west" > "$k/west.txt"; commit_all "$k" "feat: main's own west"; push "$k"
+: > "$CREW_TEST_LOG"
+expect_ok on_box rail --label wldn
+changed=$(calls | grep "^$box pendingyou update_request ")
+has "$changed" "\"changeNote\": \"west, which you left, would take main first: forecast to conflict with main on west.txt at $(short origin/main)\""
+has "$changed" "It would take main first if you tick it: forecast to conflict with main on west.txt"
+eq "$(jq -c '.recommendedIds' <<<"${changed#* update_request }")" "[]"
+lacks "$(told swb-1-conductor)" "bolt/west"
+eq "$(field $box forecast Heads bolt/west) | $(field $box forecast Reached bolt/west)" "bolt/west@$(short bolt/west) main@$(short origin/main) | left"
+echo '{"answer": {"choiceIds": ["land:west"]}}' > "$(home_of $box)/.stub-pendingyou/answered/$left.json"
+: > "$CREW_TEST_LOG"
+out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
+has "$out" "west takes main first: its team takes main in by a fix, and the user's send stands for it"
+lacks "$out" "crew bolt submit"
+has "$(told swb-1-conductor)" "bolt/west is forecast to conflict with main on west.txt"
+has "$(told swb-1-conductor)" "take-main-$(short origin/main)"
+eq "$(field $box forecast Reached bolt/west)" "told"
+eq "$(field $box landing.left Heads kit/switchboard-kit)" "near@$(short bolt/near)"
+ok "a bolt the user left keeps its box when main moves under it, the card saying it would take main first and its conductor told nothing; a send ticking it, read by ops, tells the take-main fix and submits nothing of it"
