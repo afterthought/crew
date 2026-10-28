@@ -302,7 +302,7 @@ def test_a_card_is_posted_in_its_owners_name_under_its_rows_key_filed_in_its_kit
     assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
     sent = acts.calls[1][1]
     assert (sent["idempotencyKey"], sent["areaId"], sent["session"]) == (
-        "land/b1_", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
+        "land/b1@wldn", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
     assert sent["approve"]["risk"] == "high"
     assert acts.emitted == [dict(Act="card.post", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", Head="abc1234",
                                  label="wldn")]
@@ -384,7 +384,7 @@ def test_a_change_that_finds_its_card_not_found_posts_it_again_saying_the_older_
     assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "x note", WHERE, acts) == "req_c2"
     assert [(e["Act"], e.get("State"), e.get("Card")) for e in acts.emitted] == [("card.close", "lost", "req_c1"), ("card.post", None, "req_c2")]
     assert acts.calls[-1][1]["summary"].startswith(cards.DEAD)
-    assert (acts.calls[-1][1]["idempotencyKey"], acts.emitted[-1]["Key"]) == ("land/b1:2", "land/b1")
+    assert (acts.calls[-1][1]["idempotencyKey"], acts.emitted[-1]["Key"]) == ("land/b1@wldn:2", "land/b1")
 
 
 ANSWERED = {"status": "answered", "turn": "agent", "version": 3}
@@ -399,7 +399,7 @@ def test_a_change_to_a_card_the_user_answered_asking_anew_acks_it_with_the_note_
     assert [t for t, _ in acts.calls] == ["get_request", "ack_answer", "match_area", "post_request"]
     assert acts.calls[1][1] == {"requestId": "req_c1", "name": "swb-1-conductor", "expectedVersion": 3, "outcome": "Head is now abc1234"}
     sent = acts.calls[3][1]
-    assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("land/b1:2", "req_c1", "approve")
+    assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("land/b1@wldn:2", "req_c1", "approve")
     opening, _, rest = sent["summary"].partition("\n\n")
     assert re.fullmatch(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you "
                         r"answered\. Since then: head is now abc1234\.", opening)
@@ -501,7 +501,7 @@ def test_a_card_whose_kind_changed_is_withdrawn_while_it_waits_and_its_new_versi
     assert [t for t, _ in acts.calls] == ["get_request", "cancel_request", "match_area", "post_request"]
     assert acts.calls[1][1] == {"requestId": "req_s1", "name": "swancloud-ops", "reason": note}
     sent = acts.calls[3][1]
-    assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("op/srv/1:2", "req_s1", "choice")
+    assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("op/srv/1@swancloud:2", "req_s1", "choice")
     assert [(e["Act"], e.get("Card"), e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
         ("card.close", "req_s1", "withdrawn", plan.RENEWED), ("card.post", "req_s2", None, None)]
     assert capsys.readouterr().out.startswith("card op/srv/1: req_s1 withdrawn, its kind having changed, and its new version follows it\n"
@@ -586,31 +586,45 @@ POST, CLOSE = (lambda card, by="swb-1-conductor", key="land/b1": dict(Act="card.
 
 
 @pytest.mark.parametrize("entries, asked", [
-    ([], "land/b1_"),
-    ([POST("req_1")], "land/b1_"),
-    ([POST("req_1"), POST("req_1")], "land/b1_"),
-    ([POST("req_1"), CLOSE("req_1", "declined")], "land/b1:2"),
-    ([POST("req_1"), CLOSE("req_1"), POST("req_2")], "land/b1:2"),
-    ([POST("req_1"), CLOSE("req_1"), POST("req_2"), CLOSE("req_2", "lost")], "land/b1:3"),
-    ([POST("req_1", by="swb-2-conductor"), CLOSE("req_1")], "land/b1_"),
-    ([POST("req_1", key="land/b2"), CLOSE("req_1")], "land/b1_"),
-    ([dict(POST("req_1"), Refused="x"), CLOSE("req_1")], "land/b1_")])
+    ([], "land/b1@wldn"),
+    ([POST("req_1")], "land/b1@wldn"),
+    ([POST("req_1"), POST("req_1")], "land/b1@wldn"),
+    ([POST("req_1"), CLOSE("req_1", "declined")], "land/b1@wldn:2"),
+    ([POST("req_1"), CLOSE("req_1"), POST("req_2")], "land/b1@wldn:2"),
+    ([POST("req_1"), CLOSE("req_1"), POST("req_2"), CLOSE("req_2", "lost")], "land/b1@wldn:3"),
+    ([POST("req_1", by="swb-2-conductor"), CLOSE("req_1")], "land/b1@wldn"),
+    ([POST("req_1", key="land/b2"), CLOSE("req_1")], "land/b1@wldn"),
+    ([dict(POST("req_1"), Refused="x"), CLOSE("req_1")], "land/b1@wldn")])
 def test_a_card_is_posted_under_its_rows_key_and_after_a_closed_one_under_the_key_with_its_revision(entries, asked):
-    assert cards.post_key(entries, "land/b1", "swb-1-conductor") == asked
+    assert cards.post_key(entries, "land/b1", "swb-1-conductor", "wldn") == asked
 
 
-@pytest.mark.parametrize("key, first, revised", [
-    ("batch/7", "batch/7_", "batch/7:2"), ("land/a", "land/a__", "land/a:2"), ("op/a/1", "op/a/1__", "op/a/1:2"),
-    ("batch/12", "batch/12", "batch/12:2"), ("deploy/dev", "deploy/dev", "deploy/dev:2")])
-def test_a_key_shorter_than_pending_you_takes_is_filled_out_to_eight_characters_the_same_on_every_post(key, first, revised):
+@pytest.mark.parametrize("key", ["batch/16", "proposal/16", "land/b1", "deploy/dev", "op/dev/1", "record/crew/0031"])
+def test_each_partition_sends_its_rows_key_qualified_by_its_label_and_counts_its_revision_in_its_own_run_record(key):
+    """briefs.16, read 2026-10-26 (signal 2026-10-26-swancloud-operator-4e81e687/01): madswan's batch 16 was given
+    swancloud's batch 16 card, req_eafa10ee554b41edbce6, closed on 2026-10-22, since both main levels post under the
+    host's one sign-in and both sent batch/16. Each of crew's six cards is sent under the row's key qualified by its
+    partition's label, so two partitions' rows of one key are two cards; the first part is still crew's, and each
+    partition's revision is read from its own run record, a closed card of the other's under the key counting nothing."""
+    by = "planner"
+    swancloud = [POST("req_eafa10ee554b41edbce6", by=by, key=key), CLOSE("req_eafa10ee554b41edbce6")]
+    sent = {"swancloud": cards.post_key(swancloud, key, by, "swancloud"), "madswan": cards.post_key([], key, by, "madswan")}
+    assert sent == {"swancloud": f"{key}@swancloud:2", "madswan": f"{key}@madswan"}
+    assert {plan.crews_key(k) for k in sent.values()} == {key.split("/")[0]}
+
+
+@pytest.mark.parametrize("key, label, first, revised", [
+    ("batch/7", "wldn", "batch/7@wldn", "batch/7@wldn:2"), ("land/a", "a", "land/a@a", "land/a@a:2"),
+    ("x/1", "a", "x/1@a___", "x/1@a:2_"), ("deploy/dev", "wldn", "deploy/dev@wldn", "deploy/dev@wldn:2")])
+def test_a_key_shorter_than_pending_you_takes_is_filled_out_to_eight_characters_the_same_on_every_post(key, label, first, revised):
     """rail-cards: a row's key shorter than Pending You takes. Read on mac-studio on 2026-10-19 (test D): crew could not
     post batch 7's card, the rail saying "card: batch/7, none open; its last post was refused: Pending You refused
     post_request: Some fields need fixing. idempotencyKey: Too small: expected string to have >=8 characters.", since
-    batch/<n> under ten is seven characters. A short key is filled out at its end, the same on a retry and while its
-    card is open; its revision, and a key long enough, are sent as they are."""
+    batch/<n> under ten is seven characters. The partition's label makes every row's key long enough; a shorter one
+    is still filled out at its end, the same on a retry and while its card is open."""
     by = "wldn-planner"
     held, closed = [POST("req_1", by=by, key=key)], [POST("req_1", by=by, key=key), CLOSE("req_1")]
-    sent = [cards.post_key([], key, by), cards.post_key([], key, by), cards.post_key(held, key, by), cards.post_key(closed, key, by)]
+    sent = [cards.post_key(e, key, by, label) for e in ([], [], held, closed)]
     assert sent == [first, first, first, revised] and all(len(k) >= cards.KEY_LEAST for k in sent)
 
 
@@ -770,7 +784,7 @@ def test_a_later_post_with_something_changed_follows_the_card_whose_answer_stand
     acts, card = record_post(stood, ["Revised at 9c0ffee: docs(adr): 0019 names the key"], follows=None)
     sent = acts.calls[-1][1]
     assert card == "req_2" and sent["follows"] == "req_1" and sent["summary"].startswith(OPENED + "revised at 9c0ffee")
-    assert sent["idempotencyKey"] == "record/crew/0019:2"
+    assert sent["idempotencyKey"] == "record/crew/0019@swancloud:2"
 
 
 def test_a_post_following_no_card_the_user_answered_is_posted_as_built():

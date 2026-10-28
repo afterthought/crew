@@ -289,13 +289,13 @@ class TestNames:
         ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a kit's landings card is crew's"),
         ("wldn-ops", "op/a/1", "a step's card is crew's")])
     def test_the_hook_refuses_an_agents_post_under_crews_key_as_crew_sends_it(self, monkeypatch, agent, row, said):
-        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key shorter
-        than Pending You's eight characters filled out (cards.post_key, batch/7 as batch/7_), and its revision."""
+        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key qualified
+        by its partition's label (cards.post_key, batch/7 as batch/7@wldn), and its revision."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
         monkeypatch.setenv("CREW_AGENT", agent)
         monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
         closed = [dict(Act="card.post", Key=row, By=agent, Card="req_1"), dict(Act="card.close", Card="req_1")]
-        for sent in (plan.cards.post_key([], row, agent), plan.cards.post_key(closed, row, agent)):
+        for sent in (plan.cards.post_key([], row, agent, "wldn"), plan.cards.post_key(closed, row, agent, "wldn")):
             assert len(sent) >= plan.cards.KEY_LEAST
             assert cards.refusal(hooked("post_request", {"idempotencyKey": sent, "name": agent})).startswith(
                 f"crew refuses {agent}'s post of the card under {sent}: {said}")
@@ -1878,7 +1878,7 @@ class TestTheRefusedDeployCards:
         follows = built.follows_of("deploy", {"env": "deneb", "head": self.HEAD}, self.ENTRIES, self.OPS)
         assert plan.row_card_post(None, "swancloud", self.OPS, built.deploy_card, self.facts(follows), self.WHERE, acts) == "req_deneb2"
         sent = next(a for t, a in acts.calls if t == "post_request")
-        assert sent["idempotencyKey"] == "deploy/deneb:2" and "follows" not in sent
+        assert sent["idempotencyKey"] == "deploy/deneb@swancloud:2" and "follows" not in sent
         assert sent["artifacts"][0]["lines"] == ["the-box-works-in-wldn-prod"]
         assert [(e["Act"], e["Card"], e["Key"], e["by"]) for e in acts.emitted] == [("card.post", "req_deneb2", "deploy/deneb", self.OPS)]
 
@@ -1960,6 +1960,20 @@ class TestRecord:
         assert [o["id"] for o in c["options"]] == ["loosen", "accept", "back"] and c["options"][0]["label"] == "Loosen ops.3 and ops.7 as drafted"
         assert [a["title"] for a in c["artifacts"]] == ["Where your rules decided, and the rules loosened", "Record 0032"]
 
+    def test_an_amendments_card_is_titled_by_its_own_first_words_cut_at_whole_words_and_not_the_records_title(self):
+        """Record 0031 as amended 2026-10-24: record/swancloud/0019 was asked three times on 2026-10-22 and 23 under its
+        one title, so three amendments read as one question asked again."""
+        f = dict(kit="crew", number=31, title="crew raises six cards at fixed points of its process", opening="Amended 2026-10-24: x.",
+                 text=RECORD, amendment="a card asked again says what changed, a landing's approval stands through taking main in, "
+                                        "and an amendment's card is titled by the amendment")
+        c = built.record_card(f)["card"]
+        assert c["title"] == ("Accept an amendment to record 0031 in crew: a card asked again says what changed, a landing's approval "
+                              "stands through taking main in, and…")
+        assert len(c["title"]) <= built.TITLE and c["approve"]["action"] == "Accept record 0031"
+        c = built.record_card(dict(f, amendment="the deployer's host is deneb", alternatives={
+            "rules": ["deploy.9"], "other": "mac-studio", "text": "## Where\n\ndeploy.9", "recommended": "accept"}))["card"]
+        assert c["title"] == "An amendment to record 0031 in crew: the deployer's host is deneb"
+
 
 # crew record (briefs.15, record 0031 §1): the record's facts read from its Markdown at a commit, whether the file holds
 # the status recorded, the alternatives a rule decided between, the refusals made before anything is read, and the raise
@@ -2023,6 +2037,7 @@ class TestRecordCommand:
         assert (f["title"], f["opening"], f["quoted"]) == ("switchboard runs GitHub's workflows itself", "The runners cost. A fleet costs more.",
                                                            ["I don't want a fleet"])
         assert f["text"].startswith("# switchboard runs GitHub's workflows itself") and "status: proposed" not in f["text"]
+        assert f["amendment"] is None
         b = built.record_card(f)
         assert b["key"] == "record/switchboard-kit/0032" and re.fullmatch(plan.RECORD_KEY, b["key"])
         assert (b["card"]["kind"], b["card"]["approve"]["risk"], b["card"]["approve"]["reversible"]) == ("approve", "low", True)
@@ -2049,13 +2064,32 @@ class TestRecordCommand:
 
     def test_an_amendment_is_proposed_while_marked_and_accepted_or_rejected_once_its_mark_is_gone(self):
         f = recorded(AMENDED, "proposed", before=ACCEPTED)
-        assert f["opening"] == "- **Rented.** The runners are rented by the hour."
+        assert (f["opening"], f["amendment"]) == ("- **Rented.** The runners are rented by the hour.", "Rented")
         with pytest.raises(crew.Refusal, match="its file on main says accepted, with an amendment still marked proposed"):
             recorded(AMENDED, "accepted", before=ACCEPTED)
         taken = AMENDED.replace(" Status: proposed to the user on 2026-10-18, as `briefs.15` has it; accepted only on their yes.", "")
         assert recorded(taken, "accepted", before=AMENDED) and recorded(ACCEPTED, "rejected", before=AMENDED)
         with pytest.raises(crew.Refusal, match="as rejected: its file on main says accepted"):
             recorded(ACCEPTED, "rejected", before=MADR)
+
+    @pytest.mark.parametrize("words, said", [
+        ("Amended 2026-10-22: what “no row worse than before” and “every row added ok” read. Eight deploys failed their suite.",
+         "what no row worse than before and every row added ok read"),
+        ("Amended 2026-10-23: the deployer's host is deneb. The user chose it on the design agent's card.", "the deployer's host is deneb"),
+        ("Amended 2026-10-23: a break-glass deploy is known to the deployer as a deploy is. On 2026-10-23 ops deployed the box.",
+         "a break-glass deploy is known to the deployer as a deploy is")])
+    def test_each_amendment_of_one_record_titles_its_card_by_its_own_first_words(self, words, said):
+        """record/swancloud/0019's three amendments of 2026-10-22 and 23, each a paragraph that opens with its proposed
+        mark as the design agent writes them, asked under the record's one title until record 0031 as amended 2026-10-24."""
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        f = recorded(ACCEPTED + f"\n{mark} {words.replace('“', '').replace('”', '')}\n", "proposed", before=ACCEPTED)
+        assert f["amendment"] == said
+        assert built.record_card(f)["card"]["title"] == f"Accept an amendment to record 0032 in switchboard-kit: {said}"
+
+    def test_an_amendment_with_no_words_of_its_own_is_refused_and_nothing_raised(self):
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        with pytest.raises(crew.Refusal, match="it has no words of its amendment. Nothing is raised."):
+            recorded(ACCEPTED + f"\n{mark} Amended 2026-10-23:\n", "proposed", before=ACCEPTED)
 
     @pytest.mark.parametrize("alternatives, said", [
         ("## Where\n\nops.3", "their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>"),
@@ -2118,7 +2152,7 @@ class TestRecordCommand:
         acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
         assert plan.raise_record(None, "wldn", f, where, "Revised at abc1234: x", acts) == "req_c1"
         sent = acts.calls[1][1]
-        assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032", "wldn-design")
+        assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032@wldn", "wldn-design")
         assert acts.emitted[0]["On"] == ["record/switchboard-kit/0032"] and acts.told == []
         held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
         acts = Acts({"get_request": ({"status": "pending", "version": 2}, None), "update_request": ({"version": 3}, None)}, entries=held,
@@ -2131,7 +2165,7 @@ class TestRecordCommand:
         assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
-        assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
+        assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032@wldn:2", "req_c1")
         # rail-cards "A record revised after the user's note": the card that follows says first what they answered
         assert re.match(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you answered\. "
                         r"Since then: revised at 9ab0123: ops\.7 loosened\.\n\n", acts.calls[3][1]["summary"])
@@ -2152,7 +2186,7 @@ class TestRecordCommand:
         assert plan.raise_record_again(None, row, acts) == "req_c1"
         assert reads == [("wldn", "switchboard-kit", 32, "proposed", None)]
         sent = next(a for t, a in acts.calls if t == "post_request")
-        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032")
+        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032@wldn")
         assert sent["summary"] == f"{built.DEAD}\n\n" + built.record_card(recorded(MADR, "proposed"))["card"]["summary"]
         acts = Acts({}, caller="wldn-design")
         with pytest.raises(crew.Refusal) as e:
@@ -2172,7 +2206,7 @@ class TestRecordCommand:
             assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
             assert [c[0] for c in acts.calls] == ["get_request", "match_area", "post_request"]
             assert (acts.emitted[0]["Act"], acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("card.close", state, plan.ENDED_ELSEWHERE)
-            assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032:2"
+            assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032@wldn:2"
             assert acts.calls[2][1].get("follows") == follows
         for status in ("resolved", "closed"):
             acts = Acts({"get_request": ({"status": status, "version": 4}, None)}, entries=held, caller="wldn-design")
@@ -2246,7 +2280,7 @@ class TestPickedUp:
         assert plan.row_card_change(None, "swancloud", self.OWNER, built.deploy_card, dict(self.OFFER, follows=follows),
                                     "Now d35fbf2", self.WHERE, acts) == "req_d2"
         assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
-        assert acts.calls[1][1]["idempotencyKey"] == "deploy/mac-studio:2" and "follows" not in acts.calls[1][1]
+        assert acts.calls[1][1]["idempotencyKey"] == "deploy/mac-studio@swancloud:2" and "follows" not in acts.calls[1][1]
         entries = self.held(entries, acts)
         assert built.card_under(entries, "deploy/mac-studio", self.OWNER) == "req_d2"
 

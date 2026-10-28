@@ -998,7 +998,7 @@ class TestSweep:
                                    "post_request": ({"requestId": "req_d2", "version": 1}, None)})
         assert [(n, t) for n, t, _ in acts.calls] == [("crew", "get_request"), ("wldn-ops", "get_request"), ("wldn-ops", "match_area"), ("wldn-ops", "post_request")]
         posted = acts.calls[-1][2]
-        assert posted["idempotencyKey"] == "deploy/dev:2" and posted["summary"].startswith(cards.DEAD)
+        assert posted["idempotencyKey"] == "deploy/dev@wldn:2" and posted["summary"].startswith(cards.DEAD)
         assert [(e["Act"], e.get("State"), e["Card"]) for e in acts.emitted] == [("card.close", "lost", "req_d1"), ("card.post", None, "req_d2")]
         assert out["done"] == [dict(label="wldn", key="deploy/dev", card="req_d1", by="wldn-ops", did="lost", words="posted again as req_d2", new="req_d2")]
 

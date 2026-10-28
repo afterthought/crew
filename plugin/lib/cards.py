@@ -945,20 +945,38 @@ def step_card(f):
                  recommendedIds=["quiet"])
 
 
+AMENDED = re.compile(r"^Amended\b[^:.]*:\s*")
+
+
+def first_words(text):
+    """An amendment's own first words, which title its record's card (record 0031 as amended 2026-10-24): the first
+    sentence of its paragraph, with its `Amended <date>:` lead, a list item's marker, its Markdown marks and its
+    closing stop left out."""
+    p = AMENDED.sub("", " ".join(MARKS.sub("", re.sub(r"^[-*+]\s+", "", (text or "").strip())).split()))
+    return SENTENCE.split(p, 1)[0].rstrip(".") if p else ""
+
+
 def record_card(f):
     """A decision record's card (record 0031 §5): a plain record's a hold-to-accept of low risk, holding the record
     whole as Markdown, its opening sentences the summary and the user's own words beside them; a record a rule of the
     user's decided between alternatives a choice asked once, loosen the rules as drafted and take the other path,
     accept the record as ruled, or send it back, its face the alternatives, the rules that decided and each loosened,
-    then the record. f: kit, number, title, opening, quoted (the user's words it records), text (the record, Markdown),
-    alternatives ({rules, other, text, recommended: loosen or accept}) or None, follows."""
+    then the record. An amendment's card is titled by the amendment's own first words, cut at whole words, not the
+    record's title, so each amendment of one record reads as its own question (record 0031 as amended 2026-10-24).
+    f: kit, number, title, opening, quoted (the user's words it records), text (the record, Markdown), amendment (its
+    first words, first_words) or None, alternatives ({rules, other, text, recommended: loosen or accept}) or None,
+    follows."""
     n = f"{int(f['number']):04d}"
     quoted = list(f.get("quoted") or [])
     words = "Your own words, recorded as your decision:\n" + "\n".join(f"“{q}”" for q in quoted) if quoted else ""
     record = markdown(f"Record {n}", f"record-{n}.md", f["text"])
-    alt = f.get("alternatives")
+    alt, amended = f.get("alternatives"), f.get("amendment")
+
+    def titled(head):
+        head += f" {n} in {f['kit']}: "
+        return head + (by_words(amended, TITLE - len(head)) if amended else f["title"])
     if not alt:
-        return built(f"record/{f['kit']}/{n}", f"Accept record {n} in {f['kit']}: {f['title']}",
+        return built(f"record/{f['kit']}/{n}", titled("Accept an amendment to record" if amended else "Accept record"),
                      f["opening"] + ("\n\n" + words if words else ""), words, (), [record], f.get("follows"),
                      urgency="whenever", kind="approve", intent="approve",
                      approve={"action": f"Accept record {n}", "risk": "low", "reversible": True}, recommendedIds=["approve"])
@@ -969,7 +987,7 @@ def record_card(f):
                {"id": "back", "label": "Send it back with a note", "consequence": "The design agent revises it from your note"}]
     summary = (f"Your rules decided this one: {rules} chose the record's path over the other, {alt['other']}. One decision: "
                "the record as ruled, or loosen the rules as drafted and take the other path.")
-    return built(f"record/{f['kit']}/{n}", f"Record {n} in {f['kit']}: {f['title']}", summary, words, (),
+    return built(f"record/{f['kit']}/{n}", titled("An amendment to record" if amended else "Record"), summary, words, (),
                  [markdown("Where your rules decided, and the rules loosened", f"record-{n}-rules.md", alt["text"]), record],
                  f.get("follows"), urgency="whenever", kind="choice", intent="decide", options=options,
                  recommendedIds=[alt.get("recommended") or "accept"])
@@ -1322,7 +1340,7 @@ CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "mu
            "rationale", "urgency", "blocking")
 DEAD = "An older copy of this card was lost: dismiss it in the app."
 # The fewest characters Pending You takes in an idempotencyKey (post_request's schema, pendingyou 0.35.1), and what
-# fills a shorter key of crew's out to it: no row key and no revision holds it, so a filled key is no other row's.
+# fills a shorter key of crew's out to it: no row key, label or revision holds it, so a filled key is no other row's.
 KEY_LEAST, FILL = 8, "_"
 
 
@@ -1432,18 +1450,22 @@ def head_anew(entries, card, head):
     return None if asked == head else {"approved": asked or ""}
 
 
-def post_key(entries, key, by):
-    """The idempotency key crew posts its card under a row's key with, from the run record's entries: the row's key for
-    its first card, and for each card after one of `by`'s under it closed (answered and followed, declined, withdrawn or
-    lost), the key with that card's revision, <key>:<n>, since Pending You gives a key's card back as long as it keeps
-    it and takes one key per question. A card still open under the key keeps its own key, so posting it again gives it
-    back. A key shorter than Pending You takes, batch/7 or land/b1, is filled out to KEY_LEAST at its end with FILL,
-    batch/7_, the same on every post: its first part is still crew's (plan.crews_key), and a key long enough is sent as
-    it always was, so a card open under it is given back (batch 7's card on 2026-10-19, refused "idempotencyKey: Too
-    small: expected string to have >=8 characters")."""
+def post_key(entries, key, by, label):
+    """The idempotency key crew posts its card under a row's key with, from the partition's own run record's entries:
+    the row's key qualified by the partition's label, <key>@<label>, for its first card, and for each card after one of
+    `by`'s under it closed (answered and followed, declined, withdrawn or lost), that key with the card's revision,
+    <key>@<label>:<n>, since Pending You gives a key's card back as long as it keeps it and takes one key per question.
+    The label is in the key because every partition's main level posts under the host's one sign-in (record 0031 §6)
+    and a row's key is its partition's alone: madswan's batch 16 was given swancloud's batch 16 card, closed four days
+    before, when both were sent as batch/16 (briefs.16, 2026-10-26). The run record keeps the row's key, and the key's
+    first part is still crew's (plan.crews_key). A card still open under the key keeps its own key, so posting it again
+    gives it back. A key shorter than Pending You takes is filled out to KEY_LEAST at its end with FILL, the same on
+    every post (batch 7's card on 2026-10-19, refused "idempotencyKey: Too small: expected string to have >=8
+    characters")."""
     mine = [e for e in entries if e.get("Act") == "card.close" or (e.get("Key") == key and e.get("By") == by)]
     closed = {c["card"] for c in posted_cards(mine) if c["state"]}
-    return (f"{key}:{len(closed) + 1}" if closed else key).ljust(KEY_LEAST, FILL)
+    sent = f"{key}@{label}"
+    return (f"{sent}:{len(closed) + 1}" if closed else sent).ljust(KEY_LEAST, FILL)
 
 
 def posted_again(card):

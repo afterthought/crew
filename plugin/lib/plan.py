@@ -1191,10 +1191,11 @@ def host_run(fleet, host, script, *args):
 # Where a bolt's branch lives, for kit.bolt_lives (plan.19), read in a checkout of its kit with $bolt and $file set:
 # LOCAL and TRACKED, the commit of the host's own bolt/<bolt> and of origin's tracking ref of it, as this host last
 # fetched it, or -; AT_LOCAL and AT_TRACKED, the policy ($file) at each, base64, or - when it holds none, read from the
-# commit as sluice reads a branch's policy.
-BOLT_AT = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
+# commit as sluice reads a branch's policy. Its two reads, ref and pol, are REFS, which LAND_COPIES reads with too.
+REFS = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
 pol() { if [ "$1" != - ] && text=$(git show "$1:$file" 2>/dev/null); then printf '%s\n' "$text" | base64 | tr -d '\n'; else printf -; fi; }
-l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
+"""
+BOLT_AT = REFS + r"""l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
 echo "LOCAL=$l"; echo "TRACKED=$o"; echo "AT_LOCAL=$(pol "$l")"; echo "AT_TRACKED=$(pol "$o")"
 """
 
@@ -1995,8 +1996,8 @@ def last_submits(entries):
 def refusals(entries):
     """Each bolt whose last landing sluice refused for the bolt's own content (landing_end), from the run record's
     entries, oldest first: {bolt: (head, words)}, the head that was submitted (its bolt.submit's Head) and the words it
-    was refused with, sluice's when it gave any (landing_said, recorded), from each bolt's last bolt.submit entry when it
-    was refused; a bolt whose last one landed or was stopped, or that has none, is not in it."""
+    was refused with, sluice's verdict when it gave one (landing_said, recorded), from each bolt's last bolt.submit
+    entry when it was refused; a bolt whose last one landed or was stopped, or that has none, is not in it."""
     return {b: (e.get("Head") or "", e["Refused"]) for b, e in last_submits(entries).items() if e.get("Refused")}
 
 
@@ -3108,24 +3109,47 @@ def bolt_land(fleet, a):
 # its submission's outcome; an answer naming neither empties it at once. It decides nothing (code.7): it prints, as
 # shell assignments, RC, the submission's exit; TIP, the bolt's tip that was submitted; OLD, the host's own main before,
 # empty when it has none; ID, the submission's number from sluice's JSON, and PULL, the pull request's, each empty when
-# it gave none; ANSWER, what sluice printed on standard output, base64, for crew to name an answer it can't read; and
-# SAID, what it said on standard error, base64, sluice's words when it refused the submission at once. Given a
-# submission (the fifth word) and the tip it submitted (the sixth), it waits on that submission again in place of
-# submitting: the place made again, the `sluice wait` on it holding crew-landing as for one sluice queued, ID that
-# submission and TIP that tip, as landing_ended asks once sluice itself failed and its record has the submission
+# it gave none; ANSWER, what sluice printed on standard output, base64, for crew to name an answer it can't read, and
+# its verdict when it refused the submission at once, its error document (verdict_printed); SAID, what it said on
+# standard error, base64, which crew says beside that verdict and never as it (beside_of); and LEVEL, the value the
+# host's bolt/<bolt> had when it levelled it, - for none, or empty when it wrote nothing. The fifth word is
+# the head to submit (landing_head), empty for the host's copy as it stands, and the sixth the copy's value as
+# LAND_COPIES read it, - for none: given a head the copy is not at, it first sets the host's bolt/<bolt> to it with `git
+# update-ref` guarded by that value, before anything is cut (plan.19), the one write sluice's guard lets through, its
+# value the branch as sluice's route reads it on GitHub; git refuses it when the copy moved since the read, and the
+# guard when GitHub's branch did, either way in their words with nothing cut or submitted. A landing's worktree that
+# stands from an earlier attempt is brought along with `read-tree -m -u`, which writes no ref, git's words when it
+# cannot; and a worktree whose HEAD is not the head given submits nothing. Given a submission (the seventh word) and the
+# tip it submitted (the eighth), the head and value empty, it levels nothing and waits on that submission again in
+# place of submitting: the place made again, the `sluice wait` on it holding crew-landing as for one sluice queued, ID
+# that submission and TIP that tip, as landing_ended asks once sluice itself failed and its record has the submission
 # standing (submission_of).
-SUBMIT = r"""main=$1 path=$2 bolt=$3
+SUBMIT = r"""main=$1 path=$2 bolt=$3 head=$5 from=$6
 export SLUICE_AGENT=$4
 cd "$main" || exit 2
 command -v wt-submit >/dev/null || { echo "wt submit needs sluice's wt-submit, which is not on $(hostname -s)'s path" >&2; exit 2; }
 old=$(git rev-parse --verify -q refs/heads/main) || old=
+now=$(git rev-parse --verify -q "refs/heads/bolt/$bolt") || now=
+level=
+if [ -n "$head" ] && [ "$head" != "$now" ]; then
+  was=$from; [ "$was" != - ] || was=$(printf '%0*d' ${#head} 0)
+  err=$(git update-ref -m "crew: level to GitHub's bolt/$bolt for its landing" "refs/heads/bolt/$bolt" "$head" "$was" 2>&1) || {
+    echo "$(hostname -s)'s copy of bolt/$bolt was not levelled to GitHub's ${head:0:7}: $(printf '%s' "$err" | tr '\n' ' ')" >&2; exit 2; }
+  level=$from
+fi
 git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main has no branch bolt/$bolt" >&2; exit 2; }
-[ -d "$path" ] || { git worktree add -q --no-checkout "$path" "bolt/$bolt" >&2 && git -C "$path" read-tree -m -u HEAD >&2; } || exit 2
+if [ ! -d "$path" ]; then
+  { git worktree add -q --no-checkout "$path" "bolt/$bolt" >&2 && git -C "$path" read-tree -m -u HEAD >&2; } || exit 2
+elif [ -n "$level" ] && [ "$level" != - ]; then
+  err=$(git -C "$path" read-tree -m -u "$level" HEAD 2>&1) || {
+    echo "the landing's worktree $path could not be brought to ${head:0:7}: $(printf '%s' "$err" | tr '\n' ' ')" >&2; exit 2; }
+fi
 tip=$(git -C "$path" rev-parse HEAD) || exit 2
-[ -z "$6" ] || tip=$6
+[ -z "$head" ] || [ "$tip" = "$head" ] || { echo "the landing's worktree $path is at ${tip:0:7}, not bolt/$bolt's head ${head:0:7}, so nothing was submitted" >&2; exit 2; }
+[ -z "$8" ] || tip=$8
 mark=$(git -C "$path" rev-parse --absolute-git-dir)/crew-landing && echo $$ > "$mark" || exit 2
 out=$(mktemp) || exit 2
-if [ -n "$5" ]; then printf '{"id":%s}\n' "$5" >"$out"; : >"$out.err"; rc=0
+if [ -n "$7" ]; then printf '{"id":%s}\n' "$7" >"$out"; : >"$out.err"; rc=0
 else (cd "$path" && wt submit main --no-wait --json --no-remove) >"$out" 2>"$out.err" </dev/null; rc=$?; fi
 cat "$out.err" >&2
 id=; [[ $(cat "$out") =~ \"id\":[[:space:]]*([0-9]+) ]] && id=${BASH_REMATCH[1]}
@@ -3142,7 +3166,7 @@ elif [ "$rc" = 0 ] && [ -n "$pull" ]; then
 else
   : > "$mark"
 fi
-printf 'RC=%s TIP=%s OLD=%s ID=%s PULL=%s ANSWER=%s SAID=%s\n' "$rc" "$tip" "$old" "$id" "$pull" "$answer" "$said"
+printf 'RC=%s TIP=%s OLD=%s ID=%s PULL=%s ANSWER=%s SAID=%s LEVEL=%s\n' "$rc" "$tip" "$old" "$id" "$pull" "$answer" "$said" "$level"
 """
 
 # sluice's outcome of a landing's submission, waited on in the kit's main checkout on the team's host, a call at a time
@@ -3160,8 +3184,8 @@ WAIT = r"""cd "$1" && exec sluice wait "$2" --timeout 9m --json"""
 # withdrawn, 64 a bad command line, 130 stopped); TIP, the bolt's tip that was submitted; OLD, the host's own main
 # before, empty when it has none; KEPT, the worktree when git could not remove it, and WHY, git's words for it, which
 # the tidy at the bolt's landing sweeps or names (tidy_over); LEVEL, "yes", "detached", why it was not tried, or empty
-# when the host's own main did not move; SAID, the last line sluice printed, base64, as crew hands it, since bash's %q
-# garbles what is not ASCII in the C locale.
+# when the host's own main did not move; SAID, sluice's verdict on the submission (verdict_printed), base64, as crew
+# hands it, since bash's %q garbles what is not ASCII in the C locale.
 LANDED = r"""main=$1 path=$2 bolt=$3 tip=$4 old=$5 rc=$6 said=$7
 cd "$main" || exit 2
 kept= why=; why=$(git worktree remove "$path" 2>&1 >/dev/null) || kept=$path
@@ -3353,6 +3377,73 @@ def landing_blame(doc):
     return "stop", f"sluice's record has {n} in a state crew does not read: {cut(json.dumps(state), 60)}"
 
 
+def verdict_of(doc):
+    """sluice's verdict on a submission, from its record (doc, a sluice/submission@1 as sluice 0.36.4 prints and lists
+    it, out in its state), in the words sluice's own report gives it (lib.rs report, detail): `#<n> conflict: <paths>`,
+    with each submission it conflicts with; `#<n> failed: <checks> on <combination>`, timed out or not run; `#<n>
+    withdrawn by <who> at <when>`; or `#<n> landed as <commit>`; or, from sluice's error document, its message
+    (told.rs).
+    It is never what sluice says on standard error, which under --json is only what its rounds did beside, a place it
+    released or could not release among them (exec.rs tell_abandoned), and its own warnings and failure (main.rs).
+    "" when doc is neither, or holds a submission not out; an absent field is left out (read.2)."""
+    if not isinstance(doc, dict):
+        return ""
+    err = doc.get("error")
+    if isinstance(err, dict):
+        return " ".join(err["message"].split()) if isinstance(err.get("message"), str) else ""
+    if doc.get("schema") != SUBMISSION or type(doc.get("id")) is not int or doc.get("state") not in OUT:
+        return ""
+    n, state = doc["id"], doc["state"]
+    field = lambda d, k, of=str: d.get(k) if isinstance(d, dict) and isinstance(d.get(k), of) else None
+    if state == "conflict":
+        c = doc.get("conflict")
+        paths = [p for p in field(c, "paths", list) or [] if isinstance(p, str)]
+        withs = [w for w in field(c, "with", list) or [] if type(field(w, "id", int)) is int]
+        said = f"#{n} conflict" + (f": {', '.join(paths)}" if paths else "")
+        for w in withs:
+            who = [x for x in (field(w.get("from"), "agent"), field(w.get("from"), "worktree")) if x]
+            said += f"; conflicts with #{w['id']}" + (f" ({', '.join(who)})" if who else "")
+        return said
+    if state == "failed":
+        tasks = [t for t in field(doc, "failed", list) or [] if field(t, "task")]
+        named = lambda t: t["task"] + (f" ({t['system']})" if field(t, "system") else "") + (
+            " (flaky)" if t.get("flaky") else " (could not run)" if t.get("not_run") else "")
+        ran, unrun = [named(t) for t in tasks if field(t, "hash")], [t["task"] for t in tasks if not field(t, "hash")]
+        parts = (["timed out"] if field(doc, "result") == "timed out" else []) + (
+            [f"failed: {', '.join(ran)}"] if ran else []) + ([f"not run: {', '.join(unrun)}"] if unrun else [])
+        on = field(doc.get("tested"), "combination")
+        return f"#{n} " + ("; ".join(parts) or field(doc, "result") or "failed") + (f" on {on[:7]}" if on else "")
+    if state == "withdrawn":
+        w = doc.get("withdrawn")
+        return f"#{n} withdrawn" + (f" by {field(w, 'by')}" if field(w, "by") else "") + (f" at {field(w, 'at')}" if field(w, "at") else "")
+    return f"#{n} landed" + (f" as {field(doc, 'landed_as')[:7]}" if field(doc, "landed_as") else "")
+
+
+def verdict_printed(out, n=None):
+    """sluice's verdict (verdict_of) from what it printed on standard output under --json: the record of submission #n,
+    as its wait prints it (WAIT), or as main's listing holds it (SUBMISSIONS); the record of any submission when n is
+    None, as SUBMIT's answer holds one; or sluice's error document. "" when it printed none of them crew reads
+    (read.2)."""
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        return ""
+    if isinstance(doc, dict) and isinstance(doc.get("submissions"), list):
+        doc = next((s for s in doc["submissions"] if isinstance(s, dict) and s.get("id") == n), None) if n is not None else None
+    elif n is not None and isinstance(doc, dict) and "error" not in doc and doc.get("id") != n:
+        return ""
+    return verdict_of(doc)
+
+
+def beside_of(err, verdict=""):
+    """What sluice said on standard error beside its verdict on a submission (verdict_of), its lines joined: under
+    --json, what its rounds did beside, as a place it could not release, and its own warnings, which crew says beside
+    the verdict and never as why a landing did not land; a line that is the verdict itself, as sluice's failure is said
+    on both (main.rs), is left out."""
+    lines = [" ".join(l.split()) for l in (err or "").splitlines() if l.strip()]
+    return "; ".join(l for l in lines if not verdict or l not in (verdict, f"sluice: {verdict}"))
+
+
 def answered_before(f, after):
     """The submission sluice answered a landing's submission with (f, SUBMIT's assignments) when sluice had recorded it
     before the landing, its id no newer than the last sluice had recorded then (after): sluice 0.36.4 answers a pull
@@ -3422,10 +3513,10 @@ def left_standing(bolt, name, path, f, why=None, was=None):
             f"queued stands, its place {path} kept, and sluice status main says where it is.")
 
 
-def landing_said(bolt, name, host, said, before, marked="", sub=None, again=0, recorded=False, doc=None):
+def landing_said(bolt, name, host, said, before, marked="", sub=None, again=0, recorded=False, doc=None, beside=""):
     """What a landing's submission came to, as landing_end judges it: (landed, the words crew says to ops), or with
     recorded, (landed, the words its bolt.submit is recorded with)."""
-    landed, words, kept_as, _ = landing_end(bolt, name, host, said, before, marked, sub, again, doc)
+    landed, words, kept_as, _ = landing_end(bolt, name, host, said, before, marked, sub, again, doc, beside)
     return landed, kept_as if recorded else words
 
 
@@ -3435,7 +3526,7 @@ def submit_again(bolt):
             f"submit {bolt} submits it again, with no new word.")
 
 
-def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, doc=None):
+def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, doc=None, beside=""):
     """What a landing's submission came to, from LANDED's report on the team's host and the commit main now was at
     before it (code.7): (landed, the words crew says to ops, the words its bolt.submit is recorded with, stopped).
     Main now is GitHub's after the landing's fetch for a kit with an origin, its own main for one with none
@@ -3449,19 +3540,21 @@ def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, do
     record the wait printed or sluice answered with at once (doc, wait_outcome, answer_record), or, when sluice itself
     failed, exiting 3, with the bolt's tip not on main now, its record in sluice's listing (sub, submission_of; again,
     the times crew has waited on it again): a conflict or a check that ran is the team's to resolve by taking main into
-    the bolt by a submission to the bolt (plan.8), told to the bolt's conductor in sluice's words, and recorded in
-    sluice's own last words when it exited non-zero and said any (rail-cards "A refused landing is held on its row"),
-    else crew's for why it did not land and where main is. Anything else is stopped, nothing of the bolt's (rail-cards
-    "A landing sluice or its host stopped keeps its box"): recorded with what stopped it, the record's words for it
-    (landing_blame), sluice's own when it gave no record, or crew's for what it can't tell, and ops told to report it
-    and submit the bolt again once it is cleared, with no new word (submit_again, main-level). While sluice's record
-    has a submission sluice itself failed on standing queued or under test, crew says so and waits on it again
-    (wait_again); crew can't tell when the record has it landed, has none, or can't be read, or when it still stands
-    after AGAIN waits, each stopped. A main now crew can't read after the submission says it can't tell, naming why
-    and sluice's exit, and words crew can't read land nothing, each stopped (read.1, read.2). A worktree git could not
-    remove is named with git's words to ops, and goes with the bolt at crew bolt land or is named there (tidy_over).
-    The recorded words are what its row on its kit's landings card, its line on the rail and the card's close say
-    (refused_at, stopped_at), never what crew tells ops, which is for ops's terminal."""
+    the bolt by a submission to the bolt (plan.8), and ops tells the bolt's conductor why in sluice's verdict, SAID, or
+    its record's once sluice itself failed (sub's verdict), which is recorded, a conflict's paths among it (rail-cards
+    "A refused landing is held on its row"), else crew's words for why it did not land and where main is. Anything
+    else is stopped, nothing of the bolt's (rail-cards "A landing sluice or its host stopped keeps its box"): recorded
+    with what stopped it, the record's words for it (landing_blame), sluice's verdict when it gave no record crew reads,
+    or crew's for what it can't tell, and ops told to report it and submit the bolt again once it is cleared, with no
+    new word (submit_again, main-level). While sluice's record has a submission sluice itself failed on standing queued
+    or under test, crew says so and waits on it again (wait_again); crew can't tell when the record has it landed, has
+    none, or can't be read, or when it still stands after AGAIN waits, each stopped. A main now crew can't read after
+    the submission says it can't tell, naming why and sluice's exit, and words crew can't read land nothing, each
+    stopped (read.1, read.2). What sluice said beside its verdict (beside, beside_of), as a place its rounds could not
+    release, is said to ops apart, as not why it did not land, and never recorded. A worktree git could not remove is
+    named with git's words to ops, and goes with the bolt at crew bolt land or is named there (tidy_over). The recorded
+    words are what its row on its kit's landings card, its line on the rail and the card's close say (refused_at,
+    stopped_at), never what crew tells ops, which is for ops's terminal."""
     r = landing_report(said)
     if r is None:
         why = f"crew can't read what the submission of bolt/{bolt} to {name}'s main came to: {said.strip()[-200:] or 'nothing'}"
@@ -3505,22 +3598,26 @@ def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, do
             return False, f"crew can't tell whether bolt/{bolt} landed: {why}.{submit_again(bolt)}{kept}", why, True
         blame, cause = landing_blame(sub)
         why, cause = f"sluice itself failed, and its record has #{n} {OUT[state]}", cause and f"{failed}, and {cause}"
+        verdict = sub.get("verdict") or ""
     else:
         blame, cause = landing_blame(doc) if doc is not None else ("stop", None)
         why = {"1": "main's checks failed on it", "2": "sluice refused it or found a conflict", "4": "it was withdrawn while it waited",
                "64": "sluice could not read its command line", "130": "the submission was stopped"}.get(f["RC"], f"the submission exited {f['RC']}")
-    sluices = words if f["RC"] != "0" and words else None
+        verdict = words if f["RC"] != "0" else ""
+    also = f" Beside its verdict, and not why it did not land, sluice said: {beside}." if beside else ""
     if blame == "bolt":
-        return False, (f"bolt/{bolt} did not land: {why}{where}. Tell the bolt's conductor sluice's words above: a conflict is the "
-                       f"bolt's, and the team takes main into it by a submission to the bolt, then you submit again.{kept}"), (
-            sluices or f"bolt/{bolt} did not land: {why}{where}."), False
+        told = f" sluice's verdict: {verdict}." if verdict else ""
+        return False, (f"bolt/{bolt} did not land: {why}{where}.{told} Tell the bolt's conductor why: a conflict is the bolt's, "
+                       f"and the team takes main into it by a submission to the bolt, then you submit again.{also}{kept}"), (
+            verdict or f"bolt/{bolt} did not land: {why}{where}."), False
     if cause:  # sluice's record says what stopped it
         told, kept_as = f"{cause.rstrip('.')}{where}", cause
-    else:  # sluice gave no record crew reads: in its own words, else crew's
+    else:  # sluice gave no record crew reads: in its verdict, else crew's words
         crews = {"0": "the submission exited 0", "64": "sluice could not read its command line", "130": "the submission was stopped"
                  }.get(f["RC"], f"the submission exited {f['RC']}, and sluice gave no record of it crew reads")
-        told, kept_as = f"{(sluices or crews).rstrip('.')}{where}", sluices or f"{crews}{where}"
-    return False, f"bolt/{bolt} did not land, and nothing of the bolt's stopped it: {told}.{submit_again(bolt)}{kept}", kept_as, True
+        told, kept_as = f"{(verdict or crews).rstrip('.')}{where}", verdict or f"{crews}{where}"
+    return (False, f"bolt/{bolt} did not land, and nothing of the bolt's stopped it: {told}.{submit_again(bolt)}{also}{kept}",
+            kept_as, True)
 
 
 def mark_said(code, out, err):
@@ -3671,24 +3768,36 @@ def submit_order(bolts, hosts):
 
 
 def landing_submitted(fleet, t, bolt):
-    """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held) and its
-    landing pull request, a draft, readied, since the submission is the user's word (pull_hold, bolt-teams): {bolt, t,
-    before, path, RC, TIP, OLD, ID, PULL, ANSWER, SAID, said, standing, last}, said the last line SUBMIT's submission
-    said on standard error, sluice's words when it refused it at once, said as it is queued (submitted_line). Its ID is
-    only ever a submission sluice made for this landing, newer than last, the last of main's submissions sluice had
-    recorded before its pull request was readied (SUBMISSIONS, submissions_listed). Queued as a pull request, sluice
+    """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held), the
+    bolt's two copies read there after one fetch (LAND_COPIES, kit.land_copies) and the head it submits decided
+    (landing_head, plan.19), and its landing pull request, a draft, readied, since the submission is the user's word
+    (pull_hold, bolt-teams). SUBMIT is given that head and the host's copy's value as read, and levels the copy to it
+    first; what the decision says of the copy is printed once SUBMIT has run, a level only when SUBMIT made it: {bolt, t,
+    before, path, RC, TIP, OLD, ID, PULL, ANSWER, SAID, LEVEL, standing, last}, said as it is queued (submitted_line),
+    sluice's verdict when it refused it at once in its answer, ANSWER, and what it said beside on standard error, SAID.
+    Its ID is only ever a submission sluice made for this landing, newer than last, the last of main's submissions
+    sluice had recorded before its pull request was readied (SUBMISSIONS, submissions_listed). Queued as a pull request, sluice
     answering with its number and no submission, or answered with an earlier submission (answered_before), whose exit
     is that one's and refuses nothing of this one, its ID is the submission sluice made for it, found in sluice's
     record on the team's host (SUBMISSIONS, submission_of with the pull request and last), and waited on as any other;
     standing, when crew finds none to wait on, its words (left_standing). Or {bolt, t, refused}, nothing submitted,
-    when main now or sluice's record of main could not be read, the pull request could not be readied, or the
-    submission could not be made, in crew's, sluice's, gh's or the host's words."""
+    when main now, the bolt's copies or sluice's record of main could not be read, the bolt's two copies have diverged,
+    the pull request could not be readied, or the submission could not be made, in crew's, sluice's, gh's, git's or the
+    host's words; refused before its submission ran, its pull request is left as it was."""
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     try:
         before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
         not why or fail(why)
+        r = crew.on_machine(fleet, host, ["bash", "-c", LAND_COPIES, "crew", main, bolt, kit.DECLARATION])
+        r.returncode == 0 or fail(f"crew can't read bolt/{bolt}'s copies on {host}: "
+                                  + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
+        copies = kit.land_copies(r.stdout, bolt)
     except Refusal as e:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted: {e}")
+    decided = landing_head(bolt, host, copies)
+    if isinstance(decided, str):  # the copy on GitHub unread, or the two diverged: nothing levelled or submitted
+        return dict(bolt=bolt, t=t, refused=decided)
+    head, own = (decided["head"], copies["own"]) if decided["head"] else ("", "")
     s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
     subs = submissions_listed(s.returncode, s.stdout, s.stderr)
     if isinstance(subs, str):  # read.1: no submission sluice answers with could be told from one made before it
@@ -3702,9 +3811,11 @@ def landing_submitted(fleet, t, bolt):
     if said:
         print(said)
     path = f"{t['kit']['dir']}/places/land-{bolt}"
-    f, told = submit_ran(fleet, host, main, path, bolt)
+    f, told = submit_ran(fleet, host, main, path, bolt, head, own)
     if f is None:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted on {host}: {told}", attempted=True)
+    if decided["said"] and (f["LEVEL"] or not decided["level"]):
+        print(decided["said"])
     standing, was = None, answered_before(f, last)
     if was:  # an earlier submission's record and exit: this landing's own is looked for as a pull request's is
         f = dict(f, RC="0", ID="", PULL=was["pull"] or "")
@@ -3716,26 +3827,27 @@ def landing_submitted(fleet, t, bolt):
             f["ID"], why = (str(sub["id"]), None) if isinstance(sub, dict) else ("", sub)
         standing = None if f["ID"] else left_standing(bolt, name, path, f, why, was)
     print(submitted_line(bolt, name, f, was))
-    return dict(bolt=bolt, t=t, before=before, path=path, **f, said=told, standing=standing, last=last)
+    return dict(bolt=bolt, t=t, before=before, path=path, **f, standing=standing, last=last)
 
 
-def submit_ran(fleet, host, main, path, bolt, *again):
-    """SUBMIT run on the team's host, a landing's submission, or, given a submission and the tip it submitted (again),
-    a wait on it again: (its assignments, RC, TIP, OLD, ID, PULL, ANSWER and SAID, and the last line it says the
-    submission said on standard error), or (None, the host's last words) when they can't be read."""
-    r = crew.on_machine(fleet, host, ["bash", "-c", SUBMIT, "crew", main, path, bolt, record.who(), *again])
+def submit_ran(fleet, host, main, path, bolt, head="", own="", *again):
+    """SUBMIT run on the team's host, a landing's submission of head (landing_head), empty for the host's copy as it
+    stands, the copy levelled to it first from own, its value as read (LAND_COPIES); or, given a submission and the tip
+    it submitted (again), head and own empty, a wait on it again: (its assignments, RC, TIP, OLD, ID, PULL, ANSWER, SAID
+    and LEVEL, None), or (None, the host's last words) when they can't be read."""
+    r = crew.on_machine(fleet, host, ["bash", "-c", SUBMIT, "crew", main, path, bolt, record.who(), head, own, *again])
     READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.rstrip(), file=sys.stderr)
     try:
         f = dict(w.split("=", 1) for w in shlex.split(r.stdout.strip().splitlines()[-1])) if r.returncode == 0 else {}
-        told = base64.b64decode(f.get("SAID", ""), validate=True).decode(errors="replace")
+        base64.b64decode(f.get("SAID", ""), validate=True)
         base64.b64decode(f.get("ANSWER", ""), validate=True)
     except (ValueError, IndexError):
         f = {}
-    if not {"RC", "TIP", "OLD", "ID", "PULL", "ANSWER", "SAID"} <= set(f):
+    if not {"RC", "TIP", "OLD", "ID", "PULL", "ANSWER", "SAID", "LEVEL"} <= set(f):
         return None, ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
-    return f, next((l.strip() for l in reversed(told.splitlines()) if l.strip()), "")
+    return f, None
 
 
 def landing_ended(fleet, label, p, a):
@@ -3749,17 +3861,19 @@ def landing_ended(fleet, label, p, a):
     close refused named with why and crew bolt land as the act that closes it; a bolt that did not land has its landing
     pull request drafted first, so no merge into the bolt lands it (landing_unheld), and is recorded so with the head
     that was submitted, and the kit's card raised so (land_hand): refused, when sluice's record of the submission has it
-    for the bolt's own content (landing_end), in sluice's words when it gave any, from its wait or from SUBMIT when it
-    refused the submission at once, which holds its row on its kit's landings card (refused_at); else stopped, with what
-    stopped it as Why, Outcome stopped and no refusal, so its row keeps its box and says so (stopped_at), as is one
-    whose submission ran and failed, with no head when it never named its tip (attempted). When sluice itself failed
-    with the bolt's tip not on main now, sluice's own record of the submission is read on the team's host (SUBMISSIONS,
-    submission_of, among those made since the landing began, newer than its last), and while it has the submission
-    standing crew says so and waits on it again (wait_again), SUBMIT given the submission's id and the tip it submitted,
-    then its outcome waited on and its end read as before. A landing on the user's words in the caller's pane (p's frm,
-    the transcript record bolt_submit read them from, a's excerpt) is recorded naming that record and the words' length,
-    and the words kept on this host (landing_word_keep) before it is closed. Its words printed, standard error for one
-    that did not land. Returns (bolt, landed)."""
+    for the bolt's own content (landing_end), in sluice's verdict on the submission when it gave one, from the record
+    its wait printed or from SUBMIT's answer when it refused the submission at once (verdict_printed), which holds its
+    row on its kit's landings card (refused_at); else stopped, with what stopped it as Why, Outcome stopped and no
+    refusal, so its row keeps its box and says so (stopped_at), as is one whose submission ran and failed, with no head
+    when it never named its tip (attempted); what sluice said beside its verdict on standard error said to ops apart
+    and never recorded (beside_of). When sluice itself failed with the bolt's tip not on main now, sluice's own record
+    of the submission is read on the team's host (SUBMISSIONS, submission_of, among those made since the landing began,
+    newer than its last), its verdict with it, and while it has the submission standing crew says so and waits on it
+    again (wait_again), SUBMIT given the submission's id and the tip it submitted, then its outcome waited on and its
+    end read as before. A landing on the user's words in the caller's pane (p's frm, the transcript record bolt_submit
+    read them from, a's excerpt) is recorded naming that record and the words' length, and the words kept on this host
+    (landing_word_keep) before it is closed. Its words printed, standard error for one that did not land. Returns
+    (bolt, landed)."""
     bolt, t = p["bolt"], p["t"]
     if p.get("refused") and p.get("attempted"):  # its submission ran and failed: drafted, and stopped, nothing of the bolt's
         words, why = landing_unheld(fleet, t, bolt, p["refused"] + "." + submit_again(bolt), p["refused"])
@@ -3777,7 +3891,10 @@ def landing_ended(fleet, label, p, a):
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     again = 0
     while True:
-        rc, said = p["RC"], p["said"]
+        # sluice's verdict, from what it printed on standard output, its answer to SUBMIT when it refused at once; what
+        # it said on standard error said beside it (verdict_printed, beside_of)
+        rc, said = p["RC"], verdict_printed(base64.b64decode(p["ANSWER"]).decode(errors="replace"))
+        beside = beside_of(base64.b64decode(p["SAID"]).decode(errors="replace"), said)
         doc = answer_record(p) if rc != "0" else None  # what sluice refused at once is judged by its answer's record
         if rc == "0":
             while True:
@@ -3787,7 +3904,8 @@ def landing_ended(fleet, label, p, a):
             if w.stderr.strip():
                 print(w.stderr.rstrip(), file=sys.stderr)
             rc, doc = wait_outcome(int(p["ID"]), w.returncode, w.stdout)
-            said = next((l.strip() for l in reversed((w.stderr or "").splitlines()) if l.strip()), "")
+            said = verdict_printed(w.stdout, int(p["ID"]))
+            beside = beside_of(w.stderr, said)
         r = crew.on_machine(fleet, host, ["bash", "-c", LANDED, "crew", main, p["path"], bolt, p["TIP"], p["OLD"], rc,
                                           base64.b64encode(said.encode()).decode()])
         READ.drop_kit(host, main)
@@ -3802,18 +3920,21 @@ def landing_ended(fleet, label, p, a):
         if tip:  # sluice itself failed, the bolt not on main now: its record of the submission says what comes next
             s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
             sub = submission_of(tip, s.returncode, s.stdout, s.stderr, after=p["last"])
-        landed, words, refused, stopped = landing_end(bolt, name, host, r.stdout, p["before"], sub=sub, again=again, doc=doc)
+            if isinstance(sub, dict):  # its verdict, from its record in the listing, where it is out
+                sub = dict(sub, verdict=verdict_printed(s.stdout, sub["id"]))
+        landed, words, refused, stopped = landing_end(bolt, name, host, r.stdout, p["before"], sub=sub, again=again, doc=doc,
+                                                      beside=beside)
         n = wait_again(sub, again) if tip else None
         if n is None:
             break
         print(words, flush=True)
-        f, told = submit_ran(fleet, host, main, p["path"], bolt, str(n), tip)
+        f, told = submit_ran(fleet, host, main, p["path"], bolt, "", "", str(n), tip)
         if f is None:
             refused = (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: crew could not wait on #{n} "
                        f"again on {host}: {told}")
             words, stopped = refused + "." + submit_again(bolt), True
             break
-        p, again = dict(p, **f, said=told), again + 1
+        p, again = dict(p, **f), again + 1
     if not landed:
         # its pull request a draft, so no merge into the bolt lands it
         words, refused = landing_unheld(fleet, t, bolt, words, refused)
@@ -3924,9 +4045,10 @@ bolt=$2 file=$3
 # Whether a bolt's branch on the remote its host's tip names holds that tip (plan.19), read in its kit's main checkout
 # with one fetch of it (plan.18), for kit.bolt_split: THERE=- when the remote has no bolt/<bolt>, READ with git's words
 # when it can't be asked or fetched, else LOCAL and THERE, the host's commit and the remote's, HELD, yes when the
-# host's tip is an ancestor of the remote's, and MERGES, the merges the host holds beyond it.
+# host's tip is an ancestor of the remote's, and MERGES, the merges the host holds beyond it; and given the ref of the
+# work to merge ($4), CARRIED, yes when the host's tip is an ancestor of it.
 BOLT_SPLIT = r"""cd "$1" || exit 1
-bolt=$2 remote=$3
+bolt=$2 remote=$3 work=${4:-}
 l=$(git rev-parse --verify -q "refs/heads/bolt/$bolt^{commit}")
 err=$(git ls-remote --exit-code "$remote" "refs/heads/bolt/$bolt" 2>&1); rc=$?
 if [ $rc = 2 ]; then echo "THERE=-"; exit 0; fi
@@ -3938,6 +4060,33 @@ there=$(git rev-parse --verify -q "refs/remotes/$remote/bolt/$bolt^{commit}")
 echo "LOCAL=$l"; echo "THERE=$there"
 git merge-base --is-ancestor "$l" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
 echo "MERGES=$(git rev-list --count --merges "$there..$l" 2>/dev/null)"
+[ -n "$work" ] || exit 0
+git merge-base --is-ancestor "$l" "$work" 2>/dev/null; case $? in 0) echo "CARRIED=yes" ;; 1) echo "CARRIED=no" ;; esac
+"""
+
+# The bolt's two copies a landing reads (plan.19), in its kit's main checkout with $file the policy, with one fetch of
+# the bolt from origin (plan.18), for kit.land_copies: THERE=- when the kit has no origin or origin has no
+# bolt/<bolt>, fetching nothing; READ with git's words when origin can't be asked or fetched; else OWN, the host's own
+# bolt/<bolt>, or - when it has none; THERE, origin's after the fetch; AT_THERE, the policy at it, base64, or - when it
+# holds none, read as BOLT_AT reads one; HELD, yes when the host's copy is an ancestor of origin's or there is none;
+# AHEAD, yes when origin's is an ancestor of the host's; LACKS, the merges the host's copy holds beyond origin's, and
+# BEYOND, the merges origin's holds beyond the host's; AHEAD, LACKS and BEYOND each - when the host has no copy.
+LAND_COPIES = r"""cd "$1" || exit 1
+bolt=$2 file=$3
+git remote get-url origin >/dev/null 2>&1 || { echo "THERE=-"; exit 0; }
+err=$(git ls-remote --exit-code origin "refs/heads/bolt/$bolt" 2>&1); rc=$?
+if [ $rc = 2 ]; then echo "THERE=-"; exit 0; fi
+if [ $rc != 0 ]; then echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0; fi
+if ! err=$(git fetch -q origin "+refs/heads/bolt/$bolt:refs/remotes/origin/bolt/$bolt" 2>&1); then
+  echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+fi
+""" + REFS + r"""own=$(ref "refs/heads/bolt/$bolt") there=$(ref "refs/remotes/origin/bolt/$bolt")
+echo "OWN=$own"; echo "THERE=$there"; echo "AT_THERE=$(pol "$there")"
+if [ "$own" = - ]; then printf 'HELD=yes\nAHEAD=-\nLACKS=-\nBEYOND=-\n'; exit 0; fi
+git merge-base --is-ancestor "$own" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
+git merge-base --is-ancestor "$there" "$own" 2>/dev/null; case $? in 0) echo "AHEAD=yes" ;; 1) echo "AHEAD=no" ;; esac
+echo "LACKS=$(git rev-list --count --merges "$there..$own" 2>/dev/null)"
+echo "BEYOND=$(git rev-list --count --merges "$own..$there" 2>/dev/null)"
 """
 
 
@@ -3977,15 +4126,17 @@ def bolts_local_said(fleet, t, plan):
     return out
 
 
-def bolt_split_check(fleet, t, bolt):
+def bolt_split_check(fleet, t, bolt, work=None):
     """What a merge into the bolt reads of a split (plan.19), on the team's host in the kit's main checkout: where the
     bolt lives (BOLT_LIVES), and when the host's own tip names a remote for it (kit.split_remote), that remote's copy
-    after one fetch (BOLT_SPLIT); (remote, kit.bolt_split's facts), or None when there is nothing to read, so a bolt
-    whose tip names no remote fetches nothing."""
+    after one fetch (BOLT_SPLIT), and given the ref of the work to merge, whether it holds the host's tip; (remote,
+    kit.bolt_split's facts), or None when there is nothing to read, so a bolt whose tip names no remote fetches
+    nothing."""
     remote = kit.split_remote(host_run(fleet, t["machine"], BOLT_LIVES, t["kit"]["main"], bolt, kit.DECLARATION), bolt)
     if not remote:
         return None
-    return remote, kit.bolt_split(host_run(fleet, t["machine"], BOLT_SPLIT, t["kit"]["main"], bolt, remote), bolt)
+    return remote, kit.bolt_split(host_run(fleet, t["machine"], BOLT_SPLIT, t["kit"]["main"], bolt, remote,
+                                           *([work] if work else [])), bolt)
 
 
 def bolt_upstream(fleet, t, bolt):
@@ -5016,6 +5167,19 @@ def closed_refusal(p, n):
     return state + (f": {p.get('Reason')}" if p.get("Reason") else ""), state
 
 
+def agree_closed(p, n):
+    """What crew answers an agreement to proposal n with when the plan as it stands once the agreement is written
+    shows the proposal (p) closed: that it is closed and how, approved or dropped with its reason, and that crew raises
+    no card for it and changes none, since the agreement's write still showed it open and a card raised from that
+    would reach the user in the planner's name for a closed proposal (wldn's proposal 553 on 2026-10-24: swb-1 agreed
+    at 35d07471, the planner dropped it at bc2c3b1 four seconds on, and the agreement then posted its card again until
+    the rail's sweep withdrew it; signal 2026-10-24-swancloud-planner-04891322/01). None while it is open."""
+    why = closed_refusal(p, n)
+    if why is None:
+        return None
+    return why[0] + ("" if why[0][-1:] in ".!?" else ".") + " It is closed, so crew raises no card for it and changes none."
+
+
 def close(p, state, today, reason=None, cleared=()):
     """A proposal closed: approved, with each new unit the user left out of the change as Cleared, or dropped with its
     reason; one that is not open is refused, saying what it is (plan.4)."""
@@ -5058,7 +5222,21 @@ def plan_agree(fleet, a):
         return []
     write(fleet, label, change, "plan: agree", act="plan.agree")
     tell_planner(fleet, label, f"{', '.join(seen['new'])} agree{'s' if len(seen['new']) == 1 else ''} to proposal {a.n}.")
-    raise_proposal_at(fleet, label, seen["w"], a.n, "agree", agreed=seen["new"])
+    raise_agreed(fleet, label, a.n, seen["new"])
+
+
+def raise_agreed(fleet, label, n, agreed, acts=None):
+    """Proposal n's card once the agreements of the teams agreed are written (raise_proposal_at, agree), raised on the
+    plan as it stands, the branch's tip fetched anew: an approval or a drop can land between the agreement's write and
+    its raise, so a proposal the tip shows closed raises no card and changes none, and the agreement answers that it is
+    closed and how (agree_closed). The fetch is the one past the command's first (plan.12), as the sweep's raise makes
+    (raise_proposal). The card's id, or None."""
+    w = tip_write(fleet, label, fresh=True)
+    closed = agree_closed(proposal(proposals(w), n, label), n)
+    if closed:
+        print(closed)
+        return None
+    return raise_proposal_at(fleet, label, w, n, "agree", acts, agreed=agreed)
 
 
 def plan_approve(fleet, a):
@@ -6725,17 +6903,64 @@ def split_refusal(kind, name, bolt, host, remote, f):
     """Why a unit's, chore's or fix's merge is refused while its bolt is split (plan.19), or None: the host's tip names
     remote for the bolt and that remote's bolt/<bolt> lacks it (f, kit.bolt_split), so sluice would form the merge
     there and drop what the host holds; the landing, whose push makes the two one, is the way on. A copy that holds the
-    host's tip, or none at all, which sluice refuses itself, lets it through; one crew could not read refuses (read.1)."""
+    host's tip, or none at all, which sluice refuses itself, lets it through, and so does a fix whose head holds the
+    host's tip (carried), having taken the host copy's merges in, which sluice's merge on the remote's copy then drops
+    none of: the way on of a bolt whose two copies have diverged (landing_head). One crew could not read refuses
+    (read.1)."""
     if f["read"]:
         return f"crew can't tell whether bolt/{bolt} is split, so {kind} {name}'s merge waits: {f['read']}"
-    if f["there"] == "-" or f["held"] == "yes":
+    if f["there"] == "-" or f["held"] == "yes" or f.get("carried") == "yes":
         return None
     n = f["merges"]
     lacks = f"{host}'s tip" if not n else f"{n} merge{'' if n == 1 else 's'} {host} holds"
+    carry = (f"; a fix that takes {host}'s merges in first (git merge bolt/{bolt} in its place) carries them, and merges"
+             if kind == "fix" else "")
     return (f"bolt/{bolt} is split: its tip on {host}, {f['local'][:7]}, names {remote} for it, so sluice would form "
             f"{kind} {name}'s merge on {remote}'s bolt/{bolt} at {f['there'][:7]}, which lacks {lacks}, and drop "
             f"{'them' if n > 1 else 'it'}. The bolt takes no merge until it lands: its landing (crew bolt submit {bolt}, "
-            f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one")
+            f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one{carry}")
+
+
+def landing_head(bolt, host, f):
+    """The head a bolt's landing submits, from what it read of the bolt's two copies after one fetch (f,
+    kit.land_copies; plan.19): {"head", "level", "said"}, or why it submits nothing. A bolt lands from where it lives.
+    One whose copy on GitHub crew could not read submits nothing, in git's words (read.1). One that lives on its host,
+    GitHub having no copy or GitHub's copy naming no remote for it, is submitted from the host's copy as it stands
+    (head None), nothing levelled and nothing said. A bolt on GitHub is submitted at GitHub's head: the host's copy
+    made there when the host has none, and levelled to it when it is behind, each said with both commits, or left
+    alone when it is level. A host's copy ahead of GitHub's is the split a merge into the bolt is refused for, whose
+    way on is this landing: its tip is submitted, nothing levelled, and its push moves GitHub's branch forward,
+    dropping nothing. Two copies that have diverged submit nothing, naming both commits and what each lacks, since
+    either submission would drop the other's merges, and the way on: the bolt is its branch on GitHub, so the host
+    copy's merges are work only a fix carries, its place cut from GitHub's head and taking them in, merged into the
+    bolt through sluice as any fix (split_refusal lets it through), after which the landing submits GitHub's head and
+    levels the host's copy to it. level is whether SUBMIT writes the host's copy first, the one write the landing
+    makes, the copy set to GitHub's own value, which changes nothing GitHub holds and is no second writer (record
+    0032)."""
+    def merges(n):
+        return f"{n} merge{'' if n == 1 else 's'}"
+    if f["read"]:
+        return f"bolt/{bolt} was not submitted: crew can't read bolt/{bolt} on GitHub: {f['read']}"
+    if f["there"] == "-" or f["remote"] is None:
+        return dict(head=None, level=False, said=None)
+    own, there = f["own"], f["there"]
+    if own == "-":
+        return dict(head=there, level=True, said=f"made {host}'s copy of bolt/{bolt} at GitHub's {there[:7]}")
+    if own == there:
+        return dict(head=there, level=False, said=None)
+    if f["held"] == "yes":
+        lacked = f", {merges(f['beyond'])} it lacked" if f["beyond"] else ""
+        return dict(head=there, level=True,
+                    said=f"levelled {host}'s copy of bolt/{bolt} from {own[:7]} to GitHub's {there[:7]}{lacked}")
+    if f["ahead"] == "yes":
+        return dict(head=own, level=False,
+                    said=(f"bolt/{bolt} is split: {host}'s tip {own[:7]} holds {merges(f['lacks'])} GitHub's {there[:7]} "
+                          "lacks; the landing submits that tip, its push moving GitHub's branch forward"))
+    return (f"bolt/{bolt} was not submitted: its two copies have diverged: {host}'s {own[:7]} holds {merges(f['lacks'])} "
+            f"GitHub's {there[:7]} lacks, and GitHub's holds {merges(f['beyond'])} {host}'s lacks, so either submission "
+            f"would drop merges. The bolt is its branch on GitHub, so the way on is its team's: its conductor starts a fix "
+            f"(crew fix), whose place is cut from GitHub's head, that takes {host}'s merges in (git merge bolt/{bolt}) and "
+            f"merges into the bolt through sluice; the landing then submits GitHub's head, levelling {host}'s copy to it")
 
 
 def chore_check(fleet, a, label, plan, c):
@@ -7155,7 +7380,7 @@ def fix_cmd(fleet, a):
         elif a.mode == "merge":
             why = own_place(place, *place_branch(fleet, t, place), fix, bolt)
             not why or fail(why)
-            split = bolt_split_check(fleet, t, bolt)
+            split = bolt_split_check(fleet, t, bolt, f"refs/heads/{fix}")
             why = split and split_refusal("fix", a.name, bolt, t["machine"], *split)
             not why or fail(why)
             merge_holds(fleet, t, bolt, f"{fix}'s merge into bolt/{bolt}")
@@ -12004,9 +12229,9 @@ CREWS = {"proposal": "a proposal's card is crew's, raised by crew plan propose a
 
 
 def crews_key(key):
-    """The kind of crew's own card a key names, by its first part (CREWS), whatever follows, crew's revision of a key
-    and its fill of a short one (cards.post_key) and a key of an older form among it; None for any other key, an
-    agent's question's."""
+    """The kind of crew's own card a key names, by its first part (CREWS), whatever follows, the partition's label
+    crew qualifies a key with as it sends it, its revision and its fill of a short one (cards.post_key) and a key of an
+    older form among it; None for any other key, an agent's question's."""
     kind = key.split("/", 1)[0] if isinstance(key, str) and "/" in key else None
     return kind if kind in CREWS else None
 
@@ -12015,8 +12240,8 @@ def card_refusal(fleet, name, label, tool, key):
     """Whether a crew agent's Pending You call may go through (briefs.11, record 0031): None to let it, else the
     refusal's words. The user's own name is never checked. A card's post, change or close is a question's, the agent's
     own, only from a conductor, the planner, main-level ops or the design agent (ASKERS), and never under crew's own
-    key (crews_key). A post's key is its idempotencyKey, judged by its form alone, with or without :<n> or the fill of
-    a short key (cards.post_key), and no plan read. A change or a close carries a request id and no key, so its key is
+    key (crews_key). A post's key is its idempotencyKey, judged by its form alone, with or without the partition's
+    @<label>, :<n> or the fill of a short key (cards.post_key), and no plan read. A change or a close carries a request id and no key, so its key is
     the one this host's run record holds the card under, crew's raises and the agents' own posts alike, read locally
     with no state-branch fetch, None when it holds none; the hook refuses the call when that record can't be read. The planner's close of a card under
     batch/<n>-<k>, which it posted itself before a batch was one card and crew never raises, passes, a departure from
@@ -13875,9 +14100,9 @@ def asked_of(b):
 
 def card_posted(acts, label, owner, b, where, entries=None, since=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
-    posted under the row's key, or the key with its revision once a card of the owner's under it closed, either filled
-    out to Pending You's eight characters when shorter (post_key, from entries, this host's run record unless given),
-    and recorded under the row's key, with why its reading could not open when it did not (built_fields) and the head it
+    posted under the row's key qualified by the partition's label, or that key with its revision once a card of the
+    owner's under it closed, either filled out to Pending You's eight characters when shorter (post_key, from entries,
+    this host's run record of the partition unless given), and recorded under the row's key, with why its reading could not open when it did not (built_fields) and the head it
     asks about (asked_of). A post Pending
     You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
@@ -13907,7 +14132,7 @@ def card_posted(acts, label, owner, b, where, entries=None, since=None):
             print(f"card {key}: {words}", file=sys.stderr)
             return None
         b = dict(b, card=cards.opened(b["card"], opening, earlier["card"])) if opening else b
-    asked = cards.post_key(known, key, owner)
+    asked = cards.post_key(known, key, owner, label)
     follows = b["card"].get("follows")
     held = cards.followed_open(known, follows, owner) if follows else None
     try:
@@ -14219,14 +14444,15 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     """A decision record's facts as its card is built from them (cards.record_card), from its Markdown at a commit, and
     whether the file holds the status the design agent records (briefs.15): its title, its frontmatter's or else its
     heading's; its opening, the first paragraph of its body that is neither a heading nor a `Name:` line, or, for an
-    amendment, the paragraph its proposed mark stands in; the user's words its deciders line quotes; its body whole;
-    and the alternatives a rule of the user's decided between, from the Markdown --alternatives hands, whose
-    frontmatter names the rules that decided (`rules:`, separated by commas), the other path (`other:`) and, when the
-    user's own words point there, `recommended: loosen`, else accepting as ruled is. A file holds its frontmatter's
-    status, but proposed while an amendment to an accepted record is still marked proposed ("Status: proposed" past
-    the record's own status line), and accepted or rejected alike once the mark the text before (before, the record at
-    the commit before) held is gone, the amendment taken in or out. Refused naming what the file holds when it holds no
-    such status, and refused when what the card is built from can't be read (read.1)."""
+    amendment, the paragraph its proposed mark stands in; an amendment's own first words, which title its card in
+    place of the record's (cards.first_words, record 0031 as amended 2026-10-24), else None; the user's words its
+    deciders line quotes; its body whole; and the alternatives a rule of the user's decided between, from the Markdown
+    --alternatives hands, whose frontmatter names the rules that decided (`rules:`, separated by commas), the other
+    path (`other:`) and, when the user's own words point there, `recommended: loosen`, else accepting as ruled is. A
+    file holds its frontmatter's status, but proposed while an amendment to an accepted record is still marked proposed
+    ("Status: proposed" past the record's own status line), and accepted or rejected alike once the mark the text
+    before (before, the record at the commit before) held is gone, the amendment taken in or out. Refused naming what
+    the file holds when it holds no such status, and refused when what the card is built from can't be read (read.1)."""
     n = f"{number:04d}"
     fields, body, paras = record_split(text)
     now, marked = record_status_held(text)
@@ -14237,12 +14463,15 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
                             f"and land it on main, then run crew record again.")
     head = next((p for p in paras if p.startswith("# ")), "")
     title = fields.get("title") or re.sub(r"^#\s+(\d+\.\s+)?", "", head)
-    if marked and now == "accepted":
+    amended = bool(marked) and now == "accepted"
+    if amended:
         opening = re.sub(r"\s*Status: proposed\b.*?(?:\.(?=\s|$)|$)", "", marked[0], flags=re.S).strip()
     else:
         opening = next((p for p in paras if not p.startswith("#") and not re.match(r"[A-Z][\w -]*:\s", p)), "")
-    title and opening or fail(f"crew can't read record {n} in {kit} for its card: it has no "
-                              + ("title" if not title else "opening paragraph") + ". Nothing is raised.")
+    amendment = cards.first_words(opening) if amended else None
+    title and opening and amendment != "" or fail(
+        f"crew can't read record {n} in {kit} for its card: it has no "
+        + ("title" if not title else "opening paragraph" if not opening else "words of its amendment") + ". Nothing is raised.")
     deciders = next((p for p in paras if p.startswith("Deciders:")), "")
     quoted = [a or b for a, b in re.findall(r"“([^”]+)”|\"([^\"]+)\"", deciders)]
     alt = None
@@ -14256,7 +14485,8 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
                "the file holds nothing under its frontmatter for the card" if not abody else None)
         not why or fail(f"crew refuses the alternatives for record {n} in {kit}: {why}. Nothing is raised.")
         alt = {"rules": rules, "other": other, "text": abody, "recommended": rec}
-    return {"kit": kit, "number": number, "title": title, "opening": opening, "quoted": quoted, "text": body, "alternatives": alt}
+    return {"kit": kit, "number": number, "title": title, "opening": opening, "amendment": amendment, "quoted": quoted, "text": body,
+            "alternatives": alt}
 
 
 def raise_record(fleet, label, facts, where, note, acts=None, dead=False):

@@ -4,6 +4,8 @@ order, a bolt held for a fix or a landing sluice refused at its head; the confli
 and each row above it; and the one decision of what the raise does with the kit's card. Each on plain facts (code.7);
 the raise's act on a stand-in for what it reaches beyond them. Its wiring is t-journey-land's and t-cards'."""
 import argparse
+import base64
+import json
 
 import pytest
 
@@ -99,6 +101,26 @@ def test_a_landing_refused_at_the_bolts_present_head_holds_its_row():
     assert (row["box"], row["why"]) == (False, "held: sluice refused its landing at ddddddd, and it waits for its team's "
                                                "fix: bolt/y did not land: sluice found a conflict")
     assert plan.refused_at([submitted("y", head, "no")], "y", head) == "no"
+
+
+def test_a_holds_reason_is_sluices_verdict_with_the_conflicts_paths_never_a_place_it_could_not_release():
+    """The chore a-holds-reason-is-sluices-verdict-not-a-side-warning: sluice's wait on the landing's submission prints
+    its record in conflict and says on standard error only that its round could not release another place (sluice
+    0.36.4 exec.rs tell_abandoned); the hold carries the record's verdict, its paths, so the conductor reads a
+    conflict, the team's to take main in for, and not the release, which is said to ops beside it."""
+    head, old = "d" * 40, "a" * 40
+    record = {"schema": "sluice/submission@1", "id": 7, "branch": "main", "head": head, "state": "conflict",
+              "conflict": {"paths": ["plugin/lib/plan.py"], "with": []}}
+    tidying = "could not release /c/places/old-unit, whose worktree no longer exists: its release command failed"
+    verdict = plan.verdict_printed(json.dumps(record), 7)
+    landed = (f"ORIGIN=yes\nFETCHED=ok\nGITHUB={old}\nOWN={old}\nHELD_GITHUB=no\nHELD_OWN=no\nRC=2 TIP={head} OLD={old} KEPT='' "
+              f"WHY='' LEVEL='' SAID={base64.b64encode(verdict.encode()).decode()}\n")  # LANDED's report, handed the verdict
+    _, refused = plan.landing_said("y", "crew", "h", landed, old, recorded=True)
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, plan.refusals([submitted("y", head, refused)]))
+    assert row["why"] == ("held: sluice refused its landing at ddddddd, and it waits for its team's fix: #7 conflict: "
+                          "plugin/lib/plan.py")
+    told = plan.landing_said("y", "crew", "h", landed, old, beside=plan.beside_of(f"{tidying}\n", verdict))[1]
+    assert "release" not in refused and f"sluice said: {tidying}." in told
 
 
 def test_a_refusal_at_an_older_head_holds_nothing_once_the_fix_moved_it():
@@ -923,7 +945,7 @@ def test_two_proven_bolts_post_one_card_in_ops_name_with_two_boxes(monkeypatch, 
     assert acts.asked == [("y", "mac-studio"), ("z", "mac-studio")]  # w is swancloud's, no row of crew's card
     post = next(a for t, a in acts.calls if t == "post_request")
     assert (post["idempotencyKey"], post["session"]["label"], post["kind"], post["highStakes"]) == (
-        "land/crew", "swancloud-ops", "multi", True)
+        "land/crew@swancloud", "swancloud-ops", "multi", True)
     assert [o["label"] for o in post["options"]] == ["1. y", "2. z"]
     assert acts.emitted == [dict(Act="card.post", On=["kit/crew"], by="swancloud-ops", Card="req_k1", Key="land/crew",
                                  Heads="y@abc1234 z@abc1234")]
