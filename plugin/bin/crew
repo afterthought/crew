@@ -133,9 +133,12 @@
 #                                      card gives: each bolt's branch submitted to its kit's main through sluice from a
 #                                      short-lived worktree on its team's host, queued behind the one before on one host,
 #                                      once it ended on another; each waited on in order and closed as it lands, one
-#                                      that did not land recorded at its head and held on its row while the rest go on,
-#                                      the command exiting non-zero naming it; sluice pushes to GitHub, and the landing
-#                                      pushes nothing and levels no host. In a kit whose main takes pull requests, it
+#                                      that did not land recorded at its head while the rest go on: one refused for its
+#                                      own content, a conflict or a check that ran and failed, held on its row; one
+#                                      sluice or its host stopped keeping its box and the user's word, and submitted
+#                                      again once that is cleared; the command exiting non-zero naming each; sluice
+#                                      pushes to GitHub, and the landing pushes nothing and levels no host. In a kit
+#                                      whose main takes pull requests, it
 #                                      readies each bolt's draft pull request first, and a landing that does not land
 #                                      leaves it a draft, as a fix's start or a merge into the bolt keeps it, until the
 #                                      next submit readies it; with --excerpt, on the user's words in ops's pane,
