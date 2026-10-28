@@ -4,10 +4,18 @@
   python3 gather.py '<request>'      or, sent over ssh:  python3 - '<request>' < gather.py
 
 The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
-"slots": {<team>: <its slots file, ~ allowed>}}],
+"slots": {<team>: <its slots file, ~ allowed>}, "queued": <the host's follower's [submissions, why] of the kit's queue,
+read from its overview watch, in place of running sluice>}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
 "board": <true to also read each team's slots file and the explorations on the kit's main>,
-"fetch": <true to fetch each kit's GitHub, its origin, before reading it>}.
+"fetch": <true to fetch each kit's GitHub, its origin, before reading it>,
+"stamped": <true to also give each kit's stamp, taken before it is read>,
+"stamp": <true to give each kit's stamp alone and read nothing else: the host's follower's check that nothing moved,
+answered {"kits": {<main>: <stamp>}, "readings": <the stamp of the card readings folders of the partitions named>}>,
+"labels": <with stamp, the partitions whose card readings folders on the host to stamp>,
+"overview": <with stamp, the main checkouts whose sluice overview to read once, answered "overviews": {<main>:
+[<document>, <why it can't be read>]}>,
+"routes": <with stamp, true to read the host's portless routes too, answered "routes">}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
@@ -25,7 +33,7 @@ folder under openspec/explorations/ on main with the first line of its first .md
 system, devurl, portless and sluice and, for a change whose workflow it does not read itself, openspec, and changes
 nothing.
 It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
-import fnmatch, json, os, re, subprocess, sys, tomllib
+import fnmatch, hashlib, json, os, re, subprocess, sys, tomllib
 
 
 def run(args, cwd):
@@ -534,13 +542,140 @@ def explorations(main, ref="main"):
     return out
 
 
+def git_dirs(main):
+    """A checkout's git folder and the common folder its worktrees share, read from its .git (a folder, or a file
+    naming one, as a linked worktree's is) and the git folder's commondir; None when there is none."""
+    dot = os.path.join(main, ".git")
+    if os.path.isdir(dot):
+        gitdir = dot
+    else:
+        with open(dot, encoding="utf-8") as f:
+            line = f.read().strip()
+        if not line.startswith("gitdir: "):
+            return None
+        gitdir = os.path.join(main, line[len("gitdir: "):])
+    try:
+        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as f:
+            return gitdir, os.path.normpath(os.path.join(gitdir, f.read().strip()))
+    except FileNotFoundError:
+        return gitdir, gitdir
+
+
+def stamp(req):
+    """A kit's stamp, what moves whenever anything kit() reads of it moves, read with os.stat and os.scandir alone so a
+    check that nothing moved starts no process (plan.12): the size and time of every file of the kit's git folder the
+    gather reads through git (HEAD, packed-refs, config, every loose ref, each worktree's HEAD and gitdir), of every file
+    of each unit's place's change folder and its archive and openspec config, and of each slots file the request names,
+    hashed to one value. It reads nothing under the git folder's sluice/: a kit's queue is its overview's to say (sluice
+    ADR 0023), followed by the host's follower. None when a file it reads can't be read (read.1); a kit with no checkout
+    stamps as such, and its gather says so."""
+    main, kdir = req["main"], os.path.realpath(req["dir"])
+    seen = Seen()
+    note, tree = seen.note, seen.tree
+    try:
+        if not os.path.isdir(main):
+            return hashlib.sha256(f"no checkout at {main}".encode()).hexdigest()[:32]
+        dirs = git_dirs(main)
+        if dirs is None:
+            return None
+        _, common = dirs
+        for f in ("HEAD", "packed-refs", "config"):
+            note(os.path.join(common, f))
+        tree(os.path.join(common, "refs"))
+        places = os.path.join(kdir, "places")
+        try:
+            linked = sorted(e.path for e in os.scandir(os.path.join(common, "worktrees")) if e.is_dir(follow_symlinks=False))
+        except FileNotFoundError:
+            linked = []
+        for w in linked:
+            note(os.path.join(w, "HEAD"))
+            note(os.path.join(w, "gitdir"))
+            try:
+                with open(os.path.join(w, "gitdir"), encoding="utf-8") as f:
+                    path = os.path.dirname(os.path.realpath(f.read().strip()))
+                with open(os.path.join(w, "HEAD"), encoding="utf-8") as f:
+                    head = f.read().strip()
+            except FileNotFoundError:
+                continue
+            if os.path.dirname(path) != places or not head.startswith("ref: refs/heads/unit/"):
+                continue
+            unit, changes = head[len("ref: refs/heads/unit/"):], os.path.join(path, "openspec", "changes")
+            tree(os.path.join(changes, unit))
+            note(os.path.join(changes, "archive"))
+            try:
+                for d in sorted(os.listdir(os.path.join(changes, "archive"))):
+                    if d[11:] == unit and DATED.fullmatch(d[:11]):
+                        tree(os.path.join(changes, "archive", d))
+            except (FileNotFoundError, NotADirectoryError):
+                pass
+            for f in ("config.yaml", "config.yml"):
+                note(os.path.join(path, "openspec", f))
+        for path in sorted(req.get("slots", {}).values()):
+            note(os.path.expanduser(path))
+    except OSError:
+        return None
+    return seen.digest()
+
+
+class Seen:
+    """The size and time of files, read with os.stat and os.scandir alone, a missing one noted as missing, hashed to
+    one value: what a stamp reads."""
+
+    def __init__(self):
+        self.files = []
+
+    def note(self, path):
+        try:
+            st = os.stat(path)
+            self.files.append((path, st.st_size, st.st_mtime_ns))
+        except FileNotFoundError:
+            self.files.append((path, None))
+
+    def tree(self, top):
+        """Every file under a folder, by name."""
+        stack = [top]
+        while stack:
+            d = stack.pop()
+            try:
+                with os.scandir(d) as it:
+                    for e in sorted(it, key=lambda e: e.name):
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(e.path)
+                        else:
+                            self.note(e.path)
+            except (FileNotFoundError, NotADirectoryError):
+                self.files.append((d, None))
+
+    def digest(self):
+        return hashlib.sha256(json.dumps(self.files).encode()).hexdigest()[:32]
+
+
+# Where crew keeps each card's reading session on a host, by partition, as plan.CARDS: its session.json, plannotator's
+# result.json once the user sends a reading back, told.json once its owner is told, a landings card's main.
+CARDS = "~/.local/state/crew/cards"
+
+
+def readings_stamp(labels):
+    """A host's card readings folders' stamp, ~/.local/state/crew/cards/<label>/ for each partition named: every file
+    under each, read with os.stat and os.scandir alone, so the follower sees a reading sent back and sweeps that host's
+    card sessions, where its owner is told (the card-sessions spec, A reading sent on one host). A missing folder stamps
+    alike each time; None when one can't be read (read.1)."""
+    seen = Seen()
+    try:
+        for label in sorted(labels):
+            seen.tree(os.path.join(os.path.expanduser(CARDS), label))
+    except OSError:
+        return None
+    return seen.digest()
+
+
 SLUICE_ANSWER = 15  # seconds the gather gives sluice overview to answer
 
 
-def queue(main):
-    """The submissions standing in sluice's queue for a kit, read in its main checkout on this host (teams.22, record
-    0046 part 2): `sluice overview --json`, read by submissions_of; (None, why) when sluice is not on the host, fails,
-    or does not answer within SLUICE_ANSWER seconds (read.1)."""
+def overview(main):
+    """sluice's overview of a kit's queue, read in its main checkout on this host: `sluice overview --json`, sluice's
+    one contract for a reader (sluice ADR 0023), as (its document, None), or (None, why) when sluice is not on the
+    host, fails, prints no JSON, or does not answer within SLUICE_ANSWER seconds (read.1)."""
     try:
         r = subprocess.run(["sluice", "overview", "--json"], cwd=main, capture_output=True, text=True, timeout=SLUICE_ANSWER)
     except FileNotFoundError:
@@ -549,17 +684,29 @@ def queue(main):
         return None, f"sluice overview did not answer within {SLUICE_ANSWER} seconds"
     except OSError as e:
         return None, f"sluice overview could not run: {e}"
-    if r.returncode:  # sluice says why as {"error": {"message": ...}} under --json, clap on standard error
-        try:
-            said = json.loads(r.stdout)["error"]["message"]
-        except (ValueError, TypeError, KeyError):
-            said = next((l.strip() for l in r.stderr.splitlines() if l.strip()), "")
-        return None, f"sluice overview exited {r.returncode}" + (f": {said}" if isinstance(said, str) and said else "")
+    if r.returncode:
+        return None, sluice_said("sluice overview", r.returncode, r.stdout, r.stderr)
     try:
-        doc = json.loads(r.stdout)
+        return json.loads(r.stdout), None
     except ValueError:
         return None, "sluice overview printed no JSON"
-    return submissions_of(doc)
+
+
+def sluice_said(what, code, out, err):
+    """Why a sluice command failed, in its words: sluice says why as {"error": {"message": ...}} under --json, clap on
+    standard error."""
+    try:
+        said = json.loads(out)["error"]["message"]
+    except (ValueError, TypeError, KeyError):
+        said = next((l.strip() for l in (err or "").splitlines() if l.strip()), "")
+    return f"{what} exited {code}" + (f": {said}" if isinstance(said, str) and said else "")
+
+
+def queue(main):
+    """The submissions standing in sluice's queue for a kit, read in its main checkout on this host (teams.22, record
+    0046 part 2): its overview, read by submissions_of; (None, why) when it can't be read (overview, read.1)."""
+    doc, why = overview(main)
+    return (None, why) if why else submissions_of(doc)
 
 
 def submissions_of(doc):
@@ -592,7 +739,7 @@ def submissions_of(doc):
     return out, None
 
 
-def kit(req, sites=False, running=None, board=False, fetch=False):
+def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
         return {"ok": False, "error": f"no checkout at {main}"}
@@ -661,8 +808,16 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
     out["fix_branches"] = {b: f for b, f in facts.items() if b not in worked}
     # What stands in sluice's queue, read once for a kit this host holds a bolt of (teams.22): each submission's number
     # on its bolt's row, a queue that can't be read said there, never read as empty (read.1).
+    # The host's follower hands in what its overview watch of the kit last read (queued), so sluice is not run again;
+    # where it has none, the overview read here goes back with the answer, the document its new watch starts from.
     if req.get("bolts"):
-        subs, why = queue(main)
+        if req.get("queued"):
+            subs, why = req["queued"]
+        else:
+            doc, why = overview(main)
+            subs, why = (None, why) if why else submissions_of(doc)
+            if stamped and doc is not None:
+                out["overview"] = doc
         out["submissions"] = subs
         if why:
             out["submissions_error"] = why
@@ -676,7 +831,25 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
     return out
 
 
+def read(request, running=None):
+    """The answer to a request: with stamp, each kit's stamp alone by its main checkout and the stamp of the card readings
+    folders of the partitions it names, the follower's check that nothing moved, and, at its clock's tick, each named
+    kit's overview (overview, [document, why]) and the host's portless routes (routes) when asked; else, by each kit's
+    main checkout, each kit as kit() reads it, with stamped, the host's follower's, its stamp too, taken before the kit
+    is read, so anything that moves while it is read moves the stamp the follower next compares, and the overview it
+    read of the kit's queue (overview), which its watch of the kit starts from."""
+    if request.get("stamp"):
+        return {"kits": {k["main"]: stamp(k) for k in request["kits"]}, "readings": readings_stamp(request.get("labels", [])),
+                **({"overviews": {m: list(overview(m)) for m in request["overview"]}} if request.get("overview") else {}),
+                **({"routes": routes()} if request.get("routes") else {})}
+    out = {}
+    for k in request["kits"]:
+        s = stamp(k) if request.get("stamped") else None
+        out[k["main"]] = dict(kit(k, request.get("sites"), running, request.get("board"), request.get("fetch"), request.get("stamped")),
+                              **({"stamp": s} if request.get("stamped") else {}))
+    return out
+
+
 if __name__ == "__main__":
     request = json.loads(sys.argv[1])
-    running = routes() if request.get("sites") else None
-    print(json.dumps({k["main"]: kit(k, request.get("sites"), running, request.get("board"), request.get("fetch")) for k in request["kits"]}))
+    print(json.dumps(read(request, routes() if request.get("sites") and not request.get("stamp") else None)))

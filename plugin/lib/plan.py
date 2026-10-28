@@ -464,7 +464,9 @@ class Reading:
     it is gone with its command (state.4)."""
 
     def __init__(self):
-        self.memory, self.bypass = {}, 0
+        # follower: the host's follower's Kept, handed in for its refresh, which serves what has not moved since its
+        # last read; None for any other command
+        self.memory, self.bypass, self.follower = {}, 0, None
 
     def held(self, name):
         return self.memory.get(name)
@@ -521,13 +523,133 @@ class Reading:
 READ = Reading()
 
 
+def kit_served(kept, stamp, req):
+    """The answer the follower kept for a kit that it may serve in place of a gather (plan.12's reading of 2026-10-28):
+    kept is (the request it answered, its answer with the stamp it was read at) or None, stamp the kit's stamp now;
+    the answer when the stamp now is read and is the one it was read at and the request is the same, else None, and
+    the kit is asked of its host. A decision on plain facts (code.7)."""
+    if not kept or not kept[1] or stamp is None:
+        return None
+    then, answer = kept
+    return answer if answer.get("stamp") == stamp and then == req else None
+
+
+# The state branch's paths whose blobs a refresh reads at a moved tip in one cat-file: its plan, proposals and moves,
+# its signals and its run record's days the rail reads (BATCH_DAYS); a path past them is read when asked.
+def wanted(path, since):
+    return ("/" not in path and path.endswith(".rec")) or path.startswith("signals/") or (
+        path.startswith("runs/") and path.endswith(".rec") and pathlib.PurePath(path).stem >= since)
+
+
+class Kept:
+    """What the host's follower keeps between its refreshes, in its own process and never written (plan.12's reading
+    of 2026-10-28, state.4): each kit's answer, with the request it answered and the stamp it was read at, by host;
+    each branch tip's files by blob, the blobs' text, and the blobs whose recfix check passed; and what Pending You
+    answered of the cards at the clock's last tick. It is keyed by the stamps and commits it was read at, so nothing is
+    served once they move (read.1); what a refresh did not use is dropped at its end (settle)."""
+
+    def __init__(self):
+        self.kits, self.used, self.stamps = {}, {}, {}
+        self.listings, self.blobs, self.checked, self.tips = {}, {}, set(), set()
+        # cards: the clock's last ask of Pending You after the cards (cards_fetched), (found, why), which every card
+        # sweep judges with until the next tick; None while no tick has asked, when the read's sweep asks on its tick
+        self.cards = None
+        # listed: herdr's listing of the askers of the questions the sweep judges, read on the clock's tick beside the
+        # cards (askers_listed), {name: (listed, why)}; None while no tick has read it
+        self.listed = None
+        # queued: each kit's queue as the follower's overview watch last read it, [submissions, why] by (host, main),
+        # handed to the kit's gather in place of its own run of sluice
+        self.queued = {}
+
+    def served(self, host, main, req):
+        return kit_served(self.kits.get(host, {}).get(main), self.stamps.get((host, main)), req)
+
+    def use(self, host, main, req, answer):
+        """A kit this refresh read, served or gathered, answer None when its host did not answer: what the next check
+        stamps."""
+        self.used.setdefault(host, {})[main] = (req, answer)
+
+    def listing(self, repo, tip):
+        """Each file at the tip by its blob, {path: blob}: one ls-tree at a tip not yet read, kept while a refresh reads
+        it; the blobs of the paths a refresh reads (wanted) not yet held are read then, in one cat-file."""
+        key = (repo, tip)
+        self.tips.add(key)
+        if key not in self.listings:
+            self.listings[key] = files = blobs_at(repo, tip)
+            since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=BATCH_DAYS + 1)).isoformat()
+            new = sorted({b for p, b in files.items() if wanted(p, since) and b not in self.blobs})
+            self.blobs.update(zip(new, cat_file(repo, new)))
+        return self.listings[key]
+
+    def text(self, repo, blob):
+        if blob not in self.blobs:
+            self.blobs[blob] = cat_file(repo, [blob])[0]
+        return self.blobs[blob]
+
+    def settle(self):
+        """A refresh's end: the kits it read are what it keeps, and the tips it did not read go with their blobs."""
+        self.kits, self.used = self.used, {}
+        self.listings = {k: v for k, v in self.listings.items() if k in self.tips}
+        self.tips = set()
+        live = {b for files in self.listings.values() for b in files.values()}
+        self.blobs = {b: t for b, t in self.blobs.items() if b in live}
+        self.checked &= live
+
+
+def blobs_at(repo, tip, prefix=None):
+    """Each file at a tip, or under prefix, by its blob, {path: blob}, in one ls-tree."""
+    files = {}
+    for line in git(repo, "ls-tree", "-r", tip, *(["--", prefix] if prefix else [])).splitlines():
+        meta, _, path = line.partition("\t")
+        _, kind, blob = meta.split()
+        if kind == "blob":
+            files[path] = blob
+    return files
+
+
+def kept_listing(repo, tip):
+    """The follower's listing of a tip (Kept.listing) when it is reading and tip names a commit, else None."""
+    k = READ.follower
+    return k.listing(repo, tip) if k is not None and tip and crew.SHA.fullmatch(tip) else None
+
+
+def cat_file(repo, names):
+    """The text of each object named, a blob or <tip>:<path>, in crew's cache of the repo, in one git cat-file --batch:
+    a list in order, None for one that is not there or is no blob."""
+    if not names:
+        return []
+    r = subprocess.run(["git", "-C", str(cache(repo)), "cat-file", "--batch"], input="".join(f"{n}\n" for n in names).encode(),
+                       capture_output=True, env=gitenv())
+    r.returncode == 0 or fail(f"git cat-file in crew's cache of {repo} failed: {r.stderr.decode(errors='replace').strip()}")
+    out, data, i = [], r.stdout, 0
+    for _ in names:
+        nl = data.index(b"\n", i)
+        head, i = data[i:nl], nl + 1
+        if head.endswith((b" missing", b" ambiguous")):
+            out.append(None)
+            continue
+        _, kind, size = head.rsplit(b" ", 2)
+        out.append(data[i:i + int(size)].decode("utf-8", "replace") if kind == b"blob" else None)
+        i += int(size) + 1
+    return out
+
+
+def paths_at(repo, tip, prefix):
+    """The paths under prefix at a tip, in order: from the follower's listing when it reads, else one ls-tree."""
+    files = kept_listing(repo, tip)
+    if files is not None:
+        return sorted(p for p in files if p.startswith(prefix))
+    return git(repo, "ls-tree", "-r", "--name-only", tip, "--", prefix).splitlines()
+
+
 def fetch(repo, ref, fresh=False):
     """The tip of a branch of the repo: the one this command already holds, else fetched now over https and kept; or
-    None when the repo has no such branch, which is not kept, so a later step looks again. fresh fetches even when a
-    tip is held: after a refused push, and after any push that is not a write's own."""
+    None when the repo has no such branch, which is not kept, so a later step looks again, unless the follower handed
+    in its cache's word that there is none (""). fresh fetches even when a tip is held: after a refused push, and
+    after any push that is not a write's own."""
     held = None if fresh else READ.tip(repo, ref)
-    if held:
-        return held
+    if held is not None:
+        return held or None
     for n in range(LOCK_TRIES):
         r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
         if not (r.returncode and "cannot lock ref" in r.stderr):
@@ -537,12 +659,32 @@ def fetch(repo, ref, fresh=False):
         if "couldn't find remote ref" in r.stderr:
             return None
         fail(f"could not fetch {ref} of {repo} over https: {r.stderr.strip()}")
-    tip = git(repo, "rev-parse", f"refs/crew/{ref}")
+    tip = tip_here(repo, ref) or git(repo, "rev-parse", f"refs/crew/{ref}")  # the cache's files, else git
     READ.keep_tip(repo, ref, tip)
     return tip
 
 
+def tip_here(repo, ref):
+    """A branch's tip as crew's cache of the repo holds it, refs/crew/<ref>, read from the cache's files with no process
+    (crew.files_ref), the follower's look and check (plan.12): its commit, "" when the cache holds none, a branch not
+    fetched, not started or no cache yet; through git rev-parse only when the files can't say, and None when git
+    can't read it either (read.1)."""
+    c = CACHE / f"{repo}.git"
+    if not (c / "HEAD").exists():
+        return ""
+    got = crew.files_ref(c, f"refs/crew/{ref}")
+    if got is not None:
+        return got
+    r = subprocess.run(["git", "-C", str(c), "rev-parse", "--verify", "-q", f"refs/crew/{ref}^{{commit}}"], capture_output=True,
+                       text=True, env=gitenv())
+    return r.stdout.strip() if r.returncode == 0 else "" if r.returncode == 1 and not r.stderr.strip() else None
+
+
 def show(repo, tip, path):
+    """A file's text at a tip, None when it is not there: the follower's kept blob when it reads and the blob is held."""
+    files = kept_listing(repo, tip)
+    if files is not None:
+        return READ.follower.text(repo, files[path]) if path in files else None
     r = git(repo, "show", f"{tip}:{path}", check=False)
     return r.stdout if r.returncode == 0 else None
 
@@ -608,13 +750,18 @@ def state_of(fleet, label):
 
 
 def read(repo, ref, tip):
-    """plan.rec at a commit of a branch, refused when it fails its schema, naming the commit."""
+    """plan.rec at a commit of a branch, refused when it fails its schema, naming the commit; a blob the follower kept
+    as passing is not checked again."""
     text = show(repo, tip, "plan.rec")
     text is not None or fail(f"{ref} of {repo} at {tip[:7]} has no plan.rec")
-    try:
-        recfix(text, "plan.rec")
-    except Refusal as e:
-        fail(f"{ref} of {repo} at {tip[:7]}: {e}")
+    blob = (kept_listing(repo, tip) or {}).get("plan.rec")
+    if blob is None or blob not in READ.follower.checked:
+        try:
+            recfix(text, "plan.rec")
+        except Refusal as e:
+            fail(f"{ref} of {repo} at {tip[:7]}: {e}")
+        if blob is not None:
+            READ.follower.checked.add(blob)
     return Plan(text)
 
 
@@ -877,11 +1024,10 @@ def gathered(fleet, host, req):
     if host == crew.this_host():
         if os.environ.get("CREW_TEST_READS"):  # crew's tests count a command's reads of the kits, a piped one by its python3
             with open(os.environ["CREW_TEST_READS"], "a") as f:
-                f.write(f"{host} gather\n")
+                f.write(f"{host} {'stamp' if req.get('stamp') else 'gather'}\n")
         try:
-            running = gather.routes() if req.get("sites") else None
-            return json.loads(json.dumps({k["main"]: gather.kit(k, req.get("sites"), running, req.get("board"), req.get("fetch"))
-                                          for k in req["kits"]})), None
+            running = gather.routes() if req.get("sites") and not req.get("stamp") else None
+            return json.loads(json.dumps(gather.read(req, running))), None
         except Exception as e:
             import traceback
             return None, traceback.format_exception_only(e)[-1].strip()
@@ -889,6 +1035,17 @@ def gathered(fleet, host, req):
     if r.returncode:
         return None, ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]
     return json.loads(r.stdout), None
+
+
+def stamped(fleet, host, kits, labels=(), overviews=(), routes=False):
+    """Each kit's stamp on a host (gather.stamp) and the stamp of its card readings folders of the partitions named
+    (gather.readings_stamp), {"kits": {main: stamp}, "readings": stamp}, a stamp None when it can't be read, and None;
+    or None and why the host did not answer: in this process on this host, which starts nothing, and in one ssh to
+    another, the follower's check that nothing moved there (plan.12). At the follower's clock's tick it also asks the
+    overview of each kit named in overviews, which no watch follows, {"overviews": {main: [document, why]}}, and with
+    routes the host's portless routes, {"routes": routes}: one sluice and one portless here, and the same ssh there."""
+    return gathered(fleet, host, {"kits": kits, "stamp": True, "labels": sorted(labels),
+                                  **({"overview": sorted(overviews)} if overviews else {}), **({"routes": True} if routes else {})})
 
 
 def survey(fleet, held, sites=False, board=False, fetch=False):
@@ -900,7 +1057,9 @@ def survey(fleet, held, sites=False, board=False, fetch=False):
     host. With fetch, each kit's GitHub is fetched on its host before it is read, for a read a decision of the moment
     rests on (plan.18, plan.19), and a fetch that fails reads that kit unread with git's words. A kit the command has
     already read is not asked again, but by a survey that fetches, which must read after its own fetch; what a host
-    answers is kept for the command's later steps; a sites survey is neither served nor kept."""
+    answers is kept for the command's later steps; a sites survey is neither served nor kept, but in the host's
+    follower's board survey, which serves each kit whose stamp and request have not moved from what it kept
+    (Kept.served) and asks each host only for the rest, its answers stamped."""
     sites = sites or board
     hosts = {}
     for team, bolt, *repo in held:
@@ -919,13 +1078,22 @@ def survey(fleet, held, sites=False, board=False, fetch=False):
                 **({"slots": {o: f"~/.local/state/{o}-team/slots" for o in mates}} if board else {})})
             if bolt and bolt not in k["bolts"]:
                 k["bolts"].append(bolt)
-    out = {}
+    out, kept = {}, READ.follower if board and not fetch else None  # the follower's read is the board's survey
     for host, kits in sorted(hosts.items()):
         have = {} if sites or fetch else {m: k for m, k in READ.kits(host).items() if m in kits}
+        if kept is not None:
+            have.update({m: a for m, k in kits.items() if (a := kept.served(host, m, k)) is not None})
+            for m in have:
+                kept.use(host, m, kits[m], have[m])
         ask = [k for m, k in kits.items() if m not in have]
         if ask:
-            req = {"kits": ask, "sites": sites, **({"board": True} if board else {}), **({"fetch": True} if fetch else {})}
+            # the follower hands each kit's queue as its overview watch last read it, so the gather runs no sluice
+            queued = {m: q for m in kits if (q := (kept.queued.get((host, m)) if kept is not None else None))}
+            req = {"kits": [dict(k, queued=queued[k["main"]]) if k["main"] in queued else k for k in ask], "sites": sites,
+                   **({"board": True} if board else {}), **({"fetch": True} if fetch else {}), **({"stamped": True} if kept is not None else {})}
             got, error = gathered(fleet, host, req)
+            for k in ask if kept is not None else ():
+                kept.use(host, k["main"], k, None if error else got.get(k["main"]))
             if error:
                 out[host] = {"ok": False, "error": error}
                 continue
@@ -11568,38 +11736,67 @@ def batch_reckoners(found, teams, here):
     return out
 
 
-def reckon_batches(fleet, found):
+def reckon_batches(fleet, found, read=None, skip=()):
     """The rail's sweep reckons each partition's batch on this host (batch_reckoners, batch_check), stopping at the first
     of its teams that tells the planner, since a batch is told once; what crew can't read is said on standard error and
-    the rail read stands."""
+    the rail read stands. With read, the rail read's, the plan, the run record and the stages are taken from it and
+    nothing is read again, as the host's follower reckons at every refresh, its read kept; a partition in skip, one the
+    follower told at its read's tip already (batch_told), is not reckoned. Returns each partition a batch was due for,
+    with whether its planner was told, {label: told}."""
+    told = {}
     for label, names in batch_reckoners(found, fleet["teams"], crew.this_host()).items():
+        if label in skip:
+            continue
         for name in names:
             try:
-                if batch_check(fleet, fleet["teams"][name]):
-                    break
+                said = batch_check(fleet, fleet["teams"][name], read)
             except Refusal as e:
                 print(f"no batch reckoned for {name}: {e}", file=sys.stderr)
                 break
+            if said is not None:
+                told[label] = said
+            if said:
+                break
+    return told
 
 
-def batch_check(fleet, t):
+def batch_told(told, found, tick):
+    """The partitions the host's follower reckons no batch for at a refresh (Decision 8 of
+    a-rail-refresh-after-no-change-reads-nothing), from what it told at which tip, {label: (tip, whether the tell went
+    through)}: one told at the tip its read still holds, until the read takes in the batch.due entry that tell wrote,
+    which moves the tip; and one whose tell did not go through, its planner not up, until the clock's next tick (tick),
+    so it is tried again once a minute and not at every refresh. A decision on plain facts (code.7)."""
+    return {label for label, _, tip, _ in found if tip and label in told and told[label][0] == tip and (told[label][1] or not tick)}
+
+
+def batch_check(fleet, t, read=None):
     """On each wait of a conductor of the partition, at the end of a construct or a merge it waited on
     (after_delivery), and on the rail's sweep (reckon_batches): the changes due across the partition, counted from the run
     record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
     one due, or at once when the team's bolt has every unit merged and some unit's latest change has been in no batch.
     crew then tells the partition's planner once, `batch.due` in the run record, until the next batch is delivered
-    (briefs.12). What crew can't read is said on standard error, and the wait goes on. Returns whether it told the planner."""
+    (briefs.12). What crew can't read is said on standard error, and the wait goes on. With read, a rail read, the plan,
+    the run record and the stages are its, read nothing again (the host's follower's, every refresh, Decision 8 of
+    a-rail-refresh-after-no-change-reads-nothing). Returns whether it told the planner."""
     label = t["label"]
     setting = fleet["partitions"][label]["review"]
-    plan = plan_of(fleet, label)
-    if plan is None:
-        return
-    entries = partition_entries(fleet, label)
+    if read is not None:
+        plan = next((p for l, _, _, p in read["found"] if l == label), None)
+        if plan is None:
+            return
+        if (read.get("unread") or {}).get(label):
+            fail(unread_batches(state_of(fleet, label)[0], read["unread"][label]))
+        entries = read["logs"].get(label, [])
+    else:
+        plan = plan_of(fleet, label)
+        if plan is None:
+            return
+        entries = partition_entries(fleet, label)
     due = due_changes(plan, entries)
     if not due or told_since_last_batch(entries):
         return
     held = held_by(plan, t["name"])
-    st = stages_for(fleet, plan, held) if held else None
+    st = (Stages(fleet, plan, read["sv"]) if read is not None else stages_for(fleet, plan, held)) if held else None
     bolts = [(b.name(), bool(plan.work_of(b.name())) and all(st.of(u.name())["stage"] in ("merged", "landed") for u in plan.work_of(b.name())),
               [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]) for b in held]
     why = batch_due(due, entries, setting, datetime.datetime.now(datetime.timezone.utc), bolts)
@@ -12363,7 +12560,7 @@ def stranded_said(entries, card, owner, new):
     return (f"lost to {owner}" if state == "lost" else f"held on {host}, which this host's sign-in does not reach") + f": posted again as {new}"
 
 
-def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
+def sweep_sessions(fleet, found, sv, rows, cards, unread, batched, only=None):
     """End the card sessions crew started, and release the landings' previews it asked for, whose card is closed or
     whose row is gone, on every host of each partition
     whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
@@ -12372,15 +12569,19 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     while the record could not be read from its branch, when no key is taken out for being closed either (read.1). A host the survey
     found not answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said, sent},
     why "its row is gone" or "its card is closed", or, for a reading the user sent that the sweep told its owner of or
-    recorded read (sent), "its reading was sent", and the hosts not checked, each {label, host, why} (read.3)."""
+    recorded read (sent), "its reading was sent", and the hosts not checked, each {label, host, why} (read.3). only,
+    when given, {label: hosts}, asks those hosts alone: the follower's refresh after nothing moved, on the hosts its
+    last could not check (sessions_unchecked)."""
     ended, unchecked = [], []
     for l, _, _, plan in found:
-        if not plan:
+        if not plan or (only is not None and not only.get(l)):
             continue
         readings = {f"land/{b['bolt']}" for r in rows if r["label"] == l and r["group"] == "land" for b in r.get("bolts", []) if b["can"]}
         rowed = {r["key"] for r in rows if r["label"] == l} | readings  # each row's, and each landing row's reading and preview
         judged = json.dumps(sweep_judgment(l, rowed, cards, unread.get(l), batched.get(l, {}), readings))
         for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
+            if only is not None and h not in only[l]:
+                continue
             if h in sv and not sv[h]["ok"]:
                 unchecked.append(dict(label=l, host=h, why=f"did not answer ({sv[h]['error']})"))
                 continue
@@ -12405,6 +12606,16 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
                            why="its reading was sent" if x.get("sent") is True else "its card is closed" if x["key"] in rowed
                            else "its row is gone") for x in got]
     return ended, unchecked
+
+
+def sessions_unchecked(unchecked):
+    """The hosts a refresh after nothing moved asks to end their card sessions, {label: hosts}: those the last refresh
+    could not check (sweep_sessions), and no other, since every other host was judged on the same facts (the
+    card-sessions spec, A host the last sweep missed)."""
+    out = {}
+    for u in unchecked or []:
+        out.setdefault(u["label"], set()).add(u["host"])
+    return out
 
 
 def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
@@ -12456,15 +12667,20 @@ def rail_read(fleet, labels, board=False, sweep=False):
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
-                gives=gives, ops=opses, logs=logs, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
+                gives=gives, ops=opses, logs=logs, batched=batched, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
-        read["swept"] = sweep_cards(fleet, read)
+        k = READ.follower
+        if k is not None and k.cards is None:  # the follower's tick with no read kept to ask from: its one ask, made here
+            now = datetime.datetime.now(datetime.timezone.utc)
+            k.cards = cards_fetched(fleet, cards_asked(fleet, read, crew.this_host(), now))
+            k.listed = askers_listed(fleet, askers_asked(fleet, read, crew.this_host(), now))
+        read["swept"] = sweep_cards(fleet, read, answers=k.cards if k is not None else None, listed=k.listed if k is not None else None)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
                                     {l: partition_kits(fleet, l) for l, *_ in found})
         read["moved"] = sweep_moved(fleet, read)
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
-        reckon_batches(fleet, found)
+        read["told"] = reckon_batches(fleet, found, read)
     return read
 
 
@@ -12492,7 +12708,10 @@ def rail_text(fleet, labels, read, now):
     again as main moved under it and each whose kit's revision of main can't be read (sweep_moved), each card session ended,
     with its host and why, each reading the user sent whose owner it told or that it recorded read, and each host whose
     sessions were not checked. A host is named as not answering only when it holds a bolt of the plans read, so a read
-    that surveyed more (the board's) gives the same text."""
+    that surveyed more (the board's) gives the same text. Of a read of several partitions, labels may name some: the
+    rail of those alone, as a read of them alone would give it (the host's follower's, which reads every partition on
+    the host at once)."""
+    read = labels_of(read, labels)
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
@@ -12565,6 +12784,21 @@ def rail_text(fleet, labels, read, now):
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
     return "\n".join(lines)
+
+
+def labels_of(read, labels):
+    """A rail read narrowed to some of the partitions it read: its plans, rows, cards, what its sweeps did and the hosts
+    they could not check, each of those labels'; the survey stays whole, since a host serves every partition."""
+    labels = set(labels)
+    swept = read.get("swept")
+    moved = read.get("moved")
+    return dict(read, found=[f for f in read["found"] if f[0] in labels], rows=[r for r in read["rows"] if r["label"] in labels],
+                cards=[c for c in read["cards"] if c["label"] in labels], unread={l: v for l, v in read["unread"].items() if l in labels},
+                logs={l: v for l, v in (read.get("logs") or {}).items() if l in labels},
+                swept=swept and {"done": [d for d in swept["done"] if d["label"] in labels], "unswept": [u for u in swept["unswept"] if u["label"] in labels]},
+                moved=moved and {k: [x for x in v if x["label"] in labels] for k, v in moved.items()},
+                ended=[e for e in read.get("ended") or [] if e["label"] in labels],
+                unchecked=[u for u in read.get("unchecked") or [] if u["label"] in labels])
 
 
 def unread_card_acts(logs, now):
@@ -15140,7 +15374,78 @@ def question_close(acts, label, c, words):
     return state
 
 
-def sweep_cards(fleet, read, acts=None):
+def sweep_judgments(fleet, read, here, now):
+    """The judgments the rail's sweep of the cards acts on, made on this host (here) at now from a read (rail_read):
+    each partition's whose plan was read and whose run record was read from its branch, [(label, owners, planner, j)],
+    j as sweep_judged gives it, owners each row's owner by its key with each decision record's row the design agent's,
+    planner the batches' owner; and each partition it can't judge with why, [{label, why}], its run record unread. A
+    decision on plain facts (code.7)."""
+    unswept, judged = [], []
+    down = {h for h, v in read["sv"].items() if not v["ok"]}
+    for l, _, _, pl in read["found"]:
+        if not pl:
+            continue
+        unread = read["unread"].get(l, {})
+        if unread:
+            unswept.append(dict(label=l, why="; ".join(f"its run record could not be read from {b}, so which cards are open can't be told: {v}"
+                                                       for b, v in sorted(unread.items()))))
+            continue
+        rows = [r for r in read["rows"] if r["label"] == l]
+        owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
+        blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
+        blind |= {b.get("Repo") for b in pl.bolts() if b.name() in blind and b.get("Repo")}  # a kit's card, a bolt of it unread
+        planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
+        design = (f"{l}-design", fleet["partitions"][l]["machine"])
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind,
+                         read["proposed"].get(l), now, planner, design, partition_kits(fleet, l),
+                         {x["bolt"]: r["key"].split("/", 1)[1] for r in rows if r["group"] == "land" for x in r.get("bolts", [])})
+        judged.append((l, dict(owners, **{r["key"]: design for r, _ in j["again"] if r["group"] == "records"}), planner, j))
+    return judged, unswept
+
+
+def cards_asked(fleet, read, here, now):
+    """The cards the rail's sweep asks Pending You whether it still finds, of the judgments it would act on
+    (sweep_judgments): each card of a row that is gone, each held with its row and each question, each once, in order.
+    The host's follower asks after them on its clock's tick (cards_fetched) and none when there are none. A decision
+    on plain facts (code.7)."""
+    judged, _ = sweep_judgments(fleet, read, here, now)
+    return list(dict.fromkeys(c["card"] for _, _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]))
+
+
+def askers_asked(fleet, read, here, now):
+    """The agents whose questions the rail's sweep would judge (sweep_judgments), each once, in order: whose panes herdr
+    is asked about, the host's follower asking on its clock's tick beside Pending You (askers_listed). A decision on
+    plain facts (code.7)."""
+    judged, _ = sweep_judgments(fleet, read, here, now)
+    return list(dict.fromkeys(c["by"] for _, _, _, j in judged for c in j["questions"]))
+
+
+def askers_listed(fleet, names, acts=None):
+    """herdr's listing of each asker's pane, as the card sweep reads it (SweepActs.listed), {name: (listed, why)}, read
+    afresh at the follower's tick, its sessions listed once each; none read when no asker is named."""
+    if not names:
+        return {}
+    crew.herdr_fresh()
+    acts = acts or SweepActs(fleet)
+    return {name: acts.listed(name) for name in names}
+
+
+def cards_fetched(fleet, asked, acts=None):
+    """The card sweep's one ask of Pending You, in crew's own name (SWEEPER), whether it still finds each card asked,
+    which it answers for another assistant's card by refusing it as that assistant's and for one this host's sign-in no
+    longer reaches with "not found": ({card: (got, words)}, None), or ({}, why) when the bridge failed; no bridge when
+    none is asked."""
+    if not asked:
+        return {}, None
+    acts = acts or SweepActs(fleet)
+    try:
+        with acts.bridge(SWEEPER, SWEEP_LATER) as py:
+            return {card: py.answer("get_request", {"requestId": card, "name": SWEEPER}) for card in asked}, None
+    except Refusal as e:
+        return {}, str(e)
+
+
+def sweep_cards(fleet, read, acts=None, answers=None, listed=None):
     """The rail read's sweep of the cards on this host, under its sign-in (record 0031 §1, §2, read.4): for each
     partition whose plan was read, and whose run record was read from its branch, it closes each card of a row that
     is gone with why (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"],
@@ -15154,8 +15459,10 @@ def sweep_cards(fleet, read, acts=None):
     it records crew's close of each batch that waits on nothing, once, as batch.close on batch/<n> in the planner's
     name with its card key and why (briefs.12), so a host not signed in still records it; a card open under its key is
     withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
-    (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
-    that assistant's, and for a card this host's sign-in no longer reaches with "not found". Every row's card this
+    (SWEEPER) whether it finds each card (cards_fetched), in one bridge and none when it asks after no card; or, for
+    the host's follower, which asks on its clock's tick alone, takes answers, (found, why), the clock's last ask's,
+    acting on no card that ask did not answer for, until the next tick does, and listed, herdr's listing of the askers
+    read on that tick (askers_listed), judging no question whose asker it did not list. Every row's card this
     host's sign-in can't reach, posted from another host or lost to its owner, while the row's owner runs here, is
     posted again through its kind's raise, its summary saying the older copy is dead, the older copy reported lost and
     never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again, briefs.11,
@@ -15167,24 +15474,8 @@ def sweep_cards(fleet, read, acts=None):
     acts = acts or SweepActs(fleet)
     here, now = acts.host(), acts.now()
     out, judged = {"done": [], "unswept": []}, []
-    down = {h for h, v in read["sv"].items() if not v["ok"]}
-    for l, _, _, pl in read["found"]:
-        if not pl:
-            continue
-        unread = read["unread"].get(l, {})
-        if unread:
-            out["unswept"].append(dict(label=l, why="; ".join(f"its run record could not be read from {b}, so which cards are open can't be told: {v}"
-                                                              for b, v in sorted(unread.items()))))
-            continue
-        rows = [r for r in read["rows"] if r["label"] == l]
-        owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
-        blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
-        blind |= {b.get("Repo") for b in pl.bolts() if b.name() in blind and b.get("Repo")}  # a kit's card, a bolt of it unread
-        planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
-        design = (f"{l}-design", fleet["partitions"][l]["machine"])
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind,
-                         read["proposed"].get(l), now, planner, design, partition_kits(fleet, l),
-                         {x["bolt"]: r["key"].split("/", 1)[1] for r in rows if r["group"] == "land" for x in r.get("bolts", [])})
+    found_judged, out["unswept"] = sweep_judgments(fleet, read, here, now)
+    for l, owners, planner, j in found_judged:
         for key, why in j.pop("settled"):
             got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
                             Key=key, Outcome=why)
@@ -15193,15 +15484,13 @@ def sweep_cards(fleet, read, acts=None):
         j["none"] = [r for r in j["none"] if acts.raise_of(r["key"].split("/")[0])]
         j["again"] = [(r, c) for r, c in j["again"] if acts.raise_of(r["key"].split("/")[0])]
         if any(j.values()):
-            judged.append((l, dict(owners, **{r["key"]: design for r, _ in j["again"] if r["group"] == "records"}), j))
+            judged.append((l, owners, j))
     if not judged:
         return out
-    asked = [c["card"] for _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]]
-    try:
-        with acts.bridge(SWEEPER, SWEEP_LATER) as py:
-            found = {card: py.answer("get_request", {"requestId": card, "name": SWEEPER}) for card in asked}
-    except Refusal as e:
-        out["unswept"] += [dict(label=l, why=str(e)) for l, _, _ in judged]
+    asked = list(dict.fromkeys(c["card"] for _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]))
+    found, error = answers if answers is not None else cards_fetched(fleet, asked, acts)
+    if error is not None:
+        out["unswept"] += [dict(label=l, why=error) for l, _, _ in judged]
         return out
 
     def did(l, key, card, by, what, words, new=None):
@@ -15218,6 +15507,8 @@ def sweep_cards(fleet, read, acts=None):
             return None, None
     for l, owners, j in judged:
         for c, outcome, reason in j["gone"]:
+            if c["card"] not in found:
+                continue
             words = found[c["card"]][1]
             if cards.lost(words):
                 card_lost(acts, l, c["by"], c["key"], c["card"], words)
@@ -15228,20 +15519,24 @@ def sweep_cards(fleet, read, acts=None):
             else:
                 did(l, c["key"], c["card"], c["by"], "left", "its close did not go through, as said above")
         for c in j["questions"]:
+            if c["card"] not in found:
+                continue
             words = found[c["card"]][1]
             if cards.lost(words):
                 card_lost(acts, l, c["by"], c["key"] or "", c["card"], words)
                 did(l, c["key"], c["card"], c["by"], "lost", "this host's sign-in no longer reaches it")
                 continue
-            listed, why = acts.listed(c["by"])
-            if listed is None:
+            if listed is not None and c["by"] not in listed:
+                continue
+            here_, why = listed[c["by"]] if listed is not None else acts.listed(c["by"])
+            if here_ is None:
                 did(l, c["key"], c["card"], c["by"], "left", f"whether {c['by']} still runs can't be told: {why}")
-            elif not listed:
+            elif not here_:
                 state = question_close(acts, l, c, f"{c['by']} ended; ask again if it still matters")
                 did(l, c["key"], c["card"], c["by"], state or "left", {None: "its close did not go through, as said above",
                                                                        "lost": "this host's sign-in no longer reaches it"}.get(state, f"{c['by']} ended"))
         for c, row in j["held"]:
-            words = found[c["card"]][1]
+            words = found.get(c["card"], (None, None))[1]
             if not cards.lost(words):
                 continue
             new, kind_raises = raised(l, row, c["by"])
@@ -15261,7 +15556,7 @@ def sweep_cards(fleet, read, acts=None):
                 did(l, row["key"], older, owner, "left",
                     "its batch no longer waits to be read" if row["key"].startswith("batch/") else "its raise posted none")
         for c, row in j["unread"]:
-            if cards.lost(found[c["card"]][1]):
+            if c["card"] not in found or cards.lost(found[c["card"]][1]):
                 continue
             try:
                 with acts.bridge(c["by"], SWEEP_LATER) as py:

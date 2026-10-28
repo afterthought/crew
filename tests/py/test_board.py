@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import re
+import sys
 
 import pytest
 
@@ -319,48 +320,684 @@ class TestFollower:
         assert board.labels_here(fleet, "mac-studio") == ["wldn", "swancloud"]
         assert board.labels_here(fleet, BOX) == ["wldn"] and board.labels_here(fleet, "macbook-pro") == []
 
-    def test_an_entry_wakes_its_partitions_round_a_burst_is_one_round_and_a_follow_that_ends_leaves_the_clock(self, monkeypatch):
-        """Each partition's follow is a pipe here, as a crew events --follow child's output is, and each round is
-        recorded rather than run."""
-        class Follow:
-            def __init__(self):
-                self.r, self.w = os.pipe()
-                self.stdout, self.killed = os.fdopen(self.r, "rb"), False
+    @pytest.mark.parametrize("m, kept, crew_read, how", [
+        ({"crew": True, "read": True, "any": True}, False, True, "read"), ({"crew": True, "read": True, "any": True}, True, True, "update"),
+        ({"crew": True, "read": True, "any": True}, True, False, "read"), ({"crew": False, "read": True, "any": True}, True, True, "read"),
+        ({"crew": False, "read": False, "any": True}, True, True, "sweep"), ({"crew": False, "read": False, "any": False}, True, True, "render")])
+    def test_a_refresh_reads_once_with_none_kept_hands_out_restarts_once_crew_moved_and_renders_when_nothing_moved(self, m, kept, crew_read, how):
+        """A tip or a kit moved reads; only a readings folder or the cards moved sweeps; nothing moved renders."""
+        assert board.refresh_plan(m, kept, crew_read) == how
 
-            def kill(self):
-                self.killed = True
+    NOTHING = {"crew": False, "state": set(), "blueprints": set(), "kits": set(), "readings": set(), "cards": False, "read": False, "any": False}
+    READINGS = {"mac-studio": ["wldn", "swancloud"], BOX: ["wldn"]}
 
-            def wait(self):
-                pass
+    def test_after_only_a_hosts_readings_moved_its_card_sessions_alone_are_swept(self):
+        """The card-sessions spec, A reading sent on one host."""
+        assert board.sweeps_after(dict(self.NOTHING, readings={BOX}, any=True), self.READINGS, []) == {"cards": False, "sessions": {"wldn": {BOX}}}
+        assert board.sweeps_after(dict(self.NOTHING, readings={"mac-studio"}, any=True), self.READINGS, []) == (
+            {"cards": False, "sessions": {"wldn": {"mac-studio"}, "swancloud": {"mac-studio"}}})
+
+    def test_after_only_the_cards_moved_the_card_sweep_alone_runs(self):
+        assert board.sweeps_after(dict(self.NOTHING, cards=True, any=True), self.READINGS, []) == {"cards": True, "sessions": {}}
+
+    def test_with_nothing_moved_only_the_hosts_the_last_could_not_check_are_swept_beside_what_moved(self):
+        unchecked = [{"label": "wldn", "host": "mac-studio", "why": "did not answer (exit 255)"}]
+        assert board.sweeps_after(self.NOTHING, self.READINGS, unchecked) == {"cards": False, "sessions": {"wldn": {"mac-studio"}}}
+        assert board.sweeps_after(dict(self.NOTHING, readings={BOX}, any=True), self.READINGS, unchecked) == (
+            {"cards": False, "sessions": {"wldn": {"mac-studio", BOX}}})
+
+    @pytest.mark.parametrize("now, tick_at, seen, looked, how", [
+        (100.0, 100.0, "a", "a", "tick"), (100.0, 0.0, "a", "b", "tick"), (100.0, 160.0, "a", "b", "refresh"), (100.0, 160.0, "a", "a", None)])
+    def test_a_look_ticks_when_its_clock_is_due_refreshes_when_a_cache_moved_and_else_reads_nothing(self, now, tick_at, seen, looked, how):
+        assert board.wake(now, tick_at, seen, looked) == how
+
+    def test_the_clock_is_a_minute_a_frame_is_stale_after_three_and_sigusr1_makes_the_next_tick_now(self):
+        assert board.PERIOD == 60 and board.STALE == 3 * board.PERIOD
+        f = board.Follower(None)
+        f.tick_at = 1e12
+        assert board.wake(100.0, f.tick_at, "a", "a") is None
+        f.tick_now()
+        assert board.wake(100.0, f.tick_at, "a", "a") == "tick"
+
+
+class TestRefresh:
+    """The host's follower's refresh (the crew-board spec, The rail and the board come from one read, A refresh after
+    nothing moved reads nothing, A refresh after a change reads only what moved): one read for every partition with an
+    operator session on the host, kept, and the frames written from it; each step around it stands in here, the read,
+    the views and the stamps, so what is asked is what the case shows."""
+
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan", "state": "o/state", "blueprints": ["o/bp"],
+                                     "machine": "mac-studio", "teams": ["swb-1"]},
+                            "swancloud": {"label": "swancloud", "partition": "personal", "state": "o/state", "blueprints": ["o/bp"],
+                                          "machine": "mac-studio", "teams": []}},
+             "teams": {"swb-1": {"machine": BOX}},
+             "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
+
+    @pytest.fixture
+    def follower(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        monkeypatch.setattr(crew, "SESSIONS", tmp_path / "sessions")
+        monkeypatch.setattr(crew, "HOLD", tmp_path / "hold")
+        self.looks = {"crew": ("c" * 40, b"{teams}"), "state": {"wldn": "a" * 40, "swancloud": ""}, "blueprints": {"wldn": "b" * 40, "swancloud": "b" * 40}}
+        self.stamps, self.reads, self.swept, self.again, self.unchecked = {(BOX, "/kit/main"): "s1"}, [], [], [], []
+        self.readings, self.asked = {BOX: "r1", "mac-studio": "r2"}, []
+        monkeypatch.setattr(board, "look", lambda fleet, labels: {k: dict(v) if isinstance(v, dict) else v for k, v in self.looks.items()})
+
+        self.overviews, self.overviews_asked, self.routes = {}, [], {}
+
+        def stamps_now(fleet, kits, readings, overviews=None, routes=False):
+            self.asked.append(readings)
+            self.overviews_asked += [(h, m) for h, ms in (overviews or {}).items() for m in ms]
+            return {"kits": {k: v for k, v in self.stamps.items() if k[1] in kits.get(k[0], {})}, "readings": {h: self.readings[h] for h in readings},
+                    "overviews": {(h, m): self.overviews[(h, m)] for h, ms in (overviews or {}).items() for m in ms},
+                    "routes": {h: r for h, r in self.routes.items() if h in kits} if routes else {}}
+        monkeypatch.setattr(board, "stamps_now", stamps_now)
+
+        self.req, self.handed, self.found = {"main": "/kit/main"}, [], []
+
+        def flow_read(fleet, labels, sweep=False):
+            kept = plan.READ.follower
+            self.reads.append((list(labels), sweep, plan.READ.tip("o/state", "wldn/main"), plan.READ.tip("o/state", "swancloud/main")))
+            self.handed.append(dict(kept.queued))
+            served = kept.served(BOX, "/kit/main", self.req)
+            kept.use(BOX, "/kit/main", self.req, served or {"ok": True, "stamp": self.stamps[(BOX, "/kit/main")], "routes": []})
+            if kept.cards is None:  # the tick's ask, which rail_read makes when the follower kept no read to ask from
+                kept.cards = ({}, None)
+            print("crew: a word the read said", file=sys.stderr)
+            return {"found": list(self.found), "errors": {"wldn/main of o/state": "a plan it could not read"}, "signals": {}, "unchecked": list(self.unchecked),
+                    "sv": {}, "rows": [], "cards": [], "unread": {}, "batched": {}, "served": served is not None}
+        monkeypatch.setattr(board, "flow_read", flow_read)
+        monkeypatch.setattr(board, "board_data", lambda fleet, labels, read, now: {"read_at": board.iso(now), "from": "mac-studio",
+                                                                                   "partitions": [{"label": labels[0]}], "unread": {}})
+        monkeypatch.setattr(plan, "rail_text", lambda fleet, labels, read, now: f"rail of {labels[0]}" + (", served" if read["served"] else ""))
+        monkeypatch.setattr(board, "here_read", lambda fleet, l: {"host": "mac-studio", "version": None, "held": None, "agents": {}})
+        monkeypatch.setattr(board, "agent_views", lambda data: {"read_at": data["read_at"], "views": {}})
+        monkeypatch.setattr(plan, "sweep_sessions", lambda fleet, found, sv, rows, cards, unread, batched, only=None: self.swept.append(only) or ([], []))
+        test = self
 
         class Here(board.Follower):
             def fleet(self):
-                return {"partitions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}},
-                        "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
-        rounds = []
-        monkeypatch.setattr(board, "follow_round", lambda label, seen: rounds.append(label))
-        monkeypatch.setattr(board, "BURST", 0.05)
-        follows = {"wldn": Follow(), "swancloud": Follow()}
-        f = Here(None)
-        f.follows = dict(follows)
-        f.step(0)
-        assert rounds == ["wldn", "swancloud"]
-        f.step(0)
-        assert rounds == ["wldn", "swancloud"], "a round ran before it was due"
-        for _ in range(3):
-            os.write(follows["wldn"].w, b"2026-10-28T10:00:00Z  unit.run  ...\n")
-        f.step(1)
-        f.step(0)
-        assert rounds == ["wldn", "swancloud", "wldn"], "a burst of entries was not one round of its own partition"
-        os.close(follows["swancloud"].w)
-        f.step(1)
-        assert follows["swancloud"].killed and f.follows["swancloud"] is None
-        f.step(0)
-        assert rounds == ["wldn", "swancloud", "wldn"] and f.follows["swancloud"] is None, "an ended follow woke a round or was started again"
-        assert f.due["swancloud"] > 0
-        os.close(follows["wldn"].w)
-        for x in follows.values():
-            x.stdout.close()
+                self.fleet_, self.labels = test.FLEET, board.labels_here(test.FLEET, "mac-studio")
+                return test.FLEET
+
+            def again(self, fleet):
+                test.again.append(list(self.labels))
+        return Here(None)
+
+    def frame(self, label, kind="rail"):
+        return json.loads((board.FRAMES / f"{label}{'.' + kind if kind != 'board' else ''}.json").read_text())
+
+    def test_one_read_writes_every_partitions_frames_with_what_it_said(self, follower):
+        follower.refresh()
+        assert self.reads == [(["wldn", "swancloud"], True, "a" * 40, "")], "the read was not handed the tips the caches hold"
+        assert self.frame("wldn")["text"] == "rail of wldn\ncrew: a word the read said\na plan it could not read"
+        assert self.frame("swancloud")["text"] == "rail of swancloud\ncrew: a word the read said"
+        assert self.frame("swancloud", "board")["partitions"] == [{"label": "swancloud"}] and self.frame("wldn", "agents")["views"] == {}
+
+    def test_a_refresh_with_nothing_moved_reads_nothing_sweeps_nothing_and_writes_the_frames_again(self, follower):
+        follower.refresh()
+        was = self.frame("wldn")["read_at"]
+        follower.refresh()
+        assert len(self.reads) == 1 and self.swept == []
+        assert self.frame("wldn")["text"] == "rail of wldn\na plan it could not read" and self.frame("wldn")["read_at"] >= was
+
+    def test_a_refresh_after_a_kit_moved_reads_again_with_the_rest_served(self, follower):
+        follower.refresh()
+        self.stamps[(BOX, "/kit/main")] = "s2"
+        follower.refresh()
+        assert len(self.reads) == 2 and self.frame("wldn")["text"].startswith("rail of wldn\n")
+        follower.refresh()
+        assert len(self.reads) == 2, "a kit read at its new stamp was taken as moved again"
+        self.looks["state"] = {"wldn": "d" * 40, "swancloud": ""}
+        follower.refresh()
+        assert len(self.reads) == 3 and self.frame("wldn")["text"].startswith("rail of wldn, served"), "an unmoved kit was not served"
+
+    def test_its_check_stamps_the_readings_of_each_partitions_hosts_with_its_kits(self, follower):
+        """The card-sessions spec, A reading sent on one host: every host where a partition's card sessions are swept,
+        its main machine and its teams', has its readings stamped, from its first refresh on."""
+        follower.refresh()
+        follower.refresh()
+        assert self.asked == [{"mac-studio": ["wldn", "swancloud"], BOX: ["wldn"]}] * 2
+
+    def test_a_refresh_after_crew_moved_hands_out_the_restarts_and_starts_again(self, follower):
+        follower.refresh()
+        self.looks["crew"] = ("e" * 40, b"{teams}")
+        follower.refresh()
+        assert self.again == [["wldn", "swancloud"]]
+
+    def test_the_clock_asks_pending_you_after_the_kept_reads_cards_once_a_tick_and_never_between(self, follower, monkeypatch):
+        """The crew-board spec, The follower asks Pending You about cards on its clock: one bridge a tick for the cards the
+        kept read's sweep would act on, none on a tick when it names none, and none at a refresh between ticks."""
+        bridges, test = [], self
+        self.to_ask = []
+
+        class Py:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+            def answer(self, tool, args):
+                return {"status": "pending"}, None
+
+        class Acts:
+            def __init__(self, fleet):
+                pass
+
+            def bridge(self, name, later, held=None):
+                bridges.append(name)
+                return Py()
+        monkeypatch.setattr(plan, "SweepActs", Acts)
+        monkeypatch.setattr(plan, "cards_asked", lambda fleet, read, here, now: list(test.to_ask))
+        monkeypatch.setattr(plan, "sweep_cards", lambda fleet, read, acts=None, answers=None, listed=None: {"done": [], "unswept": []})
+        monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
+        follower.tick()
+        follower.tick()
+        assert bridges == [] and follower.kept.cards == ({}, None) and len(self.reads) == 1
+        self.to_ask = ["req_p4"]
+        follower.tick()
+        assert bridges == ["crew"] and follower.kept.cards == ({"req_p4": ({"status": "pending"}, None)}, None)
+        follower.refresh()
+        follower.refresh()
+        assert bridges == ["crew"], "a refresh between ticks asked Pending You"
+
+    def test_a_refresh_after_only_a_hosts_readings_moved_sweeps_its_card_sessions_and_reads_nothing(self, follower):
+        """The crew-board spec, A reading sent back: plannotator wrote the result in the box's readings folder."""
+        follower.refresh()
+        self.readings[BOX] = "r9"
+        follower.refresh()
+        assert len(self.reads) == 1 and self.swept == [{"wldn": {BOX}}]
+        follower.refresh()
+        assert len(self.reads) == 1 and self.swept == [{"wldn": {BOX}}], "a readings folder swept was taken as moved again"
+
+    def test_a_refresh_after_only_the_cards_moved_runs_the_card_sweep_alone_against_the_kept_read(self, follower, monkeypatch):
+        """The crew-board spec, A card lost between ticks: the tick's answers say proposal 4's card is lost."""
+        swept = []
+        monkeypatch.setattr(plan, "sweep_cards", lambda fleet, read, acts=None, answers=None, listed=None: swept.append((read["served"], answers)) or {
+            "done": [dict(label="wldn", key="proposal/4", card="req_p4", by="wldn-planner", did="lost", words="posted again as req_p5", new="req_p5")],
+            "unswept": []})
+        follower.refresh()
+        lost = ({"req_p4": (None, "Not found: request:req_p4.")}, None)
+        follower.kept.cards, follower.cards = lost, board.cards_stamp(*lost, False, 2)
+        follower.refresh()
+        assert len(self.reads) == 1 and swept == [(False, lost)] and self.swept == []
+        assert [c["card"] for c in follower.last["read"]["cards"]] == ["req_p5"]
+        follower.refresh()
+        assert swept == [(False, lost)], "the cards swept were taken as moved again before the next tick"
+
+    def test_a_refresh_with_nothing_moved_sweeps_the_sessions_only_where_the_last_could_not(self, follower):
+        """The card-sessions spec, A host the last sweep missed."""
+        self.unchecked = [{"label": "wldn", "host": BOX, "why": "did not answer (exit 255)"}]
+        follower.refresh()
+        follower.refresh()
+        assert self.swept == [{"wldn": {BOX}}] and len(self.reads) == 1
+        follower.refresh()
+        assert self.swept == [{"wldn": {BOX}}], "a host the sweep reached was asked again"
+
+
+    class Watching(board.Watches):
+        """The follower's watches with no process: what opens and closes is recorded, and a test sets what each read."""
+
+        def __init__(self):
+            super().__init__()
+            self.opened, self.closed = [], []
+
+        def open(self, fleet, host, main):
+            self.ended.discard((host, main))
+            self.opened.append((host, main))
+            self.running[(host, main)] = None
+
+        def close(self, key):
+            if self.running.pop(key, "none") != "none":
+                self.closed.append(key)
+
+        def poll(self):
+            pass
+
+    QUEUED = {"schema": "sluice/overview@1", "at": "2026-10-28T16:24:41Z", "branches": [
+        {"branch": "bolt/te", "submissions": [{"id": 41, "branch": "bolt/te", "state": "testing", "from": {"worktree": "unit/a"}}]}]}
+
+    def test_a_new_line_from_a_kits_watch_remakes_its_submissions_with_nothing_gathered(self, follower):
+        """The crew-board spec, A merge moves in sluice's queue: the watch opened at the first read prints a submission;
+        the next refresh takes it into the kept answer, gathers nothing, and a line differing only in its time moves
+        nothing; a refresh that gathers the kit hands it the line in place of running sluice."""
+        self.req = {"main": "/kit/main", "bolts": ["te"]}
+        follower.watches = w = self.Watching()
+        follower.refresh()
+        assert w.opened == [(BOX, "/kit/main")] and len(self.reads) == 1
+        empty = dict(self.QUEUED, branches=[])
+        w.states[(BOX, "/kit/main")] = {"doc": empty}
+        follower.refresh()
+        assert len(self.reads) == 1 and follower.kept.kits[BOX]["/kit/main"][1]["submissions"] == []
+        w.states[(BOX, "/kit/main")] = {"doc": self.QUEUED}
+        follower.refresh()
+        answer = follower.kept.kits[BOX]["/kit/main"][1]
+        assert len(self.reads) == 1 and [s["id"] for s in answer["submissions"]] == [41] and "submissions_error" not in answer
+        assert follower.last["read"]["served"] is False, "the queue's move read again"
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:30:00Z")}
+        assert not board.moved(follower.last["stamps"], dict(follower.last["stamps"], queues=w.stamp()))["any"]
+        self.stamps[(BOX, "/kit/main")] = "s2"
+        follower.refresh()
+        assert len(self.reads) == 2 and self.handed[-1] == {(BOX, "/kit/main"): [answer["submissions"], None]}
+        assert w.opened == [(BOX, "/kit/main")] and w.closed == [], "a watch was opened twice"
+
+    def test_a_new_watch_starts_from_the_overview_its_kits_gather_read_so_its_first_line_moves_nothing(self, follower, monkeypatch):
+        """A kit's queue is read once: the gather's own overview is the kept line the watch's first is compared with."""
+        self.req = {"main": "/kit/main", "bolts": ["te"]}
+        follower.watches = w = self.Watching()
+        gathered = board.flow_read
+
+        def with_overview(fleet, labels, sweep=False):
+            got = gathered(fleet, labels, sweep)
+            plan.READ.follower.used[BOX]["/kit/main"][1]["overview"] = self.QUEUED
+            return got
+        monkeypatch.setattr(board, "flow_read", with_overview)
+        follower.refresh()
+        assert w.states == {(BOX, "/kit/main"): {"doc": self.QUEUED}}
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:30:00Z")}
+        assert follower.look(self.FLEET) == follower.seen, "the watch's first line woke the follower"
+        follower.refresh()
+        answer = follower.kept.kits[BOX]["/kit/main"][1]
+        assert len(self.reads) == 1 and "submissions" not in answer and "overview" not in answer, "the first line was taken as a move"
+
+    def test_a_queue_an_ended_watch_left_unread_takes_the_overview_its_gather_read_and_never_a_stale_one(self):
+        w = self.Watching()
+        w.end((BOX, "/kit/main"), "sluice overview --watch exited 255")
+        answer = {"ok": True, "overview": self.QUEUED}
+        assert w.seed({BOX: {"/kit/main": ({"main": "/kit/main"}, answer)}}) and w.states[(BOX, "/kit/main")] == {"doc": self.QUEUED}
+        assert "overview" not in answer
+        w.end((BOX, "/kit/main"), "sluice overview --watch exited 255")
+        assert not w.seed({BOX: {"/kit/main": ({"main": "/kit/main"}, answer)}}) and "why" in w.states[(BOX, "/kit/main")]
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, branches=[])}
+        assert not w.seed({BOX: {"/kit/main": ({"main": "/kit/main"}, {"ok": True, "overview": self.QUEUED})}}), "a watch's line was overwritten"
+
+    def test_a_watch_that_ended_says_why_on_its_rows_and_is_opened_and_asked_once_at_the_next_tick(self, follower, monkeypatch):
+        """The crew-board spec, A watch ends: the ssh holding it dropped."""
+        self.req = {"main": "/kit/main", "bolts": ["te"]}
+        follower.watches = w = self.Watching()
+        monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
+        monkeypatch.setattr(type(follower), "ask", lambda self, fleet: None)
+        follower.refresh()
+        w.running.pop((BOX, "/kit/main"))
+        w.end((BOX, "/kit/main"), "sluice overview --watch exited 255: Connection closed, on " + BOX)
+        follower.refresh()
+        answer = follower.kept.kits[BOX]["/kit/main"][1]
+        assert answer["submissions"] is None and answer["submissions_error"].startswith("its overview watch ended (sluice overview --watch exited 255")
+        assert w.opened == [(BOX, "/kit/main")] and self.overviews_asked == [], "the watch was opened again, or asked, between ticks"
+        self.overviews[(BOX, "/kit/main")] = {"doc": self.QUEUED}
+        follower.tick()
+        assert w.opened == [(BOX, "/kit/main")] * 2 and self.overviews_asked == [(BOX, "/kit/main")]
+        assert [s["id"] for s in follower.kept.kits[BOX]["/kit/main"][1]["submissions"]] == [41] and len(self.reads) == 1
+
+
+    def test_every_refresh_reckons_a_batch_from_the_kept_read_and_one_told_is_not_reckoned_again_at_that_tip(self, follower, monkeypatch):
+        """The crew-board spec, A batch made due by the hours: nothing moves, and each refresh reckons from the kept read."""
+        reckoned = []
+        monkeypatch.setattr(plan, "reckon_batches", lambda fleet, found, read, skip=(): reckoned.append(set(skip)) or ({"wldn": True} if not skip else {}))
+        self.found = [("wldn", "o/state", "a" * 40, None)]
+        follower.refresh()
+        follower.refresh()
+        follower.refresh()
+        assert len(self.reads) == 1 and reckoned == [set(), {"wldn"}]
+        self.looks["state"] = {"wldn": "d" * 40, "swancloud": ""}
+        self.found = [("wldn", "o/state", "d" * 40, None)]
+        follower.refresh()
+        follower.refresh()
+        assert len(self.reads) == 2 and reckoned[-1] == set(), "a partition told at an older tip was not reckoned at the new one"
+
+    def test_a_tell_that_did_not_go_through_is_tried_again_at_the_next_tick_and_not_between(self, follower, monkeypatch):
+        """wldn's planner is not up: the tell starts herdr, so it is not made at every refresh."""
+        reckoned = []
+        monkeypatch.setattr(plan, "reckon_batches", lambda fleet, found, read, skip=(): reckoned.append(set(skip)) or ({} if skip else {"wldn": False}))
+        monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
+        monkeypatch.setattr(type(follower), "ask", lambda self, fleet: None)
+        self.found = [("wldn", "o/state", "a" * 40, None)]
+        follower.refresh()
+        follower.refresh()
+        follower.refresh()
+        follower.tick()
+        assert len(self.reads) == 1 and reckoned == [set(), {"wldn"}, set()]
+
+    def test_a_dev_server_started_by_hand_is_drawn_after_the_next_tick_with_nothing_gathered(self, follower, monkeypatch):
+        """The crew-board spec, A dev server started by hand: the tick reads the box's portless routes again."""
+        monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
+        monkeypatch.setattr(type(follower), "ask", lambda self, fleet: None)
+        follower.refresh()
+        route = [{"url": "https://unit-a--switchboard-kit.local", "name": "unit-a--switchboard-kit"}]
+        self.routes = {BOX: route}
+        follower.refresh()
+        assert follower.kept.kits[BOX]["/kit/main"][1]["routes"] == [], "routes were read between ticks"
+        follower.tick()
+        assert len(self.reads) == 1 and follower.kept.kits[BOX]["/kit/main"][1]["routes"] == route
+        follower.tick()
+        assert len(self.reads) == 1 and self.swept == []
+
+    def test_an_askers_pane_emptied_moves_the_cards_at_the_tick_and_the_sweep_judges_with_the_listing(self, follower, monkeypatch):
+        """The crew-board spec, An asker's agent gone: herdr's listing is read at the tick beside Pending You's answers,
+        and the card sweep between ticks judges with it."""
+        listing, swept = {"crw-3-conductor": (True, None)}, []
+        monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
+        monkeypatch.setattr(plan, "cards_asked", lambda fleet, read, here, now: [])
+        monkeypatch.setattr(plan, "askers_asked", lambda fleet, read, here, now: ["crw-3-conductor"])
+        monkeypatch.setattr(plan, "askers_listed", lambda fleet, names: {n: listing[n] for n in names})
+        monkeypatch.setattr(plan, "sweep_cards", lambda fleet, read, acts=None, answers=None, listed=None: swept.append(listed) or {"done": [], "unswept": []})
+        follower.tick()
+        follower.tick()  # the first tick read the kits and asked nothing of herdr, having no read to ask from
+        swept.clear()
+        follower.tick()
+        assert swept == [] and follower.kept.listed == {"crw-3-conductor": (True, None)}, "the same listing moved the cards"
+        listing["crw-3-conductor"] = (False, None)
+        follower.refresh()
+        assert swept == [], "herdr was read between ticks"
+        follower.tick()
+        assert swept == [{"crw-3-conductor": (False, None)}] and len(self.reads) == 1
+
+
+def test_the_session_sweep_after_nothing_moved_asks_the_host_the_last_could_not_check_and_no_other(monkeypatch):
+    """The card-sessions spec, A host the last sweep missed: unchecked {box} and nothing moved, the box alone is asked."""
+    import subprocess
+    asked = []
+    monkeypatch.setattr(crew, "crew_argv", lambda fleet, h, *a: ["crew", *a])
+    monkeypatch.setattr(crew, "on_machine", lambda fleet, h, argv, input=None: asked.append(h) or subprocess.CompletedProcess(argv, 0, "[]", ""))
+    found = [("wldn", "WilldanGroup/crew-state", "a" * 40, the_plan())]
+    only = plan.sessions_unchecked([{"label": "wldn", "host": BOX, "why": "did not answer (exit 255)"}])
+    assert only == {"wldn": {BOX}}
+    assert plan.sweep_sessions(FLEET, found, {}, [], [], {}, {}, only) == ([], []) and asked == [BOX]
+    asked.clear()
+    plan.sweep_sessions(FLEET, found, {}, [], [], {}, {})
+    assert asked == [BOX, "mac-studio"], "a refresh after a change did not sweep every host"
+    assert plan.sessions_unchecked([]) == {}
+
+
+def test_the_check_asks_each_host_once_for_its_kits_and_its_readings(monkeypatch):
+    """The crew-board spec, A refresh after nothing moved reads nothing: a host's kits and its card readings folders are
+    stamped in one request to it, a host with no kit asked for its readings alone, and one that does not answer has
+    every stamp of its None, which counts as moved (read.1)."""
+    asked = []
+
+    def stamped(fleet, host, kits, labels=(), overviews=(), routes=False):
+        asked.append((host, [k["main"] for k in kits], list(labels)))
+        return (None, "exit 255") if host == "macbook-pro" else ({"kits": {k["main"]: "s" for k in kits}, "readings": "r"}, None)
+    monkeypatch.setattr(plan, "stamped", stamped)
+    got = board.stamps_now({}, {BOX: {"/kit/main": ({"main": "/kit/main"}, {})}, "macbook-pro": {"/b/main": ({"main": "/b/main"}, {})}},
+                           {BOX: ["wldn"], "mac-studio": ["wldn", "swancloud"], "macbook-pro": ["wldn"]})
+    assert asked == [(BOX, ["/kit/main"], ["wldn"]), ("mac-studio", [], ["wldn", "swancloud"]), ("macbook-pro", ["/b/main"], ["wldn"])]
+    assert got == {"kits": {(BOX, "/kit/main"): "s", ("macbook-pro", "/b/main"): None}, "readings": {BOX: "r", "mac-studio": "r", "macbook-pro": None},
+                   "overviews": {}, "routes": {}}
+    fleet = {"partitions": {"wldn": {"machine": "mac-studio", "teams": ["swb-1", "swb-2"]}, "swancloud": {"machine": "mac-studio", "teams": []}},
+             "teams": {"swb-1": {"machine": BOX}, "swb-2": {"machine": BOX}}}
+    assert board.readings_hosts(fleet, ["wldn", "swancloud"]) == {BOX: ["wldn"], "mac-studio": ["wldn", "swancloud"]}
+
+
+class TestMoved:
+    """The follower's check before it reads (the crew-board spec, A refresh after nothing moved reads nothing): what moved
+    between the stamps its last read was made at and the stamps now."""
+
+    KEPT = {"crew": ("c" * 40, b"{teams}"), "state": {"wldn": "a" * 40, "swancloud": ""}, "blueprints": {"wldn": "b" * 40, "swancloud": "b" * 40},
+            "kits": {(BOX, "/kit/main"): "s1", ("mac-studio", "/a/main"): "s2"}, "readings": {BOX: "r1", "mac-studio": "r2"}}
+
+    def now(self, **kw):
+        return {k: ({**self.KEPT[k], **kw[k]} if k in kw and isinstance(self.KEPT[k], dict) else kw.get(k, self.KEPT[k])) for k in self.KEPT}
+
+    def test_nothing_moved_names_nothing_and_a_branch_the_cache_lacks_stands(self):
+        assert board.moved(self.KEPT, self.now()) == {"crew": False, "state": set(), "blueprints": set(), "kits": set(), "readings": set(),
+                                                      "cards": False, "queues": set(), "read": False, "any": False}
+
+    def test_one_state_tip_moved_names_its_partition_alone(self):
+        m = board.moved(self.KEPT, self.now(state={"wldn": "d" * 40}))
+        assert m["state"] == {"wldn"} and not m["crew"] and m["blueprints"] == m["kits"] == set() and m["any"]
+
+    def test_one_kit_moved_names_that_kit_on_its_host(self):
+        m = board.moved(self.KEPT, self.now(kits={(BOX, "/kit/main"): "s9"}))
+        assert m["kits"] == {(BOX, "/kit/main")} and m["state"] == set() and m["any"]
+
+    def test_a_kit_whose_stamp_could_not_be_read_counts_as_moved(self):
+        assert board.moved(self.KEPT, self.now(kits={(BOX, "/kit/main"): None}))["kits"] == {(BOX, "/kit/main")}
+        assert board.moved(dict(self.KEPT, kits={(BOX, "/kit/main"): None}), dict(self.KEPT, kits={(BOX, "/kit/main"): None}))["kits"] == {(BOX, "/kit/main")}
+
+    def test_a_kit_new_to_the_read_or_gone_from_it_counts_as_moved(self):
+        m = board.moved(self.KEPT, dict(self.KEPT, kits={("mac-studio", "/a/main"): "s2", (BOX, "/b/main"): "s3"}))
+        assert m["kits"] == {(BOX, "/kit/main"), (BOX, "/b/main")}
+
+    def test_only_one_hosts_readings_moved_names_that_host_and_nothing_to_read(self):
+        """The crew-board spec, A reading sent back: plannotator wrote a result in the box's readings folder."""
+        m = board.moved(self.KEPT, self.now(readings={BOX: "r9"}))
+        assert m["readings"] == {BOX} and m["kits"] == m["state"] == m["blueprints"] == set() and not m["crew"]
+        assert m["any"] and not m["read"]
+
+    def test_a_host_whose_readings_could_not_be_stamped_counts_as_moved(self):
+        assert board.moved(self.KEPT, self.now(readings={BOX: None}))["readings"] == {BOX}
+
+    FOUND = {"req_p4": ({"status": "pending", "version": 2}, None), "req_q1": (None, "This is wldn-ops's card; leave it.")}
+
+    def test_the_same_answers_at_the_next_tick_leave_the_cards_and_one_card_now_lost_moves_them(self):
+        """The crew-board spec, A card lost between ticks: Pending You answered alike, then no longer finds proposal 4's."""
+        kept = dict(self.KEPT, cards=board.cards_stamp(self.FOUND, None, False, 1))
+        assert not board.moved(kept, dict(kept, cards=board.cards_stamp(dict(self.FOUND), None, False, 2)))["any"]
+        m = board.moved(kept, dict(kept, cards=board.cards_stamp(dict(self.FOUND, req_p4=(None, "Not found: request:req_p4.")), None, False, 2)))
+        assert m["cards"] and m["any"] and not m["read"] and m["readings"] == m["kits"] == set()
+
+    def test_a_failed_bridge_or_a_card_the_last_sweep_left_moves_the_cards_at_each_tick_and_only_then(self):
+        """A card left because its act did not go through is tried again once a minute, not at every refresh."""
+        for why, left in (("Pending You did not answer whoami within 30 seconds.", False), (None, True)):
+            at_tick = board.cards_stamp(self.FOUND, why, left, 2)
+            assert board.moved(dict(self.KEPT, cards=board.cards_stamp(self.FOUND, None, False, 1)), dict(self.KEPT, cards=at_tick))["cards"]
+            kept = dict(self.KEPT, cards=at_tick)
+            assert not board.moved(kept, dict(kept))["cards"], "a refresh between ticks took the cards as moved again"
+            assert board.moved(kept, dict(kept, cards=board.cards_stamp(self.FOUND, why, left, 3)))["cards"]
+
+    def test_an_askers_pane_now_empty_at_the_tick_moves_the_cards(self):
+        """The crew-board spec, An asker's agent gone: herdr's listing read at the tick beside Pending You's answers."""
+        kept = dict(self.KEPT, cards=board.cards_stamp(self.FOUND, None, False, 1, {"crw-3-conductor": (True, None)}))
+        assert not board.moved(kept, dict(kept, cards=board.cards_stamp(self.FOUND, None, False, 2, {"crw-3-conductor": (True, None)})))["any"]
+        m = board.moved(kept, dict(kept, cards=board.cards_stamp(self.FOUND, None, False, 2, {"crw-3-conductor": (False, None)})))
+        assert m["cards"] and not m["read"]
+
+    def test_crews_head_or_the_teams_file_moved_or_unreadable_says_crew_moved(self):
+        assert board.moved(self.KEPT, self.now(crew=("e" * 40, b"{teams}")))["crew"]
+        assert board.moved(self.KEPT, self.now(crew=("c" * 40, b"{teams, again}")))["crew"]
+        assert board.moved(self.KEPT, self.now(crew=(None, b"{teams}")))["crew"]
+
+    def test_with_no_read_kept_everything_has_moved(self):
+        m = board.moved(None, self.KEPT)
+        assert m["crew"] and m["state"] == {"wldn", "swancloud"} and m["kits"] == set(self.KEPT["kits"]) and m["any"] and m["read"]
+        assert m["readings"] == {BOX, "mac-studio"}
+
+
+def test_no_asker_to_ask_after_reads_no_herdr_and_each_asker_named_is_listed_afresh(monkeypatch):
+    """herdr's listing of the askers is read afresh at the tick, its sessions listed again (crew.herdr_fresh)."""
+    fresh = []
+    monkeypatch.setattr(crew, "herdr_fresh", lambda: fresh.append(1))
+    assert plan.askers_listed(FLEET, []) == {} and fresh == []
+
+    class Acts:
+        def listed(self, name):
+            return (name == "swb-1-conductor", None)
+    assert plan.askers_listed(FLEET, ["swb-1-conductor", "crw-3-conductor"], Acts()) == {"swb-1-conductor": (True, None), "crw-3-conductor": (False, None)}
+    assert fresh == [1]
+
+
+def test_no_card_to_ask_after_starts_no_bridge_and_the_cards_asked_are_asked_in_one():
+    """The crew-board spec, No card to ask about: no bridge at all (a logic test's subprocess raises); and the cards the
+    clock's tick asks after are asked in one bridge in crew's own name."""
+    assert plan.cards_fetched(FLEET, []) == ({}, None)
+    opened = []
+
+    class Py:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def answer(self, tool, args):
+            opened.append((tool, args["requestId"], args["name"]))
+            return {"status": "pending"}, None
+
+    class Acts:
+        def bridge(self, name, later, held=None):
+            opened.append(name)
+            return Py()
+    assert plan.cards_fetched(FLEET, ["req_1", "req_2"], Acts()) == ({"req_1": ({"status": "pending"}, None), "req_2": ({"status": "pending"}, None)}, None)
+    assert opened == ["crew", ("get_request", "req_1", "crew"), ("get_request", "req_2", "crew")]
+
+
+class TestWatches:
+    """The follower's overview watches (the crew-board spec, The follower follows each kit's queue through sluice's
+    overview): what moves a kit's queue, and which watches open, close and are asked on the clock."""
+
+    DOC = {"schema": "sluice/overview@1", "at": "2026-10-28T16:24:41Z", "host": BOX, "branches": [
+        {"branch": "bolt/te", "submissions": [{"id": 41, "branch": "bolt/te", "state": "testing", "from": {"worktree": "unit/a"}}]}]}
+    KIT, OTHER = (BOX, "/kit/main"), ("mac-studio", "/a/main")
+
+    def test_a_line_differing_only_in_its_time_moves_nothing_and_a_new_submission_moves_the_queue(self):
+        assert not board.queue_moved(self.DOC, dict(self.DOC, at="2026-10-28T16:30:00Z"))
+        queued = dict(self.DOC, branches=[dict(self.DOC["branches"][0], submissions=self.DOC["branches"][0]["submissions"] + [
+            {"id": 42, "branch": "bolt/te", "state": "queued", "from": {"worktree": "unit/b"}}])])
+        assert board.queue_moved(self.DOC, queued) and board.queue_moved(None, self.DOC)
+        assert board.queue_stamp({"doc": self.DOC}) == board.queue_stamp({"doc": dict(self.DOC, at="2026-10-28T17:00:00Z")})
+        assert [s["id"] for s in board.queue_of({"doc": queued})[0]] == [41, 42]
+        assert board.queue_of({"why": "its overview watch ended"}) == (None, "its overview watch ended")
+
+    def test_a_watch_opens_for_each_kit_shown_and_closes_for_one_no_longer_shown(self):
+        assert board.watch_plan({self.KIT, self.OTHER}, set(), set(), set(), False) == {"open": [self.KIT, self.OTHER], "close": [], "ask": []}
+        assert board.watch_plan({self.KIT}, {self.KIT, self.OTHER}, set(), set(), True) == {"open": [], "close": [self.OTHER], "ask": []}
+
+    def test_a_host_whose_sluice_refused_watch_is_asked_on_the_clock_alone(self):
+        """The crew-board spec, A host whose sluice has no watch."""
+        assert board.watch_plan({self.KIT, self.OTHER}, {self.OTHER}, {BOX}, set(), False) == {"open": [], "close": [], "ask": []}
+        assert board.watch_plan({self.KIT, self.OTHER}, {self.OTHER}, {BOX}, set(), True) == {"open": [], "close": [], "ask": [self.KIT]}
+        assert board.watch_refused(2, "sluice overview --watch exited 2: error: unexpected argument '--watch' found")
+        assert not board.watch_refused(255, "sluice overview --watch exited 255: Connection closed")
+
+    def test_an_ended_watch_is_opened_again_at_the_next_tick_and_asked_once_then(self):
+        """The crew-board spec, A watch ends."""
+        assert board.watch_plan({self.KIT}, set(), set(), {self.KIT}, False) == {"open": [], "close": [], "ask": []}
+        assert board.watch_plan({self.KIT}, set(), set(), {self.KIT}, True) == {"open": [self.KIT], "close": [], "ask": [self.KIT]}
+
+    def test_the_same_routes_move_nothing_and_a_new_one_moves_its_host(self):
+        """The crew-board spec, A dev server started by hand."""
+        a = {"url": "https://unit-a--switchboard-kit.local", "name": "unit-a--switchboard-kit"}
+        kits = {BOX: {"/kit/main": ({"main": "/kit/main"}, {"ok": True, "routes": [a]}), "/b/main": ({"main": "/b/main"}, {"ok": False})},
+                "mac-studio": {"/a/main": ({"main": "/a/main"}, {"ok": True, "routes": None})}}
+        assert board.routes_moved(kits, {BOX: [a], "mac-studio": None}) == set()
+        assert board.routes_moved(kits, {BOX: [a, dict(a, name="unit-b--switchboard-kit")], "mac-studio": None}) == {BOX}
+        assert board.routes_moved(kits, {"mac-studio": []}) == {"mac-studio"}
+
+    def test_the_kits_shown_are_those_read_with_bolts(self):
+        kits = {BOX: {"/kit/main": ({"main": "/kit/main", "bolts": ["te"]}, {"ok": True}), "/b/main": ({"main": "/b/main", "bolts": []}, {"ok": True})},
+                "mac-studio": {"/a/main": ({"main": "/a/main", "bolts": ["maps"]}, None)}}
+        assert board.queue_kits(kits) == {self.KIT}
+
+    def test_a_watch_is_read_without_blocking_its_last_line_taken_and_its_end_said(self, monkeypatch):
+        """Watches.poll on a stand-in for the watch's process, its output a pipe: a line read whole, a part line kept for
+        the next look, and an end that says sluice refused --watch marks the host as asking on the clock."""
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+
+        class Proc:
+            def __init__(self):
+                (r, self.w), (e, self.ew) = os.pipe(), os.pipe()
+                self.stdout, self.stderr = os.fdopen(r, "rb"), os.fdopen(e, "rb")
+
+            def wait(self, timeout=None):
+                return 2
+        w, p = board.Watches(), Proc()
+        for pipe in (p.stdout, p.stderr):
+            os.set_blocking(pipe.fileno(), False)
+        w.running[self.KIT] = {"proc": p, "out": b"", "err": b""}
+        w.poll()
+        assert w.states == {} and self.KIT in w.running
+        line = json.dumps(self.DOC).encode()
+        os.write(p.w, line + b"\n" + line[:10])
+        w.poll()
+        assert w.states == {self.KIT: {"doc": self.DOC}} and w.running[self.KIT]["out"] == line[:10]
+        os.write(p.ew, b"error: unexpected argument '--watch' found\n")
+        os.close(p.w)
+        os.close(p.ew)
+        w.poll()
+        assert self.KIT not in w.running and w.ended == {self.KIT} and w.refused == {BOX}
+        assert w.states[self.KIT]["why"] == ("its overview watch ended (sluice overview --watch exited 2: error: unexpected argument '--watch' "
+                                             f"found, on {BOX}), and is opened again at the follower's next tick")
+
+
+class TestKept:
+    """What the host's follower keeps between its refreshes and serves while it has not moved (the crew-board spec, A
+    refresh after a change reads only what moved; plan.12's reading of 2026-10-28)."""
+
+    REQ = {"main": "/kit/main", "dir": "/kit", "bolts": [], "slots": {"swb-1": "~/.local/state/swb-1-team/slots"}}
+    ANSWER = {"ok": True, "main": [], "stamp": "s1"}
+
+    def test_a_kit_is_served_only_at_the_stamp_and_request_it_was_read_at(self):
+        kept = (self.REQ, self.ANSWER)
+        assert plan.kit_served(kept, "s1", self.REQ) == self.ANSWER
+        assert plan.kit_served(kept, "s2", self.REQ) is None, "a moved kit was served"
+        assert plan.kit_served(kept, "s1", dict(self.REQ, bolts=["tenant-environments"])) is None, "a kit asked of anew was served"
+        assert plan.kit_served(kept, None, self.REQ) is None, "a kit whose stamp could not be read was served"
+        assert plan.kit_served((self.REQ, None), "s1", self.REQ) is None and plan.kit_served(None, "s1", self.REQ) is None
+
+    def test_a_board_survey_asks_each_host_for_its_moved_kits_alone_and_keeps_what_it_read(self, monkeypatch):
+        asked = []
+
+        def gathered(fleet, host, req):
+            asked.append((host, sorted(k["main"] for k in req["kits"]), req.get("stamped")))
+            return {k["main"]: {"ok": True, "stamp": "new"} for k in req["kits"]}, None
+        monkeypatch.setattr(plan, "gathered", gathered)
+        held = [(t, None) for t in FLEET["partitions"]["wldn"]["teams"]]
+        k = plan.Kept()
+        monkeypatch.setattr(plan.READ, "follower", k)
+        first = plan.survey(FLEET, held, board=True)
+        assert sorted(asked) == [("chuck-herdr-alpha", ["/b/main", "/kit/main"], True), ("mac-studio", ["/a/main"], True)]
+        k.settle()
+        k.stamps = {(BOX, "/kit/main"): "new", (BOX, "/b/main"): "moved", ("mac-studio", "/a/main"): "new"}
+        asked.clear()
+        again = plan.survey(FLEET, held, board=True)
+        assert asked == [(BOX, ["/b/main"], True)], "an unmoved kit was gathered again, or a moved one served"
+        assert again[BOX]["kits"]["/kit/main"] == first[BOX]["kits"]["/kit/main"] and again["mac-studio"] == first["mac-studio"]
+        assert set(k.used) == {BOX, "mac-studio"} and set(k.used[BOX]) == {"/kit/main", "/b/main"}
+
+    def test_a_board_survey_hands_each_kit_its_queue_as_the_watch_read_it_in_place_of_running_sluice(self, monkeypatch):
+        """The crew-board spec, One watch for each kit: a refresh that gathers the kit takes its queue from the watch's line."""
+        asked = []
+        monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: asked.append(req) or ({k["main"]: {"ok": True} for k in req["kits"]}, None))
+        k = plan.Kept()
+        k.queued = {(BOX, "/kit/main"): [[{"id": 41, "branch": "bolt/te"}], None]}
+        monkeypatch.setattr(plan.READ, "follower", k)
+        plan.survey(FLEET, [("swb-1", "te")], board=True)
+        assert [x.get("queued") for x in asked[0]["kits"]] == [[[{"id": 41, "branch": "bolt/te"}], None]]
+        assert "queued" not in k.used[BOX]["/kit/main"][0], "the kit was kept by a request that names its queue"
+
+    def test_a_host_that_does_not_answer_is_kept_with_no_answer_so_its_kits_read_as_moved(self, monkeypatch):
+        monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: (None, "ssh: connect timed out") if host == BOX else
+                            ({k["main"]: {"ok": True, "stamp": "s"} for k in req["kits"]}, None))
+        k = plan.Kept()
+        monkeypatch.setattr(plan.READ, "follower", k)
+        sv = plan.survey(FLEET, [(t, None) for t in FLEET["partitions"]["wldn"]["teams"]], board=True)
+        assert sv[BOX] == {"ok": False, "error": "ssh: connect timed out"}
+        assert {m: a for m, (_, a) in k.used[BOX].items()} == {"/kit/main": None, "/b/main": None}
+
+    def test_a_survey_of_any_other_command_is_served_nothing_the_follower_kept(self, monkeypatch):
+        asked = []
+        monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: asked.append(host) or ({k["main"]: {"ok": True} for k in req["kits"]}, None))
+        plan.survey(FLEET, [("swb-1", None)], board=True)
+        assert asked == [BOX] and plan.READ.follower is None
+
+    def test_a_state_file_at_a_tip_already_listed_is_its_kept_blob_and_starts_no_git(self, monkeypatch):
+        calls = []
+        tip = "f" * 40
+        monkeypatch.setattr(plan, "git", lambda repo, *args, **kw: calls.append(args[0]) or f"100644 blob {'1' * 40}\tplan.rec\n100644 blob {'2' * 40}\tsignals/c/01-x.md")
+        monkeypatch.setattr(plan, "cat_file", lambda repo, names: calls.append("cat-file") or [f"text of {n}" for n in names])
+        k = plan.Kept()
+        monkeypatch.setattr(plan.READ, "follower", k)
+        assert plan.show("o/state", tip, "plan.rec") == f"text of {'1' * 40}" and plan.show("o/state", tip, "moves.rec") is None
+        assert plan.paths_at("o/state", tip, "signals/") == ["signals/c/01-x.md"]
+        assert board.texts("o/state", tip, ["signals/c/01-x.md", "signals/c/capture.md"]) == {"signals/c/01-x.md": f"text of {'2' * 40}"}
+        assert calls == ["ls-tree", "cat-file"], "a kept tip was listed again or a held blob read again"
+        k.settle()
+        assert plan.show("o/state", tip, "plan.rec") == f"text of {'1' * 40}" and calls == ["ls-tree", "cat-file"]
+        k.settle()
+        k.settle()
+        assert k.listings == {} and k.blobs == {}, "a tip no refresh read kept its blobs"
 
 
 class TestRailFrame:

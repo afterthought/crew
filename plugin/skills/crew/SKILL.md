@@ -40,7 +40,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | free a slot still holding a unit or chore no longer in the team's bolt | `crew unit free <unit> [--team <team>]`, `crew chore free <chore> [--team <team>]` |
 | bring up, check or end a partition's main level and dispatchers, each agent it starts greeted to read where the partition stands and carry on | `crew main up\|status\|down <label>` |
 | open the partition's console in this host's operator session with no agent: a shell tab with crew on its path, and its flow, rail and board tabs only when named, the rail tab of itself too while no host job follows; each tab already open kept, its command run again where a restart left its pane a shell, a closed one left closed unless named; or close it | `crew console up\|down <label> [flow] [rail] [board]` |
-| be the host's follower with no tab, as swancloud's job runs it: every 30 seconds and on each run-record entry, each partition's rail, board and agents' views written and due restarts handed out, waiting while a rail tab follows | `crew _follow [--once]` |
+| be the host's follower with no tab, as swancloud's job runs it: fetching once a minute and showing this host's writes at once, reading only what moved and each kit's queue from sluice's overview watch, each partition's rail, board and agents' views written and due restarts handed out, a frame stale after three minutes, waiting while a rail tab follows | `crew _follow [--once]` |
 | after a restart, bring back every standing agent of this host whose pane came back empty, or dead, opened again, greeting each conductor and each agent outside a team it brings back, and each agent it had to start fresh | `crew revive` |
 | hold a host before herdr is upgraded or the host rebooted: crew starts no agent there, and every standing agent is told to finish its step and start nothing new; `--now` ends every agent at once | `crew hold <host>\|--all "<why>" [--now]` |
 | see what still works on a held host, or wait until it is quiet and end every crew agent there, its panes kept | `crew hold status\|wait [<host>\|--all]` |
@@ -53,7 +53,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | offer a `manual` environment a deploy, its card raised in main-level ops's name with the kit's changelog and after-deploy steps (the kit's deployer) | `crew ops offer <env> --to <sha> --from <sha\|none> [--notes <file>] [--steps <file>] --label L` |
 | record the user's word for a deploy the rail offers (main-level ops, on the user's yes) | `crew ops approve <env> --to <sha> --label L` |
 | record an operation done or declined | `crew ops step <env> [--to <sha>] --key <key> --state done\|declined --label L` |
-| see what crew did lately in a partition, read from its branch, or as it reaches the branch | `crew events [--label L] [--about <object>] [--follow]` |
+| see what crew did lately in a partition, read from its branch, or as it reaches the branch, this host's entries at once and another's within the minute | `crew events [--label L] [--about <object>] [--follow]` |
 | push what of this host's run record a refused push left (each entry is pushed as it is written) | `crew events --push [--label L]` |
 | create a partition's flywheel branch, adopting its old plan | `crew state init <label>` |
 | answer what happened to a bolt, a unit, a chore or a signal, each stage's end with how it ended (`Ended`) and what it delivered (`Delivered`) | `crew trace <bolt|unit|chore|signal>` |

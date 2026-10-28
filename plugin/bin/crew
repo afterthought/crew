@@ -278,10 +278,12 @@
 #                                      its pane a shell, and one the user closed stays closed unless named; down closes
 #                                      them
 #   crew _follow  [--once]             the host's follower with no tab, the command swancloud's job runs on each host:
-#                                      every 30 seconds and on each run-record entry, for each partition with an
-#                                      operator session here, due restarts handed out once crew's checkout or the teams
-#                                      file moved, then one read, writing the rail's frame, the board's and the agents'
-#                                      views; one follower to a host, holding its lock, a second waiting for it
+#                                      one read for every partition with an operator session here, fetching once a
+#                                      minute and showing this host's writes within seconds, reading only what moved
+#                                      and following each kit's queue through sluice's overview watch; due restarts
+#                                      handed out once crew's checkout or the teams file moved, the rail's frame, the
+#                                      board's and the agents' views written, a frame stale after three minutes; one
+#                                      follower to a host, holding its lock, a second waiting for it
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
 #   crew tell     --board < word.json  a word from a dock of the board, as its listener pipes it ({label, key, to,
@@ -332,7 +334,8 @@
 # What happened, read from the run record every command that moves work appends on the host it ran on and pushes to
 # the partition's branch as it writes it:
 #   crew events   [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-#                                      the entries on the partition's branch, in time order; no host is asked
+#                                      the entries on the partition's branch, in time order; no host is asked;
+#                                      --follow prints this host's entries at once and another's within the minute
 #   crew events   --push [--label L]   push what of this host's run record a refused push left on it
 #   crew trace    <object>             one bolt's, unit's or signal's history: what was done, by whom, in which
 #                                      session, with which commit, and what it led to
