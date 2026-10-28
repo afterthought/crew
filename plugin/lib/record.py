@@ -58,7 +58,7 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form Answer Age Split
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form Answer Age Split Submission
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
@@ -73,7 +73,8 @@ DESCRIPTOR = """\
 # on it, in crew's words made from names alone, cards.answer_said), a landing's Repo (the kit it landed on),
 # Head (the commit that kit's main holds afterwards, plan.14), and, for a bolt a team held, its Age (whole minutes from
 # its newest give to its landing) and Split (those minutes by holder, `team 200, kit 25, user 125, hold 0, nobody 20`,
-# plan.20), a branch.kept's Head (the commit a unit's, chore's or
+# plan.20), a landing's submission's Submission (sluice's number for it, on its bolt.submit from the moment sluice queued
+# it, plan.21), a branch.kept's Head (the commit a unit's, chore's or
 # fix's branch the tidy kept is at) and Count (its commits whose patch its bolt, or main, lacks, plan.10), crew's own
 # order of two units a forecast found in conflict, the unit.after that puts one After the other or the one that Lifted
 # it, with the Settle whose end decided it (plan.13), a record.proposed's State (settled in the pane) and Form
@@ -82,7 +83,7 @@ DESCRIPTOR = """\
 # suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
          "Forecast", "Batch", "Units", "Count", "Card", "Key", "Unread", "Base", "Phase", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
-         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form", "Answer", "Age", "Split")
+         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form", "Answer", "Age", "Split", "Submission")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
