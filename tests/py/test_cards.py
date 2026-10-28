@@ -1936,6 +1936,20 @@ class TestRecord:
         assert [o["id"] for o in c["options"]] == ["loosen", "accept", "back"] and c["options"][0]["label"] == "Loosen ops.3 and ops.7 as drafted"
         assert [a["title"] for a in c["artifacts"]] == ["Where your rules decided, and the rules loosened", "Record 0032"]
 
+    def test_an_amendments_card_is_titled_by_its_own_first_words_cut_at_whole_words_and_not_the_records_title(self):
+        """Record 0031 as amended 2026-10-24: record/swancloud/0019 was asked three times on 2026-10-22 and 23 under its
+        one title, so three amendments read as one question asked again."""
+        f = dict(kit="crew", number=31, title="crew raises six cards at fixed points of its process", opening="Amended 2026-10-24: x.",
+                 text=RECORD, amendment="a card asked again says what changed, a landing's approval stands through taking main in, "
+                                        "and an amendment's card is titled by the amendment")
+        c = built.record_card(f)["card"]
+        assert c["title"] == ("Accept an amendment to record 0031 in crew: a card asked again says what changed, a landing's approval "
+                              "stands through taking main in, and…")
+        assert len(c["title"]) <= built.TITLE and c["approve"]["action"] == "Accept record 0031"
+        c = built.record_card(dict(f, amendment="the deployer's host is deneb", alternatives={
+            "rules": ["deploy.9"], "other": "mac-studio", "text": "## Where\n\ndeploy.9", "recommended": "accept"}))["card"]
+        assert c["title"] == "An amendment to record 0031 in crew: the deployer's host is deneb"
+
 
 # crew record (briefs.15, record 0031 §1): the record's facts read from its Markdown at a commit, whether the file holds
 # the status recorded, the alternatives a rule decided between, the refusals made before anything is read, and the raise
@@ -1999,6 +2013,7 @@ class TestRecordCommand:
         assert (f["title"], f["opening"], f["quoted"]) == ("switchboard runs GitHub's workflows itself", "The runners cost. A fleet costs more.",
                                                            ["I don't want a fleet"])
         assert f["text"].startswith("# switchboard runs GitHub's workflows itself") and "status: proposed" not in f["text"]
+        assert f["amendment"] is None
         b = built.record_card(f)
         assert b["key"] == "record/switchboard-kit/0032" and re.fullmatch(plan.RECORD_KEY, b["key"])
         assert (b["card"]["kind"], b["card"]["approve"]["risk"], b["card"]["approve"]["reversible"]) == ("approve", "low", True)
@@ -2025,13 +2040,32 @@ class TestRecordCommand:
 
     def test_an_amendment_is_proposed_while_marked_and_accepted_or_rejected_once_its_mark_is_gone(self):
         f = recorded(AMENDED, "proposed", before=ACCEPTED)
-        assert f["opening"] == "- **Rented.** The runners are rented by the hour."
+        assert (f["opening"], f["amendment"]) == ("- **Rented.** The runners are rented by the hour.", "Rented")
         with pytest.raises(crew.Refusal, match="its file on main says accepted, with an amendment still marked proposed"):
             recorded(AMENDED, "accepted", before=ACCEPTED)
         taken = AMENDED.replace(" Status: proposed to the user on 2026-10-18, as `briefs.15` has it; accepted only on their yes.", "")
         assert recorded(taken, "accepted", before=AMENDED) and recorded(ACCEPTED, "rejected", before=AMENDED)
         with pytest.raises(crew.Refusal, match="as rejected: its file on main says accepted"):
             recorded(ACCEPTED, "rejected", before=MADR)
+
+    @pytest.mark.parametrize("words, said", [
+        ("Amended 2026-10-22: what “no row worse than before” and “every row added ok” read. Eight deploys failed their suite.",
+         "what no row worse than before and every row added ok read"),
+        ("Amended 2026-10-23: the deployer's host is deneb. The user chose it on the design agent's card.", "the deployer's host is deneb"),
+        ("Amended 2026-10-23: a break-glass deploy is known to the deployer as a deploy is. On 2026-10-23 ops deployed the box.",
+         "a break-glass deploy is known to the deployer as a deploy is")])
+    def test_each_amendment_of_one_record_titles_its_card_by_its_own_first_words(self, words, said):
+        """record/swancloud/0019's three amendments of 2026-10-22 and 23, each a paragraph that opens with its proposed
+        mark as the design agent writes them, asked under the record's one title until record 0031 as amended 2026-10-24."""
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        f = recorded(ACCEPTED + f"\n{mark} {words.replace('“', '').replace('”', '')}\n", "proposed", before=ACCEPTED)
+        assert f["amendment"] == said
+        assert built.record_card(f)["card"]["title"] == f"Accept an amendment to record 0032 in switchboard-kit: {said}"
+
+    def test_an_amendment_with_no_words_of_its_own_is_refused_and_nothing_raised(self):
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        with pytest.raises(crew.Refusal, match="it has no words of its amendment. Nothing is raised."):
+            recorded(ACCEPTED + f"\n{mark} Amended 2026-10-23:\n", "proposed", before=ACCEPTED)
 
     @pytest.mark.parametrize("alternatives, said", [
         ("## Where\n\nops.3", "their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>"),
