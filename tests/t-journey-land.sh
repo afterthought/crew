@@ -487,7 +487,10 @@ echo 2 > "$T/sluice-wait-$n-fives"  # two waits more that sluice is undecided on
 : > "$CREW_TEST_LOG"
 rm "$T/sluice-wait-holds"
 until_ok closed far-reach || fail "the waiter's read did not close far-reach:"$'\n'"$(calls)"
-(( $(calls | grep -c "^$box sluice wait main --timeout 9m --json in ") >= 3 )) || fail "the waiter did not wait a call at a time:"$'\n'"$(calls)"
+# sluice undecided on two more waits: the waiter spent both and called again after each (teams.5)
+eq "$(cat "$T/sluice-wait-$n-fives")" "0"
+(( $(calls | grep -c "^$box sluice wait main --timeout 9m --json in $(cd "$kd" && pwd -P)/places/land-far-reach$") >= 2 )) ||
+  fail "the waiter did not wait a call at a time:"$'\n'"$(calls)"
 until_ok bash -c '! kill -0 "$1" 2>/dev/null' _ "$waiter" || fail "the waiter outlived its read"
 eq "$(field $box bolt.submit Outcome bolt/far-reach) $(field $box bolt.submit Submission bolt/far-reach)" "landed $n"
 eq "$(field $box bolt.land By bolt/far-reach) $(field $box bolt.land Head bolt/far-reach)" "wldn-ops $(git -C "$k" rev-parse main)"
