@@ -68,8 +68,9 @@ BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\n
 def submit(monkeypatch, tmp_path):
     """crew bolt submit on stand-ins for what it reaches: the plan, ops's transcript, the team's host, whose main is at
     OLD before, whose policy takes no pull requests, whose sluice has recorded no submission to main, and which
-    queues, waits on and lands the bolt unless told otherwise (outs, in turn), and this host's run record and kept
-    words, under tmp_path; crew bolt land's close stood in for."""
+    queues, waits on and lands the bolt unless told otherwise (outs, in turn), sluice's record of the submission as its
+    last wait printed it, this host deneb too, where the landing is read in this process, and this host's run record,
+    team state and kept words, under tmp_path; crew bolt land's close stood in for."""
     got = {"ran": [], "emitted": [], "closed": [], "verdict": heard(),
            "outs": [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]}
     monkeypatch.setattr(plan, "CONTEXT", {})
@@ -80,15 +81,38 @@ def submit(monkeypatch, tmp_path):
     monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(
         "MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE)))
     names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK", plan.SUBMISSIONS: "SUBMISSIONS",
-             plan.LAND_COPIES: "COPIES", plan.QUEUE: "OVERVIEW"}
-    monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: got["ran"].append(names[argv[2]]) or (
-        ran_as(0, NONE_YET) if argv[2] == plan.SUBMISSIONS else ran_as(0, "THERE=-\n") if argv[2] == plan.LAND_COPIES
-        else ran_as(0, EMPTY_QUEUE) if argv[2] == plan.QUEUE else got["outs"].pop(0)))
+             plan.LAND_COPIES: "COPIES", plan.QUEUE: "OVERVIEW", plan.SUBMISSION_STATUS: "STATUS"}
+    waited = [None]
+
+    def on_machine(fleet, host, argv):
+        got["ran"].append(names[argv[2]])
+        if argv[2] == plan.SUBMISSIONS:
+            return ran_as(0, NONE_YET)
+        if argv[2] == plan.LAND_COPIES:
+            return ran_as(0, "THERE=-\n")
+        if argv[2] == plan.QUEUE:
+            return ran_as(0, EMPTY_QUEUE)
+        if argv[2] == plan.SUBMISSION_STATUS:  # as the last wait printed it, or landed
+            doc = json.loads(waited[0].stdout)
+            return ran_as(0, json.dumps(doc if doc.get("schema") else {"schema": plan.SUBMISSION, "id": int(argv[-1]), "state": "landed"}))
+        out = got["outs"].pop(0)
+        if argv[2] == plan.WAIT:
+            waited[0] = out
+        return out
+    monkeypatch.setattr(plan.crew, "on_machine", on_machine)
+    monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: Plan())
+    monkeypatch.setattr(plan, "team_state", lambda t: tmp_path / "team")
+    monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", f"{label}/main"))
+    monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "tip")
+    monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [
+        dict({k: v for k, v in e.items() if v not in (None, "") and k not in ("frm", "refused")}, From=e.get("frm") or [],
+             **({"Refused": e["refused"]} if e.get("refused") else {})) for e in got["emitted"]])
     monkeypatch.setattr(plan.READ, "drop_kit", lambda *a: None)
     monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: got["emitted"].append(dict(f, Act=act, On=on)) or "eid")
     monkeypatch.setattr(plan.record, "who", lambda: "swancloud-ops")
     monkeypatch.setattr(plan, "may_write", lambda fleet, key, a: None)
-    monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: got["closed"].append(a.bolt))
+    monkeypatch.setattr(plan, "bolt_land", lambda fleet, a, **k: got["closed"].append(a.bolt))
     monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None, pane=None: None)
     monkeypatch.setattr(plan, "LANDINGS", tmp_path / "landings")
 
@@ -106,13 +130,13 @@ class TestTheSubmission:
         transcript record and the words' length, none of the words, and the words are kept on this host as sluice
         queues it, before any wait, so crew bolt land's close reads them back wherever the landing's end is read."""
         kept = []  # what the words kept read back, at the wait and at crew bolt land's close
-        monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: kept.append(plan.landing_word_read("swancloud", a.bolt, "session/s-1/u-7")))
+        monkeypatch.setattr(plan, "bolt_land", lambda fleet, a, **k: kept.append(plan.landing_word_read("swancloud", a.bolt, "session/s-1/u-7")))
         ran = plan.crew.on_machine
         monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: (
             argv[2] == plan.WAIT and kept.append(plan.landing_word_read("swancloud", "y", "session/s-1/u-7"))) or ran(fleet, host, argv))
         got = submit["run"](WORDS)
         assert kept[0] == WORDS and kept[-1] == WORDS
-        assert got["ran"] == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
+        assert got["ran"] == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "STATUS", "LANDED", "MARK"]
         queued, landed = got["emitted"]
         assert (queued["Act"], queued["Outcome"], landed["Act"]) == ("bolt.submit", "queued", "bolt.submit")
         for e in (queued, landed):
