@@ -918,6 +918,19 @@ class TestSessionEnd:
         assert plan.end_session("wldn", "proposal/9") == ("no session was running for proposal/9", False)
         assert not (tmp_path / "wldn").exists()
 
+    def test_a_batchs_read_closes_its_card_and_returns_though_another_end_swept_its_folder(self, monkeypatch, tmp_path, capsys):
+        d = self.recorded(monkeypatch, tmp_path, "batch/3")
+        sent = {"status": "answered", "turn": "agent", "version": 2, "answer": {"note": {"text": "Read."}}}
+        acts = Acts({"get_request": (sent, None)}, [post("batch/3", "wldn-planner", "req_b3", On=["batch/3"])])
+        acts.end = lambda label, key: plan.end_session(label, key)[0]
+        fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "teams": {}, "hosts": {}}
+        plan.batch_card_read(fleet, "wldn", "batch/3", "wldn-planner", acts=acts)
+        assert [e["Act"] for e in acts.emitted] == ["card.close"]
+        assert capsys.readouterr().out.splitlines() == [
+            "batch/3: sent back on its card, with a note:", "Read.", "card batch/3: req_b3 closed",
+            "batch/3's session had already ended, and batch/3 is forgotten"]
+        assert not d.parent.exists()
+
 
 # --------------------------------------------------------------------------------------------- crew card wait, gone
 

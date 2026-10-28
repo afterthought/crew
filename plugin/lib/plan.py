@@ -13308,6 +13308,52 @@ def batch_waited(key, decided, got):
     return "read", "\n".join(lines), read_outcome(notes)
 
 
+def reading_read(key, got, decided, answered=None, held=False, recorded=True):
+    """What crew card read gives of a key with a reading (card-sessions "The session's decision reaches the owner as
+    the card's answer", review-batches), a decision of facts alone (code.7): the card as get_request gives it (got,
+    None when none is held, it was lost or it could not be read), whether a card of the key is held (held), the
+    reading's result (decided, card_result's, None while there is none), whether a session of it is recorded on this
+    host (recorded), and a batch's answer in a main-level pane (answered, (who, when) as pane_answered gives it). As
+    {lines, close, record, closed, aside, end}: lines, what it prints; close, the outcome its card is closed with, None
+    to close none; record, whether crew records the batch read by its own close when no card closed
+    (batch_read_close); closed, the status of a card Pending You shows closed outside crew, recorded so; aside, whether
+    the reading's decision is set aside so the next session starts anew (reading_decided); end, whether the reading's
+    session ends. A batch's, batch/<n>: its pane answer said without the words, its card closed answered; else what the
+    card and the reading sent together (batch_waited), the card closed with what was read and the batch recorded read,
+    the session ending with the card or, none held, here; nothing sent, that the batch waits on the user. A landing's,
+    land/<bolt>: the reading's decision alone, worded as land_waited words it, set aside, crew card session named to
+    open it again; nothing sent, that it waits on the user, nothing forgotten or ended. A long proposal's,
+    proposal/<n>: the reading's decision after the card's answer, a decided one set aside; nothing while it has none."""
+    r = dict(lines=[], close=None, record=False, closed=None, aside=False, end=False)
+    sent = bool(decided) and decided[0] in ("approved", "annotated")
+    if key.startswith("batch/"):
+        if answered:
+            said = pane_said(*answered)
+            return dict(r, lines=[f"{key}: {said}"], close=said[0].upper() + said[1:], end=True)
+        done = batch_waited(key, decided, got)
+        if done and done[0] == "read":
+            return dict(r, lines=done[1].split("\n"), close=done[2], record=True, end=not held)
+        if done:
+            return dict(r, lines=[done[1]], closed=done[2], end=True)
+        if decided:
+            return dict(r, lines=[f"{waited(key, decided, True)}; the batch waits on the user's word on its card, and crew "
+                                  f"card session {key} opens its reading again"])
+        return dict(r, lines=[f"{key}: nothing sent yet: the batch waits on the user, on its card or its reading"])
+    if key.startswith("land/"):
+        if decided:
+            return dict(r, lines=land_waited(key, decided, True).split("\n")
+                        + [f"{key}: its card is left as it is; crew card session {key} opens its reading again"], aside=sent)
+        if not recorded:
+            return dict(r, lines=[f"{key}: no reading of it runs on this host: crew card session {key} starts it"])
+        return dict(r, lines=[f"{key}: its reading waits on the user, who has sent nothing from it"])
+    if not decided:
+        return r
+    said = waited(f"{key}'s reading", decided, True).split("\n")
+    if not sent:
+        said[0] += f", and its card is still the user's to answer; crew card session {key} opens its reading again"
+    return dict(r, lines=said, aside=sent)
+
+
 def read_outcome(notes):
     """A batch card's close once the user has read the batch (review-batches): with no notes, or the notes that go to
     the units' teams, counted when crew can count them (None when it cannot)."""
@@ -13347,10 +13393,10 @@ def land_waited(name, decided, recorded, gone=False):
 
 
 def reading_decided(d, decided):
-    """A landing's reading once its wait printed the user's decision (card-sessions): an approval or annotations set
-    aside, as result.<started>.json, and the session forgotten, plannotator having ended with the decision, so the next
-    crew card session starts it anew and changes the card's link, and the next wait waits on that one. Anything else,
-    and a session crew ended meanwhile, is left as it is."""
+    """A landing's or a long proposal's reading once crew card read printed the user's decision (card-sessions): an
+    approval or annotations set aside, as result.<started>.json, and the session forgotten, plannotator having ended
+    with the decision, so the next crew card session starts it anew and changes the card's link, and the rail's refresh
+    tells nobody of it again (card_sweep). Anything else, and a session crew ended meanwhile, is left as it is."""
     if not decided or decided[0] not in ("approved", "annotated"):
         return
     try:
@@ -13558,10 +13604,18 @@ def card_read(fleet, a):
     ticked that was left and conflicts with main is held taking main first and its conductor told the take-main fix,
     and the bolts the read gives to land leave out each the run record holds so (main_firsts). An approval the user
     declined is then closed with their words, and the close recorded (record 0031 §1), with what they answered in
-    crew's words (cards.answer_said); nothing else is."""
+    crew's words (cards.answer_said); nothing else is. A key with a reading gives what the user sent in it too
+    (reading_read), since nothing of crew's waits on it (teams.24): a batch's, batch/<n>, its card and its reading
+    together, closing the card and recording the batch read (batch_card_read); a bolt's reading, land/<bolt>, its
+    decision alone, to the bolt's conductor (land_reading_read); a long proposal's, its reading's decision after the
+    card's answer, a decided one set aside."""
     import cards
     label, who = card_asker(fleet, a)
     kind = land_key(a.key, partition_kits(fleet, label))
+    if re.fullmatch(r"batch/\d+", a.key):
+        return batch_card_read(fleet, label, a.key, who, a.json)
+    if kind and kind[0] == "bolt" and re.fullmatch(r"land/[a-z0-9][a-z0-9-]*", a.key):
+        return land_reading_read(fleet, label, a.key, who, a.json)
     if kind and kind[0] == "kit":
         entries = cards.host_entries(record, label, crew.this_host())
         if not cards.card_under(entries, a.key, who):
@@ -13584,13 +13638,106 @@ def card_read(fleet, a):
                                  and not e.get("Refused")), None))
         earlier, unknown = landings_earlier(fleet, label, kind[1], a.key, who, entries, heads) if kind and kind[0] == "kit" else ([], [])
         first = main_firsts(fleet, label, entries, heads) if kind and kind[0] == "kit" and ticked_of(got, heads) else set()
+        d = CARDS / label / a.key
+        reads = a.key.startswith("proposal/") and d.is_dir()
+        decided = card_result(d) if reads else None
+        r = reading_read(a.key, got, decided) if reads else dict(lines=[], aside=False)
         print("\n".join(cards.answer_lines(a.key, card, got)
                         + (landing_lines(label, got, heads, earlier, unknown, stops(entries), first)
-                           if kind and kind[0] == "kit" else [])))
+                           if kind and kind[0] == "kit" else []) + r["lines"]))
+        if r["aside"]:
+            reading_decided(d, decided)
     if words is not None:
         record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words), Answer=cards.answer_said(got))
         print(f"card {a.key}: {card} closed, as the user declined it")
+
+
+def reading_said(key, got, r, as_json):
+    """What crew card read prints of a key with a reading, r as reading_read gives it: its lines, or with --json the
+    key, the card as get_request gave it and the lines."""
+    print(json.dumps(dict(key=key, card=got, said=r["lines"]), indent=1, ensure_ascii=False) if as_json else "\n".join(r["lines"]))
+
+
+def batch_card_read(fleet, label, key, who, as_json=False, acts=None):
+    """crew card read batch/<n>: the planner's read of a batch's card and its one reading together, on the main level's
+    host, once the card's answer wakes it or crew tells it the reading was sent (review-batches, card-sessions), what
+    reading_read gives: the batch answered in a main-level pane (pane_answered) said without the words, its card closed
+    answered and the reading ended; else what the card and the reading sent, the card's note and every annotation as
+    the user wrote them, the card closed with what was read, which ends the reading (row_card_close), and, when no card
+    closed, none held, it was lost or Pending You refused its close, the batch recorded read by crew's own close,
+    batch.close on batch/<n> in the planner's name (batch_read_close, briefs.12), the reading ended here when no card
+    was held; a card closed outside crew recorded closed as Pending You shows it, the reading ended; nothing sent, that
+    the batch waits on the user, nothing closed. A card Pending You no longer finds is recorded lost and the reading
+    still read; one it can't read is said, and read past when the reading has the user's word. Refused off the main
+    level's host, to any agent but the planner, and with neither a card nor a reading of the batch on this host."""
+    acts = acts or CardActs(fleet)
+    here, owner = acts.host(), f"{label}-planner"
+    why = session_refusal(key, label, fleet["partitions"][label]["machine"], here)
+    not why or fail(why)
+    "@" in who or who == owner or fail(f"{key}'s card and reading are {owner}'s to read, not {who}'s")
+    entries, d = acts.entries(label), CARDS / label / key
+    card, s, decided = cards.card_under(entries, key, owner), card_recorded(d), card_result(d)
+    card or s or decided or fail(f"no card and no reading of {key} is open on {here}: crew raises both when the reviewer's "
+                                 f"summary is delivered, with crew review {label} --wait")
+    answered, got = pane_answered(entries).get(key), None
+    if card and not answered:
+        try:
+            with acts.bridge(owner, "Read it again later.") as py:
+                got, words = py.answer("get_request", {"requestId": card, "name": owner})
+        except Refusal as e:
+            words = str(e)
+        if words is not None and cards.lost(words):
+            card_lost(acts, label, owner, key, card, words)
+            card = None
+        elif words is not None:
+            got = None
+            decided and decided[0] != "dismissed" or fail(f"crew can't read {key}'s card {card} now: {words}; read it again later")
+            print(f"{key}: crew can't read its card {card} now: {words}", file=sys.stderr)
+    r = reading_read(key, got, decided, answered, held=bool(card))
+    reading_said(key, got, r, as_json)
+    out = sys.stderr if as_json else sys.stdout
+    with contextlib.redirect_stdout(out):
+        closed = None  # the card a close closed, whose close ends the reading too
+        if r["close"]:
+            closed = row_card_close(fleet, label, owner, key, outcome=r["close"], acts=acts) if card else None
+            if r["record"] and batch_read_close(closed):
+                acts.emit(label, "batch.close", [cards.row_object(key) or key], by=owner,
+                          why=f"batch({key.split('/', 1)[1]}): read in its session", Key=key, State="read", Outcome=r["close"])
+                print(f"{key}: recorded read, {r['close']}")
+        elif r["closed"]:
+            acts.emit(label, "card.close", [cards.row_object(key)], by=owner, Card=card, Key=key, State=r["closed"],
+                      Outcome="closed outside crew", Answer=cards.answer_said(got))
+        if r["end"] and not closed:
+            ended = acts.end(label, key)
+            if ended:
+                print(ended)
+
+
+def land_reading_read(fleet, label, key, who, as_json=False, acts=None):
+    """crew card read land/<bolt>: the bolt's conductor's read of its landing's reading, on the host of the team holding
+    the bolt, once crew tells it the user sent it (card-sessions "The session's decision reaches the owner as the card's
+    answer"), what reading_read gives: its annotations word for word as notes on the bolt's row of its kit's landings
+    card, an approval as landing nothing, the card's approval being the word to land, the decision then set aside so
+    the next crew card session starts the reading anew (reading_decided); nothing sent, that it waits on the user,
+    nothing forgotten or ended. The conductor holds no card under the key: the kit's landings card, main-level ops's, is
+    left as it is. Refused for a bolt the plan does not hold or no team holds, off its team's host, and to any agent
+    but its conductor."""
+    acts = acts or CardActs(fleet)
+    kits, bolt = partition_kits(fleet, label), key.split("/", 1)[1]
+    _, b, t = land_held(fleet, label, bolt)
+    b or fail(f"{label}'s plan holds no bolt {bolt}, so {key} has no reading")
+    t or fail(f"bolt {bolt} is held by no team, so it is no row of its kit's landings card, and it has no reading")
+    why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), t["machine"], kits)
+    not why or fail(why)
+    owner = f"{t['name']}-conductor"
+    "@" in who or who == owner or fail(f"{key}'s reading is {owner}'s to read, not {who}'s")
+    d = CARDS / label / key
+    decided = card_result(d) if d.is_dir() else None
+    r = reading_read(key, None, decided, recorded=bool(card_recorded(d)) if d.is_dir() else False)
+    reading_said(key, None, r, as_json)
+    if r["aside"]:
+        reading_decided(d, decided)
 
 
 # ------------------------------------------------------------------------------------- a batch answered in a pane

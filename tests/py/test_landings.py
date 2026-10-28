@@ -843,12 +843,63 @@ def test_with_no_card_open_a_sent_bolt_whose_head_crew_cant_read_is_named_and_le
     assert read_unopened(monkeypatch, capsys, [], {}) == "card land/crew: no landings card of crew is open\n"
 
 
-def test_a_key_that_is_no_kits_still_refuses_when_no_card_is_held(monkeypatch):
-    monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", "crw-1-conductor"))
-    monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
-    monkeypatch.setattr(cards, "host_entries", lambda record, label, host: [])
-    with pytest.raises(crew.Refusal, match="^crw-1-conductor holds no open card under land/y on mac-studio"):
-        plan.card_read(FLEET, argparse.Namespace(key="land/y", label=None, json=False, sub="read"))
+class TestLandReadingRead:
+    """crew card read land/<bolt>, the bolt's conductor's on its team's host (card-sessions "The session's decision
+    reaches the owner as the card's answer"): the reading's decision alone, its annotations as notes on the bolt's row,
+    an approval as landing nothing, then set aside so crew card session starts it anew; the kit's card untouched."""
+    S = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio:19432/y", "started": "2026-10-23T10:00:00Z"}
+
+    def read(self, monkeypatch, tmp_path, result=None, session=True, who="crw-1-conductor", team="crw-1", key="land/y"):
+        d = tmp_path / "swancloud" / key
+        d.mkdir(parents=True, exist_ok=True)
+        if session:
+            (d / "session.json").write_text(json.dumps(self.S))
+        if result:
+            (d / "result.json").write_text(json.dumps(result))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", who))
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt), ("Repo", "crew")]),
+                                                                           FLEET["teams"].get(team)))
+        monkeypatch.setattr(cards, "Bridge", lambda *a, **k: pytest.fail("the read of a bolt's reading reached Pending You"))
+        plan.card_read(FLEET, argparse.Namespace(key=key, label=None, json=False, sub="read"))
+        return d
+
+    def test_annotations_print_word_for_word_as_notes_on_its_row_and_the_reading_is_set_aside(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "Annotated in a landing's session"."""
+        d = self.read(monkeypatch, tmp_path, {"decision": "annotated", "feedback": "1. 03-y-diff.txt: this drops the retry\n",
+                                              "annotationCount": 1})
+        assert capsys.readouterr().out == (
+            "land/y: notes from its reading, as notes on the landing card:\n1. 03-y-diff.txt: this drops the retry\n"
+            "land/y: its card is left as it is; crew card session land/y opens its reading again\n")
+        assert sorted(p.name for p in d.iterdir()) == [".lock", "result.20261023T100000Z.json"]
+
+    def test_an_approval_lands_nothing(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "Approved in a landing's session"."""
+        self.read(monkeypatch, tmp_path, {"decision": "approved", "annotationCount": 0})
+        assert capsys.readouterr().out.splitlines()[0] == (
+            "land/y: approved in its reading, which lands nothing: the card's approval is the word to land")
+
+    def test_nothing_sent_waits_on_the_user_and_forgets_nothing(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "Nothing decided yet"."""
+        d = self.read(monkeypatch, tmp_path)
+        assert capsys.readouterr().out == "land/y: its reading waits on the user, who has sent nothing from it\n"
+        assert sorted(p.name for p in d.iterdir()) == ["session.json"]
+        self.read(monkeypatch, tmp_path / "none", session=False)
+        assert capsys.readouterr().out == "land/y: no reading of it runs on this host: crew card session land/y starts it\n"
+
+    def test_any_agent_but_its_conductor_and_a_bolt_no_team_holds_are_refused(self, monkeypatch, tmp_path):
+        with pytest.raises(crew.Refusal, match="^land/y's reading is crw-1-conductor's to read, not swc-1-conductor's$"):
+            self.read(monkeypatch, tmp_path, who="swc-1-conductor")
+        with pytest.raises(crew.Refusal, match="^bolt y is held by no team"):
+            self.read(monkeypatch, tmp_path, team=None)
+
+    def test_an_old_card_of_the_bolts_own_under_its_head_is_still_read_as_a_card(self, monkeypatch):
+        monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", "crw-1-conductor"))
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(cards, "host_entries", lambda record, label, host: [])
+        with pytest.raises(crew.Refusal, match="^crw-1-conductor holds no open card under land/y/abc1234 on mac-studio"):
+            plan.card_read(FLEET, argparse.Namespace(key="land/y/abc1234", label=None, json=False, sub="read"))
 
 
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():

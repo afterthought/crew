@@ -548,7 +548,8 @@ class TestSessions:
         plan.row_card_close(None, "wldn", "wldn-planner", "batch/3", outcome="Read; no notes", acts=acts)
         assert acts.releases == []
 
-    def test_a_batch_wait_returns_the_cards_note_and_the_sessions_annotations_as_the_user_wrote_them(self):
+    def test_a_batchs_read_gives_the_cards_note_and_the_readings_annotations_as_the_user_wrote_them(self):
+        """review-batches "Notes written in a session" and "Two fine, one with notes", read by crew card read."""
         tapped = {"status": "answered", "turn": "agent", "answer": {"note": {"text": "x1: say what a zone is."}}}
         assert plan.batch_waited("batch/3", None, tapped) == (
             "read", "batch/3: sent back on its card, with a note:\nx1: say what a zone is.", "Read; 1 note sent to its team")
@@ -560,6 +561,15 @@ class TestSessions:
         assert plan.batch_waited("batch/3", ("approved", None, 0), None) == ("read", "batch/3: approved", "Read; no notes")
         assert plan.batch_waited("batch/3", ("annotated", notes, 2), tapped)[2] == "Read; 3 notes sent to their teams"
         assert plan.batch_waited("batch/3", ("annotated", notes, None), None)[2] == "Read; its notes sent to their teams"
+        r = plan.reading_read("batch/3", tapped, ("annotated", notes, 2), held=True)
+        assert r["lines"] == ["batch/3: sent back on its card, with a note:", "x1: say what a zone is.", "batch/3: annotated",
+                              "# Annotations", "", "1. Say what z means.", "2. Why one zone?"]
+        assert (r["close"], r["record"], r["end"], r["aside"]) == ("Read; 3 notes sent to their teams", True, False, False)
+
+    def test_a_batch_sent_with_no_card_held_ends_its_reading_at_the_read(self):
+        """review-batches "Sent with no card on the main level's host": the card's close would end it, and none is held."""
+        r = plan.reading_read("batch/13", None, ("approved", None, 0), held=False)
+        assert (r["lines"], r["close"], r["record"], r["end"]) == (["batch/13: approved"], "Read; no notes", True, True)
 
     def test_a_batch_whose_session_was_sent_is_recorded_read_by_crew_whenever_no_card_of_it_closed(self):
         """review-batches, "A batch whose reading session is sent is read, with or without its card": a card closed is
@@ -567,12 +577,36 @@ class TestSessions:
         assert plan.batch_read_close("req_b13") is False
         assert plan.batch_read_close(None) is True
 
-    def test_a_batch_wait_goes_on_while_neither_has_the_users_word_and_ends_on_a_card_closed_outside_crew(self):
+    def test_a_batch_nothing_sent_of_waits_on_the_user_and_one_closed_outside_crew_is_recorded_so(self):
         for decided in (None, ("dismissed", None, None)):
             assert plan.batch_waited("batch/3", decided, {"status": "pending", "turn": "you"}) is None
             assert plan.batch_waited("batch/3", decided, None) is None
+        assert plan.reading_read("batch/3", {"status": "pending", "turn": "you"}, None, held=True) == dict(
+            lines=["batch/3: nothing sent yet: the batch waits on the user, on its card or its reading"], close=None,
+            record=False, closed=None, aside=False, end=False)
+        r = plan.reading_read("batch/3", None, ("dismissed", None, None))
+        assert r["lines"] == ["batch/3: closed in plannotator with no decision; the batch waits on the user's word on its card, "
+                              "and crew card session batch/3 opens its reading again"] and not (r["close"] or r["end"])
         assert plan.batch_waited("batch/3", None, {"status": "cancelled"}) == (
             "closed", "batch/3: its card was closed outside crew; Pending You shows it cancelled", "cancelled")
+        r = plan.reading_read("batch/3", {"status": "cancelled"}, None, held=True)
+        assert (r["closed"], r["close"], r["end"]) == ("cancelled", None, True)
+
+    def test_a_batch_answered_in_a_pane_is_said_without_its_words_and_its_card_closed_answered(self):
+        """review-batches "The planner's wait was running", now its read."""
+        r = plan.reading_read("batch/16", {"status": "pending"}, ("annotated", "x", 1), ("swancloud-operator", "2026-10-22T20:17:03Z"), True)
+        assert r == dict(lines=["batch/16: answered in swancloud-operator's pane at 20:17Z"], close="Answered in swancloud-operator's "
+                         "pane at 20:17Z", record=False, closed=None, aside=False, end=True)
+
+    def test_a_long_proposals_read_gives_its_readings_decision_after_the_cards_answer(self):
+        """card-sessions "Approved in the session", "Annotated in the session" and "Closed with no decision"."""
+        assert plan.reading_read("proposal/4", None, ("approved", None, 0))["lines"] == ["proposal/4's reading: approved"]
+        r = plan.reading_read("proposal/4", None, ("annotated", "1. Why two?\n2. Name the host.", 2))
+        assert (r["lines"], r["aside"]) == (["proposal/4's reading: annotated", "1. Why two?", "2. Name the host."], True)
+        r = plan.reading_read("proposal/4", None, ("dismissed", None, None))
+        assert r["lines"] == ["proposal/4's reading: closed in plannotator with no decision, and its card is still the "
+                              "user's to answer; crew card session proposal/4 opens its reading again"] and not r["aside"]
+        assert plan.reading_read("proposal/4", {"status": "pending"}, None)["lines"] == []
 
     def test_a_sessions_result_gives_its_count_of_annotations(self, tmp_path):
         (tmp_path / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "a", "annotationCount": 2}))
@@ -719,6 +753,96 @@ class ReadingActs:
 
     def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
         return ("switchboard-kit",)
+
+
+class TestBatchRead:
+    """crew card read batch/<n>, the planner's on the main level's host (review-batches, card-sessions): the card and
+    its one reading read together, the card closed with what was read, and the batch recorded read when no card
+    closed."""
+    HELD = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
+
+    def read(self, monkeypatch, tmp_path, acts, result=None, session=True, who="wldn-planner"):
+        d = tmp_path / "wldn" / "batch/3"
+        d.mkdir(parents=True)
+        if session:
+            (d / "session.json").write_text(json.dumps({"pid": 42, "document": "/c/00-summary.md", "url": "http://x:19432",
+                                                        "started": "2026-10-23T10:00:00Z"}))
+        if result:
+            (d / "result.json").write_text(json.dumps(result))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        plan.batch_card_read(FLEET, "wldn", "batch/3", who, acts=acts)
+        return d
+
+    def test_a_tap_closes_the_card_with_its_note_whose_close_ends_the_reading(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A batch card tapped on the phone"."""
+        tapped = {"status": "answered", "turn": "agent", "version": 2, "answer": {"note": {"text": "x1: name the host."}}}
+        acts = ReadingActs({"get_request": (tapped, None)}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts)
+        assert [(e["Act"], e.get("Outcome")) for e in acts.emitted] == [("card.close", "Read; 1 note sent to its team")]
+        assert acts.ended == [("wldn", "batch/3")]
+        assert capsys.readouterr().out.splitlines() == [
+            "batch/3: sent back on its card, with a note:", "x1: name the host.", "card batch/3: req_b3 closed",
+            "ended batch/3's session, plannotator pid 42"]
+
+    def test_annotations_sent_print_word_for_word_and_close_the_card(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "Annotated in a batch's session"."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, self.HELD)
+        notes = "# Annotations\n\n1. x1: say what a zone is.\n2. z1: why one?"
+        self.read(monkeypatch, tmp_path, acts, {"decision": "annotated", "feedback": notes, "annotationCount": 2})
+        assert [(e["Act"], e.get("Outcome")) for e in acts.emitted] == [("card.close", "Read; 2 notes sent to their teams")]
+        out = capsys.readouterr().out
+        assert out.startswith(f"batch/3: annotated\n{notes}\ncard batch/3: req_b3 withdrawn\n")
+
+    def test_a_send_with_no_card_held_is_recorded_read_by_crews_own_close_and_its_reading_ended(self, monkeypatch, tmp_path, capsys):
+        """review-batches "Sent with no card on the main level's host"."""
+        acts = ReadingActs()
+        self.read(monkeypatch, tmp_path, acts, {"decision": "approved", "annotationCount": 0})
+        assert [(e["Act"], e.get("Outcome"), e.get("by")) for e in acts.emitted] == [("batch.close", "Read; no notes", "wldn-planner")]
+        assert acts.ended == [("wldn", "batch/3")] and acts.calls == []
+        assert capsys.readouterr().out.splitlines()[-2:] == ["batch/3: recorded read, Read; no notes", "ended batch/3's session, plannotator pid 42"]
+
+    def test_a_lost_card_is_recorded_lost_and_the_reading_still_read(self, monkeypatch, tmp_path, capsys):
+        """review-batches "Sent while the card is lost"."""
+        acts = ReadingActs({"get_request": (None, "Not found: req_b3")}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts, {"decision": "annotated", "feedback": "1. a\n2. b", "annotationCount": 2})
+        assert [(e["Act"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+            ("card.close", "lost", "lost to its owner: Not found: req_b3"), ("batch.close", "read", "Read; 2 notes sent to their teams")]
+        assert acts.ended == [("wldn", "batch/3")]
+
+    def test_a_refused_close_records_the_batch_read_and_leaves_the_reading_to_the_cards_withdrawal(self, monkeypatch, tmp_path):
+        """review-batches "Sent while the card's close is refused"."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None),
+                            "cancel_request": (None, "Too many requests.")}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts, {"decision": "approved", "annotationCount": 0})
+        assert [e["Act"] for e in acts.emitted] == ["card.close", "batch.close"] and acts.emitted[0]["refused"]
+        assert acts.ended == []
+
+    def test_a_batch_answered_in_a_pane_closes_the_card_it_holds_and_ends_the_reading(self, monkeypatch, tmp_path, capsys):
+        """review-batches "The planner's wait was running", now the planner's read."""
+        answered = {"Act": "batch.answer", "Batch": "3", "Key": "batch/3", "By": "wldn-operator", "At": "2026-10-22T20:17:03Z"}
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, self.HELD + [answered])
+        self.read(monkeypatch, tmp_path, acts)
+        assert [(e["Act"], e.get("Outcome")) for e in acts.emitted] == [("card.close", "Answered in wldn-operator's pane at 20:17Z")]
+        assert acts.ended == [("wldn", "batch/3")]
+        assert capsys.readouterr().out.splitlines()[0] == "batch/3: answered in wldn-operator's pane at 20:17Z"
+
+    def test_nothing_sent_closes_nothing_and_ends_nothing(self, monkeypatch, tmp_path, capsys):
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts)
+        assert acts.emitted == [] and acts.ended == []
+        assert capsys.readouterr().out == "batch/3: nothing sent yet: the batch waits on the user, on its card or its reading\n"
+
+    def test_another_agent_and_a_batch_with_neither_card_nor_reading_are_refused(self, monkeypatch, tmp_path):
+        with pytest.raises(plan.Refusal, match="^batch/3's card and reading are wldn-planner's to read, not swb-1-conductor's$"):
+            self.read(monkeypatch, tmp_path, ReadingActs(), who="swb-1-conductor")
+        with pytest.raises(plan.Refusal, match="^no card and no reading of batch/3 is open on mac-studio"):
+            self.read(monkeypatch, tmp_path / "none", ReadingActs(), session=False)
+
+    def test_off_the_main_levels_host_it_is_refused_naming_it(self, monkeypatch, tmp_path):
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="chuck-herdr-alpha")))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        with pytest.raises(plan.Refusal, match="^batch/3's reading session runs on chuck-herdr-alpha"):
+            plan.batch_card_read(fleet, "wldn", "batch/3", "wldn-planner", acts=ReadingActs())
 
 
 BOLT = plan.Rec("Bolt", [("Bolt", "b1"), ("Repo", "switchboard-kit")])
