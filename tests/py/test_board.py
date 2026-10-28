@@ -1156,7 +1156,7 @@ class TestMore:
         assert sorted(p) == ["attention", "bolt_plan", "cards", "construction", "environments", "hosts", "inception", "label", "operation", "plan",
                              "records", "teams"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
-        assert sorted(te) == ["bolt", "fixes", "goal", "host", "landing", "markers", "repo", "state", "submissions_error", "team", "teams",
+        assert sorted(te) == ["bolt", "fixes", "goal", "host", "landing", "markers", "record", "repo", "state", "submissions_error", "team", "teams",
                               "time", "units", "url"]
         assert sorted(te["units"][0]) == ["kind", "slot", "stage", "submission", "tasks", "unit", "url", "worktree"]
         assert sorted(te["fixes"][0]) == ["fix", "merged", "slot", "submission", "url", "worktree"]
@@ -1250,6 +1250,48 @@ class TestViews:
     def test_a_bolt_landed_and_still_in_the_plan_is_named_for_attention_to_its_conductor(self):
         assert view("brd-1-conductor") == [f"! breadboard-kit  ●  board-done  landed  1 of 1 merged  {DONE_TIME}", "    ●  done-one  landed",
                                            "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
+
+    QUEUED = [dict(entry("bolt.submit", 30, Outcome="queued", Submission="412", Head=S1), On=["bolt/tenant-environments", "team/swb-1"])]
+    READY = "chore tidy-a has not landed on main: it is ready"
+    UNCLOSED = [dict(entry("bolt.submit", 30, Outcome="landed", Submission="412", Head=S1), On=["bolt/tenant-environments"]),
+                entry("bolt.land", 29, bolt="tenant-environments", Refused=READY, By="wldn-ops")]
+
+    def test_a_landing_queued_is_said_on_its_bolts_head_line_with_sluices_number(self):
+        """crew-board "A landing queued": on the lane and in its conductor's band."""
+        assert view("swb-1-conductor", logs=self.QUEUED)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing queued as #412  0 of 2 merged"
+        assert "  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing queued as #412" in lane(
+            board.board_text(data(logs=self.QUEUED)), "Construction")
+
+    def test_a_close_refused_is_said_on_its_head_line_in_the_attention_gutter_to_its_conductor_and_main_level_ops(self):
+        """crew-board "A close refused": on the lane, in its conductor's band and in main-level ops's band, in the
+        words of its last refused close, which its conductor's attention names too."""
+        said = f"landed on main, not closed: {self.READY}"
+        mine = view("swb-1-conductor", logs=self.UNCLOSED)
+        assert mine[0] == f"! switchboard-kit  ◑◔  tenant-environments  {said}  0 of 2 merged"
+        assert f"! bolt tenant-environments: it landed on main and was not closed: {self.READY}" in mine
+        assert f"! switchboard-kit  swb-1  ◑◔  tenant-environments  {said}  0 of 2 merged" in view("wldn-ops", logs=self.UNCLOSED)
+        assert f"! switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {said}" in lane(board.board_text(data(logs=self.UNCLOSED)), "Construction")
+        assert not [l for l in view("wldn-ops") if "not closed" in l]
+
+    def test_a_landing_queued_that_sluices_queue_shows_standing_is_said_once_by_sluices_state(self):
+        """The run record has it queued as #355 and sluice's queue has #355 standing: its head line says it once, in
+        sluice's state, and says the record's queued again only once sluice's queue no longer shows it."""
+        logs = [dict(self.QUEUED[0], Submission="355")]
+        sv = queued(STANDING_SUBS)
+        assert view("swb-1-conductor", sv=sv, logs=logs)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged"
+        assert view("swb-1-conductor", logs=logs)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing queued as #355  0 of 2 merged"
+
+    def test_what_a_held_bolts_landing_is_read_from_the_run_record(self):
+        """Decision 5 (board.landing_of): queued while its last bolt.submit is, unclosed while its last bolt.land since
+        its landing is refused, and nothing once a close went through or before any landing."""
+        b = "tenant-environments"
+        assert board.landing_of(self.QUEUED, b) == {"queued": "412"}
+        assert board.landing_of(self.UNCLOSED, b) == {"unclosed": self.READY}
+        assert board.landing_of(self.UNCLOSED + [entry("bolt.land", 20, bolt=b, Repo="switchboard-kit", Head=S2)], b) is None
+        assert board.landing_of(self.UNCLOSED[:1], b) is None and board.landing_of([], b) is None
+        refused_before = [entry("bolt.land", 40, bolt=b, Refused=self.READY)] + self.UNCLOSED[:1]
+        assert board.landing_of(refused_before, b) is None
+        assert board.landing_of(self.UNCLOSED, "ssh-fix") is None
 
     def test_the_planner_reads_the_plan_in_brief_each_teams_bolt_and_the_proposals_with_whom_they_wait_on(self):
         assert view("wldn-planner", props=WAITS) == [

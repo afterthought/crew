@@ -18,7 +18,7 @@
 
 ## 4. The bolt's head line and the agents' views
 
-- [ ] 4.1 A held bolt's head line says its landing is queued with its submission number, or that it landed on main and was not closed with its refused close's words, and main-level ops's band shows the latter (design, Decision 5; Task notes 4.1); passes `tests/py/test_board.py`, and Verify `tests/suite mod` ends with "0 failed".
+- [x] 4.1 A held bolt's head line says its landing is queued with its submission number, or that it landed on main and was not closed with its refused close's words, and main-level ops's band shows the latter (design, Decision 5; Task notes 4.1); passes `tests/py/test_board.py`, and Verify `tests/suite mod` ends with "0 failed".
 
 ## 5. ops's brief
 

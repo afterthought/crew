@@ -99,3 +99,14 @@ test("a ledger's head line is drawn with the bolt's age and who holds it", async
   const lines = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
   expect(lines.findIndex((l) => /^ {2}crew {2}◕◔ {2}curation-and-holds {2}0 of 2 merged {2}3h 05m: team 2h 10m, kit 12m, user 40m, nobody 3m; user since 14:02, batch\/12$/.test(l))).toBeGreaterThanOrEqual(0)
 })
+
+// A bolt that landed on main and whose close crew refused (plan.21): main-level ops's band draws its head line in the
+// attention gutter with the refusal's words, as its views say it.
+test("main-level ops's band draws a landed bolt crew could not close", async ($, on) => {
+  const unclosed = [['! ', null], ['crew', null], ['  ', null], ['crw-1', 'dim'], ['  ', null], ['●', null], ['  ', null], ['doctor-rows', null],
+    ['  ', null], ['landed on main, not closed: chore tidy-rows has not landed on main: it is ready', null], ['  ', null], ['1 of 1 merged', null]]
+  const views = { ...VIEWS, views: { ...VIEWS.views, 'swancloud-ops': [[['swancloud operations', 'bold']], unclosed] } }
+  const ui = await band($, on, { env: { CREW_AGENT: 'swancloud-ops', CREW_LABEL: 'swancloud' }, views })
+  expect(await ui.find({ type: 'Text', text: /^! crew {2}crw-1 {2}● {2}doctor-rows {2}landed on main, not closed: chore tidy-rows has not landed on main: it is ready/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /curation-and-holds/ })).toBeUndefined()
+})
