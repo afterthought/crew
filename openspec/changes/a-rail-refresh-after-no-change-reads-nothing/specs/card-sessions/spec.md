@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: A session whose card is closed or whose row is gone is ended on every rail read
-Each time `crew rail` runs, and each time the host's follower refreshes after something it read has moved, whether swancloud's job or a rail tab runs it, crew SHALL end, on every host of each partition read, each session it started for a card key whose row is gone, or whose card the run record holds as closed with no card open under the key. A refresh after nothing moved SHALL end sessions only on a host the last refresh could not check. It SHALL end only sessions it recorded, and only a process plannotator lists as serving the recorded document.
+Each time `crew rail` runs, and each time the host's follower refreshes after a state tip or a kit it read has moved, whether swancloud's job or a rail tab runs it, crew SHALL end, on every host of each partition read, each session it started for a card key whose row is gone, or whose card the run record holds as closed with no card open under the key. A refresh after no state tip and no kit moved SHALL sweep sessions only on a host whose card readings folder moved since its last read, or that the last refresh could not check, and on no other host. It SHALL end only sessions it recorded, and only a process plannotator lists as serving the recorded document.
 
 #### Scenario: A verify card's session from before
 - **WHEN** the session crew started for `verify/x/20261009-1412`, before a verify report had no row, still runs on chuck-herdr-alpha
@@ -34,3 +34,7 @@ Each time `crew rail` runs, and each time the host's follower refreshes after so
 #### Scenario: A host the last sweep missed
 - **WHEN** the follower's last refresh could not check chuck-herdr-alpha's sessions, and nothing has moved since
 - **THEN** the next refresh asks chuck-herdr-alpha alone to end its sessions, and asks no other host
+
+#### Scenario: A reading sent on one host
+- **WHEN** the user sends back a reading on chuck-herdr-alpha, and nothing else has moved since mac-studio's follower last read
+- **THEN** the follower's next refresh asks chuck-herdr-alpha alone to sweep its card sessions, and asks no other host
