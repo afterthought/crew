@@ -823,6 +823,11 @@ def herdr_in(session):
     return _SESSIONS.setdefault(session, Herdr(session))
 
 
+def herdr_fresh():
+    """herdr's sessions listed again at their next read: a long-lived process's, the host's follower at its tick."""
+    _SESSIONS.clear()
+
+
 def waits_on_question(fleet, name):
     """Whether an agent crew starts waits on a question in its pane, as a tell and a greeting read it: (herdr's status
     of it, None when it is not up; whether it waits; what crew could not read to know, or None). It waits when herdr

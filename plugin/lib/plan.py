@@ -554,6 +554,9 @@ class Kept:
         # cards: the clock's last ask of Pending You after the cards (cards_fetched), (found, why), which every card
         # sweep judges with until the next tick; None while no tick has asked, when the read's sweep asks on its tick
         self.cards = None
+        # listed: herdr's listing of the askers of the questions the sweep judges, read on the clock's tick beside the
+        # cards (askers_listed), {name: (listed, why)}; None while no tick has read it
+        self.listed = None
         # queued: each kit's queue as the follower's overview watch last read it, [submissions, why] by (host, main),
         # handed to the kit's gather in place of its own run of sluice
         self.queued = {}
@@ -12600,8 +12603,10 @@ def rail_read(fleet, labels, board=False, sweep=False):
         read["proposed"] = proposals_held(found)
         k = READ.follower
         if k is not None and k.cards is None:  # the follower's tick with no read kept to ask from: its one ask, made here
-            k.cards = cards_fetched(fleet, cards_asked(fleet, read, crew.this_host(), datetime.datetime.now(datetime.timezone.utc)))
-        read["swept"] = sweep_cards(fleet, read, answers=k.cards if k is not None else None)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            k.cards = cards_fetched(fleet, cards_asked(fleet, read, crew.this_host(), now))
+            k.listed = askers_listed(fleet, askers_asked(fleet, read, crew.this_host(), now))
+        read["swept"] = sweep_cards(fleet, read, answers=k.cards if k is not None else None, listed=k.listed if k is not None else None)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
                                     {l: partition_kits(fleet, l) for l, *_ in found})
         read["moved"] = sweep_moved(fleet, read)
@@ -15327,6 +15332,24 @@ def cards_asked(fleet, read, here, now):
     return list(dict.fromkeys(c["card"] for _, _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]))
 
 
+def askers_asked(fleet, read, here, now):
+    """The agents whose questions the rail's sweep would judge (sweep_judgments), each once, in order: whose panes herdr
+    is asked about, the host's follower asking on its clock's tick beside Pending You (askers_listed). A decision on
+    plain facts (code.7)."""
+    judged, _ = sweep_judgments(fleet, read, here, now)
+    return list(dict.fromkeys(c["by"] for _, _, _, j in judged for c in j["questions"]))
+
+
+def askers_listed(fleet, names, acts=None):
+    """herdr's listing of each asker's pane, as the card sweep reads it (SweepActs.listed), {name: (listed, why)}, read
+    afresh at the follower's tick, its sessions listed once each; none read when no asker is named."""
+    if not names:
+        return {}
+    crew.herdr_fresh()
+    acts = acts or SweepActs(fleet)
+    return {name: acts.listed(name) for name in names}
+
+
 def cards_fetched(fleet, asked, acts=None):
     """The card sweep's one ask of Pending You, in crew's own name (SWEEPER), whether it still finds each card asked,
     which it answers for another assistant's card by refusing it as that assistant's and for one this host's sign-in no
@@ -15342,7 +15365,7 @@ def cards_fetched(fleet, asked, acts=None):
         return {}, str(e)
 
 
-def sweep_cards(fleet, read, acts=None, answers=None):
+def sweep_cards(fleet, read, acts=None, answers=None, listed=None):
     """The rail read's sweep of the cards on this host, under its sign-in (record 0031 §1, §2, read.4): for each
     partition whose plan was read, and whose run record was read from its branch, it closes each card of a row that
     is gone with why (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"],
@@ -15358,7 +15381,8 @@ def sweep_cards(fleet, read, acts=None, answers=None):
     withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
     (SWEEPER) whether it finds each card (cards_fetched), in one bridge and none when it asks after no card; or, for
     the host's follower, which asks on its clock's tick alone, takes answers, (found, why), the clock's last ask's,
-    acting on no card that ask did not answer for, until the next tick does. Every row's card this
+    acting on no card that ask did not answer for, until the next tick does, and listed, herdr's listing of the askers
+    read on that tick (askers_listed), judging no question whose asker it did not list. Every row's card this
     host's sign-in can't reach, posted from another host or lost to its owner, while the row's owner runs here, is
     posted again through its kind's raise, its summary saying the older copy is dead, the older copy reported lost and
     never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again, briefs.11,
@@ -15422,10 +15446,12 @@ def sweep_cards(fleet, read, acts=None, answers=None):
                 card_lost(acts, l, c["by"], c["key"] or "", c["card"], words)
                 did(l, c["key"], c["card"], c["by"], "lost", "this host's sign-in no longer reaches it")
                 continue
-            listed, why = acts.listed(c["by"])
-            if listed is None:
+            if listed is not None and c["by"] not in listed:
+                continue
+            here_, why = listed[c["by"]] if listed is not None else acts.listed(c["by"])
+            if here_ is None:
                 did(l, c["key"], c["card"], c["by"], "left", f"whether {c['by']} still runs can't be told: {why}")
-            elif not listed:
+            elif not here_:
                 state = question_close(acts, l, c, f"{c['by']} ended; ask again if it still matters")
                 did(l, c["key"], c["card"], c["by"], state or "left", {None: "its close did not go through, as said above",
                                                                        "lost": "this host's sign-in no longer reaches it"}.get(state, f"{c['by']} ended"))

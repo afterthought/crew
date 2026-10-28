@@ -931,14 +931,15 @@ class Acts:
         return None
 
 
-def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), handed=None, **kw):
+def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), handed=None, herdr=None, **kw):
     """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards, its
-    plan holding the proposals numbered proposed; handed, the host's follower's answers from its clock's last ask."""
+    plan holding the proposals numbered proposed; handed, the host's follower's answers from its clock's last ask, and
+    herdr, its listing of the askers read on that tick."""
     fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
     read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=list(rows_), cards=list(cards_),
                 unread=unread or {}, logs={"wldn": list(entries)}, proposed={"wldn": set(proposed)})
     acts = Acts(entries=[{"Act": "card.post", "Key": c["key"], "By": c["by"], "Card": c["card"]} for c in cards_], **kw)
-    return plan.sweep_cards(fleet, read, acts, handed), acts
+    return plan.sweep_cards(fleet, read, acts, handed, herdr), acts
 
 
 NOT_FOUND = (None, "Not found: request:req_x.")
@@ -989,6 +990,16 @@ class TestSweep:
         assert acts.emitted == [dict(Act="card.close", On=["agent/crw-3-conductor"], by="crw-3-conductor", Card="req_q1", Key="ask/crw-3-conductor/hold",
                                      State="withdrawn", Outcome="crw-3-conductor ended; ask again if it still matters")]
         assert [(d["did"], d["words"]) for d in out["done"]] == [("withdrawn", "crw-3-conductor ended")]
+
+    def test_the_followers_sweep_judges_a_question_by_the_listing_its_tick_read_and_none_it_did_not_list(self):
+        """The crew-board spec, An asker's agent gone: between ticks the sweep asks herdr nothing, judging with the
+        listing the tick read; a question whose asker that listing lacks is left for the next tick."""
+        q = card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
+        r = card("ask/swb-1-conductor/x", "req_q2", "swb-1-conductor")
+        answers = ({"req_q1": ({"status": "pending", "version": 2}, None), "req_q2": ({"status": "pending", "version": 2}, None)}, None)
+        out, acts = swept(cards_=[q, r], handed=answers, herdr={"crw-3-conductor": (False, None)},
+                          listed={"crw-3-conductor": (True, None), "swb-1-conductor": (False, None)})
+        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("ask/crw-3-conductor/hold", "withdrawn", "crw-3-conductor ended")]
 
     def test_a_question_pending_you_already_ended_when_its_asker_is_gone_is_recorded_closed_and_sent_nothing(self):
         """The rail-cards scenario: crw-3-conductor's question, which Pending You reports resolved, after crw-3's team

@@ -981,16 +981,18 @@ def moved(kept, now):
     return dict(out, read=read, any=read or bool(out["readings"]) or out["cards"] or bool(out["queues"]))
 
 
-def cards_stamp(found, why, left, tick):
-    """What the follower's check compares of the cards (Decision 3 of a-rail-refresh-after-no-change-reads-nothing): of
-    each card Pending You was asked after at the clock's tick (plan.cards_fetched, found {card: (got, words)}), whether
-    it answered it lost, the fact the card sweep acts on, [[card, lost]]; but the tick itself, ["again", tick], when the
-    tick's bridge failed (why) or the last card sweep left a card, its act not gone through (left), so the cards count
-    as moved at each tick until the sweep acts, and only at a tick, never at each refresh. A decision on plain facts
-    (code.7)."""
+def cards_stamp(found, why, left, tick, listed=None):
+    """What the follower's check compares of the cards (Decisions 3 and 8 of a-rail-refresh-after-no-change-reads-nothing):
+    of each card Pending You was asked after at the clock's tick (plan.cards_fetched, found {card: (got, words)}),
+    whether it answered it lost, the fact the card sweep acts on, [[card, lost]], and of each asker herdr was asked
+    about on that tick (plan.askers_listed, listed {name: (listed, why)}), whether its pane holds an agent, [["asker",
+    name, listed]]; but the tick itself, ["again", tick], when the tick's bridge failed (why) or the last card sweep
+    left a card, its act not gone through (left), so the cards count as moved at each tick until the sweep acts, and
+    only at a tick, never at each refresh. A decision on plain facts (code.7)."""
     if why is not None or left:
         return ["again", tick]
-    return sorted([card, plan.cards.lost(words)] for card, (_, words) in found.items())
+    return sorted([card, plan.cards.lost(words)] for card, (_, words) in found.items()) + sorted(
+        ["asker", name, here] for name, (here, _) in (listed or {}).items())
 
 
 def card_left(swept):
@@ -1337,16 +1339,18 @@ class Follower:
 
     def ask(self, fleet):
         """The clock's ask of Pending You after the cards the kept read's card sweep would act on (plan.cards_asked), in
-        one bridge and none when it names none (plan.cards_fetched); the answers kept for every card sweep until the next
-        tick, and the cards' stamp taken from them. With no read kept, the tick's read asks itself (plan.rail_read)."""
+        one bridge and none when it names none (plan.cards_fetched), and of herdr after the panes of the questions'
+        askers (plan.askers_listed); the answers kept for every card sweep until the next tick, and the cards' stamp
+        taken from them. With no read kept, the tick's read asks itself (plan.rail_read)."""
         self.ticks += 1
         read = (self.last or {}).get("read")
         if read is None:
-            self.kept.cards = None
+            self.kept.cards = self.kept.listed = None
             return
-        found, why = plan.cards_fetched(fleet, plan.cards_asked(fleet, read, crew.this_host(), datetime.datetime.now(datetime.timezone.utc)))
-        self.kept.cards = (found, why)
-        self.cards = cards_stamp(found, why, self.left, self.ticks)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        found, why = plan.cards_fetched(fleet, plan.cards_asked(fleet, read, crew.this_host(), now))
+        self.kept.cards, self.kept.listed = (found, why), plan.askers_listed(fleet, plan.askers_asked(fleet, read, crew.this_host(), now))
+        self.cards = cards_stamp(found, why, self.left, self.ticks, self.kept.listed)
 
     def tick(self):
         """The clock's tick: the caches fetched, the cards asked after, and a refresh, which asks the overviews no watch
@@ -1387,13 +1391,15 @@ class Follower:
         kept = self.last if self.last and self.last["read"] is not None else None
         kits = self.kept.kits if kept else {}
         asks = self.watches.sync(fleet, queue_kits(kits), tick) if self.watches is not None else {}
-        now = stamps_now(fleet, kits, readings_hosts(fleet, self.labels), asks)
+        now = stamps_now(fleet, kits, readings_hosts(fleet, self.labels), asks, routes=tick)
         if self.watches is not None:
-            self.watches.took(now.pop("overviews"))
+            self.watches.took(now["overviews"])
         looked = self.look(fleet)
         stamps = dict(looked, kits=now["kits"], readings=now["readings"], cards=self.cards)
         self.seen = looked
         m = moved(kept and kept["stamps"], stamps)
+        routes = routes_moved(kits, now["routes"])  # read on the clock's tick alone (Decision 8)
+        m = dict(m, routes=routes, any=m["any"] or bool(routes))
         how = refresh_plan(m, kept is not None, None not in looked["crew"] and None not in (kept["stamps"]["crew"] if kept else ()))
         if how == "update":
             self.again(fleet)
@@ -1402,10 +1408,20 @@ class Follower:
             self.read(fleet, looked, stamps)
         else:
             self.render(fleet, m, stamps)
+        if self.last["read"] is not None:
+            self.reroute(routes, now["routes"])
         if self.watches is not None and self.last["read"] is not None:
             self.requeue(m.get("queues", ()))
             self.watches.sync(fleet, queue_kits(self.kept.kits), tick=False)
         self.write(fleet)
+
+    def reroute(self, hosts, routes):
+        """Each host whose portless routes the tick read moved has them in every kit answer kept of it, the board's dev
+        servers drawn from them with nothing gathered (Decision 8)."""
+        for host in hosts:
+            for _, answer in self.kept.kits.get(host, {}).values():
+                if (answer or {}).get("ok"):
+                    answer["routes"] = routes[host]
 
     def requeue(self, moved_):
         """Each kit whose queue moved has its kept answer's submissions remade from what its watch or the clock's ask
@@ -1441,7 +1457,7 @@ class Follower:
             plan.READ.follower = None
             self.kept.settle()
         if asked and self.kept.cards is not None:  # the read's sweep made the tick's ask
-            self.cards = cards_stamp(*self.kept.cards, False, self.ticks)
+            self.cards = cards_stamp(*self.kept.cards, False, self.ticks, self.kept.listed)
         if read is not None:
             self.left = card_left(read.get("swept"))
             self.last = {"read": read, "stamps": dict(looked, kits=kept_stamps(self.kept.kits), readings=stamps["readings"], cards=self.cards),
@@ -1458,7 +1474,7 @@ class Follower:
         todo = sweeps_after(m, readings_hosts(fleet, self.labels), read.get("unchecked"))
         swept = {"done": [], "unswept": []}
         if todo["cards"]:
-            swept = plan.sweep_cards(fleet, read, answers=self.kept.cards)
+            swept = plan.sweep_cards(fleet, read, answers=self.kept.cards, listed=self.kept.listed)
             read = dict(read, cards=plan.swept_cards(read["cards"], swept, crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
                                                      {l: plan.partition_kits(fleet, l) for l, *_ in read["found"]}))
             self.left = card_left(swept)
