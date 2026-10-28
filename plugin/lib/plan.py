@@ -12965,7 +12965,8 @@ def swept_cards(cards_, swept, here, now, kits=()):
 
 def rail_text(fleet, labels, read, now):
     """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
-    wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it,
+    wait, how long ago that was, what it is, each bolt's line of a kit's landing row ending with the bolt's age and who
+    held its time (land_times), the commands that answer it, and its card key with whether a card is open for it,
     whose and its id, by which its owner asks Pending You for it, or, with none open, the words of the refusal of its
     last post, oldest first; then the questions the asking roles put to the user, each with its key, which names it,
     its asker and its age, since no entry holds a card's words (record.3); then each card act of an agent's whose reply
@@ -12998,6 +12999,8 @@ def rail_text(fleet, labels, read, now):
         for r in mine:
             at = r.get("date") or (f"{r['at'].astimezone():%Y-%m-%d %H:%M}" if r["at"] else "-")
             first, *rest = r["what"]
+            if g == "land":  # each bolt's line ends with its time, drawn now as the board draws it (land_times)
+                rest = [f"{w}; {t}" for w, t in zip(rest, land_times(fleet, read, r, now))]
             lines.append(f"  {at:<16}  {age(r['at'], now) if r['at'] else '-':<7}  {first}")
             lines += [" " * 29 + w for w in rest]
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
@@ -13053,6 +13056,22 @@ def rail_text(fleet, labels, read, now):
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
     return "\n".join(lines)
+
+
+def land_times(fleet, read, r, now):
+    """The time of each bolt a kit's landing row names, in its order, as its land line ends with it (crew-rail "A bolt's
+    land line shows its age and who held its time", plan.20): held_time's words at now, from the read's run record and
+    the bolt's kit as the read surveyed it, the very read and rule the board's head line is drawn from, so the rail and
+    the board never differ for one bolt."""
+    plan_ = next((p for l, _, _, p in read["found"] if l == r["label"] and p), None)
+    if plan_ is None:
+        return []
+    st, out = Stages(fleet, plan_, read["sv"]), []
+    for x in r.get("bolts", []):
+        b = plan_.bolt(x["bolt"])
+        out.append(held_time(fleet, (read.get("logs") or {}).get(r["label"], []), read["unread"].get(r["label"], {}), plan_, b,
+                             st.kit(b)[0], now)["said"] if b else "")
+    return out
 
 
 def labels_of(read, labels):

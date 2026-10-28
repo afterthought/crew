@@ -11,7 +11,7 @@
 ## 3. The rows
 
 - [x] 3.1 Each held bolt's head line on the board, in its JSON and in every band that draws it, shows its age, its shares and its holder now (design, Decision 5; Task notes 3.1); passes `tests/py/test_board.py`, `tests/suite logic`, and the mod's cases, `tests/suite mod`.
-- [ ] 3.2 Each bolt's line on its kit's landings row on the rail ends with the same age, shares and holder as the board's (design, Decision 5; Task notes 3.2); passes `tests/py/test_rail.py`, `tests/suite logic`.
+- [x] 3.2 Each bolt's line on its kit's landings row on the rail ends with the same age, shares and holder as the board's (design, Decision 5; Task notes 3.2); passes `tests/py/test_rail.py`, `tests/suite logic`.
 
 ## 4. The landing's entry
 
