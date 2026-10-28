@@ -876,11 +876,10 @@ def gathered(fleet, host, req):
     if host == crew.this_host():
         if os.environ.get("CREW_TEST_READS"):  # crew's tests count a command's reads of the kits, a piped one by its python3
             with open(os.environ["CREW_TEST_READS"], "a") as f:
-                f.write(f"{host} gather\n")
+                f.write(f"{host} {'stamp' if req.get('stamp') else 'gather'}\n")
         try:
-            running = gather.routes() if req.get("sites") else None
-            return json.loads(json.dumps({k["main"]: gather.kit(k, req.get("sites"), running, req.get("board"), req.get("fetch"))
-                                          for k in req["kits"]})), None
+            running = gather.routes() if req.get("sites") and not req.get("stamp") else None
+            return json.loads(json.dumps(gather.read(req, running))), None
         except Exception as e:
             import traceback
             return None, traceback.format_exception_only(e)[-1].strip()
@@ -888,6 +887,13 @@ def gathered(fleet, host, req):
     if r.returncode:
         return None, ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]
     return json.loads(r.stdout), None
+
+
+def stamped(fleet, host, kits):
+    """Each kit's stamp on a host (gather.stamp), {main: stamp, None when it can't be read}, and None; or None and why
+    the host did not answer: in this process on this host, which starts nothing, and in one ssh to another, the
+    follower's check that nothing moved there (plan.12)."""
+    return gathered(fleet, host, {"kits": kits, "stamp": True})
 
 
 def survey(fleet, held, sites=False, board=False, fetch=False):

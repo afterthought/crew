@@ -7,7 +7,9 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 "slots": {<team>: <its slots file, ~ allowed>}}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
 "board": <true to also read each team's slots file and the explorations on the kit's main>,
-"fetch": <true to fetch each kit's GitHub, its origin, before reading it>}.
+"fetch": <true to fetch each kit's GitHub, its origin, before reading it>,
+"stamped": <true to also give each kit's stamp, taken before it is read>,
+"stamp": <true to give each kit's stamp alone and read nothing else: the host's follower's check that nothing moved>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
@@ -23,7 +25,7 @@ portless routes; with board, each team's slots, one {slot, kind, name, place} pe
 folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
 system, devurl and portless and, for a change whose workflow it does not read itself, openspec, and changes nothing.
 It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
-import fnmatch, json, os, re, subprocess, sys, tomllib
+import fnmatch, hashlib, json, os, re, subprocess, sys, tomllib
 
 
 def run(args, cwd):
@@ -532,6 +534,100 @@ def explorations(main, ref="main"):
     return out
 
 
+def git_dirs(main):
+    """A checkout's git folder and the common folder its worktrees share, read from its .git (a folder, or a file
+    naming one, as a linked worktree's is) and the git folder's commondir; None when there is none."""
+    dot = os.path.join(main, ".git")
+    if os.path.isdir(dot):
+        gitdir = dot
+    else:
+        with open(dot, encoding="utf-8") as f:
+            line = f.read().strip()
+        if not line.startswith("gitdir: "):
+            return None
+        gitdir = os.path.join(main, line[len("gitdir: "):])
+    try:
+        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as f:
+            return gitdir, os.path.normpath(os.path.join(gitdir, f.read().strip()))
+    except FileNotFoundError:
+        return gitdir, gitdir
+
+
+def stamp(req):
+    """A kit's stamp, what moves whenever anything kit() reads of it moves, read with os.stat and os.scandir alone so a
+    check that nothing moved starts no process (plan.12): the size and time of every file of the kit's git folder the
+    gather reads through git (HEAD, packed-refs, config, every loose ref, each worktree's HEAD and gitdir), of every file
+    of each unit's place's change folder and its archive and openspec config, and of each slots file the request
+    names, hashed to one value. None when a file it reads can't be read (read.1); a kit with no checkout stamps as
+    such, and its gather says so."""
+    main, kdir = req["main"], os.path.realpath(req["dir"])
+    seen = []
+
+    def note(path):
+        try:
+            st = os.stat(path)
+            seen.append((path, st.st_size, st.st_mtime_ns))
+        except FileNotFoundError:
+            seen.append((path, None))
+
+    def tree(top):
+        stack = [top]
+        while stack:
+            d = stack.pop()
+            try:
+                with os.scandir(d) as it:
+                    for e in sorted(it, key=lambda e: e.name):
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(e.path)
+                        else:
+                            note(e.path)
+            except (FileNotFoundError, NotADirectoryError):
+                seen.append((d, None))
+    try:
+        if not os.path.isdir(main):
+            return hashlib.sha256(f"no checkout at {main}".encode()).hexdigest()[:32]
+        dirs = git_dirs(main)
+        if dirs is None:
+            return None
+        _, common = dirs
+        for f in ("HEAD", "packed-refs", "config"):
+            note(os.path.join(common, f))
+        tree(os.path.join(common, "refs"))
+        places = os.path.join(kdir, "places")
+        try:
+            linked = sorted(e.path for e in os.scandir(os.path.join(common, "worktrees")) if e.is_dir(follow_symlinks=False))
+        except FileNotFoundError:
+            linked = []
+        for w in linked:
+            note(os.path.join(w, "HEAD"))
+            note(os.path.join(w, "gitdir"))
+            try:
+                with open(os.path.join(w, "gitdir"), encoding="utf-8") as f:
+                    path = os.path.dirname(os.path.realpath(f.read().strip()))
+                with open(os.path.join(w, "HEAD"), encoding="utf-8") as f:
+                    head = f.read().strip()
+            except FileNotFoundError:
+                continue
+            if os.path.dirname(path) != places or not head.startswith("ref: refs/heads/unit/"):
+                continue
+            unit, changes = head[len("ref: refs/heads/unit/"):], os.path.join(path, "openspec", "changes")
+            tree(os.path.join(changes, unit))
+            note(os.path.join(changes, "archive"))
+            try:
+                for d in sorted(os.listdir(os.path.join(changes, "archive"))):
+                    if d[11:] == unit and DATED.fullmatch(d[:11]):
+                        tree(os.path.join(changes, "archive", d))
+            except (FileNotFoundError, NotADirectoryError):
+                pass
+            for f in ("config.yaml", "config.yml"):
+                note(os.path.join(path, "openspec", f))
+        for path in sorted(req.get("slots", {}).values()):
+            note(os.path.expanduser(path))
+    except OSError:
+        return None
+    return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:32]
+
+
 def kit(req, sites=False, running=None, board=False, fetch=False):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
@@ -609,7 +705,19 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
     return out
 
 
+def read(request, running=None):
+    """The answer to a request, by each kit's main checkout: with stamp, each kit's stamp alone, the follower's check
+    that nothing moved; else each kit as kit() reads it, with stamped its stamp too, taken before the kit is read, so
+    anything that moves while it is read moves the stamp the follower next compares."""
+    if request.get("stamp"):
+        return {k["main"]: stamp(k) for k in request["kits"]}
+    out = {}
+    for k in request["kits"]:
+        s = stamp(k) if request.get("stamped") else None
+        out[k["main"]] = dict(kit(k, request.get("sites"), running, request.get("board"), request.get("fetch")), **({"stamp": s} if request.get("stamped") else {}))
+    return out
+
+
 if __name__ == "__main__":
     request = json.loads(sys.argv[1])
-    running = routes() if request.get("sites") else None
-    print(json.dumps({k["main"]: kit(k, request.get("sites"), running, request.get("board"), request.get("fetch")) for k in request["kits"]}))
+    print(json.dumps(read(request, routes() if request.get("sites") and not request.get("stamp") else None)))

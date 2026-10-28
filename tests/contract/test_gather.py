@@ -497,3 +497,103 @@ def test_a_read_that_asks_a_fetch_reads_what_github_holds_now_and_every_other_as
     assert gather.fetched(str(repo.path)).startswith("fatal:")
     repo.git("remote", "remove", "origin")
     assert gather.fetched(str(repo.path)) is None
+
+
+class TestStamp:
+    """What crew assumes of git and the file system when the host's follower checks that nothing moved (plan.12, read.1):
+    a kit's stamp (gather.stamp), read with no process, moves on everything kit() reads of it moving, and on nothing
+    else, the gather's own reads among them."""
+
+    def kit(self, repo, tmp_path):
+        k = Kit(repo, tmp_path)
+        self.slots = tmp_path / "slots"
+        self.slots.write_text("")
+        self.req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"], "slots": {"t": str(self.slots)}}
+        return k
+
+    def test_it_stays_while_nothing_changes_and_a_read_of_the_kit_moves_it_not(self, repo, tmp_path):
+        """The follower's no-change refresh: a gather of the kit between two checks leaves its stamp where it was."""
+        k = self.kit(repo, tmp_path)
+        p = k.place("a")
+        change(p, "a", 1, 2)
+        k.commit(p, "feat(a)")
+        s = gather.stamp(self.req)
+        assert s and gather.stamp(self.req) == s
+        gather.kit(self.req, board=True)
+        assert gather.stamp(self.req) == s
+
+    def test_a_commit_in_a_place_moves_it(self, repo, tmp_path):
+        k = self.kit(repo, tmp_path)
+        p = k.place("a")
+        s = gather.stamp(self.req)
+        (p / "x").write_text("x\n")
+        k.commit(p, "feat(a): x")
+        assert gather.stamp(self.req) != s
+
+    def test_a_fetch_that_moves_a_remote_ref_moves_it(self, repo, tmp_path):
+        """Stages read GitHub's bolt and main as this host last fetched them (plan.18, plan.19)."""
+        k = self.kit(repo, tmp_path)
+        origin = tmp_path / "origin.git"
+        subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+        repo.git("remote", "add", "origin", str(origin))
+        repo.git("fetch", "-q", "origin")
+        s = gather.stamp(self.req)
+        other = tmp_path / "other"
+        subprocess.run(["git", "clone", "-q", str(origin), str(other)], check=True)
+        subprocess.run(["git", "-C", str(other), "commit", "-q", "--allow-empty", "-m", "feat: landed"], check=True)
+        subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "HEAD:main"], check=True)
+        repo.git("fetch", "-q", "origin")
+        assert gather.stamp(self.req) != s
+
+    def test_a_task_ticked_with_nothing_committed_moves_it(self, repo, tmp_path):
+        """The bolt-plan spec's A wait sees what changes while it waits: tasks.md is read from the place's files."""
+        k = self.kit(repo, tmp_path)
+        p = k.place("a")
+        change(p, "a", 0, 2)
+        k.commit(p, "docs(a): the change")
+        s = gather.stamp(self.req)
+        tasks = p / "openspec/changes/a/tasks.md"
+        tasks.write_text(tasks.read_text().replace("- [ ] 1.1", "- [x] 1.1"))
+        assert gather.stamp(self.req) != s
+
+    def test_a_place_made_and_one_removed_each_move_it(self, repo, tmp_path):
+        k = self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
+        p = k.place("b")
+        made = gather.stamp(self.req)
+        assert made != s
+        repo.git("worktree", "remove", str(p))
+        assert gather.stamp(self.req) not in (made, None)
+
+    def test_a_line_written_to_a_slots_file_moves_it(self, repo, tmp_path):
+        self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
+        self.slots.write_text("unit-1 unit a /kit/places/a\n")
+        assert gather.stamp(self.req) != s
+
+    def test_a_fix_branchs_config_changed_moves_it(self, repo, tmp_path):
+        """A dropped fix is marked in the kit's git config (record 0028), which fixes_dropped reads."""
+        k = self.kit(repo, tmp_path)
+        k.place("te/edge", prefix="fix")
+        s = gather.stamp(self.req)
+        repo.git("config", "branch.fix/te/edge.crew", "dropped")
+        assert gather.stamp(self.req) != s
+
+    def test_it_starts_no_process(self, repo, tmp_path, monkeypatch):
+        k = self.kit(repo, tmp_path)
+        change(k.place("a"), "a", 1, 2)
+
+        def refuse(*args, **kwargs):
+            raise AssertionError(f"a stamp starts no process, and this one ran {args[0] if args else kwargs!r}")
+        for name in ("run", "Popen", "call", "check_call", "check_output"):
+            monkeypatch.setattr(subprocess, name, refuse)
+        assert gather.stamp(self.req)
+
+    def test_a_stamp_request_answers_each_kits_stamp_and_a_stamped_read_carries_the_same(self, repo, tmp_path):
+        """plan.stamped's request, piped to another host as a gather is, and the follower's gather, whose answers carry
+        the stamp their read was made at."""
+        self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
+        assert gather.read({"kits": [self.req], "stamp": True}) == {str(repo.path): s}
+        got = gather.read({"kits": [self.req], "stamped": True, "board": True})[str(repo.path)]
+        assert got["ok"] and got["stamp"] == s and "stamp" not in gather.read({"kits": [self.req]})[str(repo.path)]
