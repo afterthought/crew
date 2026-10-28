@@ -321,11 +321,30 @@ class TestFollower:
         assert board.labels_here(fleet, BOX) == ["wldn"] and board.labels_here(fleet, "macbook-pro") == []
 
     @pytest.mark.parametrize("m, kept, crew_read, how", [
-        ({"crew": True, "any": True}, False, True, "read"), ({"crew": True, "any": True}, True, True, "update"),
-        ({"crew": True, "any": True}, True, False, "read"), ({"crew": False, "any": True}, True, True, "read"),
-        ({"crew": False, "any": False}, True, True, "render")])
+        ({"crew": True, "read": True, "any": True}, False, True, "read"), ({"crew": True, "read": True, "any": True}, True, True, "update"),
+        ({"crew": True, "read": True, "any": True}, True, False, "read"), ({"crew": False, "read": True, "any": True}, True, True, "read"),
+        ({"crew": False, "read": False, "any": True}, True, True, "sweep"), ({"crew": False, "read": False, "any": False}, True, True, "render")])
     def test_a_refresh_reads_once_with_none_kept_hands_out_restarts_once_crew_moved_and_renders_when_nothing_moved(self, m, kept, crew_read, how):
+        """A tip or a kit moved reads; only a readings folder or the cards moved sweeps; nothing moved renders."""
         assert board.refresh_plan(m, kept, crew_read) == how
+
+    NOTHING = {"crew": False, "state": set(), "blueprints": set(), "kits": set(), "readings": set(), "cards": False, "read": False, "any": False}
+    READINGS = {"mac-studio": ["wldn", "swancloud"], BOX: ["wldn"]}
+
+    def test_after_only_a_hosts_readings_moved_its_card_sessions_alone_are_swept(self):
+        """The card-sessions spec, A reading sent on one host."""
+        assert board.sweeps_after(dict(self.NOTHING, readings={BOX}, any=True), self.READINGS, []) == {"cards": False, "sessions": {"wldn": {BOX}}}
+        assert board.sweeps_after(dict(self.NOTHING, readings={"mac-studio"}, any=True), self.READINGS, []) == (
+            {"cards": False, "sessions": {"wldn": {"mac-studio"}, "swancloud": {"mac-studio"}}})
+
+    def test_after_only_the_cards_moved_the_card_sweep_alone_runs(self):
+        assert board.sweeps_after(dict(self.NOTHING, cards=True, any=True), self.READINGS, []) == {"cards": True, "sessions": {}}
+
+    def test_with_nothing_moved_only_the_hosts_the_last_could_not_check_are_swept_beside_what_moved(self):
+        unchecked = [{"label": "wldn", "host": "mac-studio", "why": "did not answer (exit 255)"}]
+        assert board.sweeps_after(self.NOTHING, self.READINGS, unchecked) == {"cards": False, "sessions": {"wldn": {"mac-studio"}}}
+        assert board.sweeps_after(dict(self.NOTHING, readings={BOX}, any=True), self.READINGS, unchecked) == (
+            {"cards": False, "sessions": {"wldn": {"mac-studio", BOX}}})
 
     @pytest.mark.parametrize("now, tick_at, seen, looked, how", [
         (100.0, 100.0, "a", "a", "tick"), (100.0, 0.0, "a", "b", "tick"), (100.0, 160.0, "a", "b", "refresh"), (100.0, 160.0, "a", "a", None)])
@@ -463,6 +482,7 @@ class TestRefresh:
                 return Py()
         monkeypatch.setattr(plan, "SweepActs", Acts)
         monkeypatch.setattr(plan, "cards_asked", lambda fleet, read, here, now: list(test.to_ask))
+        monkeypatch.setattr(plan, "sweep_cards", lambda fleet, read, acts=None, answers=None: {"done": [], "unswept": []})
         monkeypatch.setattr(type(follower), "fetch", lambda self, fleet: None)
         follower.tick()
         follower.tick()
@@ -473,6 +493,30 @@ class TestRefresh:
         follower.refresh()
         follower.refresh()
         assert bridges == ["crew"], "a refresh between ticks asked Pending You"
+
+    def test_a_refresh_after_only_a_hosts_readings_moved_sweeps_its_card_sessions_and_reads_nothing(self, follower):
+        """The crew-board spec, A reading sent back: plannotator wrote the result in the box's readings folder."""
+        follower.refresh()
+        self.readings[BOX] = "r9"
+        follower.refresh()
+        assert len(self.reads) == 1 and self.swept == [{"wldn": {BOX}}]
+        follower.refresh()
+        assert len(self.reads) == 1 and self.swept == [{"wldn": {BOX}}], "a readings folder swept was taken as moved again"
+
+    def test_a_refresh_after_only_the_cards_moved_runs_the_card_sweep_alone_against_the_kept_read(self, follower, monkeypatch):
+        """The crew-board spec, A card lost between ticks: the tick's answers say proposal 4's card is lost."""
+        swept = []
+        monkeypatch.setattr(plan, "sweep_cards", lambda fleet, read, acts=None, answers=None: swept.append((read["served"], answers)) or {
+            "done": [dict(label="wldn", key="proposal/4", card="req_p4", by="wldn-planner", did="lost", words="posted again as req_p5", new="req_p5")],
+            "unswept": []})
+        follower.refresh()
+        lost = ({"req_p4": (None, "Not found: request:req_p4.")}, None)
+        follower.kept.cards, follower.cards = lost, board.cards_stamp(*lost, False, 2)
+        follower.refresh()
+        assert len(self.reads) == 1 and swept == [(False, lost)] and self.swept == []
+        assert [c["card"] for c in follower.last["read"]["cards"]] == ["req_p5"]
+        follower.refresh()
+        assert swept == [(False, lost)], "the cards swept were taken as moved again before the next tick"
 
     def test_a_refresh_with_nothing_moved_sweeps_the_sessions_only_where_the_last_could_not(self, follower):
         """The card-sessions spec, A host the last sweep missed."""

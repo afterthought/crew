@@ -999,17 +999,34 @@ def wake(now, tick_at, seen, looked):
 
 def refresh_plan(m, kept, crew_read=True):
     """What a refresh does, from what moved since its last read (moved), whether it kept one, and whether crew's checkout
-    and the teams file could be read then and now (crew_read): "read" with none kept, its first, or when something
+    and the teams file could be read then and now (crew_read): "read" with none kept, its first, or when a tip or a kit
     moved, reading only what moved and running every sweep; "update" once crew's checkout or the teams file moved, the
     due restarts handed out and the follower started again as the new crew, but a read when either can't be read, which
-    hands out nothing on a guess (read.1); "render" when nothing moved, the frames written again from the kept read and
-    the card sessions swept only on the hosts the last refresh could not check (plan.sessions_unchecked). A decision on
-    plain facts (code.7)."""
+    hands out nothing on a guess (read.1); "sweep" when only a host's card readings folder or the cards moved, reading
+    nothing and running against the kept read only the sweeps of what moved (sweeps_after); "render" when nothing
+    moved, the frames written again from the kept read and the card sessions swept only on the hosts the last refresh
+    could not check (plan.sessions_unchecked). A decision on plain facts (code.7)."""
     if not kept:
         return "read"
     if m["crew"]:
         return "update" if crew_read else "read"
-    return "read" if m["any"] else "render"
+    if m["read"]:
+        return "read"
+    return "sweep" if m["any"] else "render"
+
+
+def sweeps_after(m, readings, unchecked):
+    """The sweeps a refresh that reads nothing runs against its kept read (Decision 5 of
+    a-rail-refresh-after-no-change-reads-nothing): the card sweep when the cards moved, with the clock's last answers;
+    and the card session sweep on each host whose card readings folder moved, for each partition swept there
+    (readings, {host: labels}), which is where a reading sent back is told to its owner, and on each host the last
+    refresh could not check (unchecked, plan.sessions_unchecked), {label: hosts}; none other. A decision on plain facts
+    (code.7)."""
+    only = plan.sessions_unchecked(unchecked)
+    for h in m["readings"]:
+        for l in readings.get(h, ()):
+            only.setdefault(l, set()).add(h)
+    return {"cards": bool(m["cards"]), "sessions": only}
 
 
 def readings_hosts(fleet, labels):
@@ -1066,11 +1083,12 @@ def label_errors(errors, label):
 class Follower:
     """The host's follower once it holds the lock (lock_follower): on its clock, every PERIOD seconds, it fetches each
     partition's state branch and blueprints main and refreshes; between ticks it looks each second at what this host's
-    caches hold, crew's checkout and the teams file, with no process, and refreshes within seconds when one moved. A
-    refresh is one read, in this process, for every partition with an operator session on the host (labels_here),
-    kept between refreshes (plan.Kept, state.4): it checks first whether anything the read rests on moved (moved) and
-    then reads nothing when nothing did, or only what moved; each partition's rail, board and agents' views are written
-    from it. On each tick, and only then, it asks Pending You after the cards its card sweep would act on, in one
+    caches hold, crew's checkout, the teams file and this host's card readings folders, with no process, and refreshes
+    within seconds when one moved. A refresh is one read, in this process, for every partition with an operator
+    session on the host (labels_here), kept between refreshes (plan.Kept, state.4): it checks first whether anything
+    the refresh acts on moved (moved) and then reads nothing when nothing did, or only what moved, running only the
+    sweeps of what moved when no tip or kit did (sweeps_after); each partition's rail, board and agents' views are
+    written from it. On each tick, and only then, it asks Pending You after the cards its card sweep would act on, in one
     bridge, none when there are none, and every sweep judges with those answers until the next tick. SIGUSR1 makes the
     next tick now."""
 
@@ -1156,15 +1174,15 @@ class Follower:
         kept = self.last if self.last and self.last["read"] is not None else None
         stamps = dict(looked, **stamps_now(fleet, self.kept.kits if kept else {}, readings_hosts(fleet, self.labels)), cards=self.cards)
         self.seen = looked
-        how = refresh_plan(moved(kept and kept["stamps"], stamps), kept is not None,
-                           None not in looked["crew"] and None not in (kept["stamps"]["crew"] if kept else ()))
+        m = moved(kept and kept["stamps"], stamps)
+        how = refresh_plan(m, kept is not None, None not in looked["crew"] and None not in (kept["stamps"]["crew"] if kept else ()))
         if how == "update":
             self.again(fleet)
             how = "read"
         if how == "read":
             self.read(fleet, looked, stamps)
         else:
-            self.render_unchecked(fleet)
+            self.render(fleet, m, stamps)
         self.write(fleet)
 
     def read(self, fleet, looked, stamps):
@@ -1196,15 +1214,23 @@ class Follower:
         else:
             self.last = {"read": None, "stamps": None, "said": said.getvalue().strip()}
 
-    def render_unchecked(self, fleet):
-        """Nothing moved: the kept read stands, its sweeps' acts are not said again, and the card sessions are swept only
-        on the hosts the last refresh could not check (the card-sessions spec)."""
+    def render(self, fleet, m, stamps):
+        """Nothing the read rests on moved: the kept read stands, its sweeps' acts are not said again, and only the sweeps
+        of what moved run against it (sweeps_after, the card-sessions spec): the card sweep with the clock's last answers
+        when the cards moved, and the card sessions swept on each host whose readings folder moved and each the last
+        refresh could not check; what they did is said, and the stamps they rest on kept."""
         read = self.last["read"]
-        only = plan.sessions_unchecked(read.get("unchecked"))
+        todo = sweeps_after(m, readings_hosts(fleet, self.labels), read.get("unchecked"))
+        swept = {"done": [], "unswept": []}
+        if todo["cards"]:
+            swept = plan.sweep_cards(fleet, read, answers=self.kept.cards)
+            read = dict(read, cards=plan.swept_cards(read["cards"], swept, crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
+                                                     {l: plan.partition_kits(fleet, l) for l, *_ in read["found"]}))
+            self.left = card_left(swept)
         ended, unchecked = plan.sweep_sessions(fleet, read["found"], read["sv"], read["rows"], read["cards"], read["unread"],
-                                               read.get("batched") or {}, only) if only else ([], [])
-        self.last = dict(self.last, said="", read=dict(read, swept={"done": [], "unswept": []}, moved={"raised": [], "unread": []},
-                                                       ended=ended, unchecked=unchecked))
+                                               read.get("batched") or {}, todo["sessions"]) if todo["sessions"] else ([], [])
+        self.last = dict(self.last, said="", read=dict(read, swept=swept, moved={"raised": [], "unread": []}, ended=ended, unchecked=unchecked),
+                         stamps=dict(self.last["stamps"], readings=stamps["readings"], cards=self.cards))
 
     def again(self, fleet):
         """crew's checkout or the teams file moved: each partition's agents here that it made due a restart are handed
