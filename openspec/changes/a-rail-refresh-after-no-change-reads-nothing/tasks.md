@@ -2,7 +2,7 @@
 
 ## 1. The check that nothing moved
 
-- [ ] 1.1 A decision names what moved between the stamps a read was made at and the stamps now, a state or blueprints tip, a kit, crew's checkout or the teams file, an unreadable stamp counting as moved (design, Decision 1; Task notes 1.1); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
+- [x] 1.1 A decision names what moved between the stamps a read was made at and the stamps now, a state or blueprints tip, a kit, crew's checkout or the teams file, an unreadable stamp counting as moved (design, Decision 1; Task notes 1.1); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
 - [ ] 1.2 A kit's stamp is read with no process and moves on a commit, a fetched ref, a ticked task, a place made or removed, a slots line and a fix branch's config, and is asked of another host in one ssh per host (design, Decision 1; Task notes 1.2); passes `tests/contract/test_gather.py`, `tests/suite contract` ending with "0 failed".
 - [ ] 1.3 The state and blueprints caches' tips and crew's checkout are read from their files, through git only when the files don't hold them (design, Decision 1; Task notes 1.3); passes `tests/suite contract` ending with "0 failed".
 

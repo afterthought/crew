@@ -363,6 +363,45 @@ class TestFollower:
             x.stdout.close()
 
 
+class TestMoved:
+    """The follower's check before it reads (the crew-board spec, A refresh after nothing moved reads nothing): what moved
+    between the stamps its last read was made at and the stamps now."""
+
+    KEPT = {"crew": ("c" * 40, b"{teams}"), "state": {"wldn": "a" * 40, "swancloud": ""}, "blueprints": {"wldn": "b" * 40, "swancloud": "b" * 40},
+            "kits": {(BOX, "/kit/main"): "s1", ("mac-studio", "/a/main"): "s2"}}
+
+    def now(self, **kw):
+        return {k: ({**self.KEPT[k], **kw[k]} if k in kw and isinstance(self.KEPT[k], dict) else kw.get(k, self.KEPT[k])) for k in self.KEPT}
+
+    def test_nothing_moved_names_nothing_and_a_branch_the_cache_lacks_stands(self):
+        assert board.moved(self.KEPT, self.now()) == {"crew": False, "state": set(), "blueprints": set(), "kits": set(), "any": False}
+
+    def test_one_state_tip_moved_names_its_partition_alone(self):
+        m = board.moved(self.KEPT, self.now(state={"wldn": "d" * 40}))
+        assert m["state"] == {"wldn"} and not m["crew"] and m["blueprints"] == m["kits"] == set() and m["any"]
+
+    def test_one_kit_moved_names_that_kit_on_its_host(self):
+        m = board.moved(self.KEPT, self.now(kits={(BOX, "/kit/main"): "s9"}))
+        assert m["kits"] == {(BOX, "/kit/main")} and m["state"] == set() and m["any"]
+
+    def test_a_kit_whose_stamp_could_not_be_read_counts_as_moved(self):
+        assert board.moved(self.KEPT, self.now(kits={(BOX, "/kit/main"): None}))["kits"] == {(BOX, "/kit/main")}
+        assert board.moved(dict(self.KEPT, kits={(BOX, "/kit/main"): None}), dict(self.KEPT, kits={(BOX, "/kit/main"): None}))["kits"] == {(BOX, "/kit/main")}
+
+    def test_a_kit_new_to_the_read_or_gone_from_it_counts_as_moved(self):
+        m = board.moved(self.KEPT, dict(self.KEPT, kits={("mac-studio", "/a/main"): "s2", (BOX, "/b/main"): "s3"}))
+        assert m["kits"] == {(BOX, "/kit/main"), (BOX, "/b/main")}
+
+    def test_crews_head_or_the_teams_file_moved_or_unreadable_says_crew_moved(self):
+        assert board.moved(self.KEPT, self.now(crew=("e" * 40, b"{teams}")))["crew"]
+        assert board.moved(self.KEPT, self.now(crew=("c" * 40, b"{teams, again}")))["crew"]
+        assert board.moved(self.KEPT, self.now(crew=(None, b"{teams}")))["crew"]
+
+    def test_with_no_read_kept_everything_has_moved(self):
+        m = board.moved(None, self.KEPT)
+        assert m["crew"] and m["state"] == {"wldn", "swancloud"} and m["kits"] == set(self.KEPT["kits"]) and m["any"]
+
+
 class TestRailFrame:
     """The rail tab draws the rail frame the host's follower writes (the crew-board spec, The rail and the board come
     from one read)."""

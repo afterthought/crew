@@ -927,6 +927,24 @@ def rail_frame_text(label, data, now):
     return head + data["text"] + (f"\n\n{data['updated']}" if data.get("updated") else "")
 
 
+def moved(kept, now):
+    """What moved between the stamps the follower's last read was made at (kept) and the stamps now (now), each
+    {"crew": (crew's head, the teams file's bytes), "state": {label: tip}, "blueprints": {label: tip}, "kits": {(host,
+    main): stamp}}, a tip "" for a branch the cache does not hold: whether crew's checkout or the teams file moved, the
+    labels whose state and whose blueprints tip moved, the kits that moved, and whether anything did. A stamp None,
+    which could not be read, counts as moved, as does one either side lacks (read.1); with no kept read, everything
+    has moved. A decision on plain facts (code.7)."""
+    if kept is None:
+        return {"crew": True, "state": set(now["state"]), "blueprints": set(now["blueprints"]), "kits": set(now["kits"]), "any": True}
+
+    def apart(a, b):
+        return {k for k in a.keys() | b.keys() if a.get(k) is None or b.get(k) is None or a[k] != b[k]}
+    out = {"crew": None in kept["crew"] or None in now["crew"] or tuple(kept["crew"]) != tuple(now["crew"]),
+           "state": apart(kept["state"], now["state"]), "blueprints": apart(kept["blueprints"], now["blueprints"]),
+           "kits": apart(kept["kits"], now["kits"])}
+    return dict(out, any=bool(out["crew"] or out["state"] or out["blueprints"] or out["kits"]))
+
+
 def moved_at():
     """What says crew's code or the teams file has moved since a round: the checkout's commit and the teams file's
     bytes, each None when it can't be read, as the rail tab's loop read them."""
