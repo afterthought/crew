@@ -21,7 +21,7 @@ rail (plan.rail_read); no state is written, only the frames the rail tab hands t
 crew's cache, each one redraw and not state (state.4). The rail tab's refresh, as it prints the rail, ends the card
 sessions whose card is closed or whose row is gone, as crew rail does; crew board ends nothing. The board answers
 nothing and prints no command: the rail and its shell are where things are answered."""
-import argparse, datetime, json, os, pathlib, re, shutil, subprocess, sys, tempfile, time
+import argparse, datetime, fcntl, json, os, pathlib, re, shutil, subprocess, sys, tempfile, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -829,6 +829,61 @@ def follow(label, once=False):
         if once:
             return
         time.sleep(1)
+
+
+# ------------------------------------------------------------------------------------------------- the host's follower
+
+def lock_path():
+    """The host's follower lock, beside the frames the follower writes."""
+    return FRAMES / "follower.lock"
+
+
+def lock_follower(kind, label=None, wait=True):
+    """The host's follower lock taken for a follower of kind job (crew _follow) or tab (a rail tab, of label): an OS lock
+    on the open file, which the caller keeps open for as long as it follows, so the OS lifts it when the follower ends,
+    however it ends, and nothing is left to go stale (state.4). Once taken, the file says who holds it, `job <pid>
+    <time>` or `tab <label> <pid> <time>`. With wait it waits for the lock, reading nothing meanwhile; without, None
+    when another holds it."""
+    FRAMES.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path(), "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+    except BlockingIOError:
+        f.close()
+        return None
+    f.truncate(0)
+    f.write(" ".join([kind] + ([label] if kind == "tab" else []) + [str(os.getpid()), iso(datetime.datetime.now(datetime.timezone.utc))]) + "\n")
+    f.flush()
+    return f
+
+
+def follower_of(line, free):
+    """Who follows on the host, from the lock's line and whether the lock was free: none when it was free, job or tab
+    as the line says, and unknown when the line is neither, as one read between a holder's lock and its write would be
+    (read.1)."""
+    if free:
+        return "none"
+    words = (line or "").split()
+    if words[:1] == ["job"] and len(words) == 3:
+        return "job"
+    if words[:1] == ["tab"] and len(words) == 4 and re.fullmatch(r"[a-z0-9][a-z0-9-]*", words[1]):
+        return "tab"
+    return "unknown"
+
+
+def follower_here():
+    """Who follows on this host (follower_of): the lock tried without waiting, and released at once when it was free;
+    when it is held, the holder's line read."""
+    FRAMES.mkdir(parents=True, exist_ok=True)
+    with open(lock_path(), "a+") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            f.seek(0)
+            return follower_of(f.readline(), False)
+        fcntl.flock(f, fcntl.LOCK_UN)
+        return follower_of(None, True)
+
 
 
 # ------------------------------------------------------------------------------------------------- commands

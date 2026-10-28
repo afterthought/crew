@@ -274,6 +274,41 @@ class TestFrame:
         assert " ago" not in board.frame_text("wldn", d, None, False, NOW).splitlines()[0]
 
 
+class TestFollower:
+    """The host's one follower (the crew-board spec, A host has one follower): an OS lock on a file beside the frames,
+    held for the follower's life and saying who holds it. Two open()s are two open file descriptions, so the lock
+    conflicts between them in one process as between two processes."""
+
+    def test_a_held_lock_refuses_a_second_try_and_says_the_tab_holds_it(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        held = board.lock_follower("tab", "wldn", wait=False)
+        assert held
+        assert board.lock_follower("job", wait=False) is None and board.lock_follower("tab", "madswan", wait=False) is None
+        assert board.lock_path().read_text().startswith("tab wldn ")
+        assert board.follower_here() == "tab"
+        held.close()
+        assert board.follower_here() == "none"
+
+    def test_the_job_holding_it_reads_as_the_job(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        held = board.lock_follower("job", wait=False)
+        assert board.lock_path().read_text().split()[0] == "job" and board.follower_here() == "job"
+        held.close()
+
+    def test_a_released_lock_is_free_and_taken_again_with_its_holder_written_anew(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        board.lock_follower("job", wait=False).close()
+        held = board.lock_follower("tab", "wldn", wait=False)
+        assert held and len(board.lock_path().read_text().splitlines()) == 1 and board.follower_here() == "tab"
+        held.close()
+
+    @pytest.mark.parametrize("line, free, who", [("", False, "unknown"), (None, False, "unknown"), ("job 12 2026-10-28T10:00:00Z", False, "job"),
+                                                 ("tab wldn 12 2026-10-28T10:00:00Z", False, "tab"), ("tab 12 2026-10-28T10:00:00Z", False, "unknown"),
+                                                 ("someone else", False, "unknown"), ("job 12 2026-10-28T10:00:00Z", True, "none"), ("", True, "none")])
+    def test_who_follows_is_read_from_the_lock_and_an_unreadable_holder_is_unknown(self, line, free, who):
+        assert board.follower_of(line, free) == who
+
+
 class TestMore:
     def test_a_proposal_adding_to_a_held_bolt_belongs_to_the_team_holding_it(self):
         props = [{"label": "wldn", "proposal": 2, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "Tenants get d.", "waiting": [],
