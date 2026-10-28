@@ -4,6 +4,7 @@ board.stamp on what that makes. That crew board reads it all and writes nothing,
 frame the board tab draws, are the board journey's (t-journey-board)."""
 import datetime
 import json
+import os
 import pathlib
 import re
 
@@ -307,6 +308,96 @@ class TestFollower:
                                                  ("someone else", False, "unknown"), ("job 12 2026-10-28T10:00:00Z", True, "none"), ("", True, "none")])
     def test_who_follows_is_read_from_the_lock_and_an_unreadable_holder_is_unknown(self, line, free, who):
         assert board.follower_of(line, free) == who
+
+    def test_it_follows_each_partition_whose_session_of_its_name_on_the_host_is_its_own(self):
+        fleet = {"partitions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"},
+                                "madswan": {"partition": "business"}, "agentplot": {"partition": "agentplot"}},
+                 "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "wldn-5": {"partition": "clients/willdan"},
+                                                       "swancloud": {"partition": "personal"}, "madswan": {"partition": "personal"},
+                                                       "agentplot": {"partition": None}}},
+                           BOX: {"sessions": {"wldn": {"partition": "clients/willdan"}}}}}
+        assert board.labels_here(fleet, "mac-studio") == ["wldn", "swancloud"]
+        assert board.labels_here(fleet, BOX) == ["wldn"] and board.labels_here(fleet, "macbook-pro") == []
+
+    def test_an_entry_wakes_its_partitions_round_a_burst_is_one_round_and_a_follow_that_ends_leaves_the_clock(self, monkeypatch):
+        """Each partition's follow is a pipe here, as a crew events --follow child's output is, and each round is
+        recorded rather than run."""
+        class Follow:
+            def __init__(self):
+                self.r, self.w = os.pipe()
+                self.stdout, self.killed = os.fdopen(self.r, "rb"), False
+
+            def kill(self):
+                self.killed = True
+
+            def wait(self):
+                pass
+
+        class Here(board.Follower):
+            def fleet(self):
+                return {"partitions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}},
+                        "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
+        rounds = []
+        monkeypatch.setattr(board, "follow_round", lambda label, seen: rounds.append(label))
+        monkeypatch.setattr(board, "BURST", 0.05)
+        follows = {"wldn": Follow(), "swancloud": Follow()}
+        f = Here(None)
+        f.follows = dict(follows)
+        f.step(0)
+        assert rounds == ["wldn", "swancloud"]
+        f.step(0)
+        assert rounds == ["wldn", "swancloud"], "a round ran before it was due"
+        for _ in range(3):
+            os.write(follows["wldn"].w, b"2026-10-28T10:00:00Z  unit.run  ...\n")
+        f.step(1)
+        f.step(0)
+        assert rounds == ["wldn", "swancloud", "wldn"], "a burst of entries was not one round of its own partition"
+        os.close(follows["swancloud"].w)
+        f.step(1)
+        assert follows["swancloud"].killed and f.follows["swancloud"] is None
+        f.step(0)
+        assert rounds == ["wldn", "swancloud", "wldn"] and f.follows["swancloud"] is None, "an ended follow woke a round or was started again"
+        assert f.due["swancloud"] > 0
+        os.close(follows["wldn"].w)
+        for x in follows.values():
+            x.stdout.close()
+
+
+class TestRailFrame:
+    """The rail tab draws the rail frame the host's follower writes (the crew-board spec, The rail and the board come
+    from one read)."""
+
+    RAIL = {"read_at": board.iso(NOW), "from": "mac-studio", "text": "What waits on you (wldn), as of 10:00:00\n\nproposals\n  none", "updated": None}
+
+    def test_a_fresh_frame_is_the_rail_as_its_round_printed_it(self):
+        assert board.rail_frame_text("wldn", self.RAIL, NOW) == self.RAIL["text"]
+
+    def test_what_handing_out_the_restarts_said_follows_the_rail(self):
+        said = board.rail_frame_text("wldn", dict(self.RAIL, updated="wldn-planner is due a restart: crew _renew restarts it once idle"), NOW)
+        assert said == self.RAIL["text"] + "\n\nwldn-planner is due a restart: crew _renew restarts it once idle"
+
+    def test_a_frame_read_five_minutes_ago_is_headed_with_its_age(self):
+        said = board.rail_frame_text("wldn", dict(self.RAIL, read_at=board.iso(NOW - datetime.timedelta(minutes=5))), NOW).splitlines()
+        assert said[0].startswith("wldn's rail as read at ")
+        assert said[0].endswith(", 5m ago: the host's follower on mac-studio has not refreshed it since")
+        assert said[1:] == ["", *self.RAIL["text"].splitlines()]
+        assert board.rail_frame_text("wldn", dict(self.RAIL, read_at=board.iso(NOW - datetime.timedelta(seconds=board.STALE - 5))), NOW) == self.RAIL["text"]
+
+    def test_with_no_frame_the_rail_tab_says_the_hosts_follower_writes_it(self):
+        assert board.rail_frame_text("wldn", None, NOW) == (
+            "No rail for wldn yet: the host's follower writes it each time it refreshes, swancloud's job or the console's rail tab, "
+            "which crew console up wldn opens while no job runs.")
+
+    def test_half_a_rail_frame_or_one_with_no_text_reads_as_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        assert board.read_rail("wldn") is None
+        (tmp_path / "wldn.rail.json").write_text('{"read_at": ')
+        assert board.read_rail("wldn") is None
+        (tmp_path / "wldn.rail.json").write_text(json.dumps(dict(self.RAIL, text=None)))
+        assert board.read_rail("wldn") is None
+        board.write_frame("wldn", self.RAIL, board.rail_path("wldn"))
+        assert board.read_rail("wldn") == self.RAIL and board.read_frame("wldn") is None
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["wldn.rail.json"]
 
 
 class TestMore:
