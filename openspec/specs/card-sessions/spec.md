@@ -182,7 +182,7 @@ crew SHALL write a batch's session's files into the batch's own folder on the ma
 - **THEN** every file plannotator is given is in batch 3's folder on mac-studio before plannotator starts
 
 ### Requirement: A session whose card is closed or whose row is gone is ended on every rail read
-Each time `crew rail` runs, and each time the host's follower refreshes, whether swancloud's job or a rail tab runs it, crew SHALL end, on every host of each partition read, each session it started for a card key whose row is gone, or whose card the run record holds as closed with no card open under the key. It SHALL end only sessions it recorded, and only a process plannotator lists as serving the recorded document.
+Each time `crew rail` runs, and each time the host's follower refreshes after a state tip or a kit it read has moved, whether swancloud's job or a rail tab runs it, crew SHALL end, on every host of each partition read, each session it started for a card key whose row is gone, or whose card the run record holds as closed with no card open under the key. A refresh after no state tip and no kit moved SHALL sweep sessions only on a host whose card readings folder moved since its last read, or that the last refresh could not check, and on no other host. It SHALL end only sessions it recorded, and only a process plannotator lists as serving the recorded document.
 
 #### Scenario: A verify card's session from before
 - **WHEN** the session crew started for `verify/x/20261009-1412`, before a verify report had no row, still runs on chuck-herdr-alpha
@@ -211,6 +211,14 @@ Each time `crew rail` runs, and each time the host's follower refreshes, whether
 #### Scenario: Swept with no tab open
 - **WHEN** the planner closed card `proposal/4` and its session still runs, and the host's follower runs as swancloud's job with no rail tab open
 - **THEN** the follower's next refresh ends that session
+
+#### Scenario: A host the last sweep missed
+- **WHEN** the follower's last refresh could not check chuck-herdr-alpha's sessions, and nothing has moved since
+- **THEN** the next refresh asks chuck-herdr-alpha alone to end its sessions, and asks no other host
+
+#### Scenario: A reading sent on one host
+- **WHEN** the user sends back a reading on chuck-herdr-alpha, and nothing else has moved since mac-studio's follower last read
+- **THEN** the follower's next refresh asks chuck-herdr-alpha alone to sweep its card sessions, and asks no other host
 
 ### Requirement: The rail says which sessions it ended
 After its groups and its open cards with no row, `crew rail` SHALL list each session it ended on that read, with its card key, the unit for a batch card's, its partition, its host and whether its card was closed or its row gone, and SHALL name each host whose sessions it could not check, with why. When it ended nothing and checked every host, it SHALL print nothing about sessions.
