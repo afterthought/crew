@@ -1955,32 +1955,70 @@ def down_said(team):
     return f"{team} is down; crew up {team} brings it back"
 
 
-def slot_for(team, slots, held, name):
+def slot_for(team, slots, held, name, lent=()):
     """The slot a unit or fix runs in (teams.1): the one holding it, else the first of the team's slots that holds
     nothing, as (slot, whether it is newly taken); held is the slots file's lines, split. Refused, naming what each
-    holds, when every slot is in flight."""
+    holds, when every slot is in flight; and for work waiting in a slot lent to a fix (lent, the lent file's lines,
+    split), which goes on there once the fix's slot is freed (lent_said)."""
     for f in held:
         if f[2:3] == [name]:
             return f[0], False
+    for f in lent:
+        if f[2:3] == [name]:
+            fail(lent_said(team, f[0], name, next((h[2] for h in held if h[0] == f[0] and len(h) > 2), "a fix")))
     holding = {f[0] for f in held if len(f) > 2}
     free = [s for s in slots if s not in holding]
     free or fail(f"all {len(slots)} of {team}'s slots are in flight: " + "; ".join(f"{f[0]} holds {' '.join(f[2:3])}" for f in held))
     return free[0], True
 
 
-def reaped(agent, team, name, stage, status):
+def reaped(agent, team, name, stage, status, lent=None):
     """What a team's read does with a slot (teams.1): ("free", what it says) once its work has merged, landed, been
-    dropped from the plan or left the team's bolt and its agent is not working; ("keep", what it says, or None) while
-    that agent works; (None, None) while its work goes on."""
+    dropped from the plan or left the team's bolt and its agent is not working, a slot lent to a fix given back to the
+    work it was lent from (lent, its name); ("keep", what it says, or None) while that agent works; (None, None) while
+    its work goes on."""
     if stage not in ("merged", "landed", "dropped", "left"):
         return None, None
     if status == "working":
         return "keep", {"dropped": f"{agent} still holds {name}, dropped from the plan: its agent is working; it is freed once that settles",
                         "left": f"{agent} still holds {name}, which has left {team}'s bolt: its agent is working; it is freed once that "
                                 "settles"}.get(stage)
-    return "free", {"dropped": f"{agent} is free: {name} was dropped from the plan",
-                    "landed": f"{agent} is free: {name} has landed on main",
-                    "left": f"{agent} is free: {name} has left {team}'s bolt"}.get(stage, f"{agent} is free: {name} has merged into its bolt")
+    why = {"dropped": f"{name} was dropped from the plan", "landed": f"{name} has landed on main",
+           "left": f"{name} has left {team}'s bolt"}.get(stage, f"{name} has merged into its bolt")
+    return "free", f"{agent} is given back to {lent}: {why}" if lent else f"{agent} is free: {why}"
+
+
+# The states herdr reads of an agent that runs: at work, or stopped on a question with its turn open (Herdr.status).
+RUNNING = ("working", "blocked")
+
+
+def lent_for(team, slots, held, status, owed):
+    """The slot a fix takes lent when every slot is in flight (teams.1, teams.3, record 0045), until crew launches
+    through Flume: the first of the team's slots holding a unit or chore whose agent is not running, herdr reading it
+    neither working nor blocked (status, by slot), and that owes no stage an end (owed, the slots the stages file
+    names), so its work waits and holds no agent; held is the slots file's lines, split. Refused, naming why each slot
+    is not lent, when none is: a slot holding a fix, one whose agent runs and one whose stage is under way are never
+    lent, so a team never runs more agents than it has slots."""
+    lines = {f[0]: f for f in held if len(f) > 2}
+    why = []
+    for s in slots:
+        f = lines.get(s)
+        if not f:
+            continue
+        if f[1] == "fix":
+            why.append(f"{s} holds {f[2]}")
+        elif status.get(s) in RUNNING:
+            why.append(f"{s}'s agent is {status[s]} on {f[2]}")
+        elif s in owed:
+            why.append(f"{s}'s stage on {f[2]} has not ended")
+        else:
+            return s
+    fail(f"all {len(slots)} of {team}'s slots are in flight, and none can be lent to a fix: " + "; ".join(why))
+
+
+def lent_said(team, slot, work, fix):
+    """What crew says of work waiting in a slot lent to a fix (teams.1): it goes on there once the fix's slot is freed."""
+    return f"{work} waits in {team}-{slot}, lent to {fix}: it goes on there once that fix has merged or been dropped"
 
 
 def held_object(kind, name, bolt=""):
@@ -2492,6 +2530,10 @@ class Team(Agents):
         """The slots file's line for a slot, split, or None."""
         return next((l for l in self.lines("slots") if l[0] == slot), None)
 
+    def lent(self, slot):
+        """The work waiting in a slot lent to a fix, its line as the slots file held it, split, or None (teams.1)."""
+        return next((l for l in self.lines("lent") if l[0] == slot and len(l) > 2), None)
+
     def panes(self):
         """The team's workspace, "<team>": a conductor tab holding the conductor and ops, and on a Mac a git tab with
         gitgui in the kit and in the blueprints repo; each opened when its pane is not there, a dead one closed first
@@ -2526,23 +2568,42 @@ class Team(Agents):
             self.herdr.run("tab", "rename", tab, "units")
         self.put("panes", slot, p)
 
-    def take(self, kind, name, place):
-        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken)."""
-        held = self.lines("slots")
-        slot, new = slot_for(self.name, self.slots, held, name)
+    def take(self, kind, name, place, owed=None):
+        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken). Given
+        owed, the slots whose stage the stages file owes an end, a fix that finds every slot in flight takes one lent
+        (lent_for), the work it holds kept in the lent file until the fix's slot is given back (give_back)."""
+        held, lent = self.lines("slots"), self.lines("lent")
+        try:
+            slot, new = slot_for(self.name, self.slots, held, name, lent)
+        except Refusal:
+            if owed is None:
+                raise
+            slot = lent_for(self.name, self.slots, held, {s: self.status(s) for s in self.slots}, owed)
+            self.write("lent", [l for l in lent if l[0] != slot] + [l for l in held if l[0] == slot])
+            held, new = [l for l in held if l[0] != slot], True
         if new:
             self.write("slots", held + [[slot, kind, name, place]])
         return slot, new
 
+    def give_back(self, slot):
+        """The slot's line dropped, and the work it was lent from, if any, back in it (teams.1): that work's name, or
+        None."""
+        back = self.lent(slot)
+        self.write("slots", [l for l in self.lines("slots") if l[0] != slot] + ([back] if back else []))
+        if back:
+            self.drop("lent", slot)
+        return back[2] if back else None
+
     def free(self, slot, ending=None, bolt=""):
-        """End a slot's agent, close its pane and give the slot back, recorded (teams.1); the units workspace goes with
-        the last slot. None once it is free, else what crew says of the agent it could not end (stop). bolt is the bolt
-        a fix given as fix/<name> is of, read from its branch when not given."""
+        """End a slot's agent, close its pane and give the slot back, recorded (teams.1), to the work it was lent from
+        when it was lent to a fix (give_back); the units workspace goes with the last slot. None once it is free, else
+        what crew says of the agent it could not end (stop). bolt is the bolt a fix given as fix/<name> is of, read from
+        its branch when not given."""
         why = self.stop(slot, ending)
         if why:
             return why
         line = self.held(slot)
-        self.drop("slots", slot)
+        self.give_back(slot)
         if line and len(line) > 2:
             if line[1] == "fix" and not bolt and not (line[2].startswith("fix/") and "/" in line[2][4:]):
                 bolt = subprocess.run(["git", "-C", self.t["kit"]["main"], "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{line[2]}"],

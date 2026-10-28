@@ -9537,9 +9537,9 @@ def ending(fleet, t):
 def reap(fleet, team, landed=None):
     """A team's read on its host (teams.1, record.5): the end of each stage that delivered with nobody waiting recorded,
     late; each slot freed whose unit or fix has merged into its bolt, been dropped from the plan or left the team's
-    bolt, once its agent is not working (crew.reaped); then each dependent whose After unit has merged rebased, and the
-    worktrees whose work is over removed, at a landing (landed, the bolt) the bolt's branch deleted by sluice after them
-    (rebase_and_tidy)."""
+    bolt, once its agent is not working, a slot lent to a fix given back to the work it was lent from (crew.reaped);
+    then each dependent whose After unit has merged rebased, and the worktrees whose work is over removed, at a landing
+    (landed, the bolt) the bolt's branch deleted by sluice after them (rebase_and_tidy)."""
     t = team.t
     if team.owes():
         with silenced():
@@ -9549,7 +9549,8 @@ def reap(fleet, team, landed=None):
     except Refusal:
         held = []
     for s in held:
-        how, said = crew.reaped(team.agent_of(s["slot"]), t["name"], s["name"], s["stage"], team.status(s["slot"]))
+        how, said = crew.reaped(team.agent_of(s["slot"]), t["name"], s["name"], s["stage"], team.status(s["slot"]),
+                                (team.lent(s["slot"]) or [None] * 3)[2])
         if how == "free":
             why = team.free(s["slot"], ending(fleet, t))
             if why:
@@ -9600,9 +9601,9 @@ def run_stage(fleet, team, slot, stage, prompt, act, what, obj, on, **extra):
 
 def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
     """A unit's stage, or a chore's (kind, plan.11), started in its slot on the team's host (teams.1, teams.2, plan.6):
-    refused, and recorded so, while the team is down, when every slot is in flight, and for a construct whose slot's
-    agent works unless forced, each before the plan can be written, so an amended unit whose construct can't start keeps
-    its mark and reads amended; an agent whose stage stopped short works for nothing, and is ended first (short_taken).
+    refused, and recorded so, while the team is down, when every slot is in flight or its own is lent to a fix
+    (teams.1), and for a construct whose slot's agent works unless forced, each before the plan can be written, so an
+    amended unit whose construct can't start keeps its mark and reads amended; an agent whose stage stopped short works for nothing, and is ended first (short_taken).
     The team's read frees first what is over, and a slot another team of this host holds the unit in. Whether the stage may start, the place and the stage's prompt are run_check's, a chore's chore_check's,
     its start run_stage's. It stops (Stopped), or is refused (Refusal), having said and recorded why."""
     t, label = team.t, team.label
@@ -9616,7 +9617,7 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
         slot, taken = team.take(kind, unit, f"{t['kit']['dir']}/places/" + (f"chore-{unit}" if kind == "chore" else unit))
     except Refusal as e:
         print(e, file=sys.stderr)
-        record.emit(label, "stage.start", on, refused=f"all {t['units']} of {t['name']}'s slots are in flight")
+        record.emit(label, "stage.start", on, refused=str(e))  # every slot in flight, or its own lent to a fix
         raise Stopped(1)
     agent = team.agent_of(slot)
     why = short_taken(fleet, team, slot)  # its stage is over, so a construct is not refused for its working
@@ -9775,10 +9776,12 @@ def construct_handed(fleet, team, a):
 def fix_run(fleet, a):
     """crew fix <team> <name> "<what is wrong>" | --merge | --drop | --wait, on the team's host (teams.3, teams.5,
     plan.8): the team's read first, but for a wait or a drop, which reads the team last (fix_drop); then what fix_cmd
-    decides. A new fix takes a slot, is refused and recorded when
-    every slot is in flight or its place is not its own, and starts as a code stage, in a place that could not be made
-    ready as in one that could, its agent told what failed (record 0028); a merge starts as a merge stage,
-    a submission of the fix to the bolt through sluice; a wait waits on the stage the fix's slot owes (stage_wait)."""
+    decides. A new fix takes a slot, one lent when every slot is in flight and one holds work that waits, its agent not
+    running and no stage of it owed (teams.1, teams.3, record 0045), the start naming that work; is refused and
+    recorded when no slot can be taken or lent, or its place is not its own; and starts as a code stage, in a place
+    that could not be made ready as in one that could, its agent told what failed (record 0028); a merge starts as a
+    merge stage, a submission of the fix to the bolt through sluice; a wait waits on the stage the fix's slot owes
+    (stage_wait)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     if a.mode not in ("wait", "drop"):
@@ -9795,21 +9798,24 @@ def fix_run(fleet, a):
         return stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=a.timeout, stuck=a.stuck))
     if a.mode == "drop":
         return fix_drop(fleet, team, said, on)
-    unready = None
+    unready = lent = None
     if a.mode == "start":
         taken = False
         if not slot:  # a new fix never takes over a branch or place that is already there (fix_cmd)
+            with stages_file(t, shared=True) as lines:
+                owed = {l[0] for l in lines}
             try:
-                slot, taken = team.take("fix", fix, place)
+                slot, taken = team.take("fix", fix, place, owed)
             except Refusal as e:
                 print(e, file=sys.stderr)
-                record.emit(team.label, "fix.start", on, refused=f"all {t['units']} of {t['name']}'s slots are in flight")
+                record.emit(team.label, "fix.start", on, refused=str(e))
                 raise Stopped(1)
+            lent = team.lent(slot) if taken else None
         try:
             unready = fix_place(fleet, t, place, fix, bolt)
         except Refusal as e:
             if taken:
-                team.drop("slots", slot)
+                team.give_back(slot)
             stopped(team.label, "fix.start", on, str(e))
     team.slot_pane(slot, place)
     agent = team.agent_of(slot)
@@ -9819,24 +9825,28 @@ def fix_run(fleet, a):
     else:
         if unready:
             print(f"{unready.splitlines()[0].rstrip(':')}; {agent} starts on the fix all the same, told what failed")
-        run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"])
+        if lent:
+            print(crew.lent_said(t["name"], slot, lent[2], fix))
+        waits = [crew.held_object(lent[1], lent[2])] if lent else []
+        run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"] + waits)
         fix_said(t, fix, a.words)
         print(f"{agent} has {fix}: code, in {place}")
         landing_held(fleet, t, bolt, a.words)
 
 
 def fix_drop(fleet, team, said, on):
-    """crew fix <team> <name> --drop, once fix_cmd let it (teams.3, record 0028): the fix's slot freed, its agent ended
-    when one is up, a working one only with --force (teams.2); its branch marked dropped in the kit's git config
-    (fixes_dropped); the drop recorded; then the team's read, whose tidy removes its place and its branch as a dropped
-    unit's go, keeping a branch with commits beyond the bolt, named (plan.9, plan.10)."""
+    """crew fix <team> <name> --drop, once fix_cmd let it (teams.3, record 0028): the fix's slot freed, or given back to
+    the work it was lent from (teams.1), its agent ended when one is up, a working one only with --force (teams.2); its
+    branch marked dropped in the kit's git config (fixes_dropped); the drop recorded; then the team's read, whose tidy
+    removes its place and its branch as a dropped unit's go, keeping a branch with commits beyond the bolt, named
+    (plan.9, plan.10)."""
     t, slot, fix = team.t, said["SLOT"], said["FIX"]
     if slot:
-        agent = team.agent_of(slot)
+        agent, back = team.agent_of(slot), (team.lent(slot) or [None] * 3)[2]
         on = on + [f"agent/{agent}"]
         why = team.free(slot, ending(fleet, t))
         not why or stopped(team.label, "fix.drop", on, why)
-        print(f"{agent} is free: {fix} is dropped")
+        print(f"{agent} is given back to {back}: {fix} is dropped" if back else f"{agent} is free: {fix} is dropped")
     if said["BRANCH"]:
         kit_git(fleet, t, t["kit"]["main"], "config", f"branch.{fix}.crew", "dropped")
     record.emit(team.label, "fix.drop", on)
@@ -9846,9 +9856,10 @@ def fix_drop(fleet, team, said, on):
 def team_status(fleet, a):
     """crew status <team>, on the team's host: the team's read (reap); then its conductor and ops, each with its pane,
     its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of);
-    each slot with its pane, its agent's state and what it holds (crew.holds_said); each unit of the team's bolt
-    carried onto it inside another unit's merge that no slot holds, its merge owed (carried_units, teams.17); and,
-    while the team holds two bolts, the one it builds and the one that waits to land (two_held_said, teams.16)."""
+    each slot with its pane, its agent's state and what it holds (crew.holds_said); the work waiting in each slot lent
+    to a fix (crew.lent_said, teams.1); each unit of the team's bolt carried onto it inside another unit's merge that
+    no slot holds, its merge owed (carried_units, teams.17); and, while the team holds two bolts, the one it builds and
+    the one that waits to land (two_held_said, teams.16)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     reap(fleet, team)
@@ -9876,6 +9887,9 @@ def team_status(fleet, a):
         holds = crew.holds_said(held.get(slot), team.held(slot))
         print(crew.status_row(team.agent_of(slot), team.pane(slot) or "-", (team.status(slot) or "not up") if holds else "free",
                               "-", "-", "-", "-", holds))
+    for line in team.lines("lent"):
+        if len(line) > 2:
+            print(crew.lent_said(t["name"], line[0], line[2], (team.held(line[0]) or [None] * 3)[2] or "a fix"))
     try:
         for unit, bolt, stage in carried_units(fleet, t, {s["name"] for s in held.values()}):
             print(crew.carried_said(unit, bolt, stage))
