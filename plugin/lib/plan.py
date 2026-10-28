@@ -11509,6 +11509,67 @@ def bolts_text(data):
     return "\n".join(lines)
 
 
+# ------------------------------------------------------------------------------------------------- a bolt's time
+
+HOLDERS = ("team", "kit", "user", "hold", "nobody")
+STALLED = 5  # minutes nobody has held a bolt before its row says it is stalled (teams.23's measure)
+
+
+def bolt_time(start, end, stages, submissions, cards, holds):
+    """Where a held bolt's time went (plan.20, record 0044), a decision of facts alone (code.7): from its newest give
+    (start) to end, the time now or its landing, cut at every start and end the facts hold, each piece going to the
+    first holder that applies: the team while a stage of its work runs other than a merge; the kit while one of its
+    submissions is under test; the team while a merge stage runs or one of its submissions stands in sluice not under
+    test; the user while a card of the bolt's is open; a hold while one is recorded on it; else nobody. A team at work
+    is not idle whatever else happens, a gate's checks are the gate's while the merge agent waits on them, and waiting
+    on people counts only while nothing moves, so the shares sum to the age. stages are [{start, end, merge, what}],
+    submissions [{submitted, started, decided, state, what}], cards [{at, until, key}] and holds [{at, until, what}],
+    every time aware and an end of None running to end. A submission is under test from the start of its checks to its
+    decision; one testing with no start of checks, and one decided, whose record in sluice 0.51.3 keeps no start of
+    checks, count under test for their whole stay, so a decided merge's queued minutes go to the kit until sluice keeps
+    that start (the design's Decision 3). Returns {age, shares: {holder: minutes}, now: {holder, what, since}, stalled}
+    in whole minutes, since the time the holder at end began to hold the bolt, and stalled once nobody has held it for
+    STALLED minutes."""
+    facts = []
+
+    def put(a, b, rank, holder, what):
+        a, b = max(a, start), min(b or end, end)
+        if a < b:
+            facts.append((rank, a, b, holder, what))
+    for s in stages:
+        put(s["start"], s.get("end"), 3 if s.get("merge") else 1, "team", s.get("what"))
+    for s in submissions:
+        if s.get("decided") or s.get("state") == "testing":
+            checks = s.get("started") or s["submitted"]
+            put(checks, s.get("decided"), 2, "kit", s.get("what"))
+            put(s["submitted"], checks, 3, "team", s.get("what"))
+        else:
+            put(s["submitted"], None, 3, "team", s.get("what"))
+    for c in cards:
+        put(c["at"], c.get("until"), 4, "user", c.get("key"))
+    for h in holds:
+        put(h["at"], h.get("until"), 5, "hold", h.get("what"))
+    facts.sort(key=lambda f: (f[0], f[1]))
+    cuts = sorted({start, end} | {t for f in facts for t in f[1:3]})
+    secs, pieces = dict.fromkeys(HOLDERS, 0.0), []
+    for a, b in zip(cuts, cuts[1:]):
+        top = next((f for f in facts if f[1] <= a and f[2] >= b), None)
+        holder, what = (top[3], top[4]) if top else ("nobody", None)
+        secs[holder] += (b - a).total_seconds()
+        pieces.append((a, holder, what))
+    age = int(max(0.0, (end - start).total_seconds()) // 60)
+    shares = {h: int(secs[h] // 60) for h in HOLDERS}
+    for h in sorted(HOLDERS, key=lambda h: -(secs[h] / 60 - shares[h]))[:age - sum(shares.values())]:
+        shares[h] += 1  # the minutes the floors left, to the largest parts left over, so the shares sum to the age
+    holder, what, since = (pieces[-1][1], pieces[-1][2], pieces[-1][0]) if pieces else ("nobody", None, start)
+    for a, h, _ in reversed(pieces):
+        if h != holder:
+            break
+        since = a
+    return {"age": age, "shares": shares, "now": {"holder": holder, "what": what, "since": since},
+            "stalled": holder == "nobody" and (end - since).total_seconds() >= STALLED * 60}
+
+
 # ------------------------------------------------------------------------------------------------- batches
 
 BATCH_DAYS = 60  # how far back the run record is read for constructs and batches
