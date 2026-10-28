@@ -113,8 +113,10 @@
 # repository; a meeting's signals stay in the partition's first blueprints repo:
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
-#                                      every bolt, unit and chore of the plans, each one's stage read from its kit, and
-#                                      each held bolt's verification, sluice's verdict on its last landing
+#                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
+#                                      each held bolt's verification, sluice's verdict on its last landing, and each
+#                                      merge and landing standing in sluice's queue with its number and state on its
+#                                      line, a queue that can't be read said once on the bolt's head line
 #   crew bolt  new|give|order|drop|land ...
 #                                      give has sluice make bolt/<bolt> on GitHub from main (sluice branch create, on the
 #                                      team's host), with no worktree, before the plan write; refused, nothing changed,
@@ -136,7 +138,9 @@
 #                                      that did not land recorded at its head while the rest go on: one refused for its
 #                                      own content, a conflict or a check that ran and failed, held on its row; one
 #                                      sluice or its host stopped keeping its box and the user's word, and submitted
-#                                      again once that is cleared; the command exiting non-zero naming each; sluice
+#                                      again once that is cleared; a landing still standing in sluice at the bolt's
+#                                      head, as after ops's session ended, waited on again with nothing submitted,
+#                                      one at another head said; the command exiting non-zero naming each; sluice
 #                                      pushes to GitHub, and the landing pushes nothing and levels no host. In a kit
 #                                      whose main takes pull requests, it
 #                                      readies each bolt's draft pull request first, and a landing that does not land
@@ -185,7 +189,7 @@
 #                                      dev servers) and Operation (bolts landed this week, each environment's deploys
 #                                      and the operations waiting); each rail row a marker on its object, what needs
 #                                      attention at the foot; it answers nothing
-#   crew card  session|wait|end <key> [<unit>] [--label L]
+#   crew card  session|end <key> [<unit>] [--label L]
 #                                      the plannotator session on what a rail row's card asks the user to read, which
 #                                      crew starts with a batch's card, a landing card and a long proposal's: session
 #                                      prints its link (the running one's, else one started on this host with no
@@ -195,24 +199,23 @@
 #                                      carry a new link, or one it stands without, while it waits on the user, land/<kit>
 #                                      having none of its own, as a batch's and a long proposal's change the planner's,
 #                                      recording the start, a proposal's only for one of more than fifteen new units, and an old
-#                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
-#                                      waits for the user's decision in it and prints it with their words, for a batch
-#                                      card waits on the card too, printing its note and every annotation, and closes
-#                                      the card, recording the batch read in the planner's name when the session is
-#                                      sent and no card of it closes there, and for a bolt's reading prints its
-#                                      annotations as notes on its row
-#                                      and its approval as landing nothing, leaving the card, starting the reading
-#                                      first when none runs while the bolt is a row that can land, refused naming crew
-#                                      card session land/<bolt> when it will not open, a batch's starting it first
-#                                      too, and when it will not open saying why once, naming crew card session
-#                                      batch/<n>, and waiting on the card alone; end ends it, as the card's close
-#                                      does, and a bolt's reading as its row's end does, which no close of a card of
-#                                      the bolt's own does
+#                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; end
+#                                      ends it, as the card's close does, and a bolt's reading as its row's end does,
+#                                      which no close of a card of the bolt's own does. Nothing of crew's waits on a
+#                                      session or a card: crew card wait is refused at once, naming crew card read
+#                                      <key>, which gives what the user decided
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
-#                                      input: ends the sessions there whose card is closed or whose row is gone; not
+#                                      input: ends the sessions there whose card is closed or whose row is gone, tells
+#                                      the owner of each reading there the user sent and nobody read, once, to run crew
+#                                      card read <key>, and records a batch's reading approved with no notes read; not
 #                                      for hand use
 #   crew card  read <key> [--label L] [--json]
-#                                      where the asker's card stands: its status, whose turn, the user's answer and words;
+#                                      where the asker's card stands: its status, whose turn, the user's answer and words,
+#                                      and what the user sent from its reading: a batch's card and reading together
+#                                      (batch/<n>), the planner's, its note and every annotation, the card closed and
+#                                      the batch recorded read; a bolt's reading (land/<bolt>), its conductor's, its
+#                                      annotations as notes on its row and its approval as landing nothing, the card
+#                                      left and the reading set aside; a long proposal's reading's decision;
 #                                      an approval the user declined is closed with their words; for a kit's landings
 #                                      card (land/<kit>), the bolts the user ticked in its order and the crew bolt
 #                                      submit that lands them, after those an earlier send still lands at their head
@@ -225,8 +228,7 @@
 #                                      in its pane, recorded once crew reads the words in that agent's own session
 #                                      transcript as the user's, never an agent's, a tool's or crew's own, with no
 #                                      words in the run record; closes the batch's card held on this host with the
-#                                      words, or names the host whose rail closes it, ends the planner's wait on it,
-#                                      and tells the planner the words when the operator ran it; refused for a batch
+#                                      words, or names the host whose rail closes it, and tells the planner the words when the operator ran it; refused for a batch
 #                                      answered already or waiting on nothing
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
