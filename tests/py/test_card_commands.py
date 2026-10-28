@@ -879,7 +879,7 @@ def test_the_rest_of_the_environment_passes_through_and_the_one_given_is_not_cha
 
 
 # --------------------------------------------------------------------------------- a session's end, swept
-# plan.end_session, and crew card wait on a batch whose card's close ends its session: the key's folder swept whether
+# plan.end_session, and crew card read on a batch whose card's close ends its session: the key's folder swept whether
 # or not the partition's cards folder for it exists, a folder another end swept first, as the card hook's crew card end
 # or the rail's sweep may while this one reads plannotator's list, swept as empty and never raised.
 
@@ -918,67 +918,26 @@ class TestSessionEnd:
         assert plan.end_session("wldn", "proposal/9") == ("no session was running for proposal/9", False)
         assert not (tmp_path / "wldn").exists()
 
-    def test_a_batch_wait_returns_once_its_card_is_closed_and_its_session_ended_though_another_end_swept_its_folder(
-            self, monkeypatch, tmp_path, capsys):
-        d = self.recorded(monkeypatch, tmp_path, "batch/3")
-        sent = {"status": "answered", "turn": "agent", "version": 2, "answer": {"note": {"text": "Read."}}}
-        acts = Acts({"get_request": (sent, None)}, [post("batch/3", "wldn-planner", "req_b3", On=["batch/3"])])
-        acts.end = lambda label, key: plan.end_session(label, key)[0]
-        fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "teams": {}, "hosts": {}}
-        plan.batch_wait(fleet, "wldn", "batch/3", d, acts)
-        assert [e["Act"] for e in acts.emitted] == ["card.close"]
-        assert capsys.readouterr().out.splitlines() == [
-            "batch/3: sent back on its card, with a note:", "Read.", "card batch/3: req_b3 closed",
-            "batch/3's session had already ended, and batch/3 is forgotten"]
-        assert not d.parent.exists()
 
+# --------------------------------------------------------------------------------------------- crew card wait, gone
 
-# ------------------------------------------------------------------------------- crew card wait on a bolt's row
+class TestCardWaitGone:
+    """card-sessions "The old wait run": crew keeps no process waiting on a card or its reading (teams.24), so crew card
+    wait is refused at once, naming crew card read <key>, and reads, starts and leaves nothing."""
 
-class TestLandWait:
-    """crew card wait land/<bolt> (card-sessions "A wait on a landing card starts its reading when none runs"): while
-    the bolt is a row of its kit's landings card that can land, its reading started on its team's host and the kit's
-    card raised on the main machine to carry its link; refused while it is no row, and for the kit's own key."""
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "teams": ["swb-1"]}},
-             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha",
-                                 "kit": {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}}},
-             "hosts": {}}
-    LINK = "http://chuck-herdr-alpha.ts.swancloud.net:19432"
-
-    def wait(self, monkeypatch, tmp_path, row, key="land/y"):
+    @pytest.mark.parametrize("key", ["batch/3", "land/y", "proposal/4", "land/switchboard-kit"])
+    def test_the_old_wait_is_refused_at_once_naming_the_read_and_starts_nothing(self, key, monkeypatch, tmp_path):
         import argparse
-        handed = []
         monkeypatch.setattr(plan, "CARDS", tmp_path)
-        monkeypatch.setattr(crew, "this_host", lambda: "chuck-herdr-alpha")
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", "y"), ("Repo", "switchboard-kit")]),
-                                                                           self.FLEET["teams"]["swb-1"]))
-        monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (row, None) if row else (None, "unit a has not merged"))
-        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((kit, note)))
+        monkeypatch.setattr(plan.subprocess, "Popen", lambda *a, **k: pytest.fail("crew card wait started a process"))
+        with pytest.raises(crew.Refusal, match=f"^crew card wait is gone: crew keeps no process waiting on a card or its "
+                                               f"reading. Run crew card read {re.escape(key)} when"):
+            plan.card_wait(None, argparse.Namespace(key=key, unit=None, label="wldn", sub="wait"))
+        assert list(tmp_path.iterdir()) == []
 
-        def opened(fleet, label, key, facts):  # the reading started, and the user's notes in it at once
-            d = tmp_path / label / key
-            d.mkdir(parents=True, exist_ok=True)
-            (d / "session.json").write_text(json.dumps({"pid": 42, "document": "/c/00-y.md", "url": self.LINK, "started": "2026-10-23T10:00:00Z"}))
-            (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "y: say what the zone is."}))
-            return self.LINK, False, True
-        monkeypatch.setattr(plan, "reading_open", opened)
-        plan.card_wait(self.FLEET, argparse.Namespace(key=key, unit=None, label="wldn", sub="wait"))
-        return handed
-
-    def test_a_wait_on_a_row_starts_its_reading_and_the_kits_card_is_raised_to_carry_its_link(self, monkeypatch, tmp_path, capsys):
-        row = dict(bolt="y", box=True, facts=dict(bolt="y", kit="switchboard-kit", head="a" * 40))
-        assert self.wait(monkeypatch, tmp_path, row) == [("switchboard-kit", "y: Its reading is open again at a new link")]
-        assert capsys.readouterr().out == (f"{self.LINK}\nland/y: notes from its reading, as notes on the landing card:\n"
-                                           "y: say what the zone is.\n")
-
-    def test_a_wait_on_a_bolt_that_is_no_row_is_refused_and_starts_nothing(self, monkeypatch, tmp_path):
-        with pytest.raises(crew.Refusal, match="^no session was started for card land/y, and y is no row of its kit's landings card$"):
-            self.wait(monkeypatch, tmp_path, None)
-        assert not (tmp_path / "wldn" / "land/y").exists()
-
-    def test_a_wait_on_the_kits_own_card_is_refused(self, monkeypatch, tmp_path):
-        with pytest.raises(crew.Refusal, match="^land/switchboard-kit is switchboard-kit's landings card, wldn-ops's"):
-            self.wait(monkeypatch, tmp_path, None, key="land/switchboard-kit")
+    def test_the_wait_its_wait_constants_and_the_readings_it_started_are_gone(self):
+        for name in ("batch_wait", "land_start", "land_unstarted", "batch_unstarted", "CARD_POLL", "CARD_READ"):
+            assert not hasattr(plan, name), name
 
 
 # ------------------------------------------------------------------------- crew card read of a kit's landings card

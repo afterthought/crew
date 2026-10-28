@@ -12497,7 +12497,6 @@ CARD_START = 10  # seconds a start waits for plannotator to list its session
 # The ports a card's session takes the first free one of when its environment names no range: swancloud's agents'
 # range, set in its lib/agent-config.nix (session_env).
 CARD_PORTS = "19432-19451"
-CARD_POLL = 5  # seconds between a wait's reads
 CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
 
 
@@ -12745,8 +12744,7 @@ def card_session(fleet, a, acts=None):
     def said(url, decided):
         print(url)
         if decided:
-            print(f"the user decided in {name} before it ended: crew card wait {a.key}{' ' + a.unit if a.unit else ''} gives "
-                  "the decision", file=sys.stderr)
+            print(f"the user decided in {name} before it ended: crew card read {a.key} gives the decision", file=sys.stderr)
     if not old_batch(a.key):
         if row["doc"][0] == "page":
             p = next(x for x in props if x["proposal"] == row["doc"][2])
@@ -12824,7 +12822,7 @@ def land_session(fleet, label, key, acts=None, say=None):
     else:
         print(url)
         if decided:
-            print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
+            print(f"the user decided in {key}'s session before it ended: crew card read {key} gives the decision", file=sys.stderr)
     if started or kit_unread(acts, label, kit):
         land_hand(fleet, label, kit, f"{bolt}: {RELINKED}")
     return url, decided, started
@@ -12945,7 +12943,7 @@ def session_env(environ):
 
 def session_open(d, name, write):
     """The plannotator session of a card key on this host, kept in its folder d, called name in what is said: the one
-    crew recorded given again while it serves its document, or kept for crew card wait when the user decided in it
+    crew recorded given again while it serves its document, or kept for crew card read when the user decided in it
     before it ended; else started anew on the files write() writes and returns, as one review in their order, with an
     Approve button and no browser (plannotator 0.28.6), recorded once plannotator lists it. One the user closed
     undecided has its result moved aside, so a new one starts. Returns its link, whether the user decided in it before
@@ -13040,7 +13038,7 @@ def reading_open(fleet, label, key, facts):
 def session_verdict(s, serves, decided):
     """What crew card session does with the session it recorded for a key, s (plan's card-sessions): it still serves its
     document, so its link is given again ("serving"); the user approved or annotated before it ended, so it is kept for
-    crew card wait ("decided"); the user closed it undecided, so its result is moved aside and a new one starts
+    crew card read ("decided"); the user closed it undecided, so its result is moved aside and a new one starts
     ("dismissed"); else it ended, and a new one starts ("ended")."""
     if serves:
         return "serving"
@@ -13265,211 +13263,15 @@ def batch_team(fleet, label, key, unit):
 
 
 def card_wait(fleet, a):
-    """crew card wait <key> [<unit>] [--label L]: wait, with no timeout, until the user decides in the session crew
-    started for the key on this host, or it ends without a decision, and print which: approved or annotated with the
-    user's words after it as they are, closed in plannotator with no decision, or ended with no decision; a decision
-    made before the wait began is printed at once. A session crew ended, its card closed, is said so. A batch card's,
-    batch/<n>, waits on the card and its one session together, on the main level's host (batch_wait); an old batch
-    card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. A landing's, land/<bolt>, waits on
-    its reading alone, on the team's host: its decision is notes on the bolt's row of its kit's landings card and never
-    the word to land (land_waited), and once it is printed the session is forgotten (reading_decided), so the next crew
-    card session starts it anew; the card is left as it is. The reading stays up while the bolt is a row of that card,
-    until the row is held or leaves it (land_end) or crew card end is run, and no close of a card of the bolt's own,
-    land/<bolt> or land/<bolt>/<head> as its conductor posted one before, ends it (row_card_close, sweep_judgment).
-    With no session of its own while the bolt is a row, the raise having failed to open it or a wait having forgotten
-    it, it starts the reading as crew card session does and waits on it (land_start). Refused for any other key with no
-    session started."""
-    label, d = card_of(fleet, a)
-    if a.key.startswith("batch/") and not old_batch(a.key):
-        return batch_wait(fleet, label, a.key, d)
-    if a.unit:
-        t = batch_team(fleet, label, a.key, a.unit)
-        if t["machine"] != crew.this_host():
-            return forward_card(fleet, t, a, label)
-    name = f"{a.key} {a.unit}" if a.unit else a.key
-    say = land_waited if a.key.startswith("land/") else waited
-    kind = land_key(a.key, partition_kits(fleet, label))
-    if kind and kind[0] == "kit":
-        fail(session_refusal(a.key, label, fleet["partitions"][label]["machine"], crew.this_host(), None, partition_kits(fleet, label)))
-    if say is land_waited and not card_recorded(d):
-        land_start(fleet, label, a.key)
-    card_recorded(d) or fail(f"no session was started for card {name}: crew card session {name} starts one")
-    while True:
-        decided = card_result(d)
-        said = say(name, decided, True)
-        if not said:
-            s = card_recorded(d)
-            if s is None:
-                said = say(name, None, False)
-            else:
-                listed, _ = plannotator_sessions()  # a list that can't be read says nothing: the wait goes on
-                decided = card_result(d)
-                said = say(name, decided, card_recorded(d) == s, gone=listed is not None and not serving(listed, s))
-        if said:
-            print(said)
-            if say is land_waited:
-                reading_decided(d, decided)
-            return
-        time.sleep(CARD_POLL)
+    """crew card wait <key>: gone (card-sessions "The session's decision reaches the owner as the card's answer",
+    teams.24): crew keeps no process waiting on a card or its reading, so it is refused at once, with nothing read or
+    started, naming crew card read <key>, which reads what the user sent. A card's answer wakes its owner by the fleet's
+    wake mod, and the rail's refresh tells the owner once the user sends a reading (card_sweep)."""
+    fail(f"crew card wait is gone: crew keeps no process waiting on a card or its reading. Run crew card read {a.key} "
+         "when its card's answer wakes you or crew tells you its reading was sent")
 
 
-def land_unstarted(key, recorded, held, refused=None):
-    """What crew card wait land/<bolt> does before it waits (card-sessions "A wait on a landing card starts its reading
-    when none runs"), from whether a session of the key is recorded on this host, whether the bolt is a row of its kit's
-    landings card that can land (held, land_read), and why the start it made refused (refused): ("wait", None) on a
-    session recorded; ("start", None) with none and the bolt a row, to start it as crew card session does; ("refuse",
-    words) when the start refused, naming crew card session to start it once that is mended, or the bolt is no row."""
-    if recorded:
-        return "wait", None
-    if not held:
-        return "refuse", f"no session was started for card {key}, and {key.split('/', 1)[1]} is no row of its kit's landings card"
-    if refused:
-        return "refuse", f"{key}'s reading could not be opened: {refused}; crew card session {key} starts it once that is mended"
-    return "start", None
-
-
-def land_start(fleet, label, key, acts=None):
-    """A landing's reading started for its wait when none is recorded (land_unstarted): while the bolt is a row of its
-    kit's landings card that can land, read on this, its team's, host (land_read), opened as crew card session opens it,
-    its link printed and the kit's card changed in place to carry it while it waits on the user (land_session); refused
-    naming why and crew card session when it could not open, and when the bolt is no such row."""
-    acts = acts or CardActs(fleet)
-    plan, b, t = land_held(fleet, label, key.split("/", 1)[1])
-    held = False
-    if t and t["machine"] == acts.host():
-        try:
-            row, _ = land_read(fleet, label, plan, b, t)
-            held = bool(row and row["box"])
-        except Refusal:
-            held = False
-    step, words = land_unstarted(key, False, held)
-    if step == "start":
-        try:
-            land_session(fleet, label, key, acts)
-        except Refusal as e:
-            step, words = land_unstarted(key, False, held, str(e))
-    not words or fail(words)
-
-
-def batch_unstarted(key, recorded, held, refused=None, answered=False):
-    """What crew card wait batch/<n> does before it waits (card-sessions "A batch's wait starts its reading when none
-    runs"), from whether a session of the key is recorded on this host, whether the planner holds its card open here
-    (held), why the start it made refused (refused), and whether the batch is answered in a main-level pane already
-    (answered, pane_answered): ("wait", None) with a session recorded, or no card held, which the wait refuses when
-    neither is there, or the batch answered so, since it waits on the user no more and the wait ends on its answer;
-    ("start", None) with none and the card held, to start it as crew card session does; ("card", words) when the start
-    refused, to say once, naming crew card session, and wait on the card alone, which the user sends back with a tap."""
-    if recorded or not held or answered:
-        return "wait", None
-    if refused:
-        return "card", (f"{key}'s reading could not be opened: {refused}; crew card session {key} starts it once that is "
-                        "mended, and the wait goes on for its card")
-    return "start", None
-
-
-CARD_READ = 30  # seconds between a batch wait's reads of its card in Pending You, the poll its post's answer asks for
 OPEN = ("pending", "snoozed", "delegated")  # a card's statuses in Pending You while it still waits on the user
-
-
-def batch_wait(fleet, label, key, d, acts=None):
-    """crew card wait batch/<n>: wait, with no timeout, on the planner's card of the batch and its one reading session
-    together, on the main level's host, until the user sends either back: the card read in Pending You every CARD_READ
-    seconds, the session's result every CARD_POLL. It prints what batch_waited gives, the card's note and every
-    annotation as the user wrote them, and closes the card with the outcome, which ends the session (row_card_close); a
-    word given while nobody waited is returned at once. A session sent with no card held on this host, or one lost or
-    whose close Pending You refused, so that no card is closed, records the batch read: crew's own close of it,
-    batch.close on batch/<n> in the planner's name with what was read (batch_read_close, briefs.12), the session
-    ended when no card was held. A card closed outside crew is recorded closed as Pending You shows it, and the session
-    ended. A batch answered in a main-level pane (pane_answered), read in this host's run record each round before the
-    card, ends the wait, saying in whose pane and when and never the words, which the planner has from crew card
-    answer: its card is closed answered and the session ended. A session closed or ended with no decision leaves the
-    wait on the card, said once; a card lost to its owner is recorded lost, leaving the wait on the session; a session
-    crew ended, as its card closed, ends the wait. With the card held and no session recorded, the reading is started
-    first, as crew card session starts it, its link printed and the card changed to carry it (reading_again); one that
-    will not open is said once, naming crew card session, and the wait is on the card alone (batch_unstarted). Refused
-    with neither a card nor a session of the batch on this host."""
-    acts = acts or CardActs(fleet)
-    here = acts.host()
-    why = session_refusal(key, label, fleet["partitions"][label]["machine"], here)
-    not why or fail(why)
-    owner, entries = f"{label}-planner", acts.entries(label)
-    card, started = cards.card_under(entries, key, owner), card_recorded(d)
-    card or started or fail(f"no card and no session of {key} is open on {here}: crew raises both when the reviewer's "
-                            f"summary is delivered, with crew review {label} --wait")
-    if batch_unstarted(key, started, card, answered=key in pane_answered(entries))[0] == "start":
-        try:
-            reading_again(fleet, label, key, acts, lambda url, decided: print(url))
-        except Refusal as e:
-            print(batch_unstarted(key, started, card, str(e))[1], file=sys.stderr)
-        else:
-            started = card_recorded(d)
-    got, due, said, quiet = None, 0.0, set(), False
-
-    def once(words):
-        if words not in said:
-            said.add(words)
-            print(words, file=sys.stderr)
-    while True:
-        answer = pane_answered(acts.entries(label)).get(key)
-        if answer:  # the user answered it in a main-level pane, whose agent sends the words on (crew card answer)
-            said = pane_said(*answer)
-            print(f"{key}: {said}")
-            row_card_close(fleet, label, owner, key, outcome=said[0].upper() + said[1:], acts=acts)
-            ended = acts.end(label, key)  # a close Pending You refused leaves the session to end here
-            if ended:
-                print(ended)
-            return
-        s, decided = card_recorded(d), card_result(d)
-        if card and time.monotonic() >= due:
-            due = time.monotonic() + CARD_READ
-            try:
-                with acts.bridge(owner, "The wait goes on.") as py:
-                    got, words = py.answer("get_request", {"requestId": card, "name": owner})
-            except Refusal as e:
-                once(f"{key}: crew can't read its card {card} now: {e}")
-            else:
-                if words is not None and cards.lost(words):
-                    card_lost(acts, label, owner, key, card, words)
-                    card, got = None, None
-                elif words is not None:
-                    once(f"{key}: Pending You refused to read its card {card}: {words}")
-        done = batch_waited(key, decided, got)
-        if done:
-            print(done[1])
-            if done[0] == "read":
-                closed = row_card_close(fleet, label, owner, key, outcome=done[2], acts=acts) if card else None
-                if batch_read_close(closed):
-                    acts.emit(label, "batch.close", [cards.row_object(key) or key], by=owner,
-                              why=f"batch({key.split('/', 1)[1]}): read in its session", Key=key, State="read", Outcome=done[2])
-                    print(f"{key}: recorded read, {done[2]}")
-                if card:
-                    return
-            elif done[0] == "closed":
-                acts.emit(label, "card.close", [cards.row_object(key)], by=owner, Card=card, Key=key, State=done[2],
-                          Outcome="closed outside crew", Answer=cards.answer_said(got))
-            print(acts.end(label, key) or f"no session was running for {key}")
-            return
-        if started and s is None:
-            print(waited(key, None, False))
-            return
-        ended = None
-        if decided and decided[0] == "dismissed":
-            ended = waited(key, decided, True)
-        elif s and not decided and not quiet:
-            listed, _ = plannotator_sessions()  # a list that can't be read says nothing: the wait goes on
-            if listed is not None and not serving(listed, s) and card_recorded(d) == s and card_result(d) is None:
-                ended = waited(key, None, True, gone=True)
-        if ended and not card:
-            print(ended)
-            return
-        if ended:
-            quiet = True
-            once(f"{ended}: the wait goes on for its card, which the user sends back with a tap; crew card session {key} "
-                 "starts its reading again")
-        if not card and not s:
-            print(f"{key}: its card is lost to {owner}, and it has no session to wait on")
-            return
-        time.sleep(CARD_POLL)
 
 
 def batch_read_close(closed):
