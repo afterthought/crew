@@ -135,7 +135,12 @@
 #                                      main-level ops's landing of one kit's bolts, in the order the user's landings
 #                                      card gives: each bolt's branch submitted to its kit's main through sluice from a
 #                                      short-lived worktree on its team's host, queued behind the one before on one host,
-#                                      once it ended on another; each waited on in order and closed as it lands, one
+#                                      once it ended on another, recorded queued with sluice's number as soon as sluice
+#                                      has it; each waited on in order and closed as it lands, its outcome recorded and
+#                                      a landed bolt closed by the first act of crew's that reads it once sluice's record
+#                                      has it out, on its team's host: this command's end, the waiter it leaves there,
+#                                      the team's next read or crew bolt land; a close crew refuses recorded and said
+#                                      on the bolt's head line until a later read lifts it; one
 #                                      that did not land recorded at its head while the rest go on: one refused for its
 #                                      own content, a conflict or a check that ran and failed, held on its row; one
 #                                      sluice or its host stopped keeping its box and the user's word, and submitted
