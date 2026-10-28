@@ -21,11 +21,13 @@ that main does not hold, its worktree, its head and the head's time; each place 
 paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
 head, head's time and how many commits of its own it holds beyond the bolt; each fix's place with its branch's facts
 (fix_facts), and, as fix_branches, the same facts of each fix branch no worktree holds, its place gone; the kit's
-policy, its main's .config/sluice.toml as text; and each bolt's verdict, the Sluice-Result trailer on its head when
-sluice landed it. With sites, each worktree's devurl names and the host's
+policy, its main's .config/sluice.toml as text; each bolt's verdict, the Sluice-Result trailer on its head when
+sluice landed it; and, for a kit the request asks bolts of, the submissions standing in sluice's queue, read from
+`sluice overview --json` (queue), or why they can't be read. With sites, each worktree's devurl names and the host's
 portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
 folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
-system, devurl and portless and, for a change whose workflow it does not read itself, openspec, and changes nothing.
+system, devurl, portless and sluice and, for a change whose workflow it does not read itself, openspec, and changes
+nothing.
 It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
 import fnmatch, hashlib, json, os, re, subprocess, sys, tomllib
 
@@ -681,6 +683,64 @@ def sluice_records(records):
         return []
 
 
+SLUICE_ANSWER = 15  # seconds the gather gives sluice overview to answer
+
+
+def queue(main):
+    """The submissions standing in sluice's queue for a kit, read in its main checkout on this host (teams.22, record
+    0046 part 2): `sluice overview --json`, read by submissions_of; (None, why) when sluice is not on the host, fails,
+    or does not answer within SLUICE_ANSWER seconds (read.1)."""
+    try:
+        r = subprocess.run(["sluice", "overview", "--json"], cwd=main, capture_output=True, text=True, timeout=SLUICE_ANSWER)
+    except FileNotFoundError:
+        return None, "this host has no sluice on its path"
+    except subprocess.TimeoutExpired:
+        return None, f"sluice overview did not answer within {SLUICE_ANSWER} seconds"
+    except OSError as e:
+        return None, f"sluice overview could not run: {e}"
+    if r.returncode:  # sluice says why as {"error": {"message": ...}} under --json, clap on standard error
+        try:
+            said = json.loads(r.stdout)["error"]["message"]
+        except (ValueError, TypeError, KeyError):
+            said = next((l.strip() for l in r.stderr.splitlines() if l.strip()), "")
+        return None, f"sluice overview exited {r.returncode}" + (f": {said}" if isinstance(said, str) and said else "")
+    try:
+        doc = json.loads(r.stdout)
+    except ValueError:
+        return None, "sluice overview printed no JSON"
+    return submissions_of(doc)
+
+
+def submissions_of(doc):
+    """The submissions a sluice/overview@1 document holds standing (sluice 0.51.3: each branch's submissions still in a
+    chain, as `sluice status <id> --json` prints each), as ([{id, branch, head, state, worktree, pull_head}], None):
+    worktree the branch it came from or pull/<n>, pull_head the branch a pull request was opened from; every field
+    guarded so a missing or mistyped one is None, never text (read.2), and one with no number or branch left out. (None,
+    why) for a document of another schema."""
+    schema = doc.get("schema") if isinstance(doc, dict) else None
+    if schema != "sluice/overview@1":
+        return None, (f"sluice overview printed {schema}, not the sluice/overview@1 crew reads" if isinstance(schema, str)
+                      else "sluice overview printed no schema, where crew reads sluice/overview@1")
+    if not isinstance(doc.get("branches"), list):
+        return None, "sluice overview's sluice/overview@1 holds no list of branches"
+
+    def text(v):
+        return v if isinstance(v, str) and v else None
+    out = []
+    for b in doc["branches"]:
+        subs = b.get("submissions") if isinstance(b, dict) else None
+        for x in subs if isinstance(subs, list) else []:
+            if not isinstance(x, dict):
+                continue
+            n, branch = x.get("id"), text(x.get("branch")) or text(b.get("branch"))
+            if not isinstance(n, int) or isinstance(n, bool) or not branch:
+                continue
+            frm = x.get("from") if isinstance(x.get("from"), dict) else {}
+            out.append({"id": n, "branch": branch, "head": text(x.get("head")), "state": text(x.get("state")),
+                        "worktree": text(frm.get("worktree")), "pull_head": text(frm.get("head"))})
+    return out, None
+
+
 def kit(req, sites=False, running=None, board=False, fetch=False):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
@@ -748,6 +808,13 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
     for f in out["fixes"]:
         f.update(facts[f["fix"]])
     out["fix_branches"] = {b: f for b, f in facts.items() if b not in worked}
+    # What stands in sluice's queue, read once for a kit this host holds a bolt of (teams.22): each submission's number
+    # on its bolt's row, a queue that can't be read said there, never read as empty (read.1).
+    if req.get("bolts"):
+        subs, why = queue(main)
+        out["submissions"] = subs
+        if why:
+            out["submissions_error"] = why
     if sites:
         out["sites"] = {path: devurl(path) for path, branch in at.items()
                         if os.path.dirname(path) in (places, os.path.join(kdir, "bolts")) and branch}

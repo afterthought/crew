@@ -1,0 +1,13 @@
+sluice 0.51.3's overview, as crew's gather reads the submissions standing in its queue (gather.submissions_of;
+tests/py/test_bolt_submissions.py).
+
+overview-standing.json	exit 0	sluice overview --json
+
+Recorded on deneb on 2026-10-28, running sluice 0.51.3 for real in crew's own main checkout, and trimmed to two of its
+branches, its hosts, previews and sessions emptied. bolt/crews-chores-of-the-24th-night is verbatim: two chores'
+merges standing, #317 testing and #318 queued, each submitted from its chore's place. main stood with nothing in its
+queue at the read, so its one submission is #355's own record as `sluice status 355 --json` printed it the same day
+(main-level ops's landing of bolt/crew-opens-no-tab-the-user-does-not-use, by pull request pull/198, so its `from`
+holds the pull request and the branch it was opened from, and no path), with the fields a decided submission gains
+(tested, result, told, landed_as, subject) left out and its state set back to queued, as it stood before its round;
+main's recent log emptied and its depth set to 1 to match.

@@ -1432,7 +1432,7 @@ class TestBolts:
         b = {x["bolt"]: x for x in self.data()["partitions"][0]["plans"][0]["bolts"]}
         assert {u["unit"]: u["stage"] for u in b["tenant-environments"]["units"]} == {"early": "planned", "checked": "verify", "stale": "verify"}
         assert (b["tenant-environments"]["team"], b["tenant-environments"]["host"], b["tenant-environments"]["state"]) == ("swb-1", BOX, "active")
-        assert b["apex-zones"]["state"] == "waits" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None)]
+        assert b["apex-zones"]["state"] == "waits" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None, submission=None)]
 
     def test_the_text_names_the_branch_each_bolt_and_each_units_stage_and_place(self):
         out = plan.bolts_text(self.data())

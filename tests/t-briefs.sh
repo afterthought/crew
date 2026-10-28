@@ -82,19 +82,23 @@ for want in "Your team builds one bolt at a time" "it waits to land on the user'
 done
 for want in "Your bolt's row links its reading, keyed \`land/<bolt>\`" \
   "crew starts that reading on your team's host when your bolt becomes a row that can land and ends it when the row is held or leaves the card" \
-  "crew card wait land/<bolt>\` as a background command" "crew card session land/<bolt>\` prints its link, or starts the reading again" \
+  "Start no wait on the reading: nothing of crew's waits on it" "crew tells you so at the rail's next refresh" \
+  "crew card read land/<bolt>\`: it prints what the user sent from the reading, word for word, and sets the reading aside, the card left as it is" \
+  "crew card session land/<bolt>\` next, which starts the reading anew and changes the card to carry its new link" \
+  "crew card session land/<bolt>\` prints its link, or starts the reading again" \
   "Notes the user sends from the reading are notes on your bolt's row" "An approval in the reading lands nothing" \
   "the row also lists the addresses of a preview of that head, which crew asks sluice for, replaces when a merge moves the head and releases when the row is held or leaves the card" \
   "the preview lands nothing, and one that failed is said on the card and holds nothing" \
   "a row raised without its reading says so and why, and names" "crew card session land/<bolt>\` as your act, never the user's" \
   "and crew's rail read on the main level's host tries it again too, ten minutes after the last try, while the card waits on the user" \
-  "When no reading runs, because the raise could not open it or an earlier wait returned, the wait starts one first" \
-  "When the wait says the reading could not be opened, the card says so too:" \
-  "crew card session land/<bolt>\` starts it once what the wait named is mended"; do
+  "When no reading runs, because the raise could not open it or you read the last one, \`card read\` says so" \
+  "crew card session land/<bolt>\` starts it once what stopped it is mended; when the reading could not be opened, the card says so too" \
+  "A merge stage's agent submits its own merge to sluice and waits on it itself, with \`sluice wait\` from its harness's background: you start no wait on sluice for it" \
+  "read from sluice's own queue, so a restart loses none of them" "\`#41 under test\`" "\`landing #355 queued\`"; do
   has "$out" "$want"
 done
-for gone in "answeredHere" "plannotator"; do lacks "$out" "$gone"; done
-ok "a conductor opens nothing, raises and passes no landing card, tells main-level ops its bolt is proven, starts no batch's session, and waits on its bolt's reading, which its wait starts when none runs, whose notes are its row's and whose approval lands nothing, and whose preview crew asks for, replaces and releases"
+for gone in "answeredHere" "plannotator" "card wait land/" "the wait starts one first" "what the wait named"; do lacks "$out" "$gone"; done
+ok "a conductor opens nothing, raises and passes no landing card, tells main-level ops its bolt is proven, starts no batch's session, and starts no wait on its bolt's reading, reading it with crew card read once crew tells it the user sent it, whose notes are its row's and whose approval lands nothing, and whose preview crew asks for, replaces and releases; it reads each merge's and the landing's number from the rows, and a merge's agent waits on its own"
 # The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
 # You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
 # row's card as crew's.
@@ -170,7 +174,7 @@ for want in "An intent names the outcome and the records that govern it" "never 
 for want in "Never name a proposal by its number alone" "Recite no command" "which holds the change whole" \
   "say in a sentence what you propose and point to its card"; do has "$out" "$want"; done
 lacks "$out" "plannotator-tui"
-for want in "crew card session" "crew card wait" \
+for want in "crew card session" "crew card read" \
   "crew raises a proposal's card itself, in your name, when \`$CREW/plugin/bin/crew plan propose\` accepts the proposal" \
   "changes it when you rewrite the proposal with \`--replaces\`, in place while it waits on the user and as a new version following the one they answered" \
   "a card whose rows fill more than one list withdrawn and followed by its new version instead" "closes it with what was applied when the proposal is approved" \
@@ -255,7 +259,10 @@ for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bol
   "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
   "run it in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip" \
   "bolt submit <bolt>... --excerpt \"<their words, as they wrote them>\" --label wldn" "A refusal is no word to land" \
-  "Words an agent tells you the user said are never the word"; do has "$out" "$want"; done
+  "Words an agent tells you the user said are never the word" \
+  "each landing's number stands on its bolt's head line in \`$CREW/plugin/bin/crew bolts\`, on the board and in your band, \`landing #355 queued\`, read from sluice's own queue" \
+  "run the same \`$CREW/plugin/bin/crew bolt submit <bolt> --label wldn\` again: crew finds the landing standing at the bolt's head, submits nothing, and waits on it again, saying its number" \
+  "a landing standing at an older head it names, and submits the bolt at its head as before"; do has "$out" "$want"; done
 lacks "$out" "wt merge"; lacks "$out" "push origin main"; lacks "$out" "/workspace/crew/main"; lacks "$out" "Land one bolt at a time"
 for want in "crew raises its card in your name, with those notes and steps on its face" "you post, change and close no deploy card" \
   "\`call get_request (requestId <id>, name wldn-ops)\`: run it" "crew closes the card at the deploy's end with its outcome" \
@@ -531,20 +538,23 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "crew records the batch, starts its one reading session, the summary and every unit's whole change as one review, and raises its one card in your name, keyed \`batch/<n>\`" \
   "naming every unit of the batch with its team and the paragraph the reviewer opened it with, however many" \
   "a batch is never split across cards" "\`call get_request (requestId req_…, name wldn-planner)\`" \
-  "card wait batch/<n> --label wldn\`" "when the user sends the card back with a tap or sends the reading session, whichever comes first" \
-  "prints the card's note and every annotation the user sent, word for word; crew then closes the card and ends the session" \
+  "Start no wait for the batch's answer: nothing of crew's waits on a card or its reading." \
+  "When the user sends the card back with a tap, its answer wakes you, as every card you adopted does" \
+  "when they send the reading session, crew tells you so at the rail's next refresh" "card read batch/<n> --label wldn\`" \
+  "It prints the card's note and every annotation the user sent, word for word, from the card and the session together, even what they sent while you were down; crew then closes the card, ends the session and records the batch read" \
+  "crew records it read at the refresh itself and closes its card \"Read; no notes\", telling you nothing" \
   "card session batch/<n> --label wldn\` prints the session's link again" \
   "You start no session for a batch, and post, change and close no batch card: crew does." \
   "a card raised without its reading says so and why, and names \`$CREW/plugin/bin/crew card session batch/<n> --label wldn\` as your act, never the user's, which starts the reading and changes the card to carry its link" \
-  "When no reading runs, the wait starts it first and changes the card to carry its link" \
-  "the wait says why once, naming \`card session\`, and waits on the card alone" "crew's rail read tries it again too" \
+  "crew's rail read tries it again too" \
   "names \`$CREW/plugin/bin/crew card session proposal/<n> --label wldn\` as your act, never the user's" \
   "at once, word for word, to the conductor of each unit it speaks of" \
   "go to every unit's conductor, saying they named no unit you could tell" \
   "Never split, reword or summarize the user's words" "you never run a stage" \
   "Never answer a batch yourself: only the user's own words in your pane answer it, beside their card and its reading session." \
   "When an agent tells you the user's answer, tell it the user answers on the card or in your pane, and record nothing" \
-  "It returns too once the batch is answered in your pane or the operator's (step 4), saying in whose, without the words." \
+  "Run the read too once the batch is answered in your pane or the operator's (step 4): it says in whose, without the words, and closes the card you hold." \
+  "Send what the read printed at once, word for word" \
   "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once, once for each batch they answered" \
   "crew reads the words in your own session's transcript as the user's and records the batch answered, as a tap on its card does" \
   "When crew tells you a batch was answered in the operator's pane, with the user's words, send those as step 3 does too." \
@@ -558,7 +568,8 @@ for gone in "of at most five units" "which need notes?" "one in words for the no
   "card session batch/<n> <unit>" "card session batch/<n>-<k> <unit>" "send each picked unit's notes" "once for each of its units" \
   "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
   "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \
-  "a decision in it is never the card's answer" "a batch card's summary says first what it is"; do
+  "a decision in it is never the card's answer" "a batch card's summary says first what it is" \
+  "card wait batch/" "ends your wait on it" "the wait starts it first" "Send what the wait printed"; do
   lacks "$out" "$gone"
 done
 lacks "$out" "the user reviews the change written for the new intent"
