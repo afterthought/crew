@@ -2053,23 +2053,6 @@ def landing_act(event, head=None, words=None):
 PREVIEW_STATES = ("waiting", "starting", "up", "failed")
 
 
-def preview_step(declared, recorded, head, listed, alive):
-    """What crew does with the bolt's preview as its landing card is raised (rail-cards, record 0031 §3), from facts
-    alone: declared, whether the kit's policy at the head declares [preview] (kit.previewed); recorded, the head crew's
-    record of its ask names, or None when none stands; listed, whether sluice lists the recorded preview; alive, whether
-    the process crew handed the ask to still runs. "none" with nothing declared or recorded; "release" when one is
-    recorded and the head's policy declares none; "replace" when the recorded one is another head's, released before
-    one is asked at this; "keep" when it is this head's and listed or still being asked, read again and nothing asked;
-    "ask" otherwise, sluice's one preview of a revision the second guard against asking twice."""
-    if recorded is None:
-        return "ask" if declared else "none"
-    if not declared:
-        return "release"
-    if recorded != head:
-        return "replace"
-    return "keep" if listed or alive else "ask"
-
-
 def preview_change(shown, outcome, head):
     """The change note a preview's end puts on its landing card while it waits on the user, or None (rail-cards "A
     preview that fails is said on the card"): shown, what the card was raised with, "addresses" or "reason"; outcome,
