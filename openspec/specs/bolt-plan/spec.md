@@ -279,7 +279,7 @@ Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of
 - **THEN** it is refused; what is needed is a fix or a new unit
 
 ### Requirement: A command reads each kit and the plan once
-A crew command SHALL read each kit once and fetch the state branch once on each host it runs on, however many steps it has. A step that makes or removes a worktree in a kit SHALL leave the next step to read that kit again. A plan write SHALL start from the tip the command holds and fetch again only when its push is refused. A wait, the rail tab's loop and `crew events --follow` SHALL read afresh each time they look.
+A crew command SHALL read each kit once and fetch the state branch once on each host it runs on, however many steps it has. A step that makes or removes a worktree in a kit SHALL leave the next step to read that kit again. A plan write SHALL start from the tip the command holds and fetch again only when its push is refused. A wait SHALL read afresh each time it looks. The host's follower and `crew events --follow` SHALL check at each look whether what they read has moved, and read again only what has.
 
 #### Scenario: Status with three units in flight
 - **WHEN** `crew status <team>` runs for a team with three units in flight
@@ -300,6 +300,10 @@ A crew command SHALL read each kit once and fetch the state branch once on each 
 #### Scenario: Nothing is left behind
 - **WHEN** a command ends, whether it succeeded or was refused
 - **THEN** what it kept for its steps is gone, and the next command reads afresh
+
+#### Scenario: A follower's look after nothing moved
+- **WHEN** the host's follower looks again and nothing it read has moved
+- **THEN** it reads no kit and fetches no branch at that look
 
 ### Requirement: A bolt on GitHub is read where it lives
 crew SHALL read a bolt at GitHub's copy of its branch, `origin/bolt/<bolt>`, when the host holds that copy and the policy in it names a remote for the bolt, and otherwise at the host's own `bolt/<bolt>`. Its head, verification, the changes and chores it holds, and every stage read from it SHALL come from that ref. crew SHALL never read a bolt on GitHub from the host's own `bolt/<bolt>`, sluice's copy, whether or not sluice has levelled it.

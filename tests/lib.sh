@@ -13,6 +13,9 @@ CREW=$(cd "$TESTS/.." && pwd -P)
 export CREW_TEST_ROOT=$T CREW_TEST_LOG=$T/calls.log CREW_TEST_CLAUDE_LOG=$T/claude.log
 export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
 unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH HERDR_SESSION SLUICE_BRANCH GIT_DIR GIT_WORK_TREE
+# A suite an agent starts carries its Claude session's process id, which crew's waits end with (teams.24): a test's
+# wait runs in no session but one the test names.
+unset CLAUDE_PID
 # A wt run that starts the suite, a hook's, hands it worktrunk's own variables, among them the file its shell wrapper
 # reads a cd from: a test's wt never writes there, or the run ends trying to cd into a removed scratch dir.
 unset $(env | sed -n 's/^\(WORKTRUNK_[A-Za-z0-9_]*\)=.*/\1/p')
