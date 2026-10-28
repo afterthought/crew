@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-28
 decision-makers: the user, swancloud-design
 consulted: madswan-design (sluice and Flume), swancloud-planner, swancloud-ops
@@ -7,7 +7,7 @@ consulted: madswan-design (sluice and Flume), swancloud-planner, swancloud-ops
 
 # The fleet's messages: records are the truth, herdr is the one hub, and a session submits and is told
 
-Status: proposed to the user on 2026-10-28, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-28, on their card (req_a2bd279a0778447e8e3d, "Approved").
 
 Deciders: the user, in the design agent's pane on 2026-10-28: "we've got this model now where crew sends messages around using tell and that's working okay. We have a sluice Claude Code mod that, I believe, sends messages to the session itself. It's not clear whether agents are supposed to submit and wait in the background or just submit and then let the mod send messages through. We're talking about sluice running as a daemon and sending messages, and crew doing waits. Stepping back, there's a general topology of message sending: client-server versus broadcast versus hub-sub/pub-sub. I don't know that we've actually sat down and defined the patterns that we should be using. We just keep writing fucking code"; and their note to sluice the same day that sluice must stay a simple CLI and nobody is told to set up a daemon. Their words settle what they said; the patterns below are the design agent's, asked on this card.
 Amends: `core.md` gains `roles.6`; record 0046 is revised to this record (one delivery per fact: submit and be told, no background wait beside a push); records 0047, 0046, 0044 and 0031 are read under it.
@@ -44,7 +44,7 @@ What this settles about today's parts: `crew tell` is pattern 3, kept as it is, 
 
 ## Consequences
 
-- `roles.6` is drawn from this record, marked proposed.
+- `roles.6` is drawn from this record, accepted with it.
 - Record 0046 is revised to it: part 5 and part 6 say submit and be told, no background wait beside a push on the same host; part 3's reconnect is pattern 4.
 - Records 0047 (the wrapper), 0044 (holds on the row), 0031 (cards) and 0038 (the board's word) name their patterns at their next amendment; a record from here says which pattern each message it adds uses.
 - Asked of madswan-design: sluice 0068 and flume 0009 are read as pattern 3 and 4 already; the one ask is that neither tool's push and the same tool's blocking wait are both offered as delivery on one host, the wait following the push where one runs.
