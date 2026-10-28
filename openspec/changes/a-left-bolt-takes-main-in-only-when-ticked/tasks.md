@@ -3,7 +3,7 @@
 ## 1. Which bolts are left
 
 - [x] 1.1 A decision gives a kit's left bolts from its card, the user's ticks, the heads and the run record, and a reader gives them from the run record alone, a tick, a moved head or a landing on the user's words ending one (design, Decision 1; Task notes 1.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 1.2 The card's raise marks every left bolt unticked and records the kit's left set only when it changes (design, Decision 1; Task notes 1.2); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
+- [x] 1.2 The card's raise marks every left bolt unticked and records the kit's left set only when it changes (design, Decision 1; Task notes 1.2); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
 
 ## 2. A left row says it would take main first
 

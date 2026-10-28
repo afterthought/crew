@@ -2772,7 +2772,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     machine == acts.host() or fail(f"{kit}'s landings card is raised on {machine}, where {label}-ops's cards are")
     plan = plan_of(fleet, label) or fail(f"{label}/main could not be read, so {kit}'s landings card is not raised")
     owner, key = f"{label}-ops", f"land/{kit}"
-    got = {}
+    got, unread = {}, set()
     for b in plan.bolts():
         t = bolt_team(fleet, b) if b.get("Repo") == kit else None
         if not t:
@@ -2780,6 +2780,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
         row, why = acts.land_row(label, b.name(), t["machine"])
         if row is None:
             print(f"card {key}: {t['machine']} did not answer for bolt {b.name()} ({why}), so its row is left off", file=sys.stderr)
+            unread.add(b.name())
         elif "box" in row:
             got[b.name()] = row
     entries, whole = acts.entries(label), acts.partition(label)
@@ -2800,6 +2801,14 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     sent = {b: h for b, h in landings_sent(entries, key, owner).items() if b not in {s for s, _, _ in shown}}
     ticked_at = {b: h for b, h, _ in shown if b in (ticked or [])}
     at = {r["bolt"]: r["facts"]["head"] for r in rows}
+    # The bolts the user left (left_now), recorded when they change: a row whose host did not answer is left as recorded
+    # (read.1). This host's entries the branch does not hold yet come after the branch's.
+    ids = {e["Id"] for e in whole if e.get("Id")}
+    recorded, stops = left_marks(whole + [e for e in entries if not e.get("Id") or e["Id"] not in ids], key)
+    left = dict(left_now(state, ticked, at, recorded, stops), **{b: h for b, h in recorded.items() if b in unread})
+    if left != recorded:
+        acts.emit(label, "landing.left", [cards.row_object(key, acts.kits(label))], by=owner, Key=key,
+                  Heads=" ".join(f"{b.name()}@{left[b.name()]}" for b in plan.bolts() if b.name() in left))
     moves = {b: (h, at[b]) for b, h in list(sent.items()) + list(ticked_at.items())
              if b in at and not (at[b].startswith(h) or h.startswith(at[b]))}
     work = acts.work(label, kit, moves) if moves else {}
@@ -2832,6 +2841,9 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     facts = dict(kit=kit, rows=[r["facts"] for r in rows if r["box"]], held=[dict(bolt=r["bolt"], why=r["why"]) for r in rows if not r["box"]],
                  ops=owner)
     offered = [f"land:{b}" for b, _, _ in (state or {}).get("heads") or []]  # the rows its answer ticked or left
+
+    def unticked(cleared):  # the rows a card shows unticked: those the step names cleared, and every bolt the user left
+        return [r["bolt"] for r in rows if r["box"] and (r["bolt"] in cleared or r["bolt"] in left)]
     said = [w for _, w in asked]  # what changed of each bolt an earlier send ticked that is a row again, said first
     if step[0] == "none":
         return None
@@ -2844,7 +2856,7 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
         return row_card_close(fleet, label, owner, key, outcome=f"{pane}; {step[1]}", acts=acts, said=f"{note}; {step[1]}",
                               here=True, Rows="0")
     if step[0] == "post":
-        facts.update(left=step[1], follows=cards.follows_of("land", {"kit": kit}, entries, owner))
+        facts.update(left=unticked(step[1]), follows=cards.follows_of("land", {"kit": kit}, entries, owner))
         earlier = card_heads(next((e.get("Heads") for e in reversed(entries) if e.get("Card") == facts["follows"] and not e.get("Refused")
                                    and e.get("Act") in ("card.post", "card.update") and e.get("Heads")), None)) if facts["follows"] else []
         # following the user's send, what changed of a bolt asked again opens the card with the rest (card_posted)
@@ -2854,26 +2866,27 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
                                "; ".join(said + [note or "Raised as the bolts stand"]), where, acts,
                                since=since if facts["follows"] else None)
     if step[0] == "change":
-        _, change, kind_changed, left = step
-        return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=left), "; ".join(said + [change]),
-                               where, acts, kind_changed)
+        _, change, kind_changed, cleared = step
+        return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=unticked(cleared)),
+                               "; ".join(said + [change]), where, acts, kind_changed)
     outcome = " ".join([f"{w}." for w in said] + [step[1]])
     if step[0] == "follow":  # closed with the bolts the send still lands as its Heads (landings_sent), the rest following
-        _, _, left, landing = step
-        rest = [r["facts"] for r in rows if r["box"] and r["bolt"] not in dict(landing)]
+        _, _, cleared, landing = step
+        rest, waits = [r["facts"] for r in rows if r["box"] and r["bolt"] not in dict(landing)], unticked(cleared)
         closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, offered=offered, Rows=str(len(rest)),
                                 Heads=" ".join(f"{b}@{h}" for b, h in landing))
         # the outcome, what changed of each bolt asked again among it (landings_step), opens the card that follows
-        return closed and row_card_change(fleet, label, owner, cards.landings_card, dict(facts, rows=rest, left=left,
+        return closed and row_card_change(fleet, label, owner, cards.landings_card, dict(facts, rows=rest, left=waits,
                                                                                          follows=closed), outcome, where, acts,
-                                          since=[outcome] + (left_waits(left) if left else []))
+                                          since=[outcome] + (left_waits(waits) if waits else []))
     _, _, then, standing = step  # the bolts held whose send stands kept as its close's Heads (landings_sent)
     closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, offered=offered, Rows=str(len(boxed)),
                             **({"Heads": " ".join(f"{b}@{h}" for b, h in standing)} if standing else {}))
     if then is None or not boxed or not closed:  # a close refused leaves the card open, and nothing follows it yet
         return closed
-    return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=then, follows=closed), outcome, where, acts,
-                           since=[outcome] + (left_waits(then) if then else []))
+    waits = unticked(then)
+    return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=waits, follows=closed), outcome, where, acts,
+                           since=[outcome] + (left_waits(waits) if waits else []))
 
 
 def raise_landings_row(fleet, row, acts=None):

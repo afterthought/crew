@@ -1130,8 +1130,69 @@ def test_a_bolt_proven_after_the_answer_gets_a_new_card_following_it_and_the_sen
     assert "card land/crew: y lands on the user's send of an earlier card, so it is no row of this one" in capsys.readouterr().out
 
 
+LEFT = dict(Act="landing.left", On=["kit/crew"], by="swancloud-ops", Key="land/crew", Heads="z@abc1234")
+
+
+def test_the_bolts_the_user_left_are_recorded_once_and_not_again_while_unchanged(monkeypatch):
+    """rail-cards "A bolt the user left stays left until they tick it": the raise records the kit's left set when it
+    changes, and a raise that changes nothing writes nothing (state.1)."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=dict(POSTED, **WAITING))
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.emitted == [LEFT]
+    again = LandActs({"y": row("y"), "z": row("z")}, acts.held, answers=dict(POSTED, **WAITING))
+    raised(monkeypatch, again)
+    assert again.emitted == []
+
+
+def test_a_bolt_left_on_a_closed_card_is_unticked_on_the_card_posted_after_it(monkeypatch):
+    """rail-cards "Left again": the record carries what the user left across the close of one card and the post of
+    the next."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, [LEFT], answers=POSTED)
+    assert raised(monkeypatch, acts) == "req_k1"
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["recommendedIds"] == ["land:y"]
+    assert [e["Act"] for e in acts.emitted] == ["card.post"] and acts.emitted[0]["Heads"] == "y@abc1234 z@abc1234:left"
+
+
+def test_a_left_bolt_whose_host_did_not_answer_stays_left_as_recorded(monkeypatch):
+    """read.1: a row crew could not read ends nothing the user left."""
+    acts = LandActs({"y": row("y")}, [LEFT], answers=POSTED)
+    raised(monkeypatch, acts)
+    assert not [e for e in acts.emitted if e["Act"] == "landing.left"]
+
+
+def test_a_bolt_left_whose_head_moved_is_left_no_more_and_recorded_so(monkeypatch):
+    """rail-cards "Its head moves": the card asks for it as a row at its new head."""
+    acts = LandActs({"y": row("y"), "z": row("z", H2)}, [LEFT], answers=POSTED)
+    raised(monkeypatch, acts)
+    assert [e for e in acts.emitted if e["Act"] == "landing.left"] == [dict(LEFT, Heads="")]  # none left: the run record writes no Heads
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["recommendedIds"] == ["land:y", "land:z"]
+
+
+def test_a_stop_in_ops_pane_shows_the_bolt_unticked_on_the_waiting_card_and_is_recorded(monkeypatch):
+    """rail-cards "A bolt stopped in ops's pane is shown as left": crew bolt leave's note changes the card in place."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, partition=[stop("z")], answers=dict(POSTED, **WAITING))
+    assert raised(monkeypatch, acts, note="z was stopped on your words in swancloud-ops's pane") == "req_k1"
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert change["changeNote"] == "z was stopped on your words in swancloud-ops's pane"
+    assert change["recommendedIds"] == ["land:y"]
+    assert acts.emitted[0] == LEFT and acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234:left"
+
+
+def test_a_tick_on_a_send_ends_what_the_user_left_and_is_recorded(monkeypatch):
+    """rail-cards "Ticked after a stop": the answered card ticks z, and the raise records none left."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left"), LEFT]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers={"get_request": (answer, None)})
+    raised(monkeypatch, acts)
+    assert [e for e in acts.emitted if e["Act"] == "landing.left"] == [dict(LEFT, Heads="")]  # none left: the run record writes no Heads
+
+
 WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}
-MAIN_FIRST = "takes main first: forecast to conflict with main on README.md at e4f5a6b; crw-1-conductor takes main in by a fix"
+MAIN_FIRST ="takes main first: forecast to conflict with main on README.md at e4f5a6b; crw-1-conductor takes main in by a fix"
 
 
 def test_main_moving_so_one_of_two_conflicts_follows_the_card_with_the_other_as_its_one_box(monkeypatch):
