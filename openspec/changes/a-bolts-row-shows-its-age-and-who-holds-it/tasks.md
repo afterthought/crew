@@ -5,7 +5,7 @@
 
 ## 2. sluice's record of the bolt's submissions
 
-- [ ] 2.1 A kit's gather reads each asked bolt's and main's decided submissions with `sluice status --all --json`, and each standing submission's submitted time and start of checks, every field guarded (design, Decisions 3 and 7; Task notes 2.1); passes `tests/py/test_bolt_submissions.py` in the logic tier and `tests/contract/test_gather.py` in the contract tier, `tests/suite contract`.
+- [x] 2.1 A kit's gather reads each asked bolt's and main's decided submissions with `sluice status --all --json`, and each standing submission's submitted time and start of checks, every field guarded (design, Decisions 3 and 7; Task notes 2.1); passes `tests/py/test_bolt_submissions.py` in the logic tier and `tests/contract/test_gather.py` in the contract tier, `tests/suite contract`.
 - [ ] 2.2 The follower's refresh on a queue's move keeps the last gather's history and counts a submission that left the queue as it last stood until the line's time (design, Decision 7; Task notes 2.2); passes `tests/py/test_board.py`, `tests/suite logic`.
 
 ## 3. The rows

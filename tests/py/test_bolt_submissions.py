@@ -1,7 +1,9 @@
 """Every submission's number on its bolt's row (bolt-teams "A submission's number is on its bolt's row from the
 submit", teams.22, record 0046 part 2): the gather's read of sluice's queue, gather.submissions_of, on sluice 0.51.3's
 own overview (tests/py/sluice-0.51.3/), every field guarded and a document of another schema said; gather.queue's
-failures, each said, on a stand-in for the process; whose line each submission is, plan.submission_rows; and what
+failures, each said, on a stand-in for the process; sluice's record of every submission a branch has had,
+gather.decided_of and gather.history, on its own `status --all` documents; whose line each submission is,
+plan.submission_rows; and what
 crew bolts shows of them, plan.bolts_data and plan.bolts_text, beside the rest of crew bolts in test_rail.py and
 test_chores.py."""
 import json
@@ -28,11 +30,25 @@ def overview():
 def test_the_overview_gives_each_standing_submission_with_its_branch_state_and_where_it_came_from():
     assert gather.submissions_of(overview()) == ([
         {"id": 317, "branch": "bolt/crews-chores-of-the-24th-night", "head": "aa1a9c7fa2f7a64d505f4c6a99e0f76b5f948d2b",
-         "state": "testing", "worktree": "chore/a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives", "pull_head": None},
+         "state": "testing", "worktree": "chore/a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives", "pull_head": None,
+         "submitted": "2026-10-28T00:01:43Z", "started": "2026-10-28T01:03:27Z"},
         {"id": 318, "branch": "bolt/crews-chores-of-the-24th-night", "head": "ed8e7a92d5f8385895c2cf99d277a4c147738e6f",
-         "state": "queued", "worktree": "chore/a-stage-drives-a-browser-only-the-kits-way", "pull_head": None},
+         "state": "queued", "worktree": "chore/a-stage-drives-a-browser-only-the-kits-way", "pull_head": None,
+         "submitted": "2026-10-28T00:23:06Z", "started": None},
         {"id": 355, "branch": "main", "head": "b49230ce242d7a965174cc0f52589739ed97f375", "state": "queued",
-         "worktree": "pull/198", "pull_head": "bolt/crew-opens-no-tab-the-user-does-not-use"}], None)
+         "worktree": "pull/198", "pull_head": "bolt/crew-opens-no-tab-the-user-does-not-use",
+         "submitted": "2026-10-28T15:30:29Z", "started": None}], None)
+
+
+def test_a_submission_under_test_takes_the_start_of_its_candidates_checks_and_a_candidate_only_formed_gives_none():
+    """The design's Decision 2: a standing submission under test is the kit's from the start of its checks."""
+    doc = overview()
+    doc["branches"][0]["candidates"][0]["started"] = 7
+    doc["branches"][0]["candidates"][1]["state"] = "testing"
+    got, _ = gather.submissions_of(doc)
+    assert [(s["id"], s["started"]) for s in got] == [(317, None), (318, None), (355, None)]
+    del doc["branches"][0]["candidates"]
+    assert gather.submissions_of(doc)[0][0]["started"] is None
 
 
 def test_an_empty_queue_is_none_standing_and_not_a_failure():
@@ -94,6 +110,91 @@ def test_a_queue_that_cant_be_read_says_why(monkeypatch, run, why):
 def test_a_queue_read_is_the_documents_submissions(monkeypatch):
     monkeypatch.setattr(gather.subprocess, "run", lambda args, **kw: Ran(0, (RECORDED / "overview-standing.json").read_text()))
     assert [s["id"] for s in gather.queue("/k/main")[0]] == [317, 318, 355]
+
+
+# ------------------------------------------------------------------------- sluice's record of every submission had
+
+def recorded(name):
+    return json.loads((RECORDED / name).read_text())
+
+
+def test_a_branchs_record_gives_every_submission_it_had_with_when_it_was_submitted_and_told():
+    """crew-board "A held bolt's decided merges": sluice 0.51.3's record of a bolt's branch, landed and withdrawn."""
+    got, why = gather.decided_of(recorded("status-bolt-all.json"))
+    assert why is None and [(s["id"], s["state"], s["worktree"], s["submitted"], s["told"]) for s in got] == [
+        (356, "landed", "fix/crew-costs-an-idle-host-nothing/take-main-448c543", "2026-10-28T15:47:07Z", "2026-10-28T15:48:24Z"),
+        (357, "landed", "chore/a-wait-ends-with-the-session-that-started-it", "2026-10-28T16:10:48Z", "2026-10-28T16:21:02Z"),
+        (358, "withdrawn", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T17:47:07Z", "2026-10-28T17:47:13Z"),
+        (359, "withdrawn", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T17:56:48Z", "2026-10-28T18:23:56Z"),
+        (361, "landed", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T18:36:05Z", "2026-10-28T18:55:42Z"),
+        (362, "landed", "unit/a-rail-refresh-after-no-change-reads-nothing", "2026-10-28T18:57:11Z", "2026-10-28T19:09:03Z")]
+    assert (got[0]["branch"], got[0]["head"], got[0]["pull_head"]) == (
+        "bolt/crew-costs-an-idle-host-nothing", "e79d32a4061c5a028dbd765d6c397458f249719b", None)
+
+
+def test_mains_record_names_a_landing_by_its_pull_request_and_a_withdrawal_never_told_by_its_time():
+    got, _ = gather.decided_of(recorded("status-main-all.json"))
+    assert [(s["id"], s["state"], s["worktree"], s["pull_head"], s["told"]) for s in got] == [
+        (305, "withdrawn", "pull/171", "design/bolt-cycle-time", "2026-10-27T18:34:17Z"),
+        (363, "landed", "pull/200", "bolt/crew-costs-an-idle-host-nothing", "2026-10-28T19:13:46Z"),
+        (364, "landed", "pull/201", "design/the-words", "2026-10-28T19:23:54Z")]
+
+
+def test_a_record_field_missing_or_mistyped_is_none_and_one_with_no_number_is_left_out():
+    """read.2."""
+    doc = recorded("status-bolt-all.json")
+    del doc["submissions"][0]["told"], doc["submissions"][0]["from"]
+    doc["submissions"][1]["submitted"] = 1730000000
+    doc["submissions"][2]["id"] = "358"
+    del doc["submissions"][3]["branch"]
+    doc["submissions"].append("#400")
+    got, why = gather.decided_of(doc)
+    assert why is None and [(s["id"], s["told"], s["worktree"], s["submitted"]) for s in got][:3] == [
+        (356, None, None, "2026-10-28T15:47:07Z"), (357, "2026-10-28T16:21:02Z", "chore/a-wait-ends-with-the-session-that-started-it", None),
+        (359, "2026-10-28T18:23:56Z", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T17:56:48Z")]
+    assert got[2]["branch"] == "bolt/crew-costs-an-idle-host-nothing"
+
+
+@pytest.mark.parametrize("doc, why", [
+    ({"branch": "main"}, "sluice status printed no list of submissions"),
+    ([], "sluice status printed no list of submissions"),
+    ({"submissions": [{"schema": "sluice/submission@2", "id": 1, "branch": "main"}]},
+     "sluice status printed a record of sluice/submission@2, not the sluice/submission@1 crew reads")])
+def test_a_record_of_another_shape_is_said(doc, why):
+    assert gather.decided_of(doc) == (None, why)
+
+
+def test_the_history_reads_each_bolts_branch_and_main_once_and_keeps_of_main_the_bolts_landing_alone(monkeypatch):
+    asked = []
+
+    def ran(args, **kw):
+        asked.append((args, kw["cwd"]))
+        branch = args[2]
+        if branch == "bolt/crew-costs-an-idle-host-nothing":
+            return Ran(0, (RECORDED / "status-bolt-all.json").read_text())
+        if branch == "main":
+            return Ran(0, (RECORDED / "status-main-all.json").read_text())
+        return Ran(1, (RECORDED / "status-not-found.json").read_text().replace("bolt/no-such-bolt-here", branch))
+    monkeypatch.setattr(gather.subprocess, "run", ran)
+    got, why = gather.history("/k/main", ["crew-costs-an-idle-host-nothing", "just-given"])
+    assert why is None and [s["id"] for s in got] == [356, 357, 358, 359, 361, 362, 363]
+    assert asked == [(["sluice", "status", b, "--all", "--json"], "/k/main")
+                     for b in ("bolt/crew-costs-an-idle-host-nothing", "bolt/just-given", "main")]
+
+
+@pytest.mark.parametrize("run, why", [
+    (FileNotFoundError("sluice"), "this host has no sluice on its path"),
+    (subprocess.TimeoutExpired("sluice", 15), "sluice status bolt/y did not answer within 15 seconds"),
+    (Ran(1, '{"error":{"kind":"not_found","message":"no submission bolt/y"}}'), "sluice status bolt/y exited 1: no submission bolt/y"),
+    (Ran(2, "", "error: unexpected argument '--all' found\n"), "sluice status bolt/y exited 2: error: unexpected argument '--all' found"),
+    (Ran(0, "not json"), "sluice status bolt/y printed no JSON")])
+def test_a_history_that_cant_be_read_says_why(monkeypatch, run, why):
+    def ran(args, **kw):
+        if isinstance(run, BaseException):
+            raise run
+        return run
+    monkeypatch.setattr(gather.subprocess, "run", ran)
+    assert gather.history("/k/main", ["y"]) == (None, why)
 
 
 # --------------------------------------------------------------------------------------- whose line each one is
