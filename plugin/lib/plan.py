@@ -10936,6 +10936,32 @@ def review_cmd(fleet, a):
     print(f"{agent} is reviewing batch {b['N']} of {label}, into {b['FILE']}: crew review {label} --wait waits for it")
 
 
+CONSOLE_TABS = ("shell", "flow", "rail", "board")
+
+
+def console_asked(words):
+    """The tabs crew console up names after its label: flow, rail and board, each at most once, in any order; any other
+    word refused, naming the three."""
+    for w in words:
+        w in CONSOLE_TABS[1:] or fail(f"crew console up opens the tabs flow, rail and board; there is no tab {w}")
+        words.count(w) == 1 or fail(f"crew console up names the {w} tab twice")
+    return set(words)
+
+
+def console_tabs(asked, recorded, follower):
+    """Which of the console's tabs crew console up opens, keeps and forgets (code.7), from the tabs asked, each tab the
+    console's panes file records with whether herdr still has its pane, and who follows on the host (board.follower_of).
+    Wanted are the shell tab always, each tab asked, and the rail tab while no host job follows, since the rail tab is
+    then the host's follower, a follower crew can't read taken as no job so a host is never left with none (read.1).
+    open is each wanted tab with no live pane, in the order shell, flow, rail, board; keep each recorded tab whose pane
+    is live, which every later up keeps, named or not; forget each recorded tab whose pane is gone and that is not
+    wanted, since the user closed it."""
+    wanted = {"shell"} | set(asked) | (set() if follower == "job" else {"rail"})
+    live = {t for t, up in recorded.items() if up}
+    return ([t for t in CONSOLE_TABS if t in wanted and t not in live], [t for t in CONSOLE_TABS if t in live],
+            [t for t in CONSOLE_TABS if t in recorded and t not in live and t not in wanted])
+
+
 def console_cmd(fleet, a):
     """crew console up|down <label>: the partition's console on this host, the flow, rail and board tabs in the
     `console` workspace of this host's `<label>` session, starting no agent (record 0035): flow, following the run
