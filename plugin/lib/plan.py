@@ -106,7 +106,7 @@ signal's id takes its full id, <capture>/<NN>-<slug>, or its short one, <capture
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, base64, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
+import argparse, base64, bisect, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
 # getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
 # module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
@@ -11568,6 +11568,160 @@ def bolt_time(start, end, stages, submissions, cards, holds):
         since = a
     return {"age": age, "shares": shares, "now": {"holder": holder, "what": what, "since": since},
             "stalled": holder == "nobody" and (end - since).total_seconds() >= STALLED * 60}
+
+
+def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, history, unread=None):
+    """What a held bolt's time is split from (bolt_time), read from what crew already keeps, a decision of facts alone
+    (code.7): the partition's run record (entries, oldest first, read from its branch, read.5) and sluice's submissions
+    of the kit, those standing as the gather or the follower's watch read them (submissions, gather.submissions_of's
+    (list, why)) and every one its branches have had (history, gather.decided_of's (list, why)). The start is the bolt's
+    newest give not refused. Its stages are each stage.start of a unit or chore of the bolt's, and each fix.start and
+    fix.merge of a fix of it, fix/<bolt>/<f>, not refused, to the next stage.end naming the same stage and agent, or
+    running yet, a merge told by its stage/<u>/merge or by fix.merge. Its submissions are those submission_rows gives
+    the bolt's lines and its landing, a merge into bolt/<bolt> from a unit's, chore's or fix's branch of it and a
+    landing on main from bolt/<bolt> or a pull request opened from it, the standing read standing over sluice's record
+    of the same number. Its cards are each card posted and not yet closed, a card lost to its owner and posted again
+    under its key counting as one, that is the bolt's: under land/<bolt>; a batch's holding a unit of it; a proposal's
+    whose plan.propose names the bolt or its work, or one of its chain does; its kit's landings card, land/<kit>, from
+    the end of its last merge on; a question an agent of the team holding it asked since the give; or one whose post
+    names the bolt or its work. Its holds are its team's host's, each host.hold to its host.go, what for being who held
+    the host (the one hold crew records, the design's Decision 4). Returns {start, stages, submissions, cards, holds}
+    as bolt_time takes them, or {unknown: why} when the give or the run record can't be read, and {unknown: why,
+    start} when the give is read and sluice's record of a submission is not, so no share is guessed (read.1)."""
+    if unread:
+        return {"unknown": "its age can't be told: " + "; ".join(f"{k} could not be read ({v})" for k, v in unread.items())}
+    give = next((e for e in reversed(entries) if e.get("Act") == "bolt.give" and not e.get("Refused") and f"bolt/{bolt}" in (e.get("On") or [])), None)
+    if give is None:
+        return {"unknown": f"its age can't be told: the run record of the last {BATCH_DAYS} days holds no give of it"}
+    start = utc(give["At"])
+    work = {f"{kind_of(u)}/{u.name()}" for u in plan.work_of(bolt)}
+    units, fixes = {o.split("/", 1)[1] for o in work}, f"fix/{bolt}/"
+
+    def ours(on):
+        return any(o in work or o == f"bolt/{bolt}" or o.startswith(fixes) for o in on)
+
+    def agent_of(on):
+        return next((o for o in on if o.startswith("agent/")), None)
+    ends = {}
+    for i, e in enumerate(entries):
+        if e.get("Act") == "stage.end" and not e.get("Refused"):
+            for o in e.get("On") or []:
+                if o.startswith(("stage/", fixes)):
+                    ends.setdefault((o, agent_of(e["On"])), []).append(i)
+    stages = []
+    for i, e in enumerate(entries):
+        act, on = e.get("Act"), e.get("On") or []
+        if e.get("Refused") or act not in ("stage.start", "fix.start", "fix.merge"):
+            continue
+        if act == "stage.start":
+            obj = next((o for o in on if o.startswith("stage/")), None) if any(o in work for o in on) else None
+            if not obj:
+                continue
+            _, name, stage = obj.split("/", 2)
+            merge, what = stage == "merge", f"{stage} on " + ("chore " if f"chore/{name}" in on else "") + name
+        else:
+            obj = next((o for o in on if o.startswith(fixes)), None)
+            if not obj:
+                continue
+            merge = act == "fix.merge"
+            what = f"merge of {obj}" if merge else f"fix {obj}"
+        later = ends.get((obj, agent_of(on)), [])
+        j = bisect.bisect_right(later, i)
+        stages.append({"start": utc(e["At"]), "end": utc(entries[later[j]]["At"]) if j < len(later) else None, "merge": merge, "what": what})
+    last_merge = max((s["end"] for s in stages if s["merge"] and s["end"]), default=None)
+
+    subs, why = submissions
+    hist, hwhy = history
+    if why or hwhy:
+        return {"unknown": f"who held its time can't be told: its submissions can't be read: {why or hwhy}", "start": start}
+
+    def of_bolt(x):
+        w = x.get("worktree") or ""
+        if x.get("branch") == f"bolt/{bolt}":
+            return w in work or w.startswith(fixes)
+        return x.get("branch") == "main" and (w == f"bolt/{bolt}" or (w.startswith("pull/") and x.get("pull_head") == f"bolt/{bolt}"))
+    gate = {}
+    for x in [x for x in hist if of_bolt(x)] + [x for x in subs if of_bolt(x)]:
+        decided = x.get("decided") or (x.get("told") if x.get("state") not in STANDING else None)
+        if not x.get("submitted") or (x.get("state") not in STANDING and not decided):
+            return {"unknown": f"who held its time can't be told: sluice's record of #{x['id']} gives no time it was "
+                               + ("submitted" if not x.get("submitted") else "decided"), "start": start}
+        gate[x["id"]] = {"submitted": utc(x["submitted"]), "started": utc(x.get("started")), "decided": utc(decided),
+                         "state": x.get("state"), "what": f"#{x['id']}"}
+
+    chain, named = {}, set()
+
+    def first(p):
+        while chain.get(p, p) != p:
+            p = chain[p]
+        return p
+    for e in entries:
+        if e.get("Act") == "plan.propose" and not e.get("Refused"):
+            ps = [first(o) for o in e.get("On") or [] if o.startswith("proposal/")]
+            for p in ps[1:]:
+                chain[p] = ps[0]
+            if ps and ours(e["On"]):
+                named.add(ps[0])
+    named = {first(p) for p in named}
+    held_units = {f"batch/{n}": [u for u, *_ in us] for n, _, us in batches(entries)}
+    asking = (f"{team}-conductor", f"{team}-ops")
+    open_, lost, spans, key_of = {}, {}, [], {}
+    for e in entries:
+        act, card = e.get("Act"), e.get("Card")
+        if act == "card.post" and card and not e.get("Refused"):
+            k = e.get("Key") or card
+            key_of[card] = k
+            if k not in open_:
+                open_[k] = dict(lost.pop(k), cards=set()) if k in lost else {
+                    "at": utc(e["At"]), "key": e.get("Key"), "by": e.get("By"), "on": e.get("On") or [], "cards": set()}
+            open_[k]["cards"].add(card)
+        elif act == "card.close" and card and not e.get("Refused"):
+            k = key_of.get(card) or e.get("Key") or card
+            c = open_.get(k)
+            if c is None:
+                continue
+            c["cards"].discard(card)
+            if not c["cards"]:  # a card lost to its owner waits for its copy posted again under its key
+                del open_[k]
+                c["until"] = utc(e["At"])
+                if e.get("State") == "lost":
+                    lost[k] = c
+                else:
+                    spans.append(c)
+    cards_ = []
+    for c in spans + list(lost.values()) + [dict(c, until=None) for c in open_.values()]:
+        key, at = c["key"] or "", c["at"]
+        if key.startswith("batch/"):
+            mine = any(u in units for u in card_part(key, held_units.get(key.partition("-")[0], [])))
+        elif key.startswith("proposal/"):
+            mine = first(key) in named
+        elif key == f"land/{kit_name}" and kit_name != bolt:
+            mine, at = last_merge is not None, max(at, last_merge or at)
+        else:
+            mine = (key == f"land/{bolt}" or key.startswith(f"land/{bolt}/") or ours(c["on"])
+                    or (card_kind(key or None) == "question" and at >= start
+                        and (c["by"] in asking or re.fullmatch(rf"{re.escape(team)}-unit-[0-9]+", c["by"] or "") is not None)))
+        if mine:
+            cards_.append({"at": at, "until": c["until"], "key": c["key"]})
+
+    holds, held = [], None
+    for e in entries:
+        if f"host/{host}" in (e.get("On") or []) and not e.get("Refused"):
+            if e.get("Act") == "host.hold" and held is None:
+                held = {"at": utc(e["At"]), "what": f"its host {host} is held by {e.get('By')}"}
+            elif e.get("Act") == "host.go" and held is not None:
+                holds.append(dict(held, until=utc(e["At"])))
+                held = None
+    return {"start": start, "stages": stages, "submissions": list(gate.values()), "cards": cards_,
+            "holds": holds + ([dict(held, until=None)] if held else [])}
+
+
+def time_at(facts, end):
+    """A held bolt's time to end, from its facts (bolt_facts): bolt_time's split, or, when the facts can't be told,
+    {unknown: why}, with its age in minutes once its give was read."""
+    if "unknown" in facts:
+        return {"unknown": facts["unknown"], **({"age": int(max(0.0, (end - facts["start"]).total_seconds()) // 60)} if facts.get("start") else {})}
+    return bolt_time(facts["start"], end, facts["stages"], facts["submissions"], facts["cards"], facts["holds"])
 
 
 # ------------------------------------------------------------------------------------------------- batches

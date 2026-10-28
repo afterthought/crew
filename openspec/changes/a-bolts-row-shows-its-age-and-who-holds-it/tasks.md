@@ -1,7 +1,7 @@
 ## 1. The split
 
 - [x] 1.1 `bolt_time` gives each minute of a bolt's life to one holder in the fixed order, with its age, its shares, who holds it now and since when, and stalled after five minutes of nobody (design, Decision 1; Task notes 1.1); passes `tests/py/test_bolt_time.py` in the logic tier, `tests/suite logic`.
-- [ ] 1.2 `bolt_facts` reads the give, the stages, the bolt's cards, the host's holds and the bolt's submissions from the run record and sluice's submissions, and says why when the give or the history can't be read (design, Decisions 2 and 4; Task notes 1.2); passes `tests/py/test_bolt_time.py` in the logic tier, `tests/suite logic`.
+- [x] 1.2 `bolt_facts` reads the give, the stages, the bolt's cards, the host's holds and the bolt's submissions from the run record and sluice's submissions, and says why when the give or the history can't be read (design, Decisions 2 and 4; Task notes 1.2); passes `tests/py/test_bolt_time.py` in the logic tier, `tests/suite logic`.
 
 ## 2. sluice's record of the bolt's submissions
 
