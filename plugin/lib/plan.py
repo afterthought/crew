@@ -3314,7 +3314,7 @@ def landing_cards_closed(fleet, t, bolt, outcome, said=None, here=False):
     land_hand(fleet, t["label"], t["kit"]["name"], said if here else None, outcome if here else None)
 
 
-def bolt_land(fleet, a, by=None, why=None):
+def bolt_land(fleet, a, by=None, said=None):
     """A bolt whose units and chores have all landed on its kit's main, out of the plan, the landing recording the
     commit main holds (plan.14, plan.16), then, by the tidy on its team's host once the landing's place is gone, its
     branch deleted by sluice wherever the policy at its tip keeps it, on GitHub for a bolt given since gives went
@@ -3328,7 +3328,7 @@ def bolt_land(fleet, a, by=None, why=None):
     close by hand of a landing nothing recorded records it first, and one the read closed is said so. A bolt a team
     held records its Age and Split with its landing, read from sluice's record on its team's host (landing_time), and
     neither when that can't be read, the landing going on (plan.20). A read of its landing closes it with this code
-    (landing_close), its bolt.land in the name of by, with why as its Why."""
+    (landing_close), its bolt.land in the name of by, with said as its Why."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
     t = held = bolt_team(fleet, b)
@@ -3384,7 +3384,7 @@ def bolt_land(fleet, a, by=None, why=None):
     # A bolt a team held records its age and who held its time, or neither when that can't be read (plan.20).
     spent = landing_time(fleet, t, plan, b, entries, datetime.datetime.now(datetime.timezone.utc)) if held else {}
     write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"],
-          fields=dict(Repo=t["kit"]["name"], Head=head, **spent), by=by, why=why)
+          fields=dict(Repo=t["kit"]["name"], Head=head, **spent), by=by, why=said)
     if b.get("Team"):
         after = plan_of(fleet, label)
         print(landed_line(a.bolt, t["kit"]["name"], head, t["name"], [x.name() for x in held_by(after, t["name"])] if after else None))
@@ -4724,7 +4724,7 @@ def landing_close(fleet, label, bolt, n, entries):
     ops = f"{label}-ops"
     closing = argparse.Namespace(cmd="bolt", sub="land", bolt=bolt, label=label)
     try:
-        bolt_land(fleet, closing, by=ops, why=f"plan({bolt}): land the bolt, its landing #{n} read from sluice's record by {record.who()}")
+        bolt_land(fleet, closing, by=ops, said=f"plan({bolt}): land the bolt, its landing #{n} read from sluice's record by {record.who()}")
         return True
     except Refusal as e:
         words = str(e)

@@ -1331,7 +1331,7 @@ class TestTheLandingsRead:
         self.ran, self.emitted, self.entries = [], [], [dict(self.Q)]  # its entry not yet on the branch
         assert plan.landing_read(self.F, "wldn", "b") == (True, words)
         assert self.ran == [] and self.emitted == [] and words in capsys.readouterr().out
-        assert self.closed == [("b", {"by": "wldn-ops", "why": "plan(b): land the bolt, its landing #412 read from sluice's record by "
+        assert self.closed == [("b", {"by": "wldn-ops", "said": "plan(b): land the bolt, its landing #412 read from sluice's record by "
                                                               "swb-1-conductor"})]  # by the first read alone, the plan then holding it no more
 
     def test_a_read_waiting_on_one_that_closed_the_bolt_says_its_close_and_closes_nothing(self, monkeypatch, tmp_path, capsys):
