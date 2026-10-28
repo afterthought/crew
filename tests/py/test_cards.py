@@ -1502,6 +1502,23 @@ class TestLandings:
         assert c["options"][1]["consequence"] == said
         assert said in "\n".join(c["artifacts"][0]["lines"])
 
+    def test_a_left_row_that_would_take_main_first_says_so_first_on_its_consequence_and_paragraph(self):
+        """rail-cards "Left, and main conflicts with it": the row keeps its box and says it would take main first."""
+        would = ("It would take main first if you tick it: forecast to conflict with main on README.md at e4f5a6b. Ticked, "
+                 "its team takes main in by a fix, your send standing through it.")
+        rows = [landings_row("y"), landings_row("z", forecast=[("main", ["README.md"])], would_main=("e4f5a6b", ["README.md"]))]
+        b = built.landings_card(dict(kit="crew", rows=rows, left=["z"]))
+        c = b["card"]
+        assert c["recommendedIds"] == ["land:y"] and c["options"][1]["consequence"] == would
+        assert would in "\n".join(c["artifacts"][0]["lines"])
+        one = built.landings_card(dict(kit="crew", rows=rows[1:], left=["z"]))["card"]
+        assert would in one["summary"] and "It is forecast to conflict" not in one["summary"]
+
+    def test_a_left_rows_forecast_against_main_not_made_is_not_said_beside_the_conflict_the_record_holds(self):
+        assert built.forecast_said([("main", None)], "git could not tell", ("2222222", ["a.md", "b.md"])) == (
+            "It would take main first if you tick it: forecast to conflict with main on a.md and b.md at 2222222. Ticked, "
+            "its team takes main in by a fix, your send standing through it.")
+
     def test_a_forecast_not_made_is_said_with_why(self):
         assert built.forecast_said([("main", None)], "bolt/y is on no branch crew can read") == (
             "Its forecast against main could not be made: bolt/y is on no branch crew can read.")
@@ -1529,6 +1546,30 @@ class TestLandings:
         assert "**Held, with no box**" in face and "- **w**: held for a fix: The zone list misses one zone. (fix/w/gap)" in face
         one = landings(1, held=[{"bolt": "w", "why": "held"}])["card"]
         assert [a["title"] for a in one["artifacts"]][1] == "Held on crew's main, with no box"
+
+    STOP = ("abc1234def", "sluice itself failed (could not release try/1a2b3c4, whose worktree no longer exists)")
+    STOPPED = ("Its last landing at abc1234 was stopped, nothing of the bolt's: sluice itself failed (could not release "
+               "try/1a2b3c4, whose worktree no longer exists). wldn-ops submits it again once that is cleared.")
+
+    def test_one_row_stopped_says_so_on_its_face_and_keeps_its_approval(self):
+        """rail-cards "A landing sluice or its host stopped keeps its box": the one row's card is today's approve, its
+        summary saying what stopped its last landing at its head and who submits it again."""
+        b = built.landings_card(dict(kit="crew", rows=[landings_row("b1", stopped=self.STOP)], ops="wldn-ops"))
+        c = b["card"]
+        assert c["kind"] == "approve" and self.STOPPED in c["summary"] and b["heads"] == ["b1@abc1234"]
+        assert landings(1)["card"]["summary"] == built.landings_card(dict(kit="crew", rows=[landings_row("b1")], ops="wldn-ops"))["card"]["summary"]
+        assert "stopped" not in landings(1)["card"]["summary"]
+
+    def test_a_stopped_row_of_three_says_so_on_its_paragraph_and_in_its_boxs_detail(self):
+        rows = [landings_row("b1"), landings_row("b2", stopped=self.STOP), landings_row("b3")]
+        c = built.landings_card(dict(kit="crew", rows=rows, ops="wldn-ops"))["card"]
+        assert c["recommendedIds"] == ["land:b1", "land:b2", "land:b3"]
+        face = "\n".join(c["artifacts"][0]["lines"])
+        assert face.count(self.STOPPED) == 1 and face.index(self.STOPPED) > face.index("**2. b2**")
+        assert c["options"][1]["detail"].startswith("Its last landing at abc1234 was stopped, nothing of the bolt's: sluice itself failed")
+        assert len(c["options"][1]["detail"]) <= built.DETAIL
+        assert c["options"][0]["detail"] == "2 units and 1 chore; read in batch 7; green at abc1234 since 10:02; swc-1-conductor"
+        assert f"2. b2 (swc-1-conductor): {self.STOPPED} 2 units and 1 chore" in c["context"]["background"]
 
     def test_a_bolt_cleared_on_the_last_send_is_unticked_and_said_so(self):
         c = landings(3, left=["b2"])["card"]
@@ -1676,6 +1717,105 @@ class TestFollows:
         ([dict(Act="card.post", Key="land/b1", By="swancloud-ops", Card="req_l1")], None)])
     def test_the_key_a_followed_card_is_still_open_under_is_read_from_the_record_alone(self, entries, key):
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
+
+
+def replied(answer, turn="agent", status="answered"):
+    return {"status": status, "turn": turn, "version": 3, "answer": answer}
+
+
+class TestAnswerSaid:
+    """rail-cards "The close of an answered card records the answer": what the user answered, in crew's words made from
+    names alone (cards.answer_said), which the close of the card keeps as Answer for the card that follows it, and none
+    of the words they typed (record.3)."""
+
+    @pytest.mark.parametrize("answer, offered, said", [
+        ({"approved": True}, (), "approved"),
+        ({"approved": False, "note": {"text": "not tonight"}}, (), "declined, with a note"),
+        ({"approved": False, "text": "not tonight"}, (), "declined, with a note"),
+        ({"choiceIds": ["land:y"], "note": "y first, z after the fix"}, ("land:y", "land:z"), "ticked y, left z, with a note"),
+        ({"choiceIds": ["land:y", "land:z"]}, ("land:y", "land:z", "land:w"), "ticked y and z, left w"),
+        ({"answers": {"rows-1": {"choiceIds": ["land:y"]}, "rows-2": {"choiceIds": []}}}, ("land:y", "land:z"), "ticked y, left z"),
+        ({"choiceIds": []}, ("land:y", "land:z"), "ticked none, left y and z"),
+        ({"choiceIds": ["add:a-1", "add:a-2"]}, (), "ticked a-1 and a-2"),
+        ({"choiceIds": ["quiet"]}, (), "picked quiet"),
+        ({"choiceIds": ["unticked"]}, (), "left it out"),
+        ({"done": True}, (), "done"),
+        ({"failedStep": 2, "note": "the key was refused"}, (), "said step 2 did not work, with a note"),
+        ({"handled": True}, (), "said you will handle it yourself"),
+        ({"note": "why this one?"}, (), "answered with a note")])
+    def test_the_answer_is_said_in_crews_words_from_names_alone(self, answer, offered, said):
+        got = built.answer_said(replied(answer), offered)
+        assert got == said
+        assert not any(w in got for w in ("tonight", "first", "refused", "why"))
+
+    @pytest.mark.parametrize("got", [replied({}), replied({"choiceIds": ["land:y"]}, turn="you", status="pending"),
+                                     {"status": "pending", "turn": "you"}, {}, None])
+    def test_a_reply_holding_no_answer_says_none(self, got):
+        assert built.answer_said(got, ("land:y",)) is None
+
+    def test_a_card_picked_up_in_pending_you_still_says_the_answer_its_reply_carries(self):
+        assert built.answer_said({"status": "resolved", "answer": {"approved": True}}) == "approved"
+
+
+class TestAnsweredBefore:
+    """rail-cards "A card that follows one the user answered says so first": the card the user answered that a post
+    comes after (cards.answered_before), from the run record alone, and the paragraph the post opens with
+    (cards.answered_opening), or none when nothing changed, so the post is withheld."""
+    DESIGN, KEY = "swancloud-design", "record/crew/0019"
+    POST = dict(Act="card.post", Key=KEY, By=DESIGN, Card="req_1", At="2026-10-23T13:10:04Z")
+    CLOSE = dict(Act="card.close", Key=KEY, By=DESIGN, Card="req_1", State="closed", At="2026-10-23T14:02:41Z",
+                 Answer="declined, with a note")
+    EARLIER = {"card": "req_1", "posted": "2026-10-23T13:10:04Z", "answered": "2026-10-23T14:02:41Z", "answer": "declined, with a note"}
+
+    def test_a_post_following_a_card_the_user_answered_finds_it_with_its_times_and_answer(self):
+        assert built.answered_before([self.POST, self.CLOSE], "req_1", self.KEY, self.DESIGN) == self.EARLIER
+        declined = dict(self.CLOSE, State="declined")
+        assert built.answered_before([self.POST, declined], "req_1", self.KEY, self.DESIGN)["card"] == "req_1"
+
+    @pytest.mark.parametrize("state", ["withdrawn", "lost"])
+    def test_a_post_following_a_card_withdrawn_or_lost_or_still_open_follows_no_answered_card(self, state):
+        assert built.answered_before([self.POST, dict(self.CLOSE, State=state)], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST, dict(self.CLOSE, Refused="x")], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST, self.CLOSE], None, self.KEY, self.DESIGN) is None
+
+    def test_a_key_whose_newest_post_was_withheld_comes_after_the_card_whose_answer_stands(self):
+        stood = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Card="req_1", State="stands", Refused="Not posted: …")
+        entries = [self.POST, self.CLOSE, stood]
+        assert built.standing(entries, self.KEY, self.DESIGN) == "req_1"
+        assert built.answered_before(entries, None, self.KEY, self.DESIGN) == self.EARLIER
+        refused = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Refused="Pending You refused post_request: x")
+        assert built.answered_before(entries + [refused], None, self.KEY, self.DESIGN) == self.EARLIER
+        posted = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Card="req_2")
+        assert built.answered_before(entries + [posted], None, self.KEY, self.DESIGN) is None
+        assert built.standing(entries, self.KEY, "crw-1-conductor") is None and built.standing(entries, "record/crew/0020", self.DESIGN) is None
+
+    def test_the_opening_says_when_the_card_was_answered_with_what_and_what_changed_since(self):
+        said = built.answered_opening(self.EARLIER, ["Revised at 4be21c0: docs(adr): 0019 takes the user's note"])
+        assert said == ("You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: declined, with a note. "
+                        "Since then: revised at 4be21c0: docs(adr): 0019 takes the user's note.")
+        later = dict(self.EARLIER, answered="2026-10-24T09:00:00Z")
+        assert ", by 2026-10-24 09:00 UTC: " in built.answered_opening(later, ["x"])
+        assert built.answered_opening(self.EARLIER, ["GitHub's main moved", "y waits"]).endswith("Since then: GitHub's main moved. y waits.")
+
+    def test_an_answer_crew_holds_no_record_of_is_said_so(self):
+        said = built.answered_opening(dict(self.EARLIER, answer=None), ["The offer is now e104bcf, where you answered on ddcf2cb."])
+        assert said == ("You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: crew holds no record of "
+                        "what you answered. Since then: the offer is now e104bcf, where you answered on ddcf2cb.")
+
+    @pytest.mark.parametrize("since", [None, [], ["", "  "]])
+    def test_nothing_changed_since_makes_no_opening_and_the_withheld_post_says_the_answer_stands(self, since):
+        assert built.answered_opening(self.EARLIER, since) is None
+        assert built.stands_said(self.EARLIER) == ("Not posted: nothing has changed since the user answered req_1 by "
+                                                   "2026-10-23 14:02 UTC, so their answer stands")
+
+    def test_a_card_opened_so_says_it_first_in_its_summary_and_details_and_follows_the_answered_card(self):
+        card = built.record_card(dict(kit="crew", number=19, title="T", opening="The record's own opening.", quoted=[],
+                                      text="# 19. T\n\nBody.", alternatives=None))["card"]
+        out = built.opened(card, "You answered the card before this one: approved. Since then: x.", "req_1")
+        assert out["summary"].startswith("You answered the card before this one: approved. Since then: x.\n\nThe record's own opening.")
+        assert out["context"]["background"].startswith("You answered the card before this one") and out["follows"] == "req_1"
+        assert built.opened(dict(card, follows="req_0"), "o.", "req_1")["follows"] == "req_0"
 
 
 class TestStranded:
@@ -1837,6 +1977,20 @@ class TestRecord:
         assert [o["id"] for o in c["options"]] == ["loosen", "accept", "back"] and c["options"][0]["label"] == "Loosen ops.3 and ops.7 as drafted"
         assert [a["title"] for a in c["artifacts"]] == ["Where your rules decided, and the rules loosened", "Record 0032"]
 
+    def test_an_amendments_card_is_titled_by_its_own_first_words_cut_at_whole_words_and_not_the_records_title(self):
+        """Record 0031 as amended 2026-10-24: record/swancloud/0019 was asked three times on 2026-10-22 and 23 under its
+        one title, so three amendments read as one question asked again."""
+        f = dict(kit="crew", number=31, title="crew raises six cards at fixed points of its process", opening="Amended 2026-10-24: x.",
+                 text=RECORD, amendment="a card asked again says what changed, a landing's approval stands through taking main in, "
+                                        "and an amendment's card is titled by the amendment")
+        c = built.record_card(f)["card"]
+        assert c["title"] == ("Accept an amendment to record 0031 in crew: a card asked again says what changed, a landing's approval "
+                              "stands through taking main in, and…")
+        assert len(c["title"]) <= built.TITLE and c["approve"]["action"] == "Accept record 0031"
+        c = built.record_card(dict(f, amendment="the deployer's host is deneb", alternatives={
+            "rules": ["deploy.9"], "other": "mac-studio", "text": "## Where\n\ndeploy.9", "recommended": "accept"}))["card"]
+        assert c["title"] == "An amendment to record 0031 in crew: the deployer's host is deneb"
+
 
 # crew record (briefs.15, record 0031 §1): the record's facts read from its Markdown at a commit, whether the file holds
 # the status recorded, the alternatives a rule decided between, the refusals made before anything is read, and the raise
@@ -1900,6 +2054,7 @@ class TestRecordCommand:
         assert (f["title"], f["opening"], f["quoted"]) == ("switchboard runs GitHub's workflows itself", "The runners cost. A fleet costs more.",
                                                            ["I don't want a fleet"])
         assert f["text"].startswith("# switchboard runs GitHub's workflows itself") and "status: proposed" not in f["text"]
+        assert f["amendment"] is None
         b = built.record_card(f)
         assert b["key"] == "record/switchboard-kit/0032" and re.fullmatch(plan.RECORD_KEY, b["key"])
         assert (b["card"]["kind"], b["card"]["approve"]["risk"], b["card"]["approve"]["reversible"]) == ("approve", "low", True)
@@ -1926,13 +2081,32 @@ class TestRecordCommand:
 
     def test_an_amendment_is_proposed_while_marked_and_accepted_or_rejected_once_its_mark_is_gone(self):
         f = recorded(AMENDED, "proposed", before=ACCEPTED)
-        assert f["opening"] == "- **Rented.** The runners are rented by the hour."
+        assert (f["opening"], f["amendment"]) == ("- **Rented.** The runners are rented by the hour.", "Rented")
         with pytest.raises(crew.Refusal, match="its file on main says accepted, with an amendment still marked proposed"):
             recorded(AMENDED, "accepted", before=ACCEPTED)
         taken = AMENDED.replace(" Status: proposed to the user on 2026-10-18, as `briefs.15` has it; accepted only on their yes.", "")
         assert recorded(taken, "accepted", before=AMENDED) and recorded(ACCEPTED, "rejected", before=AMENDED)
         with pytest.raises(crew.Refusal, match="as rejected: its file on main says accepted"):
             recorded(ACCEPTED, "rejected", before=MADR)
+
+    @pytest.mark.parametrize("words, said", [
+        ("Amended 2026-10-22: what “no row worse than before” and “every row added ok” read. Eight deploys failed their suite.",
+         "what no row worse than before and every row added ok read"),
+        ("Amended 2026-10-23: the deployer's host is deneb. The user chose it on the design agent's card.", "the deployer's host is deneb"),
+        ("Amended 2026-10-23: a break-glass deploy is known to the deployer as a deploy is. On 2026-10-23 ops deployed the box.",
+         "a break-glass deploy is known to the deployer as a deploy is")])
+    def test_each_amendment_of_one_record_titles_its_card_by_its_own_first_words(self, words, said):
+        """record/swancloud/0019's three amendments of 2026-10-22 and 23, each a paragraph that opens with its proposed
+        mark as the design agent writes them, asked under the record's one title until record 0031 as amended 2026-10-24."""
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        f = recorded(ACCEPTED + f"\n{mark} {words.replace('“', '').replace('”', '')}\n", "proposed", before=ACCEPTED)
+        assert f["amendment"] == said
+        assert built.record_card(f)["card"]["title"] == f"Accept an amendment to record 0032 in switchboard-kit: {said}"
+
+    def test_an_amendment_with_no_words_of_its_own_is_refused_and_nothing_raised(self):
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        with pytest.raises(crew.Refusal, match="it has no words of its amendment. Nothing is raised."):
+            recorded(ACCEPTED + f"\n{mark} Amended 2026-10-23:\n", "proposed", before=ACCEPTED)
 
     @pytest.mark.parametrize("alternatives, said", [
         ("## Where\n\nops.3", "their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>"),
@@ -2009,6 +2183,9 @@ class TestRecordCommand:
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
         assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032@wldn:2", "req_c1")
+        # rail-cards "A record revised after the user's note": the card that follows says first what they answered
+        assert re.match(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you answered\. "
+                        r"Since then: revised at 9ab0123: ops\.7 loosened\.\n\n", acts.calls[3][1]["summary"])
 
     def test_the_sweeps_raise_of_a_record_posts_it_again_from_its_record_saying_an_older_copy_was_lost(self, monkeypatch):
         """rail-cards, "A record's card left on the host the main level left": the record read with status proposed on

@@ -10,6 +10,7 @@ revision rather than changed, and each failure said and recorded. Then the port 
 plannotator on, plan.session_env.
 The bridge itself, and every command's wiring, are t-cards'."""
 import json
+import re
 
 import pytest
 
@@ -399,7 +400,10 @@ def test_a_change_to_a_card_the_user_answered_asking_anew_acks_it_with_the_note_
     assert acts.calls[1][1] == {"requestId": "req_c1", "name": "swb-1-conductor", "expectedVersion": 3, "outcome": "Head is now abc1234"}
     sent = acts.calls[3][1]
     assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("land/b1@wldn:2", "req_c1", "approve")
-    assert sent["summary"].startswith("Its head moved since your approval, from 0123abc to abc1234: approving this lands abc1234.")
+    opening, _, rest = sent["summary"].partition("\n\n")
+    assert re.fullmatch(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you "
+                        r"answered\. Since then: head is now abc1234\.", opening)
+    assert rest.startswith("Its head moved since your approval, from 0123abc to abc1234: approving this lands abc1234.")
     assert [(e["Act"], e.get("Card"), e["Key"], e.get("State"), e.get("Outcome"), e.get("Head")) for e in acts.emitted] == [
         ("card.close", "req_c1", "land/b1", "closed", plan.REVISED, None), ("card.post", "req_c2", "land/b1", None, None, "abc1234")]
     out = capsys.readouterr().out
@@ -455,7 +459,8 @@ def test_a_card_pending_you_ended_after_the_users_answer_asking_anew_is_recorded
                                 anew={"approved": ""}) == "req_c2"
     assert [t for t, _ in acts.calls] == ["get_request", "match_area", "post_request"]
     sent = acts.calls[2][1]
-    assert sent["follows"] == "req_c1" and sent["summary"].startswith(
+    assert sent["follows"] == "req_c1" and sent["summary"].startswith("You answered the card before this one, by ")
+    assert sent["summary"].split("\n\n")[1].startswith(
         "Its head is now abc1234, and crew holds no record of the head you approved: approving this lands abc1234.")
     assert [(e["Act"], e.get("Card"), e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
         ("card.close", "req_c1", "closed", plan.ENDED_ELSEWHERE), ("card.post", "req_c2", None, None)]
@@ -521,11 +526,11 @@ def test_a_post_pending_you_answers_with_the_card_the_record_already_holds_open_
 DEPLOY_HELD = [post("deploy/srv", "swancloud-ops", "req_d1")]
 
 
-def act_follow(get_request, entries=DEPLOY_HELD, follows="req_d1"):
+def act_follow(get_request, entries=DEPLOY_HELD, follows="req_d1", since=None):
     acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s1"), None), "get_request": get_request},
                 entries=entries, caller="swancloud-ops")
     facts = dict(STEP, follows=follows) if follows else STEP
-    return acts, plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, facts, WHERE, acts)
+    return acts, plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, facts, WHERE, acts, since)
 
 
 def test_a_post_following_a_card_pending_you_then_reports_resolved_records_the_post_and_then_that_card_closed(capsys):
@@ -563,7 +568,7 @@ def test_a_post_whose_read_of_the_card_it_follows_fails_stands_and_says_so(capsy
     (DEPLOY_HELD + [dict(Act="card.close", Card="req_d1", Key="deploy/srv", By="swancloud-ops", State="closed")], "req_d1"),
     ([post("deploy/srv", "swb-1-conductor", "req_d1")], "req_d1")])
 def test_a_post_following_nothing_or_a_card_the_record_holds_closed_reads_nothing(entries, follows):
-    acts, card = act_follow(({"status": "resolved", "version": 4}, None), entries, follows)
+    acts, card = act_follow(({"status": "resolved", "version": 4}, None), entries, follows, ["The deploy ended, and this is its step 1"])
     assert card == "req_s1" and [t for t, _ in acts.calls] == ["match_area", "post_request"]
     assert [e["Act"] for e in acts.emitted] == ["card.post"]
 
@@ -686,6 +691,140 @@ def test_a_close_cuts_its_outcome_and_its_reason_to_pending_yous_two_hundred_cha
     assert (tool, len(sent["reason"]), acts.emitted[0]["Outcome"]) == ("cancel_request", cards.OUTCOME, LONG)
     short = cards.close_call({"status": "pending"}, "req_p1", "wldn-planner", reason="Dropped: not now")
     assert short[1]["reason"] == "Dropped: not now"
+
+
+def test_the_close_of_a_card_the_user_answered_records_what_they_answered_in_crews_words_and_a_withdrawal_none():
+    """rail-cards "The close of an answered card records the answer": the landings card sent with land:y ticked,
+    land:z cleared and a note; a deploy declined with "not tonight"; a card still waiting, withdrawn, records none."""
+    sent = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y"], "note": "z after its fix"}}
+    held = [post("land/crew", "swancloud-ops", "req_k1")]
+    acts = Acts({"get_request": (sent, None)}, entries=held, caller="swancloud-ops")
+    plan.row_card_close(None, "swancloud", "swancloud-ops", "land/crew", outcome="Landing as you ticked: y.", acts=acts,
+                        offered=["land:y", "land:z"], Rows="1")
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Answer"], acts.emitted[0]["Rows"]) == ("closed", "ticked y, left z, with a note", "1")
+    assert "after its fix" not in repr(acts.emitted)
+    declined = {"status": "answered", "turn": "agent", "version": 3, "answer": {"approved": False, "text": "not tonight"}}
+    acts = Acts({"get_request": (declined, None)}, entries=[post("deploy/srv", "swancloud-ops", "req_d1")], caller="swancloud-ops")
+    plan.row_card_close(None, "swancloud", "swancloud-ops", "deploy/srv", outcome="Declined", acts=acts)
+    assert acts.emitted[0]["Answer"] == "declined, with a note" and "tonight" not in repr(acts.emitted)
+    acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="Held for a fix", acts=acts)
+    assert acts.emitted[0]["State"] == "withdrawn" and "Answer" not in acts.emitted[0]
+
+
+def test_a_card_closed_as_answered_in_its_owners_pane_records_the_pane_as_its_answer():
+    landed = plan.landed_words("c" * 40, "24")
+    outcome, said = plan.pane_landed(landed, "wldn-ops", "2026-10-22T21:04:00Z", "Land swb-1's bolt")
+    acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True)
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Answer"]) == ("closed", "answered in swb-1-conductor's pane")
+
+
+def test_a_card_followed_once_answered_records_the_answer_on_its_close_and_on_the_entries_its_new_card_follows(monkeypatch):
+    acts = Acts({"get_request": (dict(ANSWERED, answer={"approved": True}), None), "ack_answer": ({"version": 4}, None),
+                 "match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=HELD)
+    seen, posted = [], plan.card_posted
+    monkeypatch.setattr(plan, "card_posted", lambda *a, **kw: seen.append(a[5]) or posted(*a, **kw))
+    plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "Head is now abc1234", WHERE, acts, anew=MOVED)
+    close = acts.emitted[0]
+    assert (close["Act"], close["State"], close["Answer"]) == ("card.close", "closed", "approved")
+    (entries,) = seen
+    assert {k: entries[-1][k] for k in ("Act", "Card", "State", "Answer")} == {"Act": "card.close", "Card": "req_c1", "State": "closed",
+                                                                             "Answer": "approved"}
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", entries[-1]["At"])
+
+
+def test_a_followed_card_pending_you_picked_up_records_the_answer_its_reply_still_carries():
+    acts, card = act_follow(({"status": "resolved", "version": 4, "answer": {"approved": True}}, None))
+    assert [(e["Act"], e.get("Answer")) for e in acts.emitted] == [("card.post", None), ("card.close", "approved")]
+
+
+# A record's card the user answered with a note, and the design agent's revision of the record after it (rail-cards
+# "A card that follows one the user answered says so first", "A follow-on with nothing changed is not posted").
+DESIGN, RKEY = "swancloud-design", "record/crew/0019"
+RECORD = dict(kit="crew", number=19, title="One card per thing", opening="A card asked again says what changed.", quoted=[],
+              text="# 19. One card per thing\n\nBody.", alternatives=None)
+ANSWERED_ON = [post(RKEY, DESIGN, "req_1", at="2026-10-23T13:10:04Z"),
+               dict(Act="card.close", Key=RKEY, By=DESIGN, Card="req_1", State="closed", At="2026-10-23T14:02:41Z",
+                    Answer="declined, with a note")]
+OPENED = "You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: declined, with a note. Since then: "
+
+
+def record_post(entries, since, follows="req_1"):
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_2"), None)}, entries=entries, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    b = cards.record_card(dict(RECORD, follows=follows))
+    return acts, plan.card_posted(acts, "swancloud", DESIGN, b, WHERE, since=since)
+
+
+def test_a_post_following_a_card_the_user_answered_opens_with_what_they_answered_and_what_changed_and_follows_it():
+    acts, card = record_post(ANSWERED_ON, ["Revised at 4be21c0: docs(adr): 0019 takes the user's note"])
+    assert card == "req_2"
+    sent = acts.calls[-1][1]
+    said = OPENED + "revised at 4be21c0: docs(adr): 0019 takes the user's note."
+    assert sent["summary"].startswith(said + "\n\nA card asked again says what changed.")
+    assert sent["context"]["background"].startswith(said) and sent["follows"] == "req_1"
+    assert [(e["Act"], e.get("Card"), e.get("State")) for e in acts.emitted] == [("card.post", "req_2", None)]
+
+
+@pytest.mark.parametrize("since", [None, []])
+def test_a_post_following_a_card_the_user_answered_with_nothing_changed_is_recorded_standing_and_not_posted(capsys, since):
+    acts, card = record_post(ANSWERED_ON, since)
+    assert card is None and acts.calls == [] and acts.names == []
+    words = "Not posted: nothing has changed since the user answered req_1 by 2026-10-23 14:02 UTC, so their answer stands"
+    assert acts.emitted == [dict(Act="card.post", On=["record/crew/0019"], by=DESIGN, refused=words, Card="req_1", Key=RKEY,
+                                 State="stands", label="swancloud")]
+    assert capsys.readouterr().err == f"card {RKEY}: {words}\n"
+    stood = ANSWERED_ON + [dict(acts.emitted[0], By=DESIGN, Refused=words)]
+    assert cards.card_under(stood, RKEY, DESIGN) is None and plan.last_refusal(stood, RKEY) == words
+
+
+def test_a_later_post_with_something_changed_follows_the_card_whose_answer_stands():
+    stood = ANSWERED_ON + [dict(Act="card.post", Key=RKEY, By=DESIGN, Card="req_1", State="stands", Refused="Not posted: …")]
+    acts, card = record_post(stood, ["Revised at 9c0ffee: docs(adr): 0019 names the key"], follows=None)
+    sent = acts.calls[-1][1]
+    assert card == "req_2" and sent["follows"] == "req_1" and sent["summary"].startswith(OPENED + "revised at 9c0ffee")
+    assert sent["idempotencyKey"] == "record/crew/0019@swancloud:2"
+
+
+def test_a_post_following_no_card_the_user_answered_is_posted_as_built():
+    acts, card = record_post([], None, follows=None)
+    sent = acts.calls[-1][1]
+    assert sent["summary"] == cards.record_card(RECORD)["card"]["summary"] and "follows" not in sent
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)})
+    act_post(acts)
+    assert acts.calls[-1][1]["summary"] == cards.landing_card(FACTS)["card"]["summary"]
+
+
+def test_a_change_with_no_card_held_hands_what_changed_to_the_post_it_makes():
+    """The record's card was withheld once, its answer standing: the change holds no card, and posts the next revision
+    following req_1, saying what changed, or withholds it again when the event gives nothing changed."""
+    stood = ANSWERED_ON + [dict(Act="card.post", Key=RKEY, By=DESIGN, Card="req_1", State="stands", Refused="Not posted: …")]
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_2"), None)}, entries=stood, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    assert plan.row_card_change(None, "swancloud", DESIGN, cards.record_card, RECORD, "Revised at 4be21c0: x", WHERE, acts,
+                                since=["Revised at 4be21c0: x"]) == "req_2"
+    assert acts.calls[-1][1]["summary"].startswith(OPENED + "revised at 4be21c0: x.") and acts.calls[-1][1]["follows"] == "req_1"
+    acts = Acts(entries=stood, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    assert plan.row_card_change(None, "swancloud", DESIGN, cards.record_card, RECORD, "x", WHERE, acts, since=[]) is None
+    assert acts.calls == [] and acts.emitted[0]["State"] == "stands"
+
+
+@pytest.mark.parametrize("since", [None, []])
+def test_a_card_following_one_the_user_answered_that_pending_you_no_longer_finds_is_posted_again_never_withheld(since):
+    """rail-cards "A row's card lost to its owner is posted again": the card that followed req_1 is lost to its owner,
+    and its copy is the row's card the user can no longer reach, no follow-on with nothing changed: posted again
+    following req_1, opening with what the user answered and the change's note when the event gives nothing changed."""
+    held = ANSWERED_ON + [post(RKEY, DESIGN, "req_2", at="2026-10-23T15:00:00Z")]
+    acts = Acts({"get_request": (None, "Not found: request:req_2."), "match_area": (MATCHED, None),
+                 "post_request": (dict(POSTED, requestId="req_3"), None)}, entries=held, caller=DESIGN)
+    acts.kits = lambda label: ("crew",)
+    assert plan.row_card_change(None, "swancloud", DESIGN, cards.record_card, dict(RECORD, follows="req_1"), "Raised again", WHERE, acts,
+                                since=since) == "req_3"
+    assert [(e["Act"], e.get("Card"), e.get("State")) for e in acts.emitted] == [("card.close", "req_2", "lost"), ("card.post", "req_3", None)]
+    sent = acts.calls[-1][1]
+    assert sent["follows"] == "req_1" and sent["summary"].startswith(OPENED + "raised again.\n\n" + cards.DEAD)
 
 
 def test_a_close_pending_you_does_not_find_is_recorded_lost_and_a_refused_one_recorded_refused():
@@ -860,3 +999,85 @@ def test_a_lone_row_approved_lands_it_and_a_send_ticking_none_lands_nothing():
     none = {"status": "answered", "turn": "agent", "answer": {"choiceIds": []}}
     assert plan.landing_lines("wldn", none, one) == ["  no bolt ticked: nothing lands"]
     assert plan.landing_lines("wldn", {"status": "pending", "turn": "you"}, one) == []
+
+
+def test_a_bolt_ticked_that_the_record_holds_taking_main_first_is_left_out_of_the_submit_its_send_standing():
+    """rail-cards "Ticked after being left": z takes main first, y lands."""
+    heads = plan.card_heads("y@abc1234 z@abc1234")
+    got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:y", "land:z"]}}
+    assert plan.landing_lines("swancloud", got, heads, main_first={"z"}) == [
+        "  to land, in the card's order: y",
+        "  z takes main first: its team takes main in by a fix, and the user's send stands for it",
+        "  lands them: crew bolt submit y --label swancloud"]
+    assert plan.landing_lines("swancloud", got, heads, main_first={"y", "z"})[-1] == (
+        "  z takes main first: its team takes main in by a fix, and the user's send stands for it")
+
+
+class ReadSent:
+    """crew card read land/crew as swancloud-ops on the partition's main machine, holding req_k1 under it, with the
+    user's send (got) read from Pending You; the kit's card raised in its stead, the raise adding what it records (told)
+    to this host's run record."""
+    FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio", "teams": ["crw-1"]}},
+             "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "mac-studio",
+                                 "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}}
+
+    def __init__(self, monkeypatch, got, told=(), branch=()):
+        import argparse
+        self.entries = [post("land/crew", "swancloud-ops", "req_k1", Heads="y@abc1234 z@abc1234")]
+        self.raised, self.calls = [], []
+        acts = self
+
+        class Bridge(Py):
+            def __init__(self, name, later, held=None):
+                Py.__init__(self, acts, {"get_request": (got, None)})
+
+        def raised(fleet, label, kit, note=None, pane=None):
+            print("card land/crew: req_k1 is left as it is, the user having answered it")
+            self.raised.append(kit)
+            self.entries += list(told)
+        monkeypatch.setattr(cards, "Bridge", Bridge)
+        monkeypatch.setattr(cards, "host_entries", lambda record, label, host: list(self.entries))
+        monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", "swancloud-ops"))
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "land_hand", raised)
+        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: list(branch))
+        self.run = lambda json=False: plan.card_read(self.FLEET, argparse.Namespace(key="land/crew", label=None, json=json, sub="read"))
+
+
+TICKED = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+Z_TOLD = dict(Act="forecast", On=["bolt/z"], Heads="bolt/z@abc1234 main@e4f5a6b", Paths="README.md", Reached="told")
+
+
+def test_reading_a_sent_landings_card_raises_it_first_and_leaves_a_bolt_taking_main_first_out_of_the_submit(monkeypatch, capsys):
+    """rail-cards "Ticking a left bolt that conflicts with main starts its take-main fix": the raise tells z's conductor
+    the fix, recorded on this host, and the read gives y alone to land."""
+    read = ReadSent(monkeypatch, TICKED, told=[Z_TOLD])
+    read.run()
+    out, err = capsys.readouterr()
+    assert read.raised == ["crew"] and "is left as it is" in err and "is left as it is" not in out
+    assert out.splitlines()[-3:] == [
+        "  to land, in the card's order: y",
+        "  z takes main first: its team takes main in by a fix, and the user's send stands for it",
+        "  lands them: crew bolt submit y --label swancloud"]
+
+
+def test_a_conflict_a_wait_recorded_on_the_branch_leaves_the_bolt_out_too(monkeypatch, capsys):
+    read = ReadSent(monkeypatch, TICKED, branch=[dict(Z_TOLD, Reached="wait", Id="e-1")])
+    read.run()
+    assert capsys.readouterr().out.splitlines()[-1] == "  lands them: crew bolt submit y --label swancloud"
+
+
+def test_a_ticked_bolt_with_no_conflict_lands_as_any_and_the_json_answer_is_left_clean(monkeypatch, capsys):
+    """rail-cards "Ticked and clean"."""
+    read = ReadSent(monkeypatch, TICKED)
+    read.run()
+    assert capsys.readouterr().out.splitlines()[-1] == "  lands them: crew bolt submit y z --label swancloud"
+    read.run(json=True)
+    out, err = capsys.readouterr()
+    assert json.loads(out) == TICKED and "is left as it is" in err
+
+
+def test_a_card_still_waiting_on_the_user_is_not_raised(monkeypatch, capsys):
+    read = ReadSent(monkeypatch, {"status": "pending", "turn": "you", "version": 2})
+    read.run()
+    assert read.raised == []
