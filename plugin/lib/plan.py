@@ -2782,9 +2782,13 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     order, but each that an earlier send still lands (landings_sent, rows_unsent), at the head sent or at one whose own
     work is the same (record 0031 as amended 2026-10-24), read once for every bolt sent or ticked whose head moved
     (acts.work, bolt_work), one whose work changed a row again; each that can land forecast against main and the rows
-    above it (acts.forecast, forecast_rows); then what the card makes of them (landings_step): posted, changed in place
-    with what changed, or the event's note first, followed when its form changed, left, withdrawn saying why, or closed
-    with what landed, was held and was left, with how many rows can still land, a new card following it while any can,
+    above it (acts.forecast, forecast_rows); the bolts the user left (left_now) recorded as landing.left when they
+    change, shown unticked on every card the raise posts, changes or follows with, each keeping its box though it
+    conflicts with main, told no take-main fix and said once in the change note when a forecast finds it so (main_told,
+    rail-cards "A bolt the user left stays left until they tick it"); then what the card makes of them (landings_step):
+    posted, changed in place with what changed, or the event's note first, followed when its form changed, left,
+    withdrawn saying why, or closed with what landed, was held and was left, with how many rows can still land, a new
+    card following it while any can,
     each card that asks for a bolt again saying first what changed of its work (work_said): in its opening when it
     follows the user's send (below), else ahead of its summary (built_saying); an answered
     card whose send still lands bolts while another reads proven since is closed saying so, the bolts it still lands
