@@ -40,7 +40,8 @@
 # held, the third landing all the same, the command exiting non-zero naming the held one, and the card closed with
 # what landed and what was held, keeping the user's send for the held one; its team's fix takes main into it, and once
 # that merges no card asks for it, ops reads it under the earlier send with no card open, and the command that read
-# prints lands it on that send (record 0031 as amended 2026-10-24).
+# prints lands it on that send (record 0031 as amended 2026-10-24), run again after its landing stood in sluice when
+# ops's session ended, so it waits on that landing again and submits nothing (bolt-teams).
 # Last, main moving under a proven row makes crew rail on the main level's host raise the kit's landings card again,
 # holding the row taking main first and telling its conductor the take-main fix, recorded once, and a second crew
 # rail, main not having moved, tells and raises nothing. And a bolt the user left on a send: main moving under it keeps
@@ -589,12 +590,26 @@ out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 
 eq "$out" "card land/switchboard-kit: no landings card of switchboard-kit is open
   to land on the user's send of an earlier card: south
   lands them: crew bolt submit south --label wldn"
+# Ops's session ended while its crew bolt submit south waited on the landing, #90, still queued on main at south's head
+# (bolt-teams "Ops restarted while its landing stood"): run again, it reads sluice's queue, submits nothing and waits on
+# #90 again, and once sluice lands it south is landed and closed as any landing is.
+sh=$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/south)
+jq -n --arg h "$sh" '{schema: "sluice/overview@1", at: "2026-10-28T16:00:00Z", host: "chuck-herdr-alpha", hosts: [], previews: [],
+  sessions: [], repository: "/kit/.git", branches: [{branch: "main", submissions: [{schema: "sluice/submission@1", id: 90,
+  branch: "main", head: $h, state: "queued", from: {agent: "wldn-ops", worktree: "pull/9", head: "bolt/south"}}]}]}' \
+  > "$CREW_TEST_ROOT/sluice-overview.json"
+echo "$kd/places/land-south" > "$CREW_TEST_ROOT/sluice-stands-90"
+: > "$CREW_TEST_LOG"
 expect_ok crew bolt submit south
+rm "$CREW_TEST_ROOT/sluice-overview.json"
+has "$out" "bolt/south's landing #90 stands in sluice at ${sh:0:7}, its head: crew waits on #90 again and submits nothing"
+grep -q "^$box wt submit main" "$CREW_TEST_LOG" && fail "crew submitted south again though its landing stood in sluice:"$'\n'"$(calls)"
+[[ ! -e $CREW_TEST_ROOT/sluice-stands-90 ]] || fail "crew's wait on #90 again did not reach sluice"
 has "$out" "bolt/south landed on switchboard-kit's main at"
 eq "$(plan -t Bolt -e "Bolt = 'south'" -c)" "0"
 eq "$(field mac-studio bolt.land Repo bolt/south)" "switchboard-kit"
 calls | grep -q "^$box pendingyou post_request " && fail "a landings card was posted for south's landing"
-ok "a ticked bolt sluice refused keeps the user's send through a fix that only takes main in: no card asks for it, ops reads it with no card open under the earlier send, and the command it prints lands it"
+ok "a ticked bolt sluice refused keeps the user's send through a fix that only takes main in: no card asks for it, ops reads it with no card open under the earlier send, and the command it prints, run again after its landing stood in sluice, waits on that landing again, submitting nothing, and lands it"
 
 # Main moving under a proven row: GitHub's main lands a change to the file far's unit added, and the builder's host
 # has it as origin/main, as the fleet's timer fetches it; crew rail on the main level's host, the partition's main

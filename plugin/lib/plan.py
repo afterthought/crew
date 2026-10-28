@@ -3281,6 +3281,56 @@ fi
 printf 'RC=%s TIP=%s OLD=%s ID=%s PULL=%s ANSWER=%s SAID=%s LEVEL=%s\n' "$rc" "$tip" "$old" "$id" "$pull" "$answer" "$said" "$level"
 """
 
+# sluice's queue on the team's host, read in the kit's main checkout before a landing is submitted, so a landing that
+# already stands there at the bolt's head is waited on again rather than submitted anew (landing_standing).
+QUEUE = r"""cd "$1" || exit 2
+exec sluice overview --json
+"""
+
+
+def queue_read(code, out, err):
+    """The submissions standing in sluice's queue as QUEUE printed them on the team's host, read as the gather reads
+    them (gather.submissions_of): (submissions, None), or (None, why) when sluice did not answer or printed what crew
+    can't read (read.1, read.2)."""
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        doc = None
+    if code != 0:  # sluice says why as {"error": {"message": ...}} under --json; ssh and bash on standard error
+        said = doc.get("error") if isinstance(doc, dict) else None
+        said = said.get("message") if isinstance(said, dict) else None
+        said = said if isinstance(said, str) and said else next((l.strip() for l in (err or "").splitlines() if l.strip()), "")
+        return None, f"sluice overview exited {code}" + (f": {said}" if said else "")
+    return (None, "sluice overview printed no JSON") if doc is None else gather.submissions_of(doc)
+
+
+def landing_standing(submissions, bolt, head):
+    """What crew bolt submit does with the bolt's landing standing in sluice on its kit's main (bolt-teams "A landing
+    standing in sluice is waited on again, not submitted again"), a decision of facts alone (code.7), from the
+    submissions standing in sluice's queue as the gather reads them (gather.submissions_of), the bolt, and the head
+    this landing submits (head, None when crew can't tell it): ("again", n, its head) when one stands at that head, to
+    wait on again with nothing submitted; ("past", n, its head) when one stands at another head, said and the bolt
+    submitted as before, sluice taking the new submission from the landing's place in its stead; ("none", None, None)
+    when none stands."""
+    _, landing = submission_rows(submissions, bolt, [])
+    if not landing:
+        return "none", None, None
+    if head and landing["head"] == head:
+        return "again", landing["id"], landing["head"]
+    return "past", landing["id"], landing["head"]
+
+
+def standing_words(bolt, step, n, at, head):
+    """What crew bolt submit says of a landing it found standing in sluice (landing_standing): that it waits on it
+    again, submitting nothing; or that it stands at another head, naming both, and the bolt is submitted as before."""
+    if step == "again":
+        return f"bolt/{bolt}'s landing #{n} stands in sluice at {at[:7]}, its head: crew waits on #{n} again and submits nothing"
+    stands = f"bolt/{bolt}'s landing #{n} stands in sluice at {at[:7] if at else 'a head sluice does not name'}"
+    if not head:
+        return f"{stands}, and crew can't tell the head this landing submits: it submits bolt/{bolt} as before"
+    return f"{stands}, not its head {head[:7]}: crew submits {head[:7]} as before"
+
+
 # sluice's outcome of a landing's submission, waited on in the kit's main checkout on the team's host, a call at a time
 # (code.9): `sluice wait <n> --timeout 9m --json`, exiting 5 while it is still undecided, and printing the
 # submission's record, whose state is its outcome (wait_outcome).
@@ -3907,7 +3957,11 @@ def landing_submitted(fleet, t, bolt):
     before, path, RC, TIP, OLD, ID, PULL, ANSWER, SAID, LEVEL, standing, last}, said as it is queued (submitted_line),
     sluice's verdict when it refused it at once in its answer, ANSWER, and what it said beside on standard error, SAID.
     Its ID is only ever a submission sluice made for this landing, newer than last, the last of main's submissions
-    sluice had recorded before its pull request was readied (SUBMISSIONS, submissions_listed). Queued as a pull request, sluice
+    sluice had recorded before its pull request was readied (SUBMISSIONS, submissions_listed). Before any of that, sluice's
+    queue is read there (QUEUE, queue_read): the bolt's landing standing at the head it submits is waited on again,
+    SUBMIT given its number and head, nothing submitted and its pull request left as it is, its last the number before
+    it; one standing at another head is said, and the bolt submitted as before (landing_standing, standing_words); a
+    queue that can't be read is said, and the bolt submitted as before. Queued as a pull request, sluice
     answering with its number and no submission, or answered with an earlier submission (answered_before), whose exit
     is that one's and refuses nothing of this one, its ID is the submission sluice made for it, found in sluice's
     record on the team's host (SUBMISSIONS, submission_of with the pull request and last), and waited on as any other;
@@ -3929,6 +3983,25 @@ def landing_submitted(fleet, t, bolt):
     if isinstance(decided, str):  # the copy on GitHub unread, or the two diverged: nothing levelled or submitted
         return dict(bolt=bolt, t=t, refused=decided)
     head, own = (decided["head"], copies["own"]) if decided["head"] else ("", "")
+    path = f"{t['kit']['dir']}/places/land-{bolt}"
+    # The bolt's landing already standing in sluice, as after a session that submitted it ended: waited on again at
+    # its head, nothing submitted (teams.22, plan.16).
+    o = crew.on_machine(fleet, host, ["bash", "-c", QUEUE, "crew", main])
+    queued, why = queue_read(o.returncode, o.stdout, o.stderr)
+    at_head = head or (copies["own"] if copies.get("own") not in (None, "-") else None)
+    step, n, at = landing_standing(queued, bolt, at_head) if not why else ("unread", None, None)
+    if why:
+        print(f"crew can't read sluice's queue on {host}, so whether a landing of bolt/{bolt} stands there can't be told: "
+              f"{why}; it submits bolt/{bolt} as before", file=sys.stderr)
+    elif step != "none":
+        print(standing_words(bolt, step, n, at, at_head))
+    if step == "again":
+        f, told = submit_ran(fleet, host, main, path, bolt, head, own, str(n), at)
+        if f is None:
+            return dict(bolt=bolt, t=t, refused=f"bolt/{bolt}'s landing #{n} was not waited on again on {host}: {told}")
+        if decided["said"] and (f["LEVEL"] or not decided["level"]):
+            print(decided["said"])
+        return dict(bolt=bolt, t=t, before=before, path=path, **f, standing=None, last=n - 1)
     s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
     subs = submissions_listed(s.returncode, s.stdout, s.stderr)
     if isinstance(subs, str):  # read.1: no submission sluice answers with could be told from one made before it
@@ -3941,7 +4014,6 @@ def landing_submitted(fleet, t, bolt):
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted: {e}")
     if said:
         print(said)
-    path = f"{t['kit']['dir']}/places/land-{bolt}"
     f, told = submit_ran(fleet, host, main, path, bolt, head, own)
     if f is None:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted on {host}: {told}", attempted=True)
