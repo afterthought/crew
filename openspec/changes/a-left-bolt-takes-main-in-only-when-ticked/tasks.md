@@ -35,7 +35,7 @@
 
 ## 9. The words
 
-- [ ] 9.1 The usage, README, the crew skill and the conductor's and main-level ops's briefs say a left bolt is forecast with no fix until ticked and name `crew bolt leave` (design, Decisions 4 to 6; Task notes 9.1); verify `tests/suite t-docs` ends with "0 failed".
+- [x] 9.1 The usage, README, the crew skill and the conductor's and main-level ops's briefs say a left bolt is forecast with no fix until ticked and name `crew bolt leave` (design, Decisions 4 to 6; Task notes 9.1); verify `tests/suite t-docs` ends with "0 failed".
 
 ## 10. The change as a whole
 
