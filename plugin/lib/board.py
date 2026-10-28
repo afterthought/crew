@@ -80,31 +80,21 @@ def stamp(at):
 # ------------------------------------------------------------------------------------------------- the read
 
 def texts(repo, tip, paths):
-    """The text of each path at tip in crew's cache of the repo, in one git cat-file --batch: {path: text}, a path
-    that is not there left out."""
-    if not paths:
-        return {}
-    r = subprocess.run(["git", "-C", str(plan.cache(repo)), "cat-file", "--batch"], input="".join(f"{tip}:{p}\n" for p in paths).encode(),
-                       capture_output=True, env=plan.gitenv())
-    r.returncode == 0 or fail(f"git cat-file in crew's cache of {repo} failed: {r.stderr.decode(errors='replace').strip()}")
-    out, data, i = {}, r.stdout, 0
-    for p in paths:
-        nl = data.index(b"\n", i)
-        head, i = data[i:nl], nl + 1
-        if head.endswith((b" missing", b" ambiguous")):
-            continue
-        _, kind, size = head.rsplit(b" ", 2)
-        if kind == b"blob":
-            out[p] = data[i:i + int(size)].decode("utf-8", "replace")
-        i += int(size) + 1
-    return out
+    """The text of each path at tip in crew's cache of the repo, {path: text}, a path that is not there left out: in one
+    git cat-file --batch, or from the follower's kept blobs when it reads (plan.Kept)."""
+    files = plan.kept_listing(repo, tip)
+    if files is not None:
+        got = {p: plan.READ.follower.text(repo, files[p]) for p in paths if p in files}
+    else:
+        got = dict(zip(paths, plan.cat_file(repo, [f"{tip}:{p}" for p in paths])))
+    return {p: t for p, t in got.items() if t is not None}
 
 
 def signals_at(repo, tip, home, moved):
     """Each signal at tip whose id has no move, with its capture's captured_by (its source when it has none) and when
     the capture was made (its at, else its event_date, which is what a signal's age counts from, as stamp gives it),
     its kind and the first line of its body."""
-    sigs = [m.groups() for m in map(SIGNAL.match, plan.git(repo, "ls-tree", "-r", "--name-only", tip, "--", "signals/").splitlines()) if m]
+    sigs = [m.groups() for m in map(SIGNAL.match, plan.paths_at(repo, tip, "signals/")) if m]
     sigs = [(c, n) for c, n in sigs if f"{c}/{n}" not in moved]
     got = texts(repo, tip, sorted({f"signals/{c}/capture.md" for c, _ in sigs}) + [f"signals/{c}/{n}.md" for c, n in sigs])
     out = []

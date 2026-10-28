@@ -402,6 +402,74 @@ class TestMoved:
         assert m["crew"] and m["state"] == {"wldn", "swancloud"} and m["kits"] == set(self.KEPT["kits"]) and m["any"]
 
 
+class TestKept:
+    """What the host's follower keeps between its refreshes and serves while it has not moved (the crew-board spec, A
+    refresh after a change reads only what moved; plan.12's reading of 2026-10-28)."""
+
+    REQ = {"main": "/kit/main", "dir": "/kit", "bolts": [], "slots": {"swb-1": "~/.local/state/swb-1-team/slots"}}
+    ANSWER = {"ok": True, "main": [], "stamp": "s1"}
+
+    def test_a_kit_is_served_only_at_the_stamp_and_request_it_was_read_at(self):
+        kept = (self.REQ, self.ANSWER)
+        assert plan.kit_served(kept, "s1", self.REQ) == self.ANSWER
+        assert plan.kit_served(kept, "s2", self.REQ) is None, "a moved kit was served"
+        assert plan.kit_served(kept, "s1", dict(self.REQ, bolts=["tenant-environments"])) is None, "a kit asked of anew was served"
+        assert plan.kit_served(kept, None, self.REQ) is None, "a kit whose stamp could not be read was served"
+        assert plan.kit_served((self.REQ, None), "s1", self.REQ) is None and plan.kit_served(None, "s1", self.REQ) is None
+
+    def test_a_board_survey_asks_each_host_for_its_moved_kits_alone_and_keeps_what_it_read(self, monkeypatch):
+        asked = []
+
+        def gathered(fleet, host, req):
+            asked.append((host, sorted(k["main"] for k in req["kits"]), req.get("stamped")))
+            return {k["main"]: {"ok": True, "stamp": "new"} for k in req["kits"]}, None
+        monkeypatch.setattr(plan, "gathered", gathered)
+        held = [(t, None) for t in FLEET["partitions"]["wldn"]["teams"]]
+        k = plan.Kept()
+        monkeypatch.setattr(plan.READ, "follower", k)
+        first = plan.survey(FLEET, held, board=True)
+        assert sorted(asked) == [("chuck-herdr-alpha", ["/b/main", "/kit/main"], True), ("mac-studio", ["/a/main"], True)]
+        k.settle()
+        k.stamps = {(BOX, "/kit/main"): "new", (BOX, "/b/main"): "moved", ("mac-studio", "/a/main"): "new"}
+        asked.clear()
+        again = plan.survey(FLEET, held, board=True)
+        assert asked == [(BOX, ["/b/main"], True)], "an unmoved kit was gathered again, or a moved one served"
+        assert again[BOX]["kits"]["/kit/main"] == first[BOX]["kits"]["/kit/main"] and again["mac-studio"] == first["mac-studio"]
+        assert set(k.used) == {BOX, "mac-studio"} and set(k.used[BOX]) == {"/kit/main", "/b/main"}
+
+    def test_a_host_that_does_not_answer_is_kept_with_no_answer_so_its_kits_read_as_moved(self, monkeypatch):
+        monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: (None, "ssh: connect timed out") if host == BOX else
+                            ({k["main"]: {"ok": True, "stamp": "s"} for k in req["kits"]}, None))
+        k = plan.Kept()
+        monkeypatch.setattr(plan.READ, "follower", k)
+        sv = plan.survey(FLEET, [(t, None) for t in FLEET["partitions"]["wldn"]["teams"]], board=True)
+        assert sv[BOX] == {"ok": False, "error": "ssh: connect timed out"}
+        assert {m: a for m, (_, a) in k.used[BOX].items()} == {"/kit/main": None, "/b/main": None}
+
+    def test_a_survey_of_any_other_command_is_served_nothing_the_follower_kept(self, monkeypatch):
+        asked = []
+        monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: asked.append(host) or ({k["main"]: {"ok": True} for k in req["kits"]}, None))
+        plan.survey(FLEET, [("swb-1", None)], board=True)
+        assert asked == [BOX] and plan.READ.follower is None
+
+    def test_a_state_file_at_a_tip_already_listed_is_its_kept_blob_and_starts_no_git(self, monkeypatch):
+        calls = []
+        tip = "f" * 40
+        monkeypatch.setattr(plan, "git", lambda repo, *args, **kw: calls.append(args[0]) or f"100644 blob {'1' * 40}\tplan.rec\n100644 blob {'2' * 40}\tsignals/c/01-x.md")
+        monkeypatch.setattr(plan, "cat_file", lambda repo, names: calls.append("cat-file") or [f"text of {n}" for n in names])
+        k = plan.Kept()
+        monkeypatch.setattr(plan.READ, "follower", k)
+        assert plan.show("o/state", tip, "plan.rec") == f"text of {'1' * 40}" and plan.show("o/state", tip, "moves.rec") is None
+        assert plan.paths_at("o/state", tip, "signals/") == ["signals/c/01-x.md"]
+        assert board.texts("o/state", tip, ["signals/c/01-x.md", "signals/c/capture.md"]) == {"signals/c/01-x.md": f"text of {'2' * 40}"}
+        assert calls == ["ls-tree", "cat-file"], "a kept tip was listed again or a held blob read again"
+        k.settle()
+        assert plan.show("o/state", tip, "plan.rec") == f"text of {'1' * 40}" and calls == ["ls-tree", "cat-file"]
+        k.settle()
+        k.settle()
+        assert k.listings == {} and k.blobs == {}, "a tip no refresh read kept its blobs"
+
+
 class TestRailFrame:
     """The rail tab draws the rail frame the host's follower writes (the crew-board spec, The rail and the board come
     from one read)."""

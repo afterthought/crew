@@ -341,7 +341,7 @@ def on_branch(fleet, label, since_day, tips=None):
     if not tip:
         return []
     out = []
-    for path in plan.git(repo, "ls-tree", "-r", "--name-only", tip, "--", "runs/").splitlines():
+    for path in plan.paths_at(repo, tip, "runs/"):
         if path.endswith(".rec") and pathlib.PurePath(path).stem >= since_day:
             out += parse(plan.show(repo, tip, path) or "")
     return out

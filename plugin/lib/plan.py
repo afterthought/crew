@@ -463,7 +463,9 @@ class Reading:
     it is gone with its command (state.4)."""
 
     def __init__(self):
-        self.memory, self.bypass = {}, 0
+        # follower: the host's follower's Kept, handed in for its refresh, which serves what has not moved since its
+        # last read; None for any other command
+        self.memory, self.bypass, self.follower = {}, 0, None
 
     def held(self, name):
         return self.memory.get(name)
@@ -520,13 +522,119 @@ class Reading:
 READ = Reading()
 
 
+def kit_served(kept, stamp, req):
+    """The answer the follower kept for a kit that it may serve in place of a gather (plan.12's reading of 2026-10-28):
+    kept is (the request it answered, its answer with the stamp it was read at) or None, stamp the kit's stamp now;
+    the answer when the stamp now is read and is the one it was read at and the request is the same, else None, and
+    the kit is asked of its host. A decision on plain facts (code.7)."""
+    if not kept or not kept[1] or stamp is None:
+        return None
+    then, answer = kept
+    return answer if answer.get("stamp") == stamp and then == req else None
+
+
+# The state branch's paths whose blobs a refresh reads at a moved tip in one cat-file: its plan, proposals and moves,
+# its signals and its run record's days the rail reads (BATCH_DAYS); a path past them is read when asked.
+def wanted(path, since):
+    return ("/" not in path and path.endswith(".rec")) or path.startswith("signals/") or (
+        path.startswith("runs/") and path.endswith(".rec") and pathlib.PurePath(path).stem >= since)
+
+
+class Kept:
+    """What the host's follower keeps between its refreshes, in its own process and never written (plan.12's reading
+    of 2026-10-28, state.4): each kit's answer, with the request it answered and the stamp it was read at, by host;
+    each branch tip's files by blob, the blobs' text, and the blobs whose recfix check passed. It is keyed by the
+    stamps and commits it was read at, so nothing is served once they move (read.1); what a refresh did not use is
+    dropped at its end (settle)."""
+
+    def __init__(self):
+        self.kits, self.used, self.stamps = {}, {}, {}
+        self.listings, self.blobs, self.checked, self.tips = {}, {}, set(), set()
+
+    def served(self, host, main, req):
+        return kit_served(self.kits.get(host, {}).get(main), self.stamps.get((host, main)), req)
+
+    def use(self, host, main, req, answer):
+        """A kit this refresh read, served or gathered, answer None when its host did not answer: what the next check
+        stamps."""
+        self.used.setdefault(host, {})[main] = (req, answer)
+
+    def listing(self, repo, tip):
+        """Each file at the tip by its blob, {path: blob}: one ls-tree at a tip not yet read, kept while a refresh reads
+        it; the blobs of the paths a refresh reads (wanted) not yet held are read then, in one cat-file."""
+        key = (repo, tip)
+        self.tips.add(key)
+        if key not in self.listings:
+            files = {}
+            for line in git(repo, "ls-tree", "-r", tip).splitlines():
+                meta, _, path = line.partition("\t")
+                _, kind, blob = meta.split()
+                if kind == "blob":
+                    files[path] = blob
+            self.listings[key] = files
+            since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=BATCH_DAYS + 1)).isoformat()
+            new = sorted({b for p, b in files.items() if wanted(p, since) and b not in self.blobs})
+            self.blobs.update(zip(new, cat_file(repo, new)))
+        return self.listings[key]
+
+    def text(self, repo, blob):
+        if blob not in self.blobs:
+            self.blobs[blob] = cat_file(repo, [blob])[0]
+        return self.blobs[blob]
+
+    def settle(self):
+        """A refresh's end: the kits it read are what it keeps, and the tips it did not read go with their blobs."""
+        self.kits, self.used = self.used, {}
+        self.listings = {k: v for k, v in self.listings.items() if k in self.tips}
+        self.tips = set()
+        live = {b for files in self.listings.values() for b in files.values()}
+        self.blobs = {b: t for b, t in self.blobs.items() if b in live}
+        self.checked &= live
+
+
+def kept_listing(repo, tip):
+    """The follower's listing of a tip (Kept.listing) when it is reading and tip names a commit, else None."""
+    k = READ.follower
+    return k.listing(repo, tip) if k is not None and tip and crew.SHA.fullmatch(tip) else None
+
+
+def cat_file(repo, names):
+    """The text of each object named, a blob or <tip>:<path>, in crew's cache of the repo, in one git cat-file --batch:
+    a list in order, None for one that is not there or is no blob."""
+    if not names:
+        return []
+    r = subprocess.run(["git", "-C", str(cache(repo)), "cat-file", "--batch"], input="".join(f"{n}\n" for n in names).encode(),
+                       capture_output=True, env=gitenv())
+    r.returncode == 0 or fail(f"git cat-file in crew's cache of {repo} failed: {r.stderr.decode(errors='replace').strip()}")
+    out, data, i = [], r.stdout, 0
+    for _ in names:
+        nl = data.index(b"\n", i)
+        head, i = data[i:nl], nl + 1
+        if head.endswith((b" missing", b" ambiguous")):
+            out.append(None)
+            continue
+        _, kind, size = head.rsplit(b" ", 2)
+        out.append(data[i:i + int(size)].decode("utf-8", "replace") if kind == b"blob" else None)
+        i += int(size) + 1
+    return out
+
+
+def paths_at(repo, tip, prefix):
+    """The paths under prefix at a tip, in order: from the follower's listing when it reads, else one ls-tree."""
+    files = kept_listing(repo, tip)
+    if files is not None:
+        return sorted(p for p in files if p.startswith(prefix))
+    return git(repo, "ls-tree", "-r", "--name-only", tip, "--", prefix).splitlines()
+
+
 def fetch(repo, ref, fresh=False):
     """The tip of a branch of the repo: the one this command already holds, else fetched now over https and kept; or
-    None when the repo has no such branch, which is not kept, so a later step looks again. fresh fetches even when a
-    tip is held: after a refused push, and after any push that is not a write's own."""
+    None when the repo has no such branch, which is not kept, so a later step looks again, unless the follower handed
+    in its cache's word that there is none (""). fresh fetches even when a tip is held: after a refused push, and
+    after any push that is not a write's own."""
     held = None if fresh else READ.tip(repo, ref)
-    if held:
-        return held
+    if held is not None:
+        return held or None
     for n in range(LOCK_TRIES):
         r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
         if not (r.returncode and "cannot lock ref" in r.stderr):
@@ -558,6 +666,10 @@ def tip_here(repo, ref):
 
 
 def show(repo, tip, path):
+    """A file's text at a tip, None when it is not there: the follower's kept blob when it reads and the blob is held."""
+    files = kept_listing(repo, tip)
+    if files is not None:
+        return READ.follower.text(repo, files[path]) if path in files else None
     r = git(repo, "show", f"{tip}:{path}", check=False)
     return r.stdout if r.returncode == 0 else None
 
@@ -623,13 +735,18 @@ def state_of(fleet, label):
 
 
 def read(repo, ref, tip):
-    """plan.rec at a commit of a branch, refused when it fails its schema, naming the commit."""
+    """plan.rec at a commit of a branch, refused when it fails its schema, naming the commit; a blob the follower kept
+    as passing is not checked again."""
     text = show(repo, tip, "plan.rec")
     text is not None or fail(f"{ref} of {repo} at {tip[:7]} has no plan.rec")
-    try:
-        recfix(text, "plan.rec")
-    except Refusal as e:
-        fail(f"{ref} of {repo} at {tip[:7]}: {e}")
+    blob = (kept_listing(repo, tip) or {}).get("plan.rec")
+    if blob is None or blob not in READ.follower.checked:
+        try:
+            recfix(text, "plan.rec")
+        except Refusal as e:
+            fail(f"{ref} of {repo} at {tip[:7]}: {e}")
+        if blob is not None:
+            READ.follower.checked.add(blob)
     return Plan(text)
 
 
@@ -921,7 +1038,9 @@ def survey(fleet, held, sites=False, board=False, fetch=False):
     host. With fetch, each kit's GitHub is fetched on its host before it is read, for a read a decision of the moment
     rests on (plan.18, plan.19), and a fetch that fails reads that kit unread with git's words. A kit the command has
     already read is not asked again, but by a survey that fetches, which must read after its own fetch; what a host
-    answers is kept for the command's later steps; a sites survey is neither served nor kept."""
+    answers is kept for the command's later steps; a sites survey is neither served nor kept, but in the host's
+    follower's board survey, which serves each kit whose stamp and request have not moved from what it kept
+    (Kept.served) and asks each host only for the rest, its answers stamped."""
     sites = sites or board
     hosts = {}
     for team, bolt, *repo in held:
@@ -940,13 +1059,20 @@ def survey(fleet, held, sites=False, board=False, fetch=False):
                 **({"slots": {o: f"~/.local/state/{o}-team/slots" for o in mates}} if board else {})})
             if bolt and bolt not in k["bolts"]:
                 k["bolts"].append(bolt)
-    out = {}
+    out, kept = {}, READ.follower if board and not fetch else None  # the follower's read is the board's survey
     for host, kits in sorted(hosts.items()):
         have = {} if sites or fetch else {m: k for m, k in READ.kits(host).items() if m in kits}
+        if kept is not None:
+            have.update({m: a for m, k in kits.items() if (a := kept.served(host, m, k)) is not None})
+            for m in have:
+                kept.use(host, m, kits[m], have[m])
         ask = [k for m, k in kits.items() if m not in have]
         if ask:
-            req = {"kits": ask, "sites": sites, **({"board": True} if board else {}), **({"fetch": True} if fetch else {})}
+            req = {"kits": ask, "sites": sites, **({"board": True} if board else {}), **({"fetch": True} if fetch else {}),
+                   **({"stamped": True} if kept is not None else {})}
             got, error = gathered(fleet, host, req)
+            for k in ask if kept is not None else ():
+                kept.use(host, k["main"], k, None if error else got.get(k["main"]))
             if error:
                 out[host] = {"ok": False, "error": error}
                 continue
