@@ -201,7 +201,9 @@ def board_data(fleet, labels, read, now):
     and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
     every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind,
     and each of them its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
-    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22).
+    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22). Each ledger has its
+    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, user, hold, nobody}, now: {holder, what,
+    since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
     the design agent's band shows (records_proposed)."""
@@ -300,7 +302,8 @@ def board_data(fleet, labels, read, now):
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
-                          "landing": landing, "submissions_error": unread}
+                          "landing": landing, "submissions_error": unread,
+                          "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
@@ -473,7 +476,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Construction")
         for b in p["construction"]:
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
-                        state_said(b["state"]), landing_said(b), queue_said(b, True)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                        state_said(b["state"]), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
             for u in b["units"]:
                 line(fields(u["unit"], stage_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
@@ -553,13 +556,19 @@ def queue_said(b, why=False):
     return (f"submissions can't be read: {b['submissions_error']}" if why else ("submissions can't be read", "dim")) if b.get("submissions_error") else ""
 
 
+def time_of(b):
+    """A held bolt's age and who held its time, as its head line ends with them (plan.time_said, plan.20); nothing for
+    a ledger made without it."""
+    return (b.get("time") or {}).get("said") or ""
+
+
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
     dim; then its pips, its name, its state unless active (state_said), its landing standing in sluice (landing_said),
-    that its submissions can't be read when they can't (queue_said), and how many of its units have merged; its
-    landing's marker in the gutter, or attention once every unit has landed."""
+    that its submissions can't be read when they can't (queue_said), how many of its units have merged, and its age and
+    who held its time (time_of); its landing's marker in the gutter, or attention once every unit has landed."""
     return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], state_said(b["state"]),
-                      landing_said(b), queue_said(b), merged(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                      landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
 
 
 def ledger_rows(b):

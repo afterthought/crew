@@ -11717,6 +11717,59 @@ def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, history, 
             "holds": holds + ([dict(held, until=None)] if held else [])}
 
 
+def span(m):
+    """Minutes in their two largest units, as age says a time ago: <1m, 14m, 3h 05m, 2d 04h."""
+    if m < 1:
+        return "<1m"
+    if m < 60:
+        return f"{m}m"
+    h, m = divmod(m, 60)
+    if h < 24:
+        return f"{h}h {m:02d}m"
+    d, h = divmod(h, 24)
+    return f"{d}d {h:02d}h"
+
+
+def time_said(tm, now):
+    """A held bolt's time as its head line on the board and its land line on the rail end with it (the design's
+    Decision 5): its age, each holder's minutes in HOLDERS' order but a holder that held none, and who holds it now and
+    since when, the card's key for the user, the submission for the kit, the stage for the team, what the hold is for,
+    or that it is stalled once nobody has held it STALLED minutes, `3h 05m: team 2h 10m, kit 12m, user 40m; user since
+    14:02, batch/12`; or why it can't be told, after its age once that is known (time_at)."""
+    if "unknown" in tm:
+        return (f"{span(tm['age'])}; " if "age" in tm else "") + tm["unknown"]
+    shares = ", ".join(f"{h} {span(tm['shares'][h])}" for h in HOLDERS if tm["shares"][h])
+    n = tm["now"]
+    since = utc(n["since"]) if isinstance(n["since"], str) else n["since"]
+    at = f"{since.astimezone():%H:%M}" if since.astimezone().date() == now.astimezone().date() else f"{since.astimezone():%Y-%m-%d %H:%M}"
+    who = (f"stalled since {at}" if tm["stalled"] else f"held since {at}: {n['what']}" if n["holder"] == "hold" else
+           f"nobody since {at}" if n["holder"] == "nobody" else f"{n['holder']} since {at}, {n['what'] or 'a question'}")
+    return span(tm["age"]) + (f": {shares}" if shares else "") + f"; {who}"
+
+
+def held_time(fleet, entries, unread, plan_, b, k, now):
+    """A held bolt's time to now, as its rows carry it (plan.20): bolt_time's split of bolt_facts' facts, read from the
+    partition's run record (entries, oldest first, and unread, its branches that could not be read) and its kit as the
+    gather or the host's follower last read it (k, Stages.kit's), its submissions standing and sluice's record of them,
+    a kit not read or either not read saying why; since as ISO 8601, so the board's JSON carries it, and the words
+    its lines end with (time_said). The board and the rail each call it at the time they draw, from the same read, so
+    the two never differ for one bolt and a redraw from a kept read ages it reading nothing."""
+    t = fleet["teams"].get(b.get("Team")) or {}
+
+    def pair(key, what):
+        if not (k or {}).get("ok"):
+            return None, "its kit was not read"
+        if k.get(f"{key}_error"):
+            return None, k[f"{key}_error"]
+        return (k[key], None) if isinstance(k.get(key), list) else (None, f"{what} was not read")
+    facts = bolt_facts(entries, plan_, b.name(), b.get("Team"), t.get("machine"), b.get("Repo") or ((k or {}).get("kit") or {}).get("name"),
+                       pair("submissions", "sluice's queue"), pair("history", "sluice's record of its submissions"), unread)
+    tm = time_at(facts, now)
+    if "now" in tm:
+        tm = dict(tm, now=dict(tm["now"], since=tm["now"]["since"].astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+    return dict(tm, said=time_said(tm, now))
+
+
 def time_at(facts, end):
     """A held bolt's time to end, from its facts (bolt_facts): bolt_time's split, or, when the facts can't be told,
     {unknown: why}, with its age in minutes once its give was read."""
