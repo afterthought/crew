@@ -244,6 +244,23 @@ class TestEvents:
         assert [e["Id"] for e in record.fresh({E[0]["Id"], E[2]["Id"]}, [E[3], E[2], E[1], E[0]])] == [E[1]["Id"], E[3]["Id"]]
         assert record.fresh({e["Id"] for e in E}, E) == []
 
+    @pytest.mark.parametrize("label, follower, last, now, fetches", [
+        ("wldn", "job", None, 0.0, False), ("wldn", "tab", 0.0, 600.0, False), ("wldn", "unknown", 0.0, 600.0, False),
+        ("wldn", "none", 0.0, 59.0, False), ("wldn", "none", 0.0, 60.0, True), ("wldn", "none", None, 1.0, True),
+        ("madswan", "job", 0.0, 60.0, True), ("madswan", "job", 0.0, 30.0, False), ("madswan", "job", None, 30.0, True)])
+    def test_a_follow_fetches_once_a_minute_only_where_the_hosts_follower_does_not_and_at_once_when_told(self, label, follower, last, now, fetches):
+        """The run-record spec, Entries can be followed as they are written: the host's follower follows wldn here; last
+        None is a follow told to tick (SIGUSR1)."""
+        assert record.follow_fetches(label, {"wldn", "swancloud"}, follower, last, now) is fetches
+
+    def test_a_follow_reads_again_only_the_days_files_whose_blob_changed_since_it_began(self):
+        was = {"runs/mac-studio/2026-10-27.rec": "a", "runs/mac-studio/2026-10-28.rec": "b", "runs/box/2026-10-28.rec": "c"}
+        now = dict(was, **{"runs/mac-studio/2026-10-28.rec": "b2", "runs/box/2026-10-27.rec": "d", "runs/box/2026-10-29.rec": "e",
+                           "runs/box/2026-10-28.rec": "c", "runs/README": "f"})
+        assert record.changed_files(was, now, "2026-10-28") == ["runs/box/2026-10-29.rec", "runs/mac-studio/2026-10-28.rec"]
+        assert record.changed_files(now, now, "2026-10-28") == []
+        assert record.changed_files({}, now, "2026-10-28") == ["runs/box/2026-10-28.rec", "runs/box/2026-10-29.rec", "runs/mac-studio/2026-10-28.rec"]
+
     def test_as_json_the_entries_and_what_did_not_answer(self):
         got = json.loads(record.events_text(E, {}, "0000", None, as_json=True))
         assert [e["Act"] for e in got["entries"]][:2] == ["capture", "capture"] and got["unreachable"] == {}

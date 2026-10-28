@@ -565,13 +565,7 @@ class Kept:
         key = (repo, tip)
         self.tips.add(key)
         if key not in self.listings:
-            files = {}
-            for line in git(repo, "ls-tree", "-r", tip).splitlines():
-                meta, _, path = line.partition("\t")
-                _, kind, blob = meta.split()
-                if kind == "blob":
-                    files[path] = blob
-            self.listings[key] = files
+            self.listings[key] = files = blobs_at(repo, tip)
             since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=BATCH_DAYS + 1)).isoformat()
             new = sorted({b for p, b in files.items() if wanted(p, since) and b not in self.blobs})
             self.blobs.update(zip(new, cat_file(repo, new)))
@@ -590,6 +584,17 @@ class Kept:
         live = {b for files in self.listings.values() for b in files.values()}
         self.blobs = {b: t for b, t in self.blobs.items() if b in live}
         self.checked &= live
+
+
+def blobs_at(repo, tip, prefix=None):
+    """Each file at a tip, or under prefix, by its blob, {path: blob}, in one ls-tree."""
+    files = {}
+    for line in git(repo, "ls-tree", "-r", tip, *(["--", prefix] if prefix else [])).splitlines():
+        meta, _, path = line.partition("\t")
+        _, kind, blob = meta.split()
+        if kind == "blob":
+            files[path] = blob
+    return files
 
 
 def kept_listing(repo, tip):
