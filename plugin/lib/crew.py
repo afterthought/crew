@@ -2535,24 +2535,16 @@ class Team(Agents):
         return next((l for l in self.lines("lent") if l[0] == slot and len(l) > 2), None)
 
     def panes(self):
-        """The team's workspace, "<team>": a conductor tab holding the conductor and ops, and on a Mac a git tab with
-        gitgui in the kit and in the blueprints repo; each opened when its pane is not there, a dead one closed first
-        (mend), and the conductor's beside ops when only ops' is there (opened)."""
+        """The team's workspace, "<team>": its conductor tab holding the conductor and ops, and no git tab, on a Mac as
+        on a box; each opened when its pane is not there, a dead one closed first (mend), and the conductor's beside ops
+        when only ops' is there (opened). A git tab an earlier crew opened there is left as it stands, the user's to
+        close."""
         t, live = self.t, self.herdr.live
-        self.mend(("conductor", "ops", "git-kit", "git-blueprints"))
+        self.mend(("conductor", "ops"))
         if not live(self.pane("conductor")):
             self.opened(self.name, "conductor", t["kit"]["main"], "conductor", beside=self.pane("ops"))
         if not live(self.pane("ops")):
             self.put("panes", "ops", self.split(self.pane("conductor"), "right", t["kit"]["main"]))
-        # gitgui draws with terminal graphics, which are too slow to use over a remote host's connection.
-        if t.get("kind") != "darwin":
-            return
-        if not live(self.pane("git-kit")):
-            self.tab(self.name, "git", t["kit"]["main"], "git-kit")
-            self.herdr.run("pane", "run", self.pane("git-kit"), "gitgui")
-        if not live(self.pane("git-blueprints")):
-            self.put("panes", "git-blueprints", self.split(self.pane("git-kit"), "right", t["blueprints"]["main"]))
-            self.herdr.run("pane", "run", self.pane("git-blueprints"), "gitgui")
 
     def slot_pane(self, slot, path):
         """The slot's pane, opened in "<team> units" when it is not there (slot_pane_at), a dead one closed first (mend);

@@ -6,7 +6,7 @@
 # so; crew's Stop hook does the same at the end of a due agent's turn; and --now ends every agent at once.
 # What makes an agent due, what keeps a host from being quiet, when a due agent may be restarted and what the bands
 # say are logic cases (tests/py/test_hold.py).
-# Reads: plugin/hooks/ plugin/lib/hold.py plugin/lib/ops.py tests/teams.sh
+# Reads: plugin/hooks/ plugin/lib/board.py plugin/lib/hold.py plugin/lib/ops.py tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
 
