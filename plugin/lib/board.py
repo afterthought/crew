@@ -946,14 +946,13 @@ def moved(kept, now):
 
 
 def moved_at():
-    """What says crew's code or the teams file has moved since a round: the checkout's commit and the teams file's
-    bytes, each None when it can't be read, as the rail tab's loop read them."""
-    r = subprocess.run(["git", "-C", str(crew.HOME), "rev-parse", "HEAD"], capture_output=True, text=True)
+    """What says crew's code or the teams file has moved since a refresh: the checkout's commit, read from its files
+    (crew.head_here), and the teams file's bytes, each None when it can't be read."""
     try:
         teams = crew.TEAMS.read_bytes()
     except OSError:
         teams = None
-    return (r.stdout.strip() if r.returncode == 0 else None, teams)
+    return (crew.head_here(), teams)
 
 
 def follow_round(label, seen):

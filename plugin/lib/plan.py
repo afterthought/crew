@@ -541,6 +541,22 @@ def fetch(repo, ref, fresh=False):
     return tip
 
 
+def tip_here(repo, ref):
+    """A branch's tip as crew's cache of the repo holds it, refs/crew/<ref>, read from the cache's files with no process
+    (crew.files_ref), the follower's look and check (plan.12): its commit, "" when the cache holds none, a branch not
+    fetched, not started or no cache yet; through git rev-parse only when the files can't say, and None when git
+    can't read it either (read.1)."""
+    c = CACHE / f"{repo}.git"
+    if not (c / "HEAD").exists():
+        return ""
+    got = crew.files_ref(c, f"refs/crew/{ref}")
+    if got is not None:
+        return got
+    r = subprocess.run(["git", "-C", str(c), "rev-parse", "--verify", "-q", f"refs/crew/{ref}^{{commit}}"], capture_output=True,
+                       text=True, env=gitenv())
+    return r.stdout.strip() if r.returncode == 0 else "" if r.returncode == 1 and not r.stderr.strip() else None
+
+
 def show(repo, tip, path):
     r = git(repo, "show", f"{tip}:{path}", check=False)
     return r.stdout if r.returncode == 0 else None
