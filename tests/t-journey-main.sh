@@ -4,12 +4,14 @@
 # every host; a tell records its length and never its text; crew send reaches the partition's operator, marked with
 # whom it was for, and records its length; a word from the board, piped to crew tell --board as the board's listener
 # pipes it, reaches the agent its item's kind goes to marked as the user's from the board and naming the item, and
-# records its length, and one for an agent its kind does not go to types nothing; the console gets its tabs and starts no agent; a tell reaches an agent
+# records its length, and one for an agent its kind does not go to types nothing; the console opens its shell tab alone
+# while the host's job follows, a tab named beside it and the rail tab of itself while no follower runs, keeps what is
+# open, and starts no agent; a tell reaches an agent
 # whose pane herdr names no session for, refused while the session crew recorded in its pane has a question open;
 # crew revive brings back what a restart left empty, leaving down what was taken down; crew revive and crew main up
 # open again a pane herdr brought back dead; and a role its partition names a session for comes up there (record 0035).
 # What each agent is greeted with, where it runs and whether a pane is dead are logic cases (tests/py/test_teams.py).
-# Reads: plugin/hooks/ tests/teams.sh
+# Reads: plugin/hooks/ plugin/lib/board.py tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
 
@@ -91,20 +93,50 @@ op=$(as mac-studio herdr --session wldn pane list | jq -r '.result.panes[-1].pan
 as mac-studio herdr --session wldn stub agent "$op" wldn-operator-mac-studio >/dev/null
 mine=$(as mac-studio herdr --session wldn tab create --workspace "$(as mac-studio herdr --session wldn workspace list | jq -r '.result.workspaces[-1].workspace_id')" --cwd /tmp --label mine --no-focus | jq -r .result.root_pane.pane_id)
 as mac-studio bash -c "mkdir -p ~/.local/state/crew/wldn-operator && printf 'operator $op\n' > ~/.local/state/crew/wldn-operator/panes"
+# mac-studio's follower runs as the host's job, swancloud's: a process holding its follower lock as the job until killed.
+lock=$(home_of mac-studio)/.cache/crew/board/follower.lock
+mkdir -p "$(dirname "$lock")"
+python3 -c 'import fcntl, os, sys, time
+f = open(sys.argv[1], "a+")
+fcntl.flock(f, fcntl.LOCK_EX)
+f.truncate(0)
+f.write(f"job {os.getpid()} 2026-10-28T10:00:00Z\n")
+f.flush()
+open(sys.argv[2], "w").close()
+while True:
+    time.sleep(60)' "$lock" "$T/job-follows" &
+job=$!
+trap 'kill "$job" 2>/dev/null' EXIT
+until_ok test -e "$T/job-follows" || fail "the job did not take mac-studio's follower lock"
+tabs() { echo "$(herdr_state mac-studio wldn '[.workspaces[].label] | join(",")') $(herdr_state mac-studio wldn '[.tabs[].label] | join(",")')"; }
 : > "$CREW_TEST_LOG"
 expect_ok crew console up wldn
 has "$out" "wldn-operator-mac-studio is ended and its operator tabs closed: the operator is wldn-operator, at wldn's main level"
 eq "$(herdr_state mac-studio wldn '[.agents[].name] | map(select(. == "wldn-operator-mac-studio")) | length') $(herdr_state mac-studio wldn "[.panes | keys[] | select(. == \"$mine\")] | length")" "0 1"
 as mac-studio herdr --session wldn pane close "$mine" >/dev/null
-eq "$(herdr_state mac-studio wldn '[.workspaces[].label] | join(",")') $(herdr_state mac-studio wldn '[.tabs[].label] | join(",")')" "console flow,rail,board"
-grep -q "^mac-studio wldn pane run .*/crew _rail wldn'" "$CREW_TEST_LOG" || fail "the rail tab does not run wldn's rail"
+eq "$(tabs)" "console shell"
+grep -q "^mac-studio wldn pane run [^ ]* 'export PATH=.*/plugin/bin:\$PATH'" "$CREW_TEST_LOG" || fail "the shell tab was not given crew on its path"
+grep -q "_rail wldn" "$CREW_TEST_LOG" && fail "the console ran a rail tab while the host's job follows"
 grep -q "crew-role\|agent prompt [^ ]* '\[crew\]" "$CREW_TEST_LOG" && fail "the console started or greeted an agent"
+: > "$CREW_TEST_LOG"
+expect_ok crew console up wldn rail
+eq "$(tabs)" "console shell,rail"
+grep -q "^mac-studio wldn pane run .*/crew _rail wldn'" "$CREW_TEST_LOG" || fail "the rail tab does not run wldn's rail"
+expect_fail "crew console up opens the tabs flow, rail and board; there is no tab page" crew console up wldn page
 : > "$CREW_TEST_LOG"
 expect_ok crew console up wldn
 grep -q "workspace create\|tab create\|pane run\|agent prompt" "$CREW_TEST_LOG" && fail "a second console up made, ran or greeted something"
+eq "$(tabs)" "console shell,rail"
 expect_ok crew operator up wldn
 has "$out" "crew operator up is crew console up now; the operator is <label>-operator, at the main level"
-ok "main status reaches every host, a tell and a send record their length and never their text, a send reaching the partition's operator, a word from the board its item's agent, and the console comes up with its flow, rail and board tabs and no agent, crew operator up opening it too"
+# With no follower running, the rail tab opens of itself, since its loop is then the host's follower.
+kill "$job"; wait "$job" 2>/dev/null || true; trap - EXIT
+expect_ok crew console down wldn
+: > "$CREW_TEST_LOG"
+expect_ok crew console up wldn
+eq "$(tabs)" "console shell,rail"
+grep -q "^mac-studio wldn pane run .*/crew _rail wldn'" "$CREW_TEST_LOG" || fail "the rail tab opened while no one follows does not run wldn's rail"
+ok "main status reaches every host, a tell and a send record their length and never their text, a send reaching the partition's operator, a word from the board its item's agent; the console comes up with no agent, its shell tab alone while the host's job follows, the rail tab beside it when named and kept by the next up, a word that is no tab refused, and the rail tab of itself while no one follows, crew operator up opening it too"
 
 # herdr names no session for the planner's pane, as after its own restore: crew reads the session it recorded there.
 as $box herdr --session wldn-3 stub nosession wldn-planner on
@@ -129,6 +161,8 @@ ok "a tell reaches an agent whose pane herdr names no session for, is refused wh
 # A restart: herdr brings each tab back as its shell alone. console up, which the fleet runs every five minutes, runs
 # each tab's command there again, and leaves a pane running something else.
 pane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of mac-studio)/.local/state/crew/wldn-console/panes"; }
+expect_ok crew console up wldn flow rail board
+eq "$(herdr_state mac-studio wldn '[.tabs[].label] | sort | join(",")')" "board,flow,rail,shell"
 for t in flow rail board; do as mac-studio herdr --session wldn stub restore "$(pane $t)"; done
 as mac-studio herdr --session wldn pane run "$(pane board)" "less notes" >/dev/null
 : > "$CREW_TEST_LOG"
