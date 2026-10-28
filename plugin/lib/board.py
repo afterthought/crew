@@ -197,7 +197,9 @@ def board_data(fleet, labels, read, now):
     and each object of its lanes says the teams it belongs to, which is what the page narrows by: a held bolt and a
     landing, its team; a signal, the team whose agent captured it; a proposal, the teams holding the bolts it names
     and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
-    every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind.
+    every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind,
+    and each of them its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
+    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22).
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
     the design agent's band shows (records_proposed)."""
@@ -289,16 +291,21 @@ def board_data(fleet, labels, read, now):
                 def slot(kind, name):
                     return next((s["slot"] for s in held if s.get("kind") == kind and s.get("name") == name), None)
                 state = st.bolt_state(b) if t else "unknown"
+                fixes = [f for f in k.get("fixes", []) if f["bolt"] == b.name()]
+                unread = k.get("submissions_error")
+                subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
+                                                     [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
-                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": []}
+                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
+                          "landing": landing, "submissions_error": unread}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
-                                            "slot": slot(plan.kind_of(u), u.name()),
+                                            "slot": slot(plan.kind_of(u), u.name()), "submission": subs.get(u.name()),
                                             "worktree": s["worktree"], "url": url(s["worktree"])})
-                ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "worktree": f["path"], "url": url(f["path"])}
-                                   for f in k.get("fixes", []) if f["bolt"] == b.name()]
+                ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "submission": subs.get(f["fix"]),
+                                    "worktree": f["path"], "url": url(f["path"])} for f in fixes]
                 construction.append(ledger)
                 if state == "landed":
                     attention.append({"what": "landed", "name": b.name(), "why": "every unit has landed on main, and the bolt is still in the plan"})
@@ -464,11 +471,11 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Construction")
         for b in p["construction"]:
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
-                        state_said(b["state"])), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                        state_said(b["state"]), landing_said(b), queue_said(b, True)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
             for u in b["units"]:
-                line(fields(u["unit"], stage_of(u), u["slot"] or "", u["url"] or ""), " ", 2)
+                line(fields(u["unit"], stage_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
-                line(fields(f["fix"], "fix merged" if f["merged"] else "fix", f["slot"] or "", f["url"] or ""), " ", 2)
+                line(fields(f["fix"], "fix merged" if f["merged"] else "fix", merge_said(f), f["slot"] or "", f["url"] or ""), " ", 2)
             if b["url"]:
                 line(fields("server", b["url"]), " ", 2)
         if not p["construction"]:
@@ -526,19 +533,39 @@ def state_said(state):
     return "" if state == "active" else "waits to land" if state == "waits" else state
 
 
+def merge_said(x):
+    """A unit's, chore's or fix's merge standing in sluice's queue, as its line says it: `#<n> <state>` (plan.standing_said),
+    or nothing while none stands (teams.22)."""
+    return plan.standing_said(x["submission"]) if x.get("submission") else ""
+
+
+def landing_said(b):
+    """A held bolt's landing standing in sluice's queue on its kit's main, as its head line says it: `landing #<n>
+    <state>`, or nothing while none stands (teams.22)."""
+    return f"landing {plan.standing_said(b['landing'])}" if b.get("landing") else ""
+
+
+def queue_said(b, why=False):
+    """That a held bolt's submissions can't be read, said once on its head line, with why when asked (read.1), so no
+    line of it shows a number or says it has none; nothing when they were read."""
+    return (f"submissions can't be read: {b['submissions_error']}" if why else ("submissions can't be read", "dim")) if b.get("submissions_error") else ""
+
+
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
-    dim; then its pips, its name, its state unless active (state_said) and how many of its units have merged; its
+    dim; then its pips, its name, its state unless active (state_said), its landing standing in sluice (landing_said),
+    that its submissions can't be read when they can't (queue_said), and how many of its units have merged; its
     landing's marker in the gutter, or attention once every unit has landed."""
     return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], state_said(b["state"]),
-                      merged(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                      landing_said(b), queue_said(b), merged(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
 
 
 def ledger_rows(b):
-    """A held bolt as its conductor reads it: the bolt, then a unit to a line, its pip, stage and slot, then each fix."""
+    """A held bolt as its conductor reads it: the bolt, then a unit to a line, its pip, stage, its merge standing in
+    sluice (merge_said) and slot, then each fix with its merge."""
     return ([bolt_row(b)]
-            + [row(fields(PIP.get(u["stage"], "?"), u["unit"], stage_of(u), u["slot"] or ""), " ", 2) for u in b["units"]]
-            + [row(fields(f["fix"], "fix merged" if f["merged"] else "fix", f["slot"] or ""), " ", 2) for f in b["fixes"]])
+            + [row(fields(PIP.get(u["stage"], "?"), u["unit"], stage_of(u), merge_said(u), u["slot"] or ""), " ", 2) for u in b["units"]]
+            + [row(fields(f["fix"], "fix merged" if f["merged"] else "fix", merge_said(f), f["slot"] or ""), " ", 2) for f in b["fixes"]])
 
 
 def team_rows(p):
@@ -661,7 +688,9 @@ def operator_view(p):
 
 def ops_view(p):
     """Main-level ops's: the partition's operations in brief; each kit's landing row, its landings card ops's, naming
-    the bolts that wait on its main in the plan's order, with its card; then, environment by environment, each deploy
+    the bolts that wait on its main in the plan's order, each with its landing standing in sluice when one stands
+    (landing_said), with its card, and each held bolt whose landing stands on no such row; then, environment by
+    environment, each deploy
     waiting on the user's word with its card, each approved and not yet deployed, each running, and each operation step
     waiting, handed or failed, with the deploy it comes after, or whose gate it is, and its doer; and what keeps a host
     or the plan from being read."""
@@ -677,8 +706,13 @@ def ops_view(p):
         for m in b["markers"]:
             if m["group"] == "land":
                 lands.setdefault(m["key"], (m, []))[1].append(b["bolt"])
+    landing = {b["bolt"]: f"{b['bolt']} {landing_said(b)}" for b in p.get("construction", []) if b.get("landing")}
     for key, (m, bolts) in lands.items():
-        out.append(row(fields(key, ", ".join(bolts), "wait to land" if len(bolts) > 1 else "waits to land"), gutter([m]), 0, [m]))
+        out.append(row(fields(key, ", ".join(landing.get(x, x) for x in bolts), "wait to land" if len(bolts) > 1 else "waits to land"),
+                       gutter([m]), 0, [m]))
+    rowed = {x for _, bolts in lands.values() for x in bolts}
+    out += [row(fields(b["repo"] or "", b["bolt"], landing_said(b)), " ") for b in p.get("construction", [])
+            if b.get("landing") and b["bolt"] not in rowed]
     for e in p.get("environments", []):
         for d in (d for env, d in pending if env == e["env"]):
             out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))

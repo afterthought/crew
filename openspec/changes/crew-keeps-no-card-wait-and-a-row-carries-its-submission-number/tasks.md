@@ -11,7 +11,7 @@
 
 - [x] 2.1 The gather reads `sluice overview --json` once per kit main on a host holding a bolt of it, every field guarded, a failure said (design Decision 6; Task notes 2.1); passes a case on sluice 0.51.3's overview fixture in `tests/py/`, verify `tests/suite logic` ends with "0 failed".
 - [x] 2.2 `crew bolts`, as text and JSON, shows each standing merge's number and state on its unit's, chore's or fix's line and the landing's on the bolt's head line, and says once when the queue can't be read (design Decision 6; Task notes 2.2); passes `tests/py/test_bolt_submissions.py`.
-- [ ] 2.3 The board's ledger, `board.agent_views` and the mod draw the same numbers in the conductors' and main-level ops's bands (design Decision 6, `code.8`; Task notes 2.3); passes `tests/py/test_board.py` and verify `tests/suite mod` ends with "0 failed".
+- [x] 2.3 The board's ledger, `board.agent_views` and the mod draw the same numbers in the conductors' and main-level ops's bands (design Decision 6, `code.8`; Task notes 2.3); passes `tests/py/test_board.py` and verify `tests/suite mod` ends with "0 failed".
 - [ ] 2.4 `crew bolt submit` waits again on a landing standing at the bolt's head and submits as before past one standing at another head, saying which (design Decision 7; Task notes 2.4); passes `tests/py/test_landing.py`, and verify `tests/suite t-journey-land` ends with "0 failed".
 
 ## 3. Briefs and documentation

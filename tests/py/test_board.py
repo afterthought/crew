@@ -299,9 +299,10 @@ class TestMore:
         assert sorted(p) == ["attention", "bolt_plan", "cards", "construction", "environments", "hosts", "inception", "label", "operation", "plan",
                              "records", "teams"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
-        assert sorted(te) == ["bolt", "fixes", "goal", "host", "markers", "repo", "state", "team", "teams", "units", "url"]
-        assert sorted(te["units"][0]) == ["kind", "slot", "stage", "tasks", "unit", "url", "worktree"]
-        assert sorted(te["fixes"][0]) == ["fix", "merged", "slot", "url", "worktree"]
+        assert sorted(te) == ["bolt", "fixes", "goal", "host", "landing", "markers", "repo", "state", "submissions_error", "team", "teams",
+                              "units", "url"]
+        assert sorted(te["units"][0]) == ["kind", "slot", "stage", "submission", "tasks", "unit", "url", "worktree"]
+        assert sorted(te["fixes"][0]) == ["fix", "merged", "slot", "submission", "url", "worktree"]
 
     def test_half_a_frame_or_one_with_no_time_reads_as_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr(board, "FRAMES", tmp_path)
@@ -508,13 +509,76 @@ class TestViews:
         assert "home + '/.cache/crew/board/' + label + '.agents.json'" in mod and board.agents_path("wldn").parts[-4:] == (".cache", "crew", "board", "wldn.agents.json")
         assert re.findall(r"style === '(\w+)'", mod) == ["bold"] and "dimColor: true" in mod
         assert v["cards"] == {} and json.loads(json.dumps(board.agent_views(data(cards=[QUESTION]))))["cards"]["swb-1-conductor"]
+        standing = board.agent_views(data(sv=queued(STANDING_SUBS)))["views"]  # a merge and a landing standing in sluice, drawn as plain segments
         lines = [v["stale"]] + [l for lines in v["views"].values() for l in lines] + [l for lines in board.agent_views(data(cards=[QUESTION]))["cards"].values() for l in lines]
+        lines += [l for lines in standing.values() for l in lines]
+        assert any("#41 under test" in t for l in standing["swb-1-conductor"] for t, _ in l)
         assert all(isinstance(l, list) and all(isinstance(t, str) and len(seg) == 2 and style in (None, "bold", "dim") for seg in l for t, style in [seg])
                    for l in lines)
 
 
 QUESTION = dict(label="wldn", card="req_q1", key=None, on="agent/swb-1-conductor", by="swb-1-conductor", host=BOX,
                 at=NOW - datetime.timedelta(minutes=14))
+
+
+# Merges and a landing standing in sluice's queue, as the gather reads them on swb-1's host (gather.submissions_of).
+STANDING_SUBS = [{"id": 41, "branch": "bolt/tenant-environments", "head": "a" * 40, "state": "testing", "worktree": "unit/a", "pull_head": None},
+                 {"id": 43, "branch": "bolt/tenant-environments", "head": "c" * 40, "state": "queued", "worktree": "fix/tenant-environments/edge",
+                  "pull_head": None},
+                 {"id": 355, "branch": "main", "head": "d" * 40, "state": "queued", "worktree": "pull/198", "pull_head": "bolt/tenant-environments"}]
+
+
+def queued(subs=(), error=None):
+    sv = kits()
+    sv[BOX]["kits"]["/kit/main"].update({"submissions": list(subs)} if error is None else {"submissions": None, "submissions_error": error})
+    return sv
+
+
+class TestSubmissions:
+    """crew-board "Construction shows each held bolt as a ledger": each standing merge's number and state on its line,
+    the landing's on the bolt's head line, in the lane and in the bands (teams.22, code.8)."""
+
+    def test_a_merge_standing_in_sluice_is_on_its_line_in_the_lane_and_the_conductors_band(self):
+        """crew-board "A merge standing in sluice"."""
+        sv = queued(STANDING_SUBS)
+        assert lane(board.board_text(data(sv=sv)), "Construction")[1:4] == [
+            "    a  code 1/2  #41 under test  unit-1  https://unit-a--switchboard-kit--box.dev", "    b  planned",
+            "    fix/tenant-environments/edge  fix  #43 queued  unit-4"]
+        assert view("swb-1-conductor", sv=sv)[1:4] == ["    ◑  a  code 1/2  #41 under test  unit-1", "    ◔  b  planned",
+                                                       "    fix/tenant-environments/edge  fix  #43 queued  unit-4"]
+
+    def test_a_landing_standing_in_sluice_is_on_the_bolts_head_line_in_the_lane_and_the_bands(self):
+        """crew-board "A landing standing in sluice": the lane, its conductor's band and main-level ops's."""
+        sv = queued(STANDING_SUBS)
+        assert lane(board.board_text(data(sv=sv)), "Construction")[0] == (
+            "  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing #355 queued")
+        assert view("swb-1-conductor", sv=sv)[0] == "  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged"
+        assert "  switchboard-kit  tenant-environments  landing #355 queued" in view("wldn-ops", sv=sv)
+
+    def test_a_landing_on_ops_landing_row_is_named_with_its_bolt(self, monkeypatch):
+        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", "swb-1")], units=[("rows-one", "switchboard-kit", "doctor-rows", [])]))
+        monkeypatch.setitem(globals(), "the_plan", lambda: two)
+        sv = queued([dict(STANDING_SUBS[2], pull_head="bolt/doctor-rows")])
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["doctor-rows"] = {"head": "f" * 40, "head_at": ago(30), "changes": ["rows-one"],
+                                                                "archived": ["rows-one"], "verdict": "passed (2 run)"}
+        card = dict(label="wldn", card="req_k1", key="land/switchboard-kit", by="wldn-ops", host="mac-studio", at=NOW)
+        assert ("✓ land/switchboard-kit  doctor-rows landing #355 queued  waits to land  card open, asked by wldn-ops"
+                in view("wldn-ops", sv=sv, cards=[card]))
+        assert not [l for l in view("wldn-ops", sv=sv, cards=[card]) if l.startswith("  switchboard-kit  doctor-rows")]
+
+    def test_a_queue_that_cant_be_read_is_said_on_the_head_line_and_no_line_shows_a_number(self):
+        """crew-board "A queue that can't be read"."""
+        sv = queued(error="sluice overview exited 2: not a repository sluice serves")
+        out = lane(board.board_text(data(sv=sv)), "Construction")
+        assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  submissions can't be read: sluice overview "
+                          "exited 2: not a repository sluice serves")
+        assert not [l for l in out if "#" in l]
+        mine = view("swb-1-conductor", sv=sv)
+        assert mine[0] == "  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged"
+        assert not [l for l in mine if "#" in l]
+
+    def test_nothing_standing_draws_nothing_new(self):
+        assert view("swb-1-conductor", sv=queued([])) == view("swb-1-conductor")
 
 
 class TestCards:
