@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-27
 decision-makers: the user, swancloud-design
 consulted: madswan-design (Flume's kinds), wldn-design, swancloud-planner
@@ -7,7 +7,7 @@ consulted: madswan-design (Flume's kinds), wldn-design, swancloud-planner
 
 # A card carries what the stage's run made, as Flume gave it
 
-Status: proposed to the user on 2026-10-27, as `briefs.15` has it, and revised on 2026-10-28 on their note of 2026-10-27 ("I need the design from Flume put in front of me before we lock in this ADR"): Flume's design is set out below in plain words, and the landing's preview now follows it, brought up on the user's ask and never held while a card sits; accepted only on their yes.
+Status: accepted by the user on 2026-10-28, on their card (req_5a4d2593b7e94cca825d, "Approved"), after the revision of 2026-10-28 on their note of 2026-10-27 ("I need the design from Flume put in front of me before we lock in this ADR"), which set Flume's design out below and had the landing's preview brought up on the user's ask and never held while a card sits.
 
 Deciders: the user, on this record's card, who asked for it in their words on 2026-10-26 (swancloud signal 2026-10-26-swancloud-planner-89511ba8/01: "I want to make sure we think about this design more in terms of how Flume ties in. Landing a bolt is one thing but we could possibly have another Flume kind where maybe it was running or created a spike. We want a card that has the link to that spike or maybe there's a preview server that's not done through sluice, although I'm not sure we would want that, really"), and on 2026-10-26 to wldn's planner ("when I'm asked if we should land a bolt, the agents would make sure a sluice preview is running so I could test everything in it"); written by the design agent with madswan-design, who holds Flume's kinds.
 Amends: `briefs.13` (what a card carries); record 0031's amendment of 2026-10-26 (the landing's preview) is this record's one case, as revised here: the row carries what brings the preview up, and the preview comes up on the user's ask; it is held no more.
@@ -47,6 +47,6 @@ A card crew raises about a stage's work carries what Flume gave at that stage's 
 
 ## Consequences
 
-- `briefs.13` gains the clause, marked proposed; record 0031's case is unheld.
+- `briefs.13` carries the clause, accepted 2026-10-28; record 0031's case is unheld and reads as this record has it.
 - A crew unit builds it: the card builders read `made.jsonl` from the stage's place and carry its lines; a landings row carries the bolt branch and head and an ask to bring the preview up where the policy names one, crew brings it up through sluice's preview on that ask and releases it on the user's done, at the landing or the drop, the row carrying sluice's addresses while it is up; a card changes in place as lines are added and as a preview comes up or goes; the tests prove each card's facts.
 - The unit proposed as 369 is remade from this record once accepted.
