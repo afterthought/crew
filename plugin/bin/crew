@@ -354,10 +354,9 @@
 #                                      path printed with each partition's commit, each host that did not answer, each
 #                                      published file it could not read, and that no use is published when none is
 #
-# A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
-# "git" tab (gitgui in the kit and the blueprints repo), and "<team> units", one pane per slot in flight, which
-# exists only while a unit or fix is. A team's panes and state live on its host, so a command about a team runs
-# there. Add --force to act on an agent that is working.
+# A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and no
+# git tab, and "<team> units", one pane per slot in flight, which exists only while a unit or fix is. A team's panes
+# and state live on its host, so a command about a team runs there. Add --force to act on an agent that is working.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
