@@ -16,6 +16,6 @@
 
 ## 3. Briefs and documentation
 
-- [ ] 3.1 The planner's, the conductor's and main-level ops's briefs say to read cards with `crew card read`, that crew tells them when a reading is sent, that the rows carry each submission's number, and name no `crew card wait` (design Decisions 2, 3 and 7; Task notes 3.1); verify `tests/suite t-briefs t-roles` ends with "0 failed".
+- [x] 3.1 The planner's, the conductor's and main-level ops's briefs say to read cards with `crew card read`, that crew tells them when a reading is sent, that the rows carry each submission's number, and name no `crew card wait` (design Decisions 2, 3 and 7; Task notes 3.1); verify `tests/suite t-briefs t-roles` ends with "0 failed".
 - [ ] 3.2 README, `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage header say the same together (`docs.2`; Task notes 3.2); verify `tests/suite t-docs` ends with "0 failed".
 - [ ] 3.3 `tests/moon.yml` matches the tests after `tests/moon-tasks`, and the affected tests pass (Task notes 3.3); verify `tests/suite --affected` ends with "0 failed".
