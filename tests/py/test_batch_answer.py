@@ -144,6 +144,9 @@ class Acts:
     def release_preview(self, label, key):
         return None
 
+    def release_previews(self, label, key):  # nothing was brought up from the batch's card
+        return None
+
     def host(self):
         return "deneb"
 

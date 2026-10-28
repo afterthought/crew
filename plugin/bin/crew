@@ -231,6 +231,14 @@
 #                                      words in the run record; closes the batch's card held on this host with the
 #                                      words, or names the host whose rail closes it, and tells the planner the words when the operator ran it; refused for a batch
 #                                      answered already or waiting on nothing
+#   crew card  preview <key> <thing> [--done] [--label L]
+#                                      the card's owner's, main-level ops's for a kit's landings card (land/<kit>) and
+#                                      the planner's for a batch's (batch/<n>), on the user's words on the card: brings
+#                                      up a thing it carries that must run, a landings row's bolt at its head or a batch
+#                                      line's <unit>/<name> at the branch and revision its stage recorded, through sluice
+#                                      preview on the host of the team holding its work, and changes the card in place
+#                                      to list its addresses while it is up; --done puts it away; refused for any other
+#                                      caller, key or thing, naming those the card carries
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
@@ -489,8 +497,17 @@ case $cmd in
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
-  _preview)  # crew _preview <label> <bolt> <head>: a landing card's preview of the bolt's head, asked of sluice and
-    # waited on to its end in a process of its own on the team's host, which the card's raise hands it to (code.9)
+  _preview)  # crew _preview <label> <key> <thing> <branch> <revision>: the preview of a thing a card carries, asked
+    # of sluice and waited on to its end in a process of its own on the team's host, which crew card preview hands it
+    # to (code.9)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _card-preview | _preview-release)  # crew _card-preview <label> <key> <thing> <team> [--done], on the team's host:
+    # a card's thing brought up or put away there, which crew card preview hands it to; crew _preview-release <label>
+    # <key>: every preview brought up from a card released on this host, which the card's close hands it to (code.3)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _made | _batch-card)  # crew _made <label> <unit>... [--card <key>] --json, on the units' team's host: what each
+    # unit's stages recorded as made, kept there, which a batch's raise reads; crew _batch-card <label> <n> [--note
+    # <words>], on the partition's main machine: batch n's card raised, which a stage's new made line hands there
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   _land-row | _land-card)  # crew _land-row <label> <bolt> --json, on the bolt's team's host: its row on its kit's
     # landings card, its reading and preview opened or ended there; crew _land-card <label> <kit> [--note <words>], on

@@ -6,12 +6,15 @@
 # takes main into the bolt by a submission to the bolt, and its merge's end raises the kit's landings card, keyed by
 # the kit, in main-level ops's name on the partition's main machine, the bolt its one row, with the row's reading of
 # what the bolt brings to main started first on the team's host, tried a second time when its first start fails, and
-# linked from it, which crew card session gives again, and the address of a preview of its head, which the
-# kit's policy there declares, asked of sluice first; the preview's stack failing is said on the card, changed in
-# place by the process that waited on it; a fix started on the bolt holds its row, so the card, with no row left that
-# can land, is withdrawn naming it, the row's reading ended and its preview released, its pull request, ready again,
-# drafted, and once the fix merges and the bolt reads proven again, the dispatcher told its team is free for its next
-# bolt, a new card is posted, following nothing, with a preview of the new head, raised without its reading when both
+# linked from it, which crew card session gives again, and what brings a preview of its head up, which the kit's
+# policy there declares, sluice asked for nothing (record 0043); main-level ops's crew card preview, on the user's
+# words on the card, brings it up through sluice on the team's host and the card, changed in place, lists its address
+# while it comes up, its stack failing said on the card, changed in place by the process that waited on it, and its
+# --done releases it, sluice listing none and the card carrying what brings it up again; a fix started on the bolt
+# holds its row, so the card, with no row left that can land, is withdrawn naming it, the row's reading ended, its
+# pull request, ready again, drafted, and once the fix merges and the bolt reads proven again, the dispatcher told its
+# team is free for its next bolt, a new card is posted, following nothing, with what brings a preview of the new head
+# up, sluice asked for nothing, raised without its reading when both
 # its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's read
 # finds not running and its crew card session then starts, changing the card to carry its link, until the landing
 # ends it; the bolt read proven, its team
@@ -23,8 +26,8 @@
 # submission on the same send readies the bolt's pull request and lands it at GitHub's head, sluice answering with the
 # pull request and crew waiting on the submission it made from it, leaving the kit's detached main
 # checkout as it was, and closes it as it lands, recording the commit main holds, sluice deleting its branch from GitHub
-# (plan.19), the kit's landings card closed with where GitHub's main holds it, the row's reading ended and its preview
-# released, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
+# (plan.19), the kit's landings card closed with where GitHub's main holds it, the row's reading ended and the preview
+# ops brought up again on the user's words released, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
 # that bolt is dropped too the team holds none and its conductor and ops start again at their next stop without it;
 # a bolt its conductor submits lands and is named as not closed, crew bolt land being main-level ops's, and its branch
 # taking a commit main lacks after the landing is kept on GitHub, sluice refusing its delete, and on the host,
@@ -134,14 +137,13 @@ expect_ok crew fix swb-1 take-main --wait
 expect_ok crew fix swb-1 take-main --merge
 merge_as swb-1-unit-1 "$tmp" bolt/tenant-environments || fail "the fix's submission failed"
 : > "$CREW_TEST_LOG"
-touch "$CREW_TEST_ROOT/sluice-preview-holds"  # the preview's stack takes its time to come up
 refusals=$(home_of $box)/.stub-plannotator/refuse-starts
 mkdir -p "${refusals%/*}"; echo 1 > "$refusals"  # the reading's first start fails
 expect_ok crew fix swb-1 take-main --wait
 has "$out" "delivered merge of $tm: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 # The merge's end finds the bolt proven, and raises the kit's landings card in main-level ops's name on the
-# partition's main machine, keyed by the kit, the bolt its one row, with a preview of its head asked of sluice first,
-# once, in the kit's main checkout on the team's host, and its address listed.
+# partition's main machine, keyed by the kit, the bolt its one row, carrying what brings a preview of its head up,
+# sluice asked for nothing.
 card=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
 [[ -n $card ]] || fail "the merge's end raised no landings card:"$'\n'"$out"
 has "$out" "call get_request (requestId $card, name wldn-ops)"
@@ -150,10 +152,10 @@ has "$posted" '"idempotencyKey": "land/switchboard-kit@wldn"'
 has "$posted" '"label": "wldn-ops"'
 has "$posted" "\"title\": \"Land the bolt tenant-environments on switchboard-kit's main\""
 h1=$(git -C "$k" rev-parse bolt/tenant-environments)
-eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h1 --wait --json in $(cd "$k" && pwd -P)"
-has "$posted" "Try it running: a preview of ${h1:0:7} sluice brings up, at these addresses once it is up."
-has "$posted" "web: http://web-${h1:0:7}--bolt-tenant-environments--kit"
-ok "a fix takes main into the bolt by a submission to the bolt, and the merge's end raises the kit's landings card in main-level ops's name once the bolt reads proven, keyed by the kit, printing the line that adopts it, with the address of a preview of its head asked of sluice first"
+eq "$(calls | grep -c "^$box sluice preview ")" "0"
+has "$posted" "Try it running from bolt/tenant-environments at ${h1:0:7}: write on this card to bring it up, and that you are done to put it away. It is not held while the card waits."
+lacks "$posted" "web: http://"
+ok "a fix takes main into the bolt by a submission to the bolt, and the merge's end raises the kit's landings card in main-level ops's name once the bolt reads proven, keyed by the kit, printing the line that adopts it, with what brings a preview of its head up and sluice asked for nothing"
 
 # The landing card's reading, started with it on the team's host: one session on the head's folder, the bolt's page
 # first and its diff against main last, its link on the card, and crew card session giving it again.
@@ -176,8 +178,21 @@ expect_ok on_box card session land/tenant-environments
 eq "$out" "$url"; eq "$(listed)" "$pid"
 ok "the landing card's reading is started with it on the team's host, a second time when its first start fails, the bolt's page, each unit's change and the bolt's diff against main as one review, its link on the card, and crew card session gives it again, starting nothing"
 
+# The user writes on the card asking to try it running: ops's crew card preview brings it up through sluice on the
+# team's host, its stack taking its time, and the card, changed in place, lists its address while it comes up.
+ops() { (export CREW_AGENT=wldn-ops; HOST=$box crew "$@"); }
+previews=$(home_of $box)/.local/state/crew/previews/wldn/land-switchboard-kit
+touch "$CREW_TEST_ROOT/sluice-preview-holds"  # the preview's stack takes its time to come up
+: > "$CREW_TEST_LOG"
+out=$(ops card preview land/switchboard-kit tenant-environments 2>&1) || fail "ops could not bring the preview up:"$'\n'"$out"
+eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h1 --wait --json in $(cd "$k" && pwd -P)"
+has "$out" "tenant-environments: Its preview of ${h1:0:7} is coming up: web http://web-${h1:0:7}--bolt-tenant-environments--kit"
+changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
+has "$changed" "\"changeNote\": \"tenant-environments: Its preview of ${h1:0:7} is coming up\""
+has "$changed" "web: http://web-${h1:0:7}--bolt-tenant-environments--kit"
+ok "ops's crew card preview, on the user's words, brings the row's preview up through sluice on the team's host, and the card, changed in place, lists its address while it comes up"
+
 # The preview's stack fails: the process crew handed the ask to changes the card in place while it waits on the user.
-previews=$(home_of $box)/.local/state/crew/previews/wldn
 touch "$CREW_TEST_ROOT/sluice-preview-fails"; rm "$CREW_TEST_ROOT/sluice-preview-holds"
 until_ok grep -q "^card land/switchboard-kit: $card changed" "$previews/tenant-environments.log" ||
   fail "the card was not changed for its preview's end:"$'\n'"$(cat "$previews/tenant-environments.log")"
@@ -188,10 +203,21 @@ lacks "$changed" "web: http://"
 rm "$CREW_TEST_ROOT/sluice-preview-fails"
 ok "a preview whose stack fails is said on the card, changed in place while it waits on the user"
 
-# A defect noted on the card: a fix started on the bolt holds its row, ending its reading and releasing its preview,
-# its ready pull request drafted, and the card, with no row left that can land, is withdrawn naming the fix's words;
-# once the fix merges and the bolt reads proven again, the merge's end raises a new card, following nothing, with a new
-# reading and a preview of the new head.
+# The user writes that they are done with it: ops's --done releases it, sluice lists none, and the card, changed in
+# place, carries what brings it up again.
+: > "$CREW_TEST_LOG"
+out=$(ops card preview land/switchboard-kit tenant-environments --done 2>&1) || fail "ops could not put the preview away:"$'\n'"$out"
+has "$out" "released tenant-environments's preview of ${h1:0:7} from land/switchboard-kit"
+eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
+changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
+has "$changed" "\"changeNote\": \"tenant-environments: Its preview of ${h1:0:7} is put away\""
+has "$changed" "Try it running from bolt/tenant-environments at ${h1:0:7}: write on this card to bring it up"
+ok "ops's --done, on the user's words, releases the preview, and the card carries what brings it up again"
+
+# A defect noted on the card: a fix started on the bolt holds its row, ending its reading, its ready pull request
+# drafted, and the card, with no row left that can land, is withdrawn naming the fix's words; once the fix merges and
+# the bolt reads proven again, the merge's end raises a new card, following nothing, with a new reading and what brings
+# a preview of the new head up, sluice asked for nothing.
 as $box gh pr ready "$pr" -R $gh_repo 2>/dev/null  # ready again, as a refused landing crew could not draft leaves it
 : > "$CREW_TEST_LOG"
 expect_ok crew fix swb-1 gap "The zone list misses one zone."
@@ -199,10 +225,9 @@ has "$out" "card land/switchboard-kit: $card withdrawn"
 has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is a draft, so no merge into bolt/tenant-environments lands it"
 eq "$(drafted "$pr")" true
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid"
-has "$out" "released land/tenant-environments's preview of ${h1:0:7}"
 ended "$pid"; eq "$(listed)" ""
 has "$(calls | grep "^$box pendingyou cancel_request ")" '"reason": "every bolt waiting to land is held: tenant-environments, held for a fix: The zone list misses one zone. (fix/tenant-environments/gap)"'
-eq "$(calls | grep "^$box sluice release " | grep -vc " --worktree ")" "1"
+eq "$(calls | grep "^$box sluice release " | grep -vc " --worktree ")" "0"
 gp=$kd/places/fix-tenant-environments--gap
 echo four >> "$gp/shared.txt"; commit_all "$gp" "fix(a): the zone list holds every zone"
 expect_ok crew fix swb-1 gap --wait
@@ -232,12 +257,12 @@ has "$out" "card land/tenant-environments: its reading could not be opened on th
 [[ ! -e $reading/session.json ]] || fail "a reading is recorded though both its starts failed"
 eq "$(listed)" ""; eq "$(cat "$refusals")" "0"
 eq "$(field $box card.post Card kit/switchboard-kit) $(field $box card.post Unread kit/switchboard-kit)" "$again $refused"
-has "$posted" "web: http://web-${h2:0:7}--bolt-tenant-environments--kit"
-eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h2 --wait --json in $(cd "$k" && pwd -P)"
+has "$posted" "Try it running from bolt/tenant-environments at ${h2:0:7}: write on this card to bring it up"
+eq "$(calls | grep -c "^$box sluice preview ")" "0"
 # The merge that makes the bolt proven frees its team for its next bolt, planned for it: the dispatcher is told (teams.16).
 has "$(grep "^$box wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha " "$CREW_TEST_LOG")" \
   "swb-1 can take its next bolt: bolt tenant-environments reads proven. Give a free team its next bolt."
-ok "a fix started on the bolt drafts its ready pull request and holds its row, ending its reading and releasing its preview, the card withdrawn with no row left that can land, and once the fix merges a new card is posted with a preview of the new head, raised without its row's reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
+ok "a fix started on the bolt drafts its ready pull request and holds its row, ending its reading, the card withdrawn with no row left that can land, and once the fix merges a new card is posted with what brings a preview of the new head up, raised without its row's reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
 
 # The conductor's read finds no reading running, and its crew card session starts it, changing the card to carry its
 # link; the reading runs until the landing's close ends it, with nothing of crew's waiting on it.
@@ -287,9 +312,12 @@ lacks "$greeted" "card wait"
 lacks "$greeted" "get_request"
 eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
 ok "a give beside a waiting bolt restarts its conductor and ops at their next stop, the conductor greeted with both bolts and the waiting one's row"
-# The user approves the landings card raised again, and main-level ops submits the bolt: it lands, the kit's detached main
-# checkout left as it was, and is closed as it lands. A landing stopped before it removed its worktree left one on the
+# The user asks on the card raised again to try it running, and ops brings it up at the new head; then the user
+# approves the card, and main-level ops submits the bolt: it lands, the kit's detached main checkout left as it was,
+# and is closed as it lands, the preview released. A landing stopped before it removed its worktree left one on the
 # bolt's branch, its process gone, which the submission takes up and removes.
+out=$(ops card preview land/switchboard-kit tenant-environments 2>&1) || fail "ops could not bring the preview up again:"$'\n'"$out"
+has "$out" "tenant-environments: Its preview of ${h2:0:7} is up: web http://web-${h2:0:7}--bolt-tenant-environments--kit"
 mkdir -p "$(home_of $box)/.stub-pendingyou/answered"
 echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answered/$again.json"
 git -C "$k" worktree add -q "$land" bolt/tenant-environments
@@ -355,7 +383,7 @@ eq "$(branch)" "bolt/ssh-fix"
 eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
 has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"Landed on GitHub's main: tenant-environments at $(short main); every host's folder follows by swancloud's timer within minutes.\""
 has "$out" "card land/switchboard-kit: $again closed"
-has "$out" "released land/tenant-environments's preview of ${h2:0:7}"
+has "$out" "released tenant-environments's preview of ${h2:0:7} from land/switchboard-kit"
 eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid2"
 ended "$pid2"; eq "$(listed)" ""

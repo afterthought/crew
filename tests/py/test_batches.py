@@ -334,6 +334,9 @@ class RaiseActs:
         self.held, self.refusals = list(entries), list(refusals)
         self.sessions, self.emitted, self.calls = [], [], []
 
+    def made(self, label, host, units, key):  # no unit's stage recorded anything as made
+        return {"made": {}, "previews": {}}
+
     def session(self, label, key, facts):
         self.sessions.append(key)
         why = self.refusals.pop(0) if self.refusals else None
