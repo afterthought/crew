@@ -4,7 +4,7 @@
 
 - [x] 1.1 The host's follower lock is taken with an OS lock held for the follower's life and says whether the job or a rail tab holds it; a second try is refused while it is held, and an unreadable holder reads as unknown (design, Decision 3; Task notes 1.1); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
 - [x] 1.2 `crew _follow [--once]` makes the rail tab's refresh for every partition with an operator session on the host, with no tab: due restarts handed out when crew's checkout or the teams file moved, then one `crew _views` per partition, its output written as the rail frame beside the board's; it waits for the lock while another holds it; and `plugin/bin/crew`'s bash `_rail` loop goes (design, Decision 2; Task notes 1.2); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
-- [ ] 1.3 `crew _rail <label> [--once]` draws the rail frame whenever it changes, headed with its age once stale, says the host's follower writes it when there is none, and follows itself while it can take the lock (design, Decision 2; Task notes 1.3); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
+- [x] 1.3 `crew _rail <label> [--once]` draws the rail frame whenever it changes, headed with its age once stale, says the host's follower writes it when there is none, and follows itself while it can take the lock (design, Decision 2; Task notes 1.3); passes `tests/py/test_board.py`, `tests/suite logic` ending with "0 failed".
 
 ## 2. The console opens its tabs on the user's word
 

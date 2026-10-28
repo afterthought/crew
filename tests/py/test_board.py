@@ -388,6 +388,43 @@ class TestRailFrame:
             "No rail for wldn yet: the host's follower writes it each time it refreshes, swancloud's job or the console's rail tab, "
             "which crew console up wldn opens while no job runs.")
 
+    def test_the_rail_tab_draws_the_frame_once_and_follows_nothing(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        board.write_frame("wldn", self.RAIL, board.rail_path("wldn"))
+        board.rail_follow("wldn", once=True)
+        assert capsys.readouterr().out == self.RAIL["text"] + "\n" and board.follower_here() == "none"
+
+    def test_the_rail_tab_draws_the_jobs_frames_and_follows_itself_once_the_job_ends(self, tmp_path, monkeypatch, capsys):
+        """The host's job holds the lock: the tab draws and waits; once the job lets go, the tab takes the lock as a tab
+        and makes the rounds itself."""
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        board.write_frame("wldn", self.RAIL, board.rail_path("wldn"))
+        job, slept, stepped = board.lock_follower("job", wait=False), [], []
+
+        class Done(Exception):
+            pass
+
+        class Stepping:
+            def __init__(self, lock):
+                self.lock = lock
+
+            def step(self, most):
+                stepped.append((board.lock_path().read_text().split()[:2], most))
+                raise Done
+
+            def close(self):
+                self.lock.close()
+
+        def sleep(s):
+            slept.append(s)
+            job.close()
+        monkeypatch.setattr(board, "Follower", Stepping)
+        monkeypatch.setattr(board.time, "sleep", sleep)
+        with pytest.raises(Done):
+            board.rail_follow("wldn")
+        assert slept == [1] and stepped == [(["tab", "wldn"], 1)] and board.follower_here() == "none"
+        assert capsys.readouterr().out == self.RAIL["text"] + "\n"
+
     def test_half_a_rail_frame_or_one_with_no_text_reads_as_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr(board, "FRAMES", tmp_path)
         assert board.read_rail("wldn") is None

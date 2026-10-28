@@ -20,7 +20,8 @@
                                      waits for the host's follower lock while a rail tab holds it. --once makes one
                                      round of each and ends
   crew _rail <label> [--once]        the rail tab: the latest rail the host's follower wrote, drawn whenever it
-                                     changes, headed with its age once stale
+                                     changes, headed with its age once stale; while no one holds the host's follower
+                                     lock, it takes it and follows itself. --once draws once and follows nothing
   crew _board <label> [--once]       the board tab: the latest board the host's follower wrote, drawn at the pane's
                                      width whenever it or the pane changes
 
@@ -1059,24 +1060,38 @@ def run_follow(once=False):
 
 
 def rail_follow(label, once=False):
-    """The rail tab: the latest rail frame drawn whenever it changes, or how stale it is does; checked once a second."""
+    """The rail tab: the latest rail frame drawn whenever it changes, or how stale it is does; checked once a second.
+    Each second, while no one follows on the host, it takes the follower lock without waiting and is the host's
+    follower itself, for every partition with an operator session here, making each round when it is due; so a tab
+    drawing the job's frames follows itself within a second of the job ending. With once, one draw, following
+    nothing."""
     tty = sys.stdout.isatty()
-    seen, data, mtime = None, None, False
-    while True:
-        try:
-            m = rail_path(label).stat().st_mtime_ns
-        except OSError:
-            m = None
-        if m != mtime:
-            mtime, data = m, read_rail(label) if m is not None else None
-        text = rail_frame_text(label, data, datetime.datetime.now(datetime.timezone.utc))
-        if text != seen:
-            seen = text
-            sys.stdout.write(("\033[H\033[2J" if tty else "") + text + "\n")
-            sys.stdout.flush()
-        if once:
-            return
-        time.sleep(1)
+    seen, data, mtime, follower = None, None, False, None
+    try:
+        while True:
+            try:
+                m = rail_path(label).stat().st_mtime_ns
+            except OSError:
+                m = None
+            if m != mtime:
+                mtime, data = m, read_rail(label) if m is not None else None
+            text = rail_frame_text(label, data, datetime.datetime.now(datetime.timezone.utc))
+            if text != seen:
+                seen = text
+                sys.stdout.write(("\033[H\033[2J" if tty else "") + text + "\n")
+                sys.stdout.flush()
+            if once:
+                return
+            if follower is None:
+                lock = lock_follower("tab", label, wait=False)
+                follower = Follower(lock) if lock else None
+            if follower:
+                follower.step(1)
+            else:
+                time.sleep(1)
+    finally:
+        if follower:
+            follower.close()
 
 
 def ended_by_signal():
@@ -1097,6 +1112,8 @@ def main(argv):
         ap.add_argument("label")
         ap.add_argument("--once", action="store_true")
         a = ap.parse_args(argv)
+        if sub == "_rail":
+            ended_by_signal()
         (follow if sub == "_board" else rail_follow)(crew.partition_of(fleet, a.label)["label"], a.once)
         return
     if sub == "_follow":
