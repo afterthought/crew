@@ -203,8 +203,9 @@ print(p["number"], "draft" if p["isDraft"] else "ready")' "$CREW_TEST_ROOT/gh-pu
       exit 1
     fi
     fives=${CREW_TEST_ROOT:?}/sluice-wait-${id}-fives
-    if [[ -e $CREW_TEST_ROOT/sluice-wait-holds ]] || (( $(cat "$fives" 2>/dev/null || echo 0) > 0 )); then
-      if [[ -e $CREW_TEST_ROOT/sluice-wait-holds ]]; then read -rt 0.2 _ <> <(:) || true; else echo $(( $(cat "$fives") - 1 )) > "$fives"; fi
+    held=; [[ -e $CREW_TEST_ROOT/sluice-wait-holds ]] && held=yes  # read once, so a hold lifted meanwhile spends no five
+    if [[ -n $held ]] || (( $(cat "$fives" 2>/dev/null || echo 0) > 0 )); then
+      if [[ -n $held ]]; then read -rt 0.2 _ <> <(:) || true; else echo $(( $(cat "$fives") - 1 )) > "$fives"; fi
       jq -c 'del(.rc) | .state = "testing" | del(.result, .failed, .conflict)' "$f"
       exit 5
     fi
