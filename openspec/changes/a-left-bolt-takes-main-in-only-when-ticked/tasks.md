@@ -11,7 +11,7 @@
 
 ## 3. No fix while left
 
-- [ ] 3.1 The card's raise tells no take-main fix for a left bolt, records its forecast once as found while left and changes a waiting card in place the first time, and tells the fix at the same heads once the bolt is ticked (design, Decision 3; Task notes 3.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
+- [x] 3.1 The card's raise tells no take-main fix for a left bolt, records its forecast once as found while left and changes a waiting card in place the first time, and tells the fix at the same heads once the bolt is ticked (design, Decision 3; Task notes 3.1); passes `tests/py/test_landings.py`, `tests/suite logic` ending with "0 failed".
 
 ## 4. A stop in ops's pane
 

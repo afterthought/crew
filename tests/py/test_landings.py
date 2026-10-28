@@ -1310,6 +1310,39 @@ def test_a_conductor_that_cannot_be_told_has_nothing_recorded_and_its_row_stays_
     assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
 
 
+WOULD = "z, which you left, would take main first: forecast to conflict with main on README.md at e4f5a6b"
+
+
+def test_a_left_bolt_main_conflicts_with_is_told_nothing_and_the_waiting_card_says_so_once(monkeypatch):
+    """bolt-teams "A left bolt"; rail-cards "Left, and main conflicts with it" and "Raised again at the same heads"."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left")]
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=dict(POSTED, **WAITING), against_main={"z": [("main", ["README.md"])]})
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert [n for n, _ in acts.told if n == "crw-1-conductor"] == []
+    assert [e for e in acts.emitted if e["Act"] == "forecast"] == [dict(TOLD, Reached="left")]
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert change["changeNote"] == WOULD and change["recommendedIds"] == ["land:y"]
+    assert change["options"][1]["consequence"].startswith("It would take main first if you tick it")
+    assert acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234:left"
+    again = LandActs({"y": row("y"), "z": row("z")}, acts.held, answers=dict(POSTED, **WAITING),
+                     against_main={"z": [("main", ["README.md"])]})
+    raised(monkeypatch, again)
+    assert again.told == [] and again.emitted == [] and [t for t, _ in again.calls] == ["get_request"]
+
+
+def test_a_left_bolt_ticked_at_the_same_heads_has_its_conductor_told_the_fix_and_takes_main_first(monkeypatch):
+    """bolt-teams "A left bolt ticked"; rail-cards "Ticked after being left": the send stands for it."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234:left"), LEFT,
+            dict(TOLD, Reached="left")]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+    acts = LandActs({"y": row("y"), "z": row("z")}, held, answers={"get_request": (answer, None)},
+                    against_main={"z": [("main", ["README.md"])]})
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert [w for n, w in acts.told if n == "crw-1-conductor"][0].endswith(f"{FIX} --bolt z")
+    assert [e for e in acts.emitted if e["Act"] == "forecast"] == [TOLD]
+    assert [t for t, _ in acts.calls] == ["get_request"]  # the card is left as it is, the send standing for z
+
+
 ONLY_Z = "%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"
 
 

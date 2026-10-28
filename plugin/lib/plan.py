@@ -2722,16 +2722,41 @@ def kit_card_state(acts, label, key, owner, card, entries):
     return {"status": "answered" if got.get("status") == "answered" else "waiting", "heads": heads, "ticked": ticked_of(got, heads)}, None
 
 
-def main_told(acts, label, plan, rows, found, at, entries):
+def said_heads(entries, left=()):
+    """The Heads of the forecasts and amendments the run record holds said (entries), which a conductor's wait and a
+    landings card's raise say once each: a forecast said while its bolt was left (Reached: left) counts only while the
+    bolt is still left (left, its name among them), so it holds back no take-main fix once the user ticks it (bolt-teams
+    "A waiting bolt's conflict with main tells its conductor the take-main fix")."""
+    return {e["Heads"] for e in entries if e.get("Act") in ("forecast", "amendment") and not e.get("Refused") and e.get("Heads")
+            and (e.get("Reached") != "left" or next((o[5:] for o in e.get("On") or [] if o.startswith("bolt/")), None) in left)}
+
+
+def left_said(bolt, main, paths):
+    """The sentence a kit's landings card's change note says of a bolt the user left that a forecast first finds in
+    conflict with main (rail-cards "A row the user left says whether it would take main first")."""
+    return f"{bolt}, which you left, would take main first: forecast to conflict with main on {joined(list(paths))} at {main[:7]}"
+
+
+def main_told(acts, label, plan, rows, found, at, entries, left=()):
     """Each bolt the landings card's forecast found newly in conflict with main told to its conductor (bolt-teams "A
     waiting bolt's conflict with main tells its conductor the take-main fix"): rows, {bolt: facts} of each whose
     forecast against main names files (found, {bolt: paths}), at main's revision (at); told the take-main fix in the
     words a conductor's wait gives (bolt_forecast), with --bolt while its team holds two bolts (teams.16), once for the
     same bolt head and revision of main, whichever forecast recorded it first, read from the partition's run record and
-    this host's (entries); recorded as the wait's forecast is, on bolt/<bolt> with its Heads and Paths, only once the tell
-    went through, so a tell that fails records nothing and the next raise tells it again (roles.4, read.1)."""
-    done = {e.get("Heads") for e in entries if e.get("Act") == "forecast" and not e.get("Refused") and e.get("Heads")}
+    this host's (entries, said_heads); recorded as the wait's forecast is, on bolt/<bolt> with its Heads and Paths, only
+    once the tell went through, so a tell that fails records nothing and the next raise tells it again (roles.4,
+    read.1). A bolt the user left (left) is told nothing: its forecast is recorded once as found while it is left
+    (Reached: left), and said in the sentence returned for the card's change note (left_said); those sentences."""
+    done, said = said_heads(entries, left), []
     for b, f in rows.items():
+        if b in left:
+            heads = f"bolt/{b}@{f['head'][:7]} main@{at['main'][:7]}"
+            if heads not in done:
+                acts.emit(label, "forecast", [f"bolt/{b}"], why=f"bolt({b}): forecast to conflict with main", Heads=heads,
+                          Paths=" ".join(found[b]), Reached="left")
+                done.add(heads)
+                said.append(left_said(b, at["main"], found[b]))
+            continue
         team = f["team"]
         told = bolt_forecast(team, label, b, {"conflict": {"paths": found[b], "with": []}, "head": f["head"], "onto": at["main"]},
                              done, len(held_by(plan, team)) > 1)
@@ -2745,6 +2770,7 @@ def main_told(acts, label, plan, rows, found, at, entries):
         acts.emit(label, "forecast", [f"bolt/{b}"], why=f"bolt({b}): forecast to conflict with main", Heads=heads,
                   Paths=" ".join(paths), Reached="told")
         done.add(heads)
+    return said
 
 
 def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=None):
@@ -2808,9 +2834,9 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     # The bolts the user left (left_now), recorded when they change: a row whose host did not answer is left as recorded
     # (read.1). This host's entries the branch does not hold yet come after the branch's.
     ids = {e["Id"] for e in whole if e.get("Id")}
-    recorded, stops = left_marks(whole + [e for e in entries if not e.get("Id") or e["Id"] not in ids], key)
-    left = dict(left_now(state, ticked, at, recorded, stops), **{b: h for b, h in recorded.items() if b in unread})
-    if left != recorded:
+    was, stops = left_marks(whole + [e for e in entries if not e.get("Id") or e["Id"] not in ids], key)
+    left = dict(left_now(state, ticked, at, was, stops), **{b: h for b, h in was.items() if b in unread})
+    if left != was:
         acts.emit(label, "landing.left", [cards.row_object(key, acts.kits(label))], by=owner, Key=key,
                   Heads=" ".join(f"{b.name()}@{left[b.name()]}" for b in plan.bolts() if b.name() in left))
     moves = {b: (h, at[b]) for b, h in list(sent.items()) + list(ticked_at.items())
@@ -2831,7 +2857,9 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     found = {b: p for b, fs in forecast.items() for w, p in fs if w == "main" and p}
     takes = dict(recorded, **{b: (onto["main"][:7], p) for b, p in found.items()})
     rows = [landing_rows([r["bolt"]], {r["bolt"]: r["facts"]}, {}, takes_main=takes, left=left)[0] if r["box"] else r for r in rows]
-    main_told(acts, label, plan, {r["bolt"]: r["facts"] for r in rows if r["bolt"] in found}, found, onto, whole + entries)
+    # a bolt the user left is told no fix, and the card's change note says the first forecast that finds it in conflict
+    lefts = main_told(acts, label, plan, {r["bolt"]: r["facts"] for r in rows if r["bolt"] in found}, found, onto, whole + entries, left)
+    note = "; ".join(([note] if note else []) + lefts) or None
     boxed = [r["bolt"] for r in rows if r["box"]]
     for r in rows:
         if r["box"]:
