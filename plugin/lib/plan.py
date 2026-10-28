@@ -10683,11 +10683,12 @@ def conductor_bolts(fleet, t):
 
 def two_bolts_said(team, new, old, kit, label, fixes, unread=None):
     """What a conductor started afresh while its team holds two bolts is told first (teams.16): the bolt it builds
-    (new), the one that waits to land (old), a row of its kit's landings card, main-level ops's, with the wait on its
-    reading that brings the user's notes, and each fix in flight on it (fixes, by the name crew fix takes), with how to
-    wait on it; when its kit could not be read (unread), that, rather than name no fix (read.1)."""
+    (new), the one that waits to land (old), a row of its kit's landings card, main-level ops's, that crew tells it when
+    the user sends that bolt's reading and crew card read then gives the notes, with no wait to start (teams.24), and
+    each fix in flight on it (fixes, by the name crew fix takes), with how to wait on it; when its kit could not be read
+    (unread), that, rather than name no fix (read.1)."""
     said = (f"Your team now builds the bolt {new}. Bolt {old} waits to land, a row of {kit}'s landings card, {label}-ops's: "
-            f"run crew card wait land/{old} in the background for its reading's notes.")
+            f"crew tells you when the user sends land/{old}'s reading, and crew card read land/{old} then gives its notes.")
     if unread:
         said += f" crew could not read its fixes ({unread}): read crew status {team}."
     for f in fixes or []:
