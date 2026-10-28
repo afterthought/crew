@@ -861,6 +861,7 @@ class TestLandReadingRead:
         monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt), ("Repo", "crew")]),
                                                                            FLEET["teams"].get(team)))
+        monkeypatch.setattr(cards, "host_entries", lambda record, label, host: [])
         monkeypatch.setattr(cards, "Bridge", lambda *a, **k: pytest.fail("the read of a bolt's reading reached Pending You"))
         plan.card_read(FLEET, argparse.Namespace(key=key, label=None, json=False, sub="read"))
         return d

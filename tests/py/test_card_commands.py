@@ -953,6 +953,121 @@ class TestCardWaitGone:
             assert not hasattr(plan, name), name
 
 
+# ------------------------------------------------------------------------------- a sent reading, at the refresh
+# plan.readings_due and the sweep's acts on it (card-sessions "The rail's refresh tells a reading's owner once that the
+# user sent it"; review-batches "The session approved", "Notes sent while the planner is down").
+
+NOTES = ("annotated", "1. x1: say what a zone is.", 1)
+
+
+def test_a_sent_reading_is_told_once_a_wordless_batch_recorded_and_nothing_else_acted_on():
+    assert plan.readings_due([("land/y", NOTES, False), ("batch/3", NOTES, False), ("proposal/4", ("approved", None, 0), False),
+                              ("batch/4", ("approved", None, 0), False), ("batch/5", ("approved", "Fine.", 0), False)]) == [
+        ("land/y", "tell"), ("batch/3", "tell"), ("proposal/4", "tell"), ("batch/4", "record"), ("batch/5", "tell")]
+    assert plan.readings_due([("land/y", NOTES, True), ("proposal/4", ("dismissed", None, None), False), ("batch/3", None, False)]) == []
+
+
+def test_only_a_live_keys_reading_with_a_result_is_read_and_a_mark_is_seen(tmp_path):
+    for key, result, told in (("land/y", {"decision": "annotated", "feedback": "x"}, False),
+                              ("batch/3", {"decision": "approved"}, True), ("land/gone", {"decision": "approved"}, False),
+                              ("batch/4-1/u1", {"decision": "approved"}, False), ("proposal/4", None, False)):
+        d = tmp_path / key
+        d.mkdir(parents=True)
+        if result:
+            (d / "result.json").write_text(json.dumps(result))
+        if told:
+            (d / "told.json").write_text("{}")
+    live = {"land/y", "batch/3", "batch/4-1", "proposal/4"}
+    assert plan.readings_sent(tmp_path, live, []) == [("batch/3", ("approved", None, None), True), ("land/y", ("annotated", "x", None), False)]
+    assert plan.readings_sent(tmp_path, live, ["batch/"]) == [("land/y", ("annotated", "x", None), False)]
+
+
+def test_a_reading_read_before_any_refresh_leaves_it_nothing_to_tell(tmp_path):
+    """card-sessions "Read before the refresh": crew card read sets the decision aside, or ends the batch's reading."""
+    d = tmp_path / "land/y"
+    d.mkdir(parents=True)
+    (d / "session.json").write_text(json.dumps({"pid": 42, "document": "/c/00-y.md", "url": "http://x:19432", "started": "2026-10-23T10:00:00Z"}))
+    (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "x"}))
+    plan.reading_decided(d, ("annotated", "x", None))
+    assert plan.readings_sent(tmp_path, {"land/y"}, []) == []
+
+
+class TestSweptReading:
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "teams": ["swb-1"]}},
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha"}}, "hosts": {}}
+
+    def sweep(self, monkeypatch, tmp_path, acts, key, result, live=None):
+        import argparse
+        import io
+        d = tmp_path / "wldn" / key
+        d.mkdir(parents=True)
+        (d / "result.json").write_text(json.dumps(result))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(plan, "PREVIEWS", tmp_path / "previews")
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt)]), self.FLEET["teams"]["swb-1"]))
+        monkeypatch.setattr(plan.sys, "stdin", io.StringIO(json.dumps({"live": live or [key], "blind": []})))
+        plan.card_sweep(self.FLEET, argparse.Namespace(key=None, unit=None, label="wldn"), acts)
+        return d
+
+    def test_a_landings_reading_sent_is_told_to_its_conductor_once_with_none_of_the_users_words(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A landing's reading sent"."""
+        acts = Acts()
+        d = self.sweep(monkeypatch, tmp_path, acts, "land/y", {"decision": "annotated", "feedback": "this drops the retry"})
+        assert acts.told == [("swb-1-conductor", "The user sent land/y's reading. Run crew card read land/y for what they sent.")]
+        assert json.loads(capsys.readouterr().out) == [dict(key="land/y", unit=None, ended=False, sent=True,
+                                                            said="the user sent its reading, and swb-1-conductor was told to run crew card read land/y")]
+        assert json.loads((d / "told.json").read_text())["told"] == "swb-1-conductor"
+        import argparse
+        import io
+        monkeypatch.setattr(plan.sys, "stdin", io.StringIO(json.dumps({"live": ["land/y"], "blind": []})))
+        plan.card_sweep(self.FLEET, argparse.Namespace(key=None, unit=None, label="wldn"), acts)
+        assert len(acts.told) == 1 and json.loads(capsys.readouterr().out) == []
+
+    def test_a_tell_that_fails_leaves_the_reading_untold_for_the_next_refresh(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "The owner is down"; review-batches "Notes sent while the planner is down"."""
+        acts = Acts()
+
+        def down(name, text):
+            print(f"could not tell {name} on chuck-herdr-alpha: it is not up", file=plan.sys.stderr)
+            return False
+        acts.tell = down
+        d = self.sweep(monkeypatch, tmp_path, acts, "batch/3", {"decision": "annotated", "feedback": "1. x", "annotationCount": 1})
+        assert json.loads(capsys.readouterr().out)[0]["said"] == (
+            "the user sent its reading, and crew could not tell wldn-planner: could not tell wldn-planner on chuck-herdr-alpha: "
+            "it is not up; the next refresh tells it")
+        assert not (d / "told.json").exists() and acts.emitted == []
+
+    def test_a_reading_closed_with_no_decision_tells_nobody(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "Closed with no decision"."""
+        acts = Acts()
+        self.sweep(monkeypatch, tmp_path, acts, "proposal/4", {"decision": "dismissed"})
+        assert acts.told == [] and json.loads(capsys.readouterr().out) == []
+
+    def test_a_reading_of_a_key_no_live_row_holds_tells_nobody(self, monkeypatch, tmp_path, capsys):
+        acts = Acts()
+        self.sweep(monkeypatch, tmp_path, acts, "land/y", {"decision": "approved"}, live=["land/z"])
+        assert acts.told == []
+
+    def test_a_batch_approved_with_no_words_is_recorded_read_and_its_card_closed_read_no_notes(self, monkeypatch, tmp_path, capsys):
+        """review-batches "The session approved", and "Sent with no card on the main level's host"."""
+        acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)},
+                    [post("batch/3", "wldn-planner", "req_b3", On=["batch/3"])])
+        self.sweep(monkeypatch, tmp_path, acts, "batch/3", {"decision": "approved", "annotationCount": 0})
+        assert [(e["Act"], e.get("Outcome")) for e in acts.emitted] == [("card.close", "Read; no notes")]
+        assert acts.told == []
+        assert json.loads(capsys.readouterr().out)[0]["said"] == (
+            "the user approved its reading with no notes, so crew recorded it read, Read; no notes: card batch/3: req_b3 withdrawn")
+        acts = Acts()
+        self.sweep(monkeypatch, tmp_path / "none", acts, "batch/3", {"decision": "approved", "annotationCount": 0})
+        assert [(e["Act"], e.get("Outcome"), e.get("by")) for e in acts.emitted] == [("batch.close", "Read; no notes", "wldn-planner")]
+
+    def test_a_batch_approved_with_no_words_whose_card_holds_a_note_is_told_to_the_planner(self, monkeypatch, tmp_path, capsys):
+        tapped = {"status": "answered", "turn": "agent", "version": 2, "answer": {"note": {"text": "x1: name the host."}}}
+        acts = Acts({"get_request": (tapped, None)}, [post("batch/3", "wldn-planner", "req_b3", On=["batch/3"])])
+        self.sweep(monkeypatch, tmp_path, acts, "batch/3", {"decision": "approved", "annotationCount": 0})
+        assert acts.emitted == [] and [n for n, _ in acts.told] == ["wldn-planner"]
+
+
 # ------------------------------------------------------------------------- crew card read of a kit's landings card
 
 def test_a_sent_landings_card_reads_the_ticked_bolts_in_its_order_and_the_submit_that_lands_them():
