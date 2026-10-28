@@ -12172,8 +12172,9 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     as live every row key less each the record holds as closed with no card open under it (batched, what the batches
     hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge, batch/
     while the record could not be read from its branch, when no key is taken out for being closed either (read.1). A host the survey
-    found not answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why
-    "its row is gone" or "its card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
+    found not answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said, sent},
+    why "its row is gone" or "its card is closed", or, for a reading the user sent that the sweep told its owner of or
+    recorded read (sent), "its reading was sent", and the hosts not checked, each {label, host, why} (read.3)."""
     ended, unchecked = [], []
     for l, _, _, plan in found:
         if not plan:
@@ -12202,8 +12203,9 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
                                                   and (x.get("unit") is None or isinstance(x["unit"], str)) for x in got)):
                 unchecked.append(dict(label=l, host=h, why="its sweep printed no list of sessions crew reads"))
                 continue
-            ended += [dict(label=l, host=h, key=x["key"], unit=x.get("unit"), said=x["said"],
-                           why="its card is closed" if x["key"] in rowed else "its row is gone") for x in got]
+            ended += [dict(label=l, host=h, key=x["key"], unit=x.get("unit"), said=x["said"], sent=x.get("sent") is True,
+                           why="its reading was sent" if x.get("sent") is True else "its card is closed" if x["key"] in rowed
+                           else "its row is gone") for x in got]
     return ended, unchecked
 
 
@@ -12290,8 +12292,9 @@ def rail_text(fleet, labels, read, now):
     it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, and each batch it
     closed or left with no card, named so, each partition it changed nothing for and why, each landings card raised
     again as main moved under it and each whose kit's revision of main can't be read (sweep_moved), each card session ended,
-    with its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
-    (the board's) gives the same text."""
+    with its host and why, each reading the user sent whose owner it told or that it recorded read, and each host whose
+    sessions were not checked. A host is named as not answering only when it holds a bolt of the plans read, so a read
+    that surveyed more (the board's) gives the same text."""
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
@@ -12353,11 +12356,13 @@ def rail_text(fleet, labels, read, now):
         ["", "landings cards whose main can't be read:"] + [
             f"  land/{u['kit']} ({u['label']}): whether main moved under it can't be told: {u['why']}" for u in moved["unread"]]
         if moved["unread"] else [])
-    ended = [f"  {e['key']}{' ' + e['unit'] if e['unit'] else ''} ({e['label']}) on {e['host']}: {e['why']}; {e['said']}"
-             for e in read.get("ended") or []]
+    said = [(e.get("sent"), f"  {e['key']}{' ' + e['unit'] if e['unit'] else ''} ({e['label']}) on {e['host']}: {e['why']}; {e['said']}")
+            for e in read.get("ended") or []]
+    ended, sent = [w for s, w in said if not s], [w for s, w in said if s]
     unended = [f"  {u['host']} ({u['label']}): {u['why']}" for u in read.get("unchecked") or []]
-    lines += [""] if ended or unended else []
-    lines += (["card sessions ended:"] + ended if ended else []) + (["card sessions not checked:"] + unended if unended else [])
+    lines += [""] if ended or sent or unended else []
+    lines += (["card sessions ended:"] + ended if ended else []) + (["readings sent:"] + sent if sent else []) + (
+        ["card sessions not checked:"] + unended if unended else [])
     for h, v in sv.items():
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
@@ -13526,14 +13531,16 @@ def card_read(fleet, a):
     crew's words (cards.answer_said); nothing else is. A key with a reading gives what the user sent in it too
     (reading_read), since nothing of crew's waits on it (teams.24): a batch's, batch/<n>, its card and its reading
     together, closing the card and recording the batch read (batch_card_read); a bolt's reading, land/<bolt>, its
-    decision alone, to the bolt's conductor (land_reading_read); a long proposal's, its reading's decision after the
-    card's answer, a decided one set aside."""
+    decision alone, to the bolt's conductor (land_reading_read), unless the caller holds a card of the bolt's own under
+    the key, as a conductor posted one before a kit had its landings card, which is read as any card; a long
+    proposal's, its reading's decision after the card's answer, a decided one set aside."""
     import cards
     label, who = card_asker(fleet, a)
     kind = land_key(a.key, partition_kits(fleet, label))
     if re.fullmatch(r"batch/\d+", a.key):
         return batch_card_read(fleet, label, a.key, who, a.json)
-    if kind and kind[0] == "bolt" and re.fullmatch(r"land/[a-z0-9][a-z0-9-]*", a.key):
+    if (kind and kind[0] == "bolt" and re.fullmatch(r"land/[a-z0-9][a-z0-9-]*", a.key)
+            and not cards.card_under(cards.host_entries(record, label, crew.this_host()), a.key, who)):
         return land_reading_read(fleet, label, a.key, who, a.json)
     if kind and kind[0] == "kit":
         entries = cards.host_entries(record, label, crew.this_host())
@@ -15115,16 +15122,20 @@ def card_folder(rel):
     return None
 
 
-def card_sweep(fleet, a):
+def card_sweep(fleet, a, acts=None):
     """crew card sweep --label L: the rail's, run on each host of the partition with its judgment on standard input as
     JSON, {"live": [card keys], "blind": [key prefixes]}. It ends, through end_session, each session crew recorded on
     this host for the partition whose key is in no live entry and starts with no blind prefix, once it is at least two
     minutes old by its own start against this host's clock and its folder's lock is free (crew card session holds it
     while it starts one). Then it releases, through preview_release, each preview crew recorded on this host for a
     bolt of the partition whose landing card's key the judgment holds dead, once it is two minutes old by when it was
-    asked (preview_dead). It prints, as a JSON list, each session and preview it acted on: its key, its unit (a batch
-    card's) or null, what it said, and whether it sent SIGTERM or released the preview. A folder with no session.json,
-    or whose path is no card key's, is left alone, and a record it can't read is kept and said (read.1, read.4)."""
+    asked (preview_dead). Then it acts on each reading of a live key the user sent and nobody has read (readings_sent):
+    a batch's sent with no words is recorded read as the planner's read records it (sweep_wordless), and every other
+    reading's owner is told once, the mark written only once the tell went through (sweep_told), since nothing of
+    crew's waits on a reading (teams.24). It prints, as a JSON list, each session, preview and reading it acted on: its
+    key, its unit (a batch card's) or null, what it said, whether it sent SIGTERM or released the preview, and, for a
+    reading, sent. A folder with no session.json, or whose path is no card key's, is left alone, and a record it can't
+    read is kept and said (read.1, read.4)."""
     a.key is None or fail("crew card sweep takes no key: it judges every session crew recorded on this host, from the "
                           "rail's judgment on standard input")
     label = default_label(fleet, a) or fail("crew card sweep runs for a partition: add --label")
@@ -15188,7 +15199,125 @@ def card_sweep(fleet, a):
             said, released = preview_release(label, bolt)
             if said:
                 out.append(dict(key=key, unit=None, said=said, ended=released))
+    acts = acts or CardActs(fleet)
+    for key, step in readings_due(readings_sent(root, live, blind)):
+        said = (sweep_wordless if step == "record" else sweep_told)(fleet, label, key, acts)
+        if said:
+            out.append(dict(key=key, unit=None, said=said, ended=False, sent=True))
     print(json.dumps(out))
+
+
+def readings_sent(root, live, blind):
+    """The readings of a partition's live card keys on this host, as readings_due reads them: (key, the reading's
+    result as card_result gives it, whether it carries crew's told mark), for each key folder under root, the
+    partition's CARDS folder, holding a result, a batch's, a long proposal's or a bolt's reading, never an old batch
+    card's unit, a key the rail's judgment holds dead or one it can't judge (judged_dead). A result crew can't read is
+    left out, said on standard error, and read at the next refresh (read.1)."""
+    found = []
+    for f in sorted(root.rglob("result.json")) if root.is_dir() else []:
+        got = card_folder(f.parent.relative_to(root))
+        if not got or got[1] or got[0] not in live or got[0].startswith(tuple(blind)) or old_batch(got[0]):
+            continue
+        try:
+            decided = card_result(f.parent)
+        except Refusal as e:
+            print(f"card {got[0]}: {e}", file=sys.stderr)
+            continue
+        found.append((got[0], decided, (f.parent / "told.json").exists()))
+    return found
+
+
+def readings_due(readings):
+    """What the rail's refresh does with each reading the user may have sent (card-sessions "The rail's refresh tells
+    a reading's owner once that the user sent it", review-batches "A batch whose reading session is sent is read"), a
+    decision of facts alone (code.7), from (key, decided, told) as readings_sent gives them: [(key, "record")] for a
+    batch's reading approved with no words, which crew records read, since there is nothing to pass on; [(key, "tell")]
+    for every other reading approved or annotated that carries no told mark, whose owner crew tells to read it; nothing
+    for a reading undecided, closed with no decision, or told already. A reading crew card read has read is set aside
+    or ended, so it is no longer found."""
+    due = []
+    for key, decided, told in readings:
+        if not decided or decided[0] not in ("approved", "annotated") or told:
+            continue
+        wordless = decided[0] == "approved" and not decided[1] and not decided[2]
+        due.append((key, "record" if wordless and key.startswith("batch/") else "tell"))
+    return due
+
+
+def reading_owner(fleet, label, key):
+    """Who reads a key's reading (card-sessions): the planner a batch's and a long proposal's, the bolt's conductor a
+    bolt's, land/<bolt>, the team holding it read from the plan (land_held); refused when no team holds the bolt or the
+    plan can't be read."""
+    if not key.startswith("land/"):
+        return f"{label}-planner"
+    bolt = key.split("/", 1)[1]
+    _, b, t = land_held(fleet, label, bolt)
+    (b and t) or fail(f"bolt {bolt} is held by no team of {label}'s plan, so nobody reads its reading")
+    return f"{t['name']}-conductor"
+
+
+def sweep_told(fleet, label, key, acts):
+    """The owner of a reading the user sent told once that it was sent, by the rail's refresh (card-sessions "The rail's
+    refresh tells a reading's owner once that the user sent it"): crew's tell (roles.4), naming the key and crew card
+    read and holding no word of the user's (roles.6), and the reading marked told, told.json beside its result, only
+    once the tell went through; a tell refused, the owner not up among it, leaves it untold for the next refresh, so
+    delivery is at least once. What it did, in words."""
+    try:
+        owner = reading_owner(fleet, label, key)
+    except Refusal as e:
+        return f"the user sent its reading, and crew can't tell whom to tell: {e}"
+    why = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(why):
+            told = acts.tell(owner, f"The user sent {key}'s reading. Run crew card read {key} for what they sent.")
+    except Refusal as e:
+        told, why = False, io.StringIO(str(e))
+    if not told:
+        return f"the user sent its reading, and crew could not tell {owner}: " + (
+            (why.getvalue().strip().splitlines() or ["the tell failed"])[-1] + "; the next refresh tells it")
+    d = CARDS / label / key
+    try:
+        (d / "told.json").write_text(json.dumps({"told": owner, "at": datetime.datetime.now(datetime.timezone.utc)
+                                                 .strftime("%Y-%m-%dT%H:%M:%SZ")}) + "\n")
+    except OSError as e:
+        return f"the user sent its reading, and {owner} was told, but crew could not mark it told: {e.strerror or e}"
+    return f"the user sent its reading, and {owner} was told to run crew card read {key}"
+
+
+def sweep_wordless(fleet, label, key, acts):
+    """A batch's reading the user approved with no words, recorded read by the rail's refresh on the main level's host
+    (review-batches "The session approved"), as the planner's crew card read records it, whichever comes first: its
+    card, read once, closed "Read; no notes", which ends the reading, and crew's own close of the batch recorded when
+    no card closed (batch_read_close). A card the user answered with a note has words to pass on, so the planner is
+    told instead (sweep_told), and a card crew can't read now leaves the batch to the next refresh. What it did, in
+    words."""
+    owner, d = f"{label}-planner", CARDS / label / key
+    card = cards.card_under(acts.entries(label), key, owner)
+    got = None
+    if card:
+        try:
+            with acts.bridge(owner, "The next refresh reads it again.") as py:
+                got, words = py.answer("get_request", {"requestId": card, "name": owner})
+        except Refusal as e:
+            words = str(e)
+        if words is not None and cards.lost(words):
+            card_lost(acts, label, owner, key, card, words)
+            card, got = None, None
+        elif words is not None:
+            return f"the user approved its reading with no notes, and crew can't read its card {card} now: {words}; the next refresh reads it again"
+    r = reading_read(key, got, card_result(d), pane_answered(acts.entries(label)).get(key), held=bool(card))
+    if r["close"] != read_outcome(0):
+        return sweep_told(fleet, label, key, acts)
+    said = io.StringIO()
+    with contextlib.redirect_stdout(said):
+        closed = row_card_close(fleet, label, owner, key, outcome=r["close"], acts=acts) if card else None
+        if batch_read_close(closed):
+            acts.emit(label, "batch.close", [cards.row_object(key) or key], by=owner,
+                      why=f"batch({key.split('/', 1)[1]}): read in its session", Key=key, State="read", Outcome=r["close"])
+        ended = acts.end(label, key) if r["end"] and not closed else None
+    words = [w for w in said.getvalue().strip().splitlines() + [ended] if w]
+    return f"the user approved its reading with no notes, so crew recorded it read, {r['close']}" + (
+        f": {'; '.join(words)}" if words else "")
 
 
 def judged_dead(found, live, blind):
