@@ -68,8 +68,9 @@ BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\n
 def submit(monkeypatch, tmp_path):
     """crew bolt submit on stand-ins for what it reaches: the plan, ops's transcript, the team's host, whose main is at
     OLD before, whose policy takes no pull requests, whose sluice has recorded no submission to main, and which
-    queues, waits on and lands the bolt unless told otherwise (outs, in turn), and this host's run record and kept
-    words, under tmp_path; crew bolt land's close stood in for."""
+    queues, waits on and lands the bolt unless told otherwise (outs, in turn), sluice's record of the submission as its
+    last wait printed it, this host deneb too, where the landing is read in this process, and this host's run record,
+    team state and kept words, under tmp_path; crew bolt land's close stood in for."""
     got = {"ran": [], "emitted": [], "closed": [], "verdict": heard(),
            "outs": [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]}
     monkeypatch.setattr(plan, "CONTEXT", {})
@@ -80,15 +81,39 @@ def submit(monkeypatch, tmp_path):
     monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(
         "MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE)))
     names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK", plan.SUBMISSIONS: "SUBMISSIONS",
-             plan.LAND_COPIES: "COPIES", plan.QUEUE: "OVERVIEW"}
-    monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: got["ran"].append(names[argv[2]]) or (
-        ran_as(0, NONE_YET) if argv[2] == plan.SUBMISSIONS else ran_as(0, "THERE=-\n") if argv[2] == plan.LAND_COPIES
-        else ran_as(0, EMPTY_QUEUE) if argv[2] == plan.QUEUE else got["outs"].pop(0)))
+             plan.LAND_COPIES: "COPIES", plan.QUEUE: "OVERVIEW", plan.SUBMISSION_STATUS: "STATUS"}
+    waited = [None]
+
+    def on_machine(fleet, host, argv):
+        got["ran"].append(names[argv[2]])
+        if argv[2] == plan.SUBMISSIONS:
+            return ran_as(0, NONE_YET)
+        if argv[2] == plan.LAND_COPIES:
+            return ran_as(0, "THERE=-\n")
+        if argv[2] == plan.QUEUE:
+            return ran_as(0, EMPTY_QUEUE)
+        if argv[2] == plan.SUBMISSION_STATUS:  # as the last wait printed it, or landed
+            doc = json.loads(waited[0].stdout)
+            return ran_as(0, json.dumps(doc if doc.get("schema") else {"schema": plan.SUBMISSION, "id": int(argv[-1]), "state": "landed"}))
+        out = got["outs"].pop(0)
+        if argv[2] == plan.WAIT:
+            waited[0] = out
+        return out
+    monkeypatch.setattr(plan.crew, "on_machine", on_machine)
+    monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+    monkeypatch.setattr(plan.crew, "crew_argv", lambda fleet, host, *args: ["crew", *args])
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: Plan())
+    monkeypatch.setattr(plan, "team_state", lambda t: tmp_path / "team")
+    monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", f"{label}/main"))
+    monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "tip")
+    monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [
+        dict({k: v for k, v in e.items() if v not in (None, "") and k not in ("frm", "refused")}, From=e.get("frm") or [],
+             **({"Refused": e["refused"]} if e.get("refused") else {})) for e in got["emitted"]])
     monkeypatch.setattr(plan.READ, "drop_kit", lambda *a: None)
     monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: got["emitted"].append(dict(f, Act=act, On=on)) or "eid")
     monkeypatch.setattr(plan.record, "who", lambda: "swancloud-ops")
     monkeypatch.setattr(plan, "may_write", lambda fleet, key, a: None)
-    monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: got["closed"].append(a.bolt))
+    monkeypatch.setattr(plan, "bolt_land", lambda fleet, a, **k: got["closed"].append(a.bolt))
     monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None, pane=None: None)
     monkeypatch.setattr(plan, "LANDINGS", tmp_path / "landings")
 
@@ -101,15 +126,22 @@ def submit(monkeypatch, tmp_path):
 
 
 class TestTheSubmission:
-    def test_the_users_words_land_the_bolt_recorded_by_their_record_and_length_and_kept_here_before_it_closes(self, submit, monkeypatch):
-        kept = []  # what crew bolt land's close reads back
-        monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: kept.append(plan.landing_word_read("swancloud", a.bolt, "session/s-1/u-7")))
+    def test_the_users_words_land_the_bolt_recorded_by_their_record_and_length_and_kept_here_as_it_is_queued(self, submit, monkeypatch):
+        """bolt-teams "Queued on the user's words in ops's pane": the queued entry and the landing's own each name the
+        transcript record and the words' length, none of the words, and the words are kept on this host as sluice
+        queues it, before any wait, so crew bolt land's close reads them back wherever the landing's end is read."""
+        kept = []  # what the words kept read back, at the wait and at crew bolt land's close
+        monkeypatch.setattr(plan, "bolt_land", lambda fleet, a, **k: kept.append(plan.landing_word_read("swancloud", a.bolt, "session/s-1/u-7")))
+        ran = plan.crew.on_machine
+        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: (
+            argv[2] == plan.WAIT and kept.append(plan.landing_word_read("swancloud", "y", "session/s-1/u-7"))) or ran(fleet, host, argv))
         got = submit["run"](WORDS)
-        assert kept == [WORDS]
-        assert got["ran"] == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
-        [e] = got["emitted"]
-        assert e["Act"] == "bolt.submit" and e["frm"] == ["session/s-1/u-7"] and e["Chars"] == len(WORDS)
-        assert WORDS not in repr(e)
+        assert kept[0] == WORDS and kept[-1] == WORDS
+        assert got["ran"] == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "STATUS", "LANDED", "MARK"]
+        queued, landed = got["emitted"]
+        assert (queued["Act"], queued["Outcome"], landed["Act"]) == ("bolt.submit", "queued", "bolt.submit")
+        for e in (queued, landed):
+            assert e["frm"] == ["session/s-1/u-7"] and e["Chars"] == len(WORDS) and WORDS not in repr(e)
         assert plan.landing_word_read("swancloud", "y", "session/s-1/u-7") == WORDS
 
     def test_a_record_with_no_uuid_is_named_by_its_lines_hash(self, submit):
@@ -121,7 +153,7 @@ class TestTheSubmission:
         landed = [ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]
         submit["outs"] = [QUEUED, QUEUED] + landed + landed  # one host: both queued, then each waited on in order
         got = submit["run"](WORDS, bolts=("y", "z"))
-        assert [e["frm"] for e in got["emitted"]] == [["session/s-1/u-7"]] * 2 and got["closed"] == ["y", "z"]
+        assert [e["frm"] for e in got["emitted"]] == [["session/s-1/u-7"]] * 4 and got["closed"] == ["y", "z"]
         assert plan.landing_word_read("swancloud", "z", "session/s-1/u-7") == WORDS
 
     @pytest.mark.parametrize("v", [heard("agent:swancloud-operator"), heard(grade="refused"), heard("tool"),
@@ -140,16 +172,19 @@ class TestTheSubmission:
         assert submit["ran"] == []
 
     def test_the_cards_send_lands_as_before_naming_no_record(self, submit):
-        e = submit["run"]()["emitted"][0]
-        assert "frm" not in e and "Chars" not in e
+        for e in submit["run"]()["emitted"]:
+            assert not e.get("frm") and "Chars" not in e
         assert not (plan.LANDINGS / "swancloud" / "y.json").exists()
 
-    def test_a_submission_that_did_not_land_keeps_no_words(self, submit):
+    def test_a_submission_that_did_not_land_is_recorded_naming_no_record(self, submit):
+        """The words were kept as it was queued; its refusal names no record of them, so no landing reads them back."""
         submit["outs"][1:] = [ran_as(1, json.dumps(dict(RAN, id=7))), ran_as(0, said(1, new=OLD, github=OLD, held="no"))]
         with pytest.raises(plan.Stopped):
             submit["run"](WORDS)
-        assert submit["emitted"][0].get("refused") and "frm" not in submit["emitted"][0]
-        assert plan.landing_word_read("swancloud", "y", "session/s-1/u-7") is None
+        queued, refused = submit["emitted"]
+        assert queued["Outcome"] == "queued" and refused.get("refused") and "frm" not in refused
+        assert plan.pane_word_of([dict(e, Act="bolt.submit", From=e.get("frm") or [], Refused=e.get("refused"))
+                                  for e in submit["emitted"]], "y") is None
 
 
 def submitted(bolt="y", frm=None, refused=None, by="swancloud-ops", at="2026-10-22T21:04:00Z", host="deneb"):
@@ -166,6 +201,12 @@ class TestTheWordRead:
         entries = [submitted(), submitted(frm="session/s-1/u-7")]
         assert plan.pane_word_of(entries, "y") == ("swancloud-ops", "2026-10-22T21:04:00Z", "session/s-1/u-7", "deneb")
         assert plan.pane_word_of(entries, "z") is None
+
+    def test_a_landing_still_queued_is_in_flight_and_names_no_pane(self):
+        entries = [submitted(), dict(submitted(frm="session/s-1/u-7"), Outcome="queued", Submission="7")]
+        assert plan.pane_word_of(entries, "y") is None
+        entries.append(dict(submitted(frm="session/s-1/u-7"), Outcome="landed", Submission="7"))
+        assert plan.pane_word_of(entries, "y") == ("swancloud-ops", "2026-10-22T21:04:00Z", "session/s-1/u-7", "deneb")
 
     def test_a_refused_pane_submission_after_a_card_one_names_no_pane(self):
         entries = [submitted(), submitted(frm="session/s-1/u-7", refused="crew submits nothing of bolt y: …")]
@@ -187,6 +228,50 @@ class TestTheWordRead:
         (tmp_path / "swancloud" / "y.json").write_text("{not json")
         with pytest.raises(plan.Refusal, match=r"can't read the user's words kept for bolt y's landing in .*y\.json"):
             plan.landing_word_read("swancloud", "y", "session/s-1/u-7")
+
+
+class TestTheWordsAtAClose:
+    """bolt-teams "The user's words are kept on another host" (Decision 7): a read that closes a landing given on the
+    user's words in ops's pane, on another host than the one keeping them, fetches nothing from there; it closes the
+    landing card naming ops's pane and the time, and says which host keeps the words (plan.words_kept_where)."""
+
+    def test_words_kept_on_another_host_name_that_host(self):
+        assert plan.words_kept_where("mac-studio", "deneb") == "are kept on mac-studio, where it was submitted, not on deneb"
+
+    def test_words_kept_nowhere_here_say_so(self):
+        assert plan.words_kept_where("deneb", "deneb") == "are not kept on deneb"
+
+    def test_a_reads_close_on_a_host_keeping_no_words_names_the_pane_and_the_time_and_reaches_no_other_host(
+            self, monkeypatch, tmp_path, capsys):
+        P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "crw-5", "Repo": "crew"}, "work_of": lambda s, b: [],
+                           "units": lambda s: []})
+        at = "2026-10-28T09:41:00Z"
+        entries = [dict(submitted(frm="session/s-1/u-7", at=at, host="mac-studio"), Outcome="queued", Submission="412", Chars=len(WORDS)),
+                   dict(submitted(frm="session/s-1/u-7", at=at, host="mac-studio"), Outcome="landed", Submission="412", Chars=len(WORDS))]
+        tidied, wrote = [], []
+        monkeypatch.setattr(plan, "locate", lambda *a: ("swancloud", None, None, P()))
+        monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
+        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TEAM)
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: BEFORE.replace(f"GITHUB={OLD}", f"GITHUB={NEW}"))
+        monkeypatch.setattr(plan, "stages_for", lambda fleet, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
+        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: entries)
+        monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append(k.get("by")))
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
+        monkeypatch.setattr(plan, "tidy_after", lambda fleet, t, what, landed=None, **k: tidied.append(landed))
+        monkeypatch.setattr(plan, "LANDINGS", tmp_path)  # this host keeps no words
+        monkeypatch.setattr(plan.crew, "on_machine", lambda *a: pytest.fail(f"the close reached a host: {a[1:]}"))
+        monkeypatch.setattr(plan.record, "who", lambda: "crw-5-conductor")
+        monkeypatch.setattr(plan, "landing_time", lambda *a: {})  # its age and split are landing_time's own cases
+        assert plan.landing_close({}, "swancloud", "y", "412", entries)
+        landed = plan.landed_words(NEW, "")
+        assert wrote == ["swancloud-ops"]
+        assert tidied == [("y", f"Landed on the user's word in swancloud-ops's pane; {landed}",
+                           f"Landed on the user's word in swancloud-ops's pane at 09:41Z; {landed}", True)]
+        assert tidied[0][2] == plan.pane_landed(landed, "swancloud-ops", at, None)[1] and WORDS not in repr(tidied)
+        assert ("the user's words to land y are kept on mac-studio, where it was submitted, not on deneb: its landing card "
+                "closes naming swancloud-ops's pane and the time, without them") in capsys.readouterr().out
 
 
 # ------------------------------------------------------------------------------------- a stop in ops's pane

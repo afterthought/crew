@@ -4,7 +4,8 @@
 # sluice prints for a repository whose branches have no records yet; `sluice overview --json --watch` prints that
 # document as one line at once and again whenever it changes but for its time, as sluice 0.51.3 does, until it is
 # ended, reading no git, so a test's shims on git see the follower's own calls alone; `sluice status <id> --json` prints
-# $CREW_TEST_ROOT/sluice-status-<id>.json while it exists, else sluice's not-found error on standard output, exiting 1.
+# $CREW_TEST_ROOT/sluice-status-<id>.json while it exists, else the record of a submission it made, as its wait prints
+# it, else sluice's not-found error on standard output, exiting 1.
 # `sluice preview <branch> <revision> [--wait] --json` refuses, as sluice does, a revision whose .config/sluice.toml has
 # no [preview] table, exiting 2; else it gives back the preview of that revision when one is recorded, starting
 # nothing, or records one in $CREW_TEST_ROOT/sluice-previews/<revision>.json, its addresses the table's `addresses`
@@ -25,8 +26,12 @@
 # forecasts that worktree's head, printing the same file for the branch it is on, or, without it, a forecast with no
 # conflict, and refuses a detached worktree as sluice does, exiting 2. `sluice submit <branch>
 # --no-wait --json` lands this worktree's head at once, as the stub wt-submit does, and prints {id, branch, ahead}; its
-# outcome waits for `sluice wait <id> --timeout <duration> --json`, which prints the submission's record, its state
-# landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; its verdict is in the record alone, as sluice
+# outcome waits for `sluice wait <id> --timeout <duration> --json`, or `sluice wait <branch> ...` from the worktree,
+# which waits on its last submission to the branch, as sluice's does, and prints the submission's record, its state
+# landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; while $CREW_TEST_ROOT/sluice-wait-holds exists,
+# and for as many calls as $CREW_TEST_ROOT/sluice-wait-<id>-fives counts, one fewer each call, it is undecided: the wait
+# prints the record under test and exits 5, as sluice's does at its timeout, after a moment while held, and its status
+# says it is under test; its verdict is in the record alone, as sluice
 # 0.36.4's is under --json, and nothing of it on standard error: a failed record carries `result` "failed" and
 # `failed`, as sluice 0.36.4's records.rs Submission and FailedTask have them, the failed check with a hash, a check
 # that ran, named by the words of $CREW_TEST_ROOT/sluice-fails, or each check $CREW_TEST_ROOT/sluice-could-not-run
@@ -174,22 +179,35 @@ print(p["number"], "draft" if p["isDraft"] else "ready")' "$CREW_TEST_ROOT/gh-pu
     fi
     ;;
   wait\ *\ --timeout\ *\ --json)
-    f=$common/stub-sluice-wait-${2:-}.json
-    stands=${CREW_TEST_ROOT:?}/sluice-stands-${2:-}
-    if [[ ! -e $f ]] && mkdir "$stands.lock" 2>/dev/null; then
+    id=${2:-}
+    if [[ ! $id =~ ^[0-9]+$ ]]; then  # a branch: this worktree's last submission to it, as sluice follows one
+      head=$(git symbolic-ref -q --short HEAD)
+      id=$(jq -r --arg head "$head" '[.[] | select(.from.head == $head)] | last | .id // empty' \
+        "$common/stub-sluice-records-${id//\//-}.json" 2>/dev/null)
+    fi
+    f=$common/stub-sluice-wait-$id.json
+    stands=${CREW_TEST_ROOT:?}/sluice-stands-$id
+    if [[ -n $id && ! -e $f ]] && mkdir "$stands.lock" 2>/dev/null; then
       if [[ -e $stands && ! -e $f ]]; then  # a submission the test left standing, landed now from its place, as a round lands one
         (cd "$(cat "$stands")" && CREW_TEST_LOG= wt-submit main --no-remove) >/dev/null 2>&1; rc=$?
         state=landed; (( rc == 1 )) && state=failed; (( rc == 2 )) && state=conflict
-        jq -n --argjson id "$2" --arg state "$state" --arg path "$(cat "$stands")" --argjson rc "$rc" \
+        jq -n --argjson id "$id" --arg state "$state" --arg path "$(cat "$stands")" --argjson rc "$rc" \
           '{schema: "sluice/submission@1", id: $id, branch: "main", state: $state, from: {path: $path}, rc: $rc}' > "$f.new" && mv "$f.new" "$f"
         rm -f "$stands"
       fi
       rmdir "$stands.lock"
     fi
     for _ in $(seq 6000); do [[ -e $f || ! -e $stands.lock ]] && break; read -rt 0.1 _ <> <(:) || true; done  # another wait landing it
-    if [[ ! -e $f ]]; then
+    if [[ -z $id || ! -e $f ]]; then
       printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "${2:-}"
       exit 1
+    fi
+    fives=${CREW_TEST_ROOT:?}/sluice-wait-${id}-fives
+    held=; [[ -e $CREW_TEST_ROOT/sluice-wait-holds ]] && held=yes  # read once, so a hold lifted meanwhile spends no five
+    if [[ -n $held ]] || (( $(cat "$fives" 2>/dev/null || echo 0) > 0 )); then
+      if [[ -n $held ]]; then read -rt 0.2 _ <> <(:) || true; else echo $(( $(cat "$fives") - 1 )) > "$fives"; fi
+      jq -c 'del(.rc) | .state = "testing" | del(.result, .failed, .conflict)' "$f"
+      exit 5
     fi
     jq -c 'del(.rc)' "$f"
     exit "$(jq -r .rc "$f")"
@@ -269,6 +287,15 @@ say({"branch": branch, "deleted": tip, "into": other})
     id=${2:-}
     [[ $id =~ ^[0-9]+$ ]] || { echo "sluice stub: status $id is not stubbed" >&2; exit 2; }
     if [[ -e ${CREW_TEST_ROOT:?}/sluice-status-$id.json ]]; then cat "$CREW_TEST_ROOT/sluice-status-$id.json"; exit 0; fi
+    f=$common/stub-sluice-wait-$id.json
+    if [[ -e $f ]]; then  # the record of a submission it made, under test while its wait is undecided
+      if [[ -e $CREW_TEST_ROOT/sluice-wait-holds ]] || (( $(cat "$CREW_TEST_ROOT/sluice-wait-$id-fives" 2>/dev/null || echo 0) > 0 )); then
+        jq 'del(.rc) | .state = "testing" | del(.result, .failed, .conflict)' "$f"
+      else
+        jq 'del(.rc)' "$f"
+      fi
+      exit 0
+    fi
     printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "$id"
     exit 1
     ;;

@@ -299,10 +299,11 @@ def board_data(fleet, labels, read, now):
                 unread = k.get("submissions_error")
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
                                                      [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
+                recorded = landing_of(logs, b.name())
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
-                          "landing": landing, "submissions_error": unread,
+                          "landing": landing, "submissions_error": unread, "record": recorded,
                           "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
                 for u in units:
                     s = st.of(u.name())
@@ -312,8 +313,9 @@ def board_data(fleet, labels, read, now):
                 ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "submission": subs.get(f["fix"]),
                                     "worktree": f["path"], "url": url(f["path"])} for f in fixes]
                 construction.append(ledger)
-                if state == "landed":
-                    attention.append({"what": "landed", "name": b.name(), "why": "every unit has landed on main, and the bolt is still in the plan"})
+                if state == "landed" or (recorded or {}).get("unclosed"):
+                    attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {recorded['unclosed']}"
+                                      if (recorded or {}).get("unclosed") else "every unit has landed on main, and the bolt is still in the plan"})
             queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))}
                      for u in pl.queue()]
         operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
@@ -476,7 +478,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Construction")
         for b in p["construction"]:
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
-                        state_said(b["state"]), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                        head_said(b), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
             for u in b["units"]:
                 line(fields(u["unit"], stage_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
@@ -562,13 +564,52 @@ def time_of(b):
     return (b.get("time") or {}).get("said") or ""
 
 
+def landing_of(entries, bolt):
+    """What the run record holds of a held bolt's landing for its head line, its ledger's record (plan.21, Decision 5), from the partition's
+    entries the rail read, oldest first: {"queued": n} while its last bolt.submit has its landing queued as sluice's #n
+    (plan.submit_queued); {"unclosed": words} once its last bolt.submit landed and its last bolt.land since is refused,
+    in that refusal's words; else None. A decision of facts alone (code.7)."""
+    last, refused = None, None
+    for e in entries:
+        if f"bolt/{bolt}" not in (e.get("On") or []):
+            continue
+        if e.get("Act") == "bolt.submit":
+            last, refused = e, None
+        elif e.get("Act") == "bolt.land":
+            refused = e.get("Refused")  # None once a close went through
+    if last and last.get("Outcome") == "queued":
+        return {"queued": last.get("Submission")}
+    if last and last.get("Outcome") == "landed" and refused:
+        return {"unclosed": refused}
+    return None
+
+
+def head_said(b):
+    """A held bolt's state as its head line says it, from what the run record holds of its landing (its record,
+    landing_of): landed on main and not closed, in its last refused close's words; its landing queued, with sluice's
+    number, only while sluice's queue was read and shows no landing of it standing, which landing_said says in its
+    stead, a queue that can't be read showing no number (queue_said, read.1); else its state (state_said)."""
+    record = b.get("record") or {}
+    if record.get("unclosed"):
+        return f"landed on main, not closed: {record['unclosed']}"
+    if record.get("queued") and not b.get("landing") and not b.get("submissions_error"):
+        return f"landing queued as #{record['queued']}"
+    return state_said(b["state"])
+
+
+def needs_eye(b):
+    """Whether a held bolt's head line has the attention gutter: every unit of it landed, or its close refused."""
+    return b["state"] == "landed" or bool((b.get("record") or {}).get("unclosed"))
+
+
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
-    dim; then its pips, its name, its state unless active (state_said), its landing standing in sluice (landing_said),
-    that its submissions can't be read when they can't (queue_said), how many of its units have merged, and its age and
-    who held its time (time_of); its landing's marker in the gutter, or attention once every unit has landed."""
-    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], state_said(b["state"]),
-                      landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+    dim; then its pips, its name, its state unless active, or what its landing is (head_said), its landing standing in
+    sluice (landing_said), that its submissions can't be read when they can't (queue_said), how many of its units have
+    merged, and its age and who held its time (time_of); its landing's marker in the gutter, or attention once every
+    unit has landed or its close was refused (needs_eye)."""
+    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], head_said(b),
+                      landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
 
 
 def ledger_rows(b):
@@ -703,8 +744,9 @@ def ops_view(p):
     (landing_said), with its card, and each held bolt whose landing stands on no such row; then, environment by
     environment, each deploy
     waiting on the user's word with its card, each approved and not yet deployed, each running, and each operation step
-    waiting, handed or failed, with the deploy it comes after, or whose gate it is, and its doer; and what keeps a host
-    or the plan from being read."""
+    waiting, handed or failed, with the deploy it comes after, or whose gate it is, and its doer; the head line of each
+    bolt that landed on main and whose close was refused, with its words (plan.21); and what keeps a host or the plan
+    from being read."""
     pending = [(e["env"], d) for e in p.get("environments", []) for d in e["deploys"] if not d["ended"] and d["answer"] != "replaced"]
     steps = [(e["env"], w) for e in p.get("environments", []) for w in e["waiting"]]
     word = sum(d["answer"] == "waiting" for _, d in pending)
@@ -724,6 +766,7 @@ def ops_view(p):
     rowed = {x for _, bolts in lands.values() for x in bolts}
     out += [row(fields(b["repo"] or "", b["bolt"], landing_said(b)), " ") for b in p.get("construction", [])
             if b.get("landing") and b["bolt"] not in rowed]
+    out += [bolt_row(b, b["team"]) for b in p.get("construction", []) if (b.get("record") or {}).get("unclosed")]
     for e in p.get("environments", []):
         for d in (d for env, d in pending if env == e["env"]):
             out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))

@@ -657,8 +657,9 @@ def landing(repo, tmp_path):
     no `sluice wait` running; the outcome sluice's wait would give is handed to LANDED as crew hands it, with sluice's
     last line, or, with none, SUBMIT's exit and the last line SUBMIT says the submission said, as landing_ended hands
     them. A stand-in sluice beside it takes `sluice wait 7`, for SUBMIT run again with a submission and its tip (again):
-    the wait SUBMIT leaves running ends at once, and the one plan.WAIT runs, as landing_ended does, finds the landing's
-    place made again on bolt/b, lands from it as wt-submit does and exits 0, handed to LANDED with its last line; and
+    sluice lands submission 7 once, whichever wait on it asks first, the waiter SUBMIT leaves running or the one
+    plan.WAIT runs as landing_ended does, finding the landing's place made again on bolt/b and landing from it as
+    wt-submit does, and every wait on it ends with that landing's exit, plan.WAIT's handed to LANDED with its last line; and
     `sluice wait main`, which writes where it ran and what it was asked to the file followed, and ends once the file
     release is there. Each run reads the bolt's two copies and decides the head it submits first, as landing_submitted
     does (LAND_COPIES, kit.land_copies, landing_head), then runs between when given, then SUBMIT with that head and the
@@ -740,10 +741,16 @@ git status --porcelain > "{tmp_path}/status"
 [ "$1 $2" = "wait main" ] && {{ echo "$PWD $*" > "{tmp_path}/followed"; n=0
   while [ ! -e "{tmp_path}/release" ] && [ $n -lt 6000 ]; do sleep 0.1; n=$((n + 1)); done; exit 0; }}
 [ "$1 $2" = "wait 7" ] || exit 9
-[ "$3 $4" = "--timeout 9m" ] || exit 0
-cd "{land}" && [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
+once="{tmp_path}/sluice-7"
+if mkdir "$once" 2>/dev/null; then
+  (cd "{land}" && [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 {lands}{pushed if on_github else 'git update-ref refs/heads/main "$new"'}
+  ); rc=$?; echo "$rc" > "$once/rc.new" && mv "$once/rc.new" "$once/rc"; exit "$rc"
+fi
+n=0; while [ ! -e "$once/rc" ] && [ $n -lt 6000 ]; do sleep 0.1; n=$((n + 1)); done
+exit "$(cat "$once/rc")"
 ''')
+        shutil.rmtree(tmp_path / "sluice-7", ignore_errors=True)
         for tool in ("wt-submit", "sluice"):
             (bin_ / tool).chmod(0o755)
         return lambda *again, between=None: land_with(f"{bin_}:{os.environ['PATH']}", *again, between=between)
@@ -1194,7 +1201,7 @@ def test_a_landing_sluice_queued_as_a_pull_request_is_followed_from_its_place_wh
     while not followed.exists() and time.monotonic() < end:
         time.sleep(0.1)
     ran_in, *asked = followed.read_text().split()
-    assert os.path.realpath(ran_in) == os.path.realpath(land) and asked == ["wait", "main", "--timeout", "24h", "--json"]
+    assert os.path.realpath(ran_in) == os.path.realpath(land) and asked == ["wait", "main", "--timeout", "9m", "--json"]
     assert plan.landing_now(t, "b") == (str(land), True, True)
     release.write_text("")
     while plan.landing_now(t, "b")[2] and time.monotonic() < end:
