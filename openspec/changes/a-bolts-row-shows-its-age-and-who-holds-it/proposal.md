@@ -57,5 +57,6 @@ README.md
 plugin/skills/crew/SKILL.md
 tests/py/**
 tests/contract/**
+tests/t-journey-land.sh
 tests/moon.yml
 ```
