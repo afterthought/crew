@@ -11574,7 +11574,8 @@ def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, history, 
     """What a held bolt's time is split from (bolt_time), read from what crew already keeps, a decision of facts alone
     (code.7): the partition's run record (entries, oldest first, read from its branch, read.5) and sluice's submissions
     of the kit, those standing as the gather or the follower's watch read them (submissions, gather.submissions_of's
-    (list, why)) and every one its branches have had (history, gather.decided_of's (list, why)). The start is the bolt's
+    (list, why)) and every one its branches have had (history, gather.decided_of's (list, why), with each the follower
+    saw leave the queue since, told at the line's time, board.kept_gone). The start is the bolt's
     newest give not refused. Its stages are each stage.start of a unit or chore of the bolt's, and each fix.start and
     fix.merge of a fix of it, fix/<bolt>/<f>, not refused, to the next stage.end naming the same stage and agent, or
     running yet, a merge told by its stage/<u>/merge or by fix.merge. Its submissions are those submission_rows gives
@@ -11642,7 +11643,7 @@ def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, history, 
         return x.get("branch") == "main" and (w == f"bolt/{bolt}" or (w.startswith("pull/") and x.get("pull_head") == f"bolt/{bolt}"))
     gate = {}
     for x in [x for x in hist if of_bolt(x)] + [x for x in subs if of_bolt(x)]:
-        decided = x.get("decided") or (x.get("told") if x.get("state") not in STANDING else None)
+        decided = x.get("told")
         if not x.get("submitted") or (x.get("state") not in STANDING and not decided):
             return {"unknown": f"who held its time can't be told: sluice's record of #{x['id']} gives no time it was "
                                + ("submitted" if not x.get("submitted") else "decided"), "start": start}

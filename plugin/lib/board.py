@@ -1027,6 +1027,20 @@ def queue_of(state):
     return gather.submissions_of(state["doc"]) if "doc" in state else (None, state["why"])
 
 
+def kept_gone(before, now, history, at):
+    """sluice's record of a kit's submissions once its queue moved with nothing gathered (Decision 7 of
+    a-bolts-row-shows-its-age-and-who-holds-it): the last gather's (history), and each submission that stood before
+    (before) and has left the queue the watch's line now holds (now) that the record holds no outcome for, kept as it
+    last stood, told at the line's time (at), so its time in the gate counts until the next gather reads sluice's
+    record of it; the record as it was while it, the queue or the line's time can't be read (read.1). A decision on
+    plain facts (code.7)."""
+    if history is None or now is None or not isinstance(at, str) or not at:
+        return history
+    standing, told = {x["id"] for x in now}, {x["id"] for x in history if x.get("told")}
+    gone = [dict(x, told=at) for x in before or [] if x["id"] not in standing and x["id"] not in told]
+    return [x for x in history if x["id"] not in {g["id"] for g in gone}] + gone
+
+
 def queue_kits(kits):
     """The kits whose queue the follower's read shows, by (host, main): each the read asked bolts of and read (gather.kit
     reads sluice's queue for those alone), of the kept answers, {host: {main: (request, answer)}}."""
@@ -1452,12 +1466,16 @@ class Follower:
 
     def requeue(self, moved_):
         """Each kit whose queue moved has its kept answer's submissions remade from what its watch or the clock's ask
-        last read (queue_of), the read's rows and frames drawn from it with nothing gathered (Decision 7)."""
+        last read (queue_of), the read's rows and frames drawn from it with nothing gathered (Decision 7), and its kept
+        record of sluice's the last gather read holds each that left the queue as it last stood (kept_gone)."""
         for host, main in moved_:
             state, (_, answer) = self.watches.states.get((host, main)), self.kept.kits.get(host, {}).get(main, (None, None))
             if state is None or not (answer or {}).get("ok"):
                 continue
+            before = answer.get("submissions")
             answer["submissions"], why = queue_of(state)
+            if "history" in answer:
+                answer["history"] = kept_gone(before, answer["submissions"], answer["history"], (state.get("doc") or {}).get("at"))
             answer.pop("submissions_error", None)
             if why:
                 answer["submissions_error"] = why

@@ -582,6 +582,33 @@ class TestRefresh:
         assert len(self.reads) == 2 and self.handed[-1] == {(BOX, "/kit/main"): [answer["submissions"], None]}
         assert w.opened == [(BOX, "/kit/main")] and w.closed == [], "a watch was opened twice"
 
+    def test_a_submission_that_left_the_queue_counts_as_it_last_stood_until_the_lines_time(self, follower):
+        """The crew-board spec, The follower follows each kit's queue (between gathers, a submission that has left the
+        queue counts as it last stood until the line that no longer holds it): #41 under test leaves the queue, and the
+        refresh, gathering nothing, keeps it in the last gather's record of sluice's, told at that line's time, once."""
+        self.req = {"main": "/kit/main", "bolts": ["te"]}
+        follower.watches = w = self.Watching()
+        follower.refresh()
+        answer = follower.kept.kits[BOX]["/kit/main"][1]
+        landed = {"id": 40, "branch": "bolt/te", "head": None, "state": "landed", "submitted": "2026-10-28T15:00:00Z", "told": "2026-10-28T15:10:00Z",
+                  "worktree": "unit/b", "pull_head": None}
+        answer["history"] = [landed, dict(landed, id=41, state="queued", told=None, worktree="unit/a")]
+        testing = dict(self.QUEUED, branches=[dict(self.QUEUED["branches"][0], candidates=[
+            {"id": "c1", "state": "testing", "started": "2026-10-28T16:20:00Z", "submissions": [41]}], submissions=[
+            dict(self.QUEUED["branches"][0]["submissions"][0], submitted="2026-10-28T16:00:00Z")])])
+        w.states[(BOX, "/kit/main")] = {"doc": testing}
+        follower.refresh()
+        assert answer["history"][-1]["told"] is None and [s["started"] for s in answer["submissions"]] == ["2026-10-28T16:20:00Z"]
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:40:00Z", branches=[])}
+        follower.refresh()
+        assert len(self.reads) == 1 and answer["submissions"] == [], "the queue's move gathered the kit"
+        assert answer["history"] == [landed, {"id": 41, "branch": "bolt/te", "head": None, "state": "testing", "worktree": "unit/a", "pull_head": None,
+                                              "submitted": "2026-10-28T16:00:00Z", "started": "2026-10-28T16:20:00Z", "told": "2026-10-28T16:40:00Z"}]
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:50:00Z", branches=[dict(self.QUEUED["branches"][0], submissions=[
+            {"id": 42, "branch": "bolt/te", "state": "queued", "from": {"worktree": "unit/b"}}])])}
+        follower.refresh()
+        assert [x["told"] for x in answer["history"]] == ["2026-10-28T15:10:00Z", "2026-10-28T16:40:00Z"], "a gone submission was told again"
+
     def test_a_new_watch_starts_from_the_overview_its_kits_gather_read_so_its_first_line_moves_nothing(self, follower, monkeypatch):
         """A kit's queue is read once: the gather's own overview is the kept line the watch's first is compared with."""
         self.req = {"main": "/kit/main", "bolts": ["te"]}
@@ -859,6 +886,20 @@ class TestWatches:
         assert board.queue_stamp({"doc": self.DOC}) == board.queue_stamp({"doc": dict(self.DOC, at="2026-10-28T17:00:00Z")})
         assert [s["id"] for s in board.queue_of({"doc": queued})[0]] == [41, 42]
         assert board.queue_of({"why": "its overview watch ended"}) == (None, "its overview watch ended")
+
+    def test_a_submission_gone_from_the_queue_is_kept_told_at_the_lines_time_until_sluices_record_tells_it(self):
+        """Decision 7 of a-bolts-row-shows-its-age-and-who-holds-it: between gathers, one that left the queue counts as
+        it last stood until the line that no longer holds it."""
+        a = {"id": 41, "branch": "bolt/te", "state": "testing", "submitted": "2026-10-28T16:00:00Z", "started": "2026-10-28T16:05:00Z"}
+        b = {"id": 42, "branch": "bolt/te", "state": "queued", "submitted": "2026-10-28T16:10:00Z", "started": None}
+        told = {"id": 40, "state": "landed", "told": "2026-10-28T15:00:00Z"}
+        at = "2026-10-28T16:30:00Z"
+        assert board.kept_gone([a, b], [b], [told, dict(a, told=None)], at) == [told, dict(a, told=at)]
+        assert board.kept_gone([a, b], [b], [told, dict(a, told="2026-10-28T16:20:00Z")], at) == [told, dict(a, told="2026-10-28T16:20:00Z")]
+        assert board.kept_gone([a], [a, b], [told], at) == [told]
+        assert board.kept_gone([a], [], None, at) is None, "a record that could not be read was made"
+        assert board.kept_gone([a], None, [told], at) == [told], "a queue that can't be read was taken as empty"
+        assert board.kept_gone([a], [], [told], None) == [told], "a line with no time told one at a guess"
 
     def test_a_watch_opens_for_each_kit_shown_and_closes_for_one_no_longer_shown(self):
         assert board.watch_plan({self.KIT, self.OTHER}, set(), set(), set(), False) == {"open": [self.KIT, self.OTHER], "close": [], "ask": []}
