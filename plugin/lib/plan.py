@@ -14,7 +14,8 @@ five times. A write that changes several files is one commit; its run-record ent
 
   crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
                                              the moves where the partition's blueprints repos have them
-  crew bolts [<bolt>] [--label L] [--json]   every bolt, unit and chore of the plans, each one's stage read from its kit
+  crew bolts [<bolt>] [--label L] [--json]   every bolt, unit and chore of the plans, each one's stage read from its kit,
+                                             and each merge and landing standing in sluice with its number and state
   crew rail [--label L]                      what waits on the user: open proposals, review batches and bolts to
                                              land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
@@ -29,20 +30,18 @@ five times. A write that changes several files is one commit; its run-record ent
                                              the design agent's transcript as theirs, a choice when a rule decided,
                                              saying an older copy is dead when another host holds one, changing it on
                                              a revision and closing it on accepted or rejected
-  crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
+  crew card session|end <key> [<unit>]       a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
-                                             a batch card's one per unit on that unit's team's host; the user's decision
-                                             in it, waited for, a bolt's reading started first when none runs while
-                                             it is a row of its kit's landings card, a batch's while the planner holds
-                                             its card, waiting on the card alone when it will not open; a reading
+                                             a batch card's one per unit on that unit's team's host; a reading
                                              started anew, or given again to a card standing without it, changing its
                                              open card to carry the link, each try recorded; and its end, which a
-                                             card's close brings too
+                                             card's close brings too. crew card wait is refused, naming crew card
+                                             read <key>, which gives what the user decided in it
   crew card answer batch/<n> --excerpt "<words>"
                                              the user's answer to a batch in their own words in the planner's or the
                                              operator's pane, recorded once crew reads the words in that agent's own
                                              transcript as the user's, no words in the run record: the batch's card
-                                             closed with them, the planner's wait on it ended, and the planner told
+                                             closed with them, and the planner told
                                              them when the operator ran it
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
@@ -62,7 +61,9 @@ five times. A write that changes several files is one commit; its run-record ent
                                              record, and the landing cards closed with them at crew bolt land. One
                                              that did not land for its own content, a conflict or a check that ran
                                              and failed, is held on its row; one sluice or its host stopped keeps its
-                                             box and the user's word, and is submitted again once that is cleared
+                                             box and the user's word, and is submitted again once that is cleared; a
+                                             landing still standing in sluice at the bolt's head is waited on again,
+                                             nothing submitted
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]
