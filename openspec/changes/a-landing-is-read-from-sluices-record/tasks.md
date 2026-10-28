@@ -8,7 +8,7 @@
 
 - [x] 2.1 What sluice's record of a submission means for a landing (standing, out with its exit, or unreadable) is a decision of facts (design, Decision 2; Task notes 2.1); passes `tests/py/test_landing.py`.
 - [x] 2.2 `crew _landing-read <label> <bolt>` runs only on the team's host, one at a time per bolt, records a submission's outcome once from sluice's record as `crew bolt submit` records it today, records nothing while the submission stands or the record can't be read, and says which (design, Decision 2; Task notes 2.2); passes `tests/py/test_landing.py`, and Verify `tests/suite t-journey-land` ends with "0 failed".
-- [ ] 2.3 A read that finds the bolt landed closes it with `crew bolt land`'s code in main-level ops's name, and a refused close is said every time and recorded as a refused `bolt.land` only when its words are new since the landing (design, Decision 4; Task notes 2.3); passes `tests/py/test_landing.py`.
+- [x] 2.3 A read that finds the bolt landed closes it with `crew bolt land`'s code in main-level ops's name, and a refused close is said every time and recorded as a refused `bolt.land` only when its words are new since the landing (design, Decision 4; Task notes 2.3); passes `tests/py/test_landing.py`.
 
 ## 3. Every crew act that reads the bolt after its landing runs the read
 

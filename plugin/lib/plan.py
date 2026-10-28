@@ -815,11 +815,12 @@ def message(subject, body, eid):
     return subject + (f"\n\n{body}" if body else "") + (f"\n\nCrew-Entry: {eid}" if eid else "") + "\n"
 
 
-def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None):
+def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None, by=None, why=None):
     """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
     with crew's, commit every file it changed, each checked first, and push, replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
-    the change added to them, with the act's own fields, and reaches the branch as the commit after it (read.5).
+    the change added to them, with the act's own fields, and reaches the branch as the commit after it (read.5); by, the
+    role an act of crew's own is in the name of, and why, the entry's Why in place of the subject's (record.emit).
     Returns the commit."""
     repo, ref = state_of(fleet, label)
     seen = {"eid": record.new_id()}
@@ -839,7 +840,8 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
     sha = land(repo, ref, None, make)
     print(f"{ref} {sha[:7]}: {seen['subject']}")
     if act:
-        record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]), eid=seen["eid"], **(fields or {}))
+        record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], why or record.subject(seen["subject"]), eid=seen["eid"],
+                    by=by, **(fields or {}))
     notify(fleet, seen, seen["subject"])
     return sha
 
@@ -3312,7 +3314,7 @@ def landing_cards_closed(fleet, t, bolt, outcome, said=None, here=False):
     land_hand(fleet, t["label"], t["kit"]["name"], said if here else None, outcome if here else None)
 
 
-def bolt_land(fleet, a):
+def bolt_land(fleet, a, by=None, why=None):
     """A bolt whose units and chores have all landed on its kit's main, out of the plan, the landing recording the
     commit main holds (plan.14, plan.16), then, by the tidy on its team's host once the landing's place is gone, its
     branch deleted by sluice wherever the policy at its tip keeps it, on GitHub for a bolt given since gives went
@@ -3323,7 +3325,8 @@ def bolt_land(fleet, a):
     built outside a team, is read on the host and main checkout of a team of the partition building its kit, and lands
     the same way once main holds each of its units' changes and chores, on the user's word (roles.2). A bolt a team
     held records its Age and Split with its landing, read from sluice's record on its team's host (landing_time), and
-    neither when that can't be read, the landing going on (plan.20)."""
+    neither when that can't be read, the landing going on (plan.20). A read of its landing closes it with this code
+    (landing_close), its bolt.land in the name of by, with why as its Why."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
     t = held = bolt_team(fleet, b)
@@ -3368,7 +3371,7 @@ def bolt_land(fleet, a):
     # A bolt a team held records its age and who held its time, or neither when that can't be read (plan.20).
     spent = landing_time(fleet, t, plan, b, entries, datetime.datetime.now(datetime.timezone.utc)) if held else {}
     write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"],
-          fields=dict(Repo=t["kit"]["name"], Head=head, **spent))
+          fields=dict(Repo=t["kit"]["name"], Head=head, **spent), by=by, why=why)
     if b.get("Team"):
         after = plan_of(fleet, label)
         print(landed_line(a.bolt, t["kit"]["name"], head, t["name"], [x.name() for x in held_by(after, t["name"])] if after else None))
@@ -4539,7 +4542,9 @@ def landing_read(fleet, label, bolt):
     landing_due), and while it stands, nothing is recorded, said so; once it is out, its outcome recorded as crew bolt
     submit records it (landing_close_out), with sluice's exit for its state and its verdict, and what was said kept on
     the host; when it can't be read, nothing is recorded, said naming the host and sluice's words (read.1). With nothing
-    to record, a bolt whose last bolt.submit landed is read landed. (whether the bolt reads landed, what was said)."""
+    to record, a bolt whose last bolt.submit landed is read landed. A bolt read landed that the plan still holds is then
+    closed (landing_close), a refused close said each time and tried again at each later read until it is lifted.
+    (whether the bolt reads landed, what was said of its landing)."""
     pl = plan_of(fleet, label)
     pl is not None or fail(f"crew can't read bolt {bolt}'s landing: {label}/main could not be read")
     t = landing_team(fleet, pl, partition_entries(fleet, label), bolt)
@@ -4560,6 +4565,8 @@ def landing_read(fleet, label, bolt):
             said = (f"bolt/{bolt} landed as #{last.get('Submission') or '?'}, as {label}'s run record has it" if landed else
                     f"no landing of bolt {bolt} is queued in {label}'s run record")
             print(said)
+            if landed and pl.bolt(bolt):
+                landing_close(fleet, label, bolt, last.get("Submission") or "?", entries)
             return landed, said
         n, mark = q["Submission"], landing_mark(t, bolt, q["Submission"])
         try:
@@ -4570,6 +4577,8 @@ def landing_read(fleet, label, bolt):
             fail(f"crew can't read what {here} kept of bolt {bolt}'s landing #{n} in {mark}: {e}")
         if kept is not None:
             print(kept["words"], file=sys.stdout if kept["landed"] else sys.stderr)
+            if kept["landed"] and pl.bolt(bolt):
+                landing_close(fleet, label, bolt, n, entries)
             return kept["landed"], kept["words"]
         r = crew.on_machine(fleet, here, ["bash", "-c", SUBMISSION_STATUS, "crew", main, n])
         due = landing_due(int(n), r.returncode, r.stdout)
@@ -4595,7 +4604,40 @@ def landing_read(fleet, label, bolt):
         tmp = mark.with_name(f".{mark.name}.{os.getpid()}")
         tmp.write_text(json.dumps({"landed": bool(landed), "words": said}, ensure_ascii=False))
         tmp.replace(mark)
+        if landed and pl.bolt(bolt):
+            landing_close(fleet, label, bolt, n, entries)
         return bool(landed), said
+
+
+def close_refused_new(entries, bolt, words):
+    """Whether a close of the landed bolt crew refused in words is recorded (Decision 4, bolt-teams "A close crew
+    refuses is said on the bolt's row and in the run record until it is lifted"), from the run record's entries,
+    oldest first: when no bolt.land on the bolt refused since its last bolt.submit carries those words, the last
+    carrying others or none being there. A decision of facts alone (code.7)."""
+    on = lambda e: f"bolt/{bolt}" in (e.get("On") or [])
+    i = max((i for i, e in enumerate(entries) if e.get("Act") == "bolt.submit" and on(e)), default=-1)
+    last = next((e for e in reversed(entries[i + 1:]) if e.get("Act") == "bolt.land" and on(e) and e.get("Refused")), None)
+    return not last or last["Refused"] != words
+
+
+def landing_close(fleet, label, bolt, n, entries):
+    """A landed bolt closed by a read of its landing (plan.21, Decision 4): crew bolt land's own code, with no word asked
+    of whoever ran the act, since the user's word to land was given and the read records sluice's fact, its bolt.land
+    in main-level ops's name, the role the close is in the name of, its Why naming the submission and who read it. A
+    close crew refuses is said on standard error every time, and recorded as a refused bolt.land in main-level ops's
+    name only when its words are new since the landing (close_refused_new). Whether it closed."""
+    ops = f"{label}-ops"
+    closing = argparse.Namespace(cmd="bolt", sub="land", bolt=bolt, label=label)
+    try:
+        bolt_land(fleet, closing, by=ops, why=f"plan({bolt}): land the bolt, its landing #{n} read from sluice's record by {record.who()}")
+        return True
+    except Refusal as e:
+        words = str(e)
+        print(f"bolt/{bolt} landed and was not closed: {words}; crew's next read of the bolt closes it once that is mended",
+              file=sys.stderr)
+        if close_refused_new(entries, bolt, words):
+            record.emit(label, "bolt.land", [f"bolt/{bolt}"], refused=words, by=ops)
+        return False
 
 
 def landing_read_cmd(fleet, a):
