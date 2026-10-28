@@ -53,9 +53,11 @@ for doc in usage readme skill; do
   has "${!doc}" "standing in sluice"
 done
 for doc in usage readme skill; do has "${!doc}" "what an earlier send still lands, with or without a card open"; done
+for doc in usage readme skill; do has "${!doc}" "preview <key> <thing> [--done]"; done
+has "$skill" "crew card preview <key> <thing> [--done]"
 expect_fail "invalid choice: 'post'" crew card post land/x
 expect_fail "invalid choice: 'card'" crew plan card 1
-ok "the README, the skill and the usage give crew ops offer's notes and steps, crew record and crew card read, session and end, crew card wait refused naming the read, crew card read land/<kit> with no card open, each submission standing in sluice on its row, and no crew plan card or crew card post, change or close, which crew no longer has"
+ok "the README, the skill and the usage give crew ops offer's notes and steps, crew record and crew card read, session, end and preview, crew card wait refused naming the read, crew card read land/<kit> with no card open, each submission standing in sluice on its row, and no crew plan card or crew card post, change or close, which crew no longer has"
 
 for doc in usage readme skill; do
   has "${!doc}" "pushes nothing and levels no host"; has "${!doc}" "origin/main"; lacks "${!doc}" "behind GitHub's"

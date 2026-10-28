@@ -231,6 +231,14 @@
 #                                      words in the run record; closes the batch's card held on this host with the
 #                                      words, or names the host whose rail closes it, and tells the planner the words when the operator ran it; refused for a batch
 #                                      answered already or waiting on nothing
+#   crew card  preview <key> <thing> [--done] [--label L]
+#                                      the card's owner's, main-level ops's for a kit's landings card (land/<kit>) and
+#                                      the planner's for a batch's (batch/<n>), on the user's words on the card: brings
+#                                      up a thing it carries that must run, a landings row's bolt at its head or a batch
+#                                      line's <unit>/<name> at the branch and revision its stage recorded, through sluice
+#                                      preview on the host of the team holding its work, and changes the card in place
+#                                      to list its addresses while it is up; --done puts it away; refused for any other
+#                                      caller, key or thing, naming those the card carries
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
