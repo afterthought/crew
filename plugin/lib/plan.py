@@ -10034,11 +10034,11 @@ def stage_wait(fleet, a):
     stuck = datetime.timedelta(milliseconds=a.stuck)
     seen_quiet = seen_working = None
     sluice_seen, here, main = {}, os.path.realpath(place) if place else None, t["kit"]["main"]
-    unread_made = set()  # what crew could not read of what the stage made, said once
+    unread_made, made_dirs = set(), {}  # what crew could not read of what the stage made, said once; its git directory
 
     def made():  # what a unit's stage records as made, kept at each look and at its end (made_look)
         if here and o.kind == "unit" and not o.fix and o.stage in UNIT_STAGES:
-            made_look(fleet, t, o, place, unread_made)
+            made_look(fleet, t, o, place, unread_made, made_dirs)
     with READ.fresh():  # each look reads the plan and the kit afresh
         while True:
             made()
@@ -14946,10 +14946,14 @@ def made_file(path):
         fail(f"{path} can't be read: {getattr(e, 'strerror', None) or e}")
 
 
-def made_read(fleet, t, place):
+def made_read(fleet, t, place, dirs=None):
     """What the stage running in a place has recorded as made, its made.jsonl in the place's own git directory (design
-    Decision 1), read on the team's host: its lines (made_file); refused naming what could not be read."""
-    return made_file(pathlib.Path(kit_git(fleet, t, place, "rev-parse", "--absolute-git-dir")[1]) / MADE_FILE)
+    Decision 1), read on the team's host: its lines (made_file); refused naming what could not be read. dirs, when
+    given, keeps each place's git directory once git has named it, so a wait asks git once."""
+    dirs = {} if dirs is None else dirs
+    if place not in dirs:
+        dirs[place] = pathlib.Path(kit_git(fleet, t, place, "rev-parse", "--absolute-git-dir")[1])
+    return made_file(dirs[place] / MADE_FILE)
 
 
 def made_kept(label, unit):
@@ -15003,16 +15007,16 @@ def batch_open(entries, unit):
     return n
 
 
-def made_look(fleet, t, o, place, said):
+def made_look(fleet, t, o, place, said, dirs=None):
     """One look of the conductor's wait at what a unit's stage has recorded as made (bolt-teams "The conductor's wait
     keeps a copy of what each stage made"): the place's lines read, each new one kept under the stage running now
     (made_new, made_keep), and, when one was, the card of the batch holding the unit raised on the partition's main
     machine with a note naming it (batch_hand) while the card is open (batch_open). What crew can't read is said on
     standard error, once for the same words (said, a set the wait keeps), and the wait goes on, keeping what it copied
-    before."""
+    before. dirs, the wait's own, keeps the place's git directory once git has named it (made_read)."""
     label = t["label"]
     try:
-        new = made_new(made_kept(label, o.name), made_read(fleet, t, place))
+        new = made_new(made_kept(label, o.name), made_read(fleet, t, place, dirs=dirs))
         made_keep(label, o.name, o.stage, new)
     except Refusal as e:
         why = f"what {o.name}'s {o.stage} made is not kept yet: {e}"

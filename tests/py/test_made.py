@@ -96,6 +96,16 @@ class TestTheWait:
         """bolt-teams "A place that recorded nothing"."""
         assert plan.made_file(tmp_path / "made.jsonl") == []
 
+    def test_a_wait_asks_git_for_the_places_git_directory_once(self, monkeypatch, tmp_path):
+        """Decision 1: made.jsonl is in the place's own git directory, which git names once for the wait."""
+        asked = []
+        monkeypatch.setattr(plan, "kit_git", lambda fleet, t, where, *args: asked.append((where, args)) or (0, str(tmp_path)))
+        (tmp_path / "made.jsonl").write_text(f"{PAGE}\n")
+        dirs = {}
+        assert plan.made_read(FLEET, self.T, "/kit/places/a", dirs=dirs) == [PAGE]
+        assert plan.made_read(FLEET, self.T, "/kit/places/a", dirs=dirs) == [PAGE]
+        assert asked == [("/kit/places/a", ("rev-parse", "--absolute-git-dir"))]
+
     def test_a_file_that_cant_be_read_is_refused_naming_it(self, tmp_path):
         (tmp_path / "made.jsonl").write_bytes(b"\xff\xfe not text")
         with pytest.raises(plan.Refusal, match=f"{tmp_path / 'made.jsonl'} can't be read"):
@@ -125,20 +135,20 @@ class TestTheWait:
         return handed, said
 
     def test_a_look_keeps_what_the_place_holds_under_the_stage_running(self, monkeypatch):
-        handed, _ = self.look(monkeypatch, lambda fleet, t, place: [PAGE, DEMO])
+        handed, _ = self.look(monkeypatch, lambda fleet, t, place, dirs=None: [PAGE, DEMO])
         assert plan.made_kept("wldn", "a") == [("code", [PAGE, DEMO])] and handed == []
-        self.look(monkeypatch, lambda fleet, t, place: [PAGE, DEMO, NOTES], stage="verify")
+        self.look(monkeypatch, lambda fleet, t, place, dirs=None: [PAGE, DEMO, NOTES], stage="verify")
         assert plan.made_kept("wldn", "a") == [("code", [PAGE, DEMO]), ("verify", [NOTES])]
 
     def test_a_place_with_none_keeps_nothing(self, monkeypatch, kept):
-        handed, _ = self.look(monkeypatch, lambda fleet, t, place: [])
+        handed, _ = self.look(monkeypatch, lambda fleet, t, place, dirs=None: [])
         assert not kept.exists() and handed == []
 
     def test_a_file_that_cant_be_read_is_said_once_and_the_copy_kept(self, monkeypatch, capsys):
         """bolt-teams "The file can't be read"."""
         plan.made_keep("wldn", "a", "code", [PAGE])
 
-        def refused(fleet, t, place):
+        def refused(fleet, t, place, dirs=None):
             plan.fail("/kit/.git/worktrees/a/made.jsonl can't be read: Permission denied")
         said = set()
         monkeypatch.setattr(plan, "made_read", refused)
@@ -150,14 +160,14 @@ class TestTheWait:
 
     def test_a_line_kept_for_a_unit_in_a_batch_whose_card_is_open_hands_the_card_its_note(self, monkeypatch):
         """rail-cards "A line added while the card waits": the card's raise handed to the main machine."""
-        handed, _ = self.look(monkeypatch, lambda fleet, t, place: [NOTES], [reviewed(7, [("a", "swb-1", "aaa1"), ("b", "swb-1", "bbb1")])])
+        handed, _ = self.look(monkeypatch, lambda fleet, t, place, dirs=None: [NOTES], [reviewed(7, [("a", "swb-1", "aaa1"), ("b", "swb-1", "bbb1")])])
         assert handed == [(7, "a recorded notes")]
 
     def test_a_batch_whose_card_closed_or_that_holds_no_such_unit_is_handed_nothing(self, monkeypatch):
         b7 = reviewed(7, [("a", "swb-1", "aaa1")])
-        assert self.look(monkeypatch, lambda fleet, t, place: [NOTES], [b7, card_closed("batch/7", "req_b7")])[0] == []
+        assert self.look(monkeypatch, lambda fleet, t, place, dirs=None: [NOTES], [b7, card_closed("batch/7", "req_b7")])[0] == []
         plan.made_drop("wldn", ["a"])
-        assert self.look(monkeypatch, lambda fleet, t, place: [NOTES], [reviewed(7, [("b", "swb-1", "bbb1")])])[0] == []
+        assert self.look(monkeypatch, lambda fleet, t, place, dirs=None: [NOTES], [reviewed(7, [("b", "swb-1", "bbb1")])])[0] == []
 
     def test_the_newest_batch_holding_the_unit_is_the_one_whose_card_changes(self):
         entries = [reviewed(6, [("a", "swb-1", "aaa1")]), reviewed(7, [("a", "swb-1", "aaa2")])]
