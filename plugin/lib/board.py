@@ -9,16 +9,18 @@
                                      environment's deploys of that week and those still open, and the operations
                                      waiting on it); every rail row a marker on its object, and what needs attention
                                      at the foot
-  crew _views <label>                one refresh of the host's follower: one read, the rail printed as crew rail prints
-                                     it, the card sessions of closed cards and gone rows ended as crew rail ends them,
-                                     and the board's data written for the board tab, with each agent's view of it for
-                                     the band crew's mod draws above that agent's prompt
-  crew _follow [--once]              the host's follower with no tab, the command a job of the host's runs: every 30
-                                     seconds and on each run-record entry, for each partition with an operator session
-                                     here, the due restarts handed out once crew's checkout or the teams file moved
-                                     (crew _update), then crew _views, its output written as the rail's frame; it
-                                     waits for the host's follower lock while a rail tab holds it. --once makes one
-                                     round of each and ends
+  crew _views <label>                one partition's read as the host's follower makes it: the rail printed as crew
+                                     rail prints it, the card sessions of closed cards and gone rows ended as crew rail
+                                     ends them, and the board's data written for the board tab, with each agent's view
+                                     of it for the band crew's mod draws above that agent's prompt
+  crew _follow [--once]              the host's follower with no tab, the command a job of the host's runs: one read in
+                                     its own process for every partition with an operator session here, fetching once a
+                                     minute on its clock and showing this host's writes within seconds, checking first
+                                     what moved and reading only that, each kit's queue followed through sluice's
+                                     overview watch; the due restarts handed out once crew's checkout or the teams file
+                                     moved (crew _update), and each partition's rail, board and agents' views written as
+                                     frames, stale after three minutes; it waits for the host's follower lock while a
+                                     rail tab holds it. --once makes one tick, with no watch, and ends
   crew _rail <label> [--once]        the rail tab: the latest rail the host's follower wrote, drawn whenever it
                                      changes, headed with its age once stale; while no one holds the host's follower
                                      lock, it takes it and follows itself. --once draws once and follows nothing
