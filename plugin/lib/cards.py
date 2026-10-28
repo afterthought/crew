@@ -244,6 +244,49 @@ def answer_lines(key, card, got):
     return lines
 
 
+BOX = re.compile(r"^(?:land|add):([a-z0-9][a-z0-9-]*)$")  # a box crew minted, named by the bolt or unit it names
+
+
+def answer_said(got, offered=()):
+    """What the user answered on a card, in crew's own words made from names alone, as a card's close keeps it for the
+    card that follows (rail-cards "The close of an answered card records the answer"; record.3): from get_request's
+    reply, read as answer_lines reads it, off the user's turn: approved or declined; the boxes they ticked, each of
+    crew's named by the bolt or unit it names (land:<bolt>, add:<unit>), and those of offered, the ids the card
+    offered, they left; a lone unit's unticked as left it out, and any other option picked as it is; done, a failed
+    step, or that they will handle it themselves; and "with a note" when they wrote one, never its words. None when
+    the reply holds no answer."""
+    answer = got.get("answer") if isinstance(got, dict) and got.get("turn") != "you" else None
+    if not isinstance(answer, dict):
+        return None
+    said, picked, lists = [], [], isinstance(answer.get("choiceIds"), list)
+    wrote = bool(text_of(answer.get("note")) or text_of(answer.get("text")))
+    if isinstance(answer.get("approved"), bool):
+        said.append("approved" if answer["approved"] else "declined")
+    picked += [c for c in answer.get("choiceIds") or [] if isinstance(c, str)]
+    for a in (answer.get("answers") or {}).values() if isinstance(answer.get("answers"), dict) else []:
+        if isinstance(a, dict):
+            lists = lists or isinstance(a.get("choiceIds"), list)
+            picked += [c for c in a.get("choiceIds") or [] if isinstance(c, str)]
+            if isinstance(a.get("approved"), bool) and ("approved" if a["approved"] else "declined") not in said:
+                said.append("approved" if a["approved"] else "declined")
+        wrote = wrote or bool(text_of(a))
+    ticked = [BOX.match(c).group(1) for c in picked if BOX.match(c)]
+    boxes = [BOX.match(c).group(1) for c in offered if BOX.match(c)]
+    if ticked or lists and not [c for c in picked if not BOX.match(c)]:
+        left = [b for b in boxes if b not in ticked]
+        said.append(f"ticked {joined(ticked) if ticked else 'none'}" + (f", left {joined(left)}" if left else ""))
+    said += ["left it out" if c == "unticked" else f"picked {c}" for c in picked if not BOX.match(c)]
+    if answer.get("done") is True:
+        said.append("done")
+    if isinstance(answer.get("failedStep"), int) and not isinstance(answer.get("failedStep"), bool):
+        said.append(f"said step {answer['failedStep']} did not work")
+    if answer.get("handled") is True:
+        said.append("said you will handle it yourself")
+    if not said:
+        return "answered with a note" if wrote else None
+    return ", ".join(said) + (", with a note" if wrote else "")
+
+
 # ------------------------------------------------------------------------------- a proposal's change, drawn
 
 TEXT, SAYS = 40, 33  # the card's text, monospace lines of at most forty characters; what a block says, indented seven
@@ -593,8 +636,9 @@ def landing_card(f):
     A preview's addresses follow the reading in its details and links, each on its face as a link after the reading's
     and before the pull request, as many as the card's artifacts leave room for (record 0031 §3).
     As the one row of its kit's landings card (landings_card), f also holds key, land/<kit>; conductor; forecast and
-    forecast_why, as forecast_said takes them; held, [{bolt, why}], the bolts held on the card with no box; and left,
-    whether the user cleared this bolt on their last send."""
+    forecast_why, as forecast_said takes them; held, [{bolt, why}], the bolts held on the card with no box; left,
+    whether the user cleared this bolt on their last send; and stopped and ops, its last landing at its head stopped by
+    sluice or its host and the ops who submits it again, which its summary says (stopped_said)."""
     units, chores, batches = list(f["units"]), list(f.get("chores") or []), f.get("batches") or {}
     parts = ([plural(len(units), "unit")] if units else []) + ([plural(len(chores), "chore")] if chores else [])
     what = joined(parts) if parts else "nothing"
@@ -603,6 +647,8 @@ def landing_card(f):
     said = [] if approved is None else [  # the head moved after the user's answer and before the landing (plan.16)
         f"Its head moved since your approval, from {approved[:7]} to {head}: approving this lands {head}." if approved else
         f"Its head is now {head}, and crew holds no record of the head you approved: approving this lands {head}."]
+    if f.get("stopped"):  # its last landing at its head stopped by sluice or its host, which holds nothing
+        said.append(stopped_said(f))
     said.append(f"{what[0].upper()}{what[1:]} {'lands' if len(units) + len(chores) == 1 else 'land'}, every one merged"
                 + (f" and every unit read in a batch ({joined([str(b) for b in read])})." if read else "."))
     pr = f.get("pr")
@@ -612,7 +658,7 @@ def landing_card(f):
     said.append(f"main has moved {plural(moved, 'landing')} since the bolt was cut." if moved else
                 "main has not moved since the bolt was cut.")
     if "forecast" in f:  # a row of its kit's landings card (rail-cards "The landings card forecasts each row's conflicts")
-        said.append(forecast_said(f["forecast"], f.get("forecast_why")))
+        said.append(forecast_said(f["forecast"], f.get("forecast_why"), f.get("would_main")))
     frees = f.get("frees")
     if frees:  # its team holds another bolt, proven too, so a yes frees it (teams.16)
         said.append(f"A yes frees {frees['team']} for {frees['next']}, which waits behind this landing." if frees.get("next")
@@ -657,17 +703,25 @@ def landing_card(f):
                  approve=high(f"Land {f['bolt']} on {f['kit']}'s main"), recommendedIds=["approve"], rationale=by_words(then, DETAIL))
 
 
-def forecast_said(forecast, why=None):
+def forecast_said(forecast, why=None, would=None):
     """What a row of a kit's landings card says of its forecast (rail-cards "The landings card forecasts each row's
     conflicts"): forecast, [(with, paths)] as plan.row_forecasts gives it, "main" or a bolt above it, paths None for one
     not made, with why. No conflict forecast; the files and the bolt or main each is with; or that its forecast could
-    not be made and why, which holds nothing."""
+    not be made and why, which holds nothing. With would, (main's short sha, [paths]) for a row the user left that a
+    conflict with main would hold once ticked (plan.landing_rows' would_main), that first, and nothing more of main
+    (rail-cards "A row the user left says whether it would take main first")."""
+    if would:
+        forecast = [(w, p) for w, p in forecast if w != "main"]
     hits = [(w, p) for w, p in forecast if p]
     unmade = [w for w, p in forecast if p is None]
     said = ([f"It is forecast to conflict with " + "; and with ".join(f"{w} on {joined(list(p))}" for w, p in hits) + "."]
             if hits else [] if unmade else ["No conflict is forecast."])
     if unmade:
         said.append(f"Its forecast against {joined(unmade)} could not be made: {(why or 'git could not tell').rstrip('.')}.")
+    if would:
+        said = [f"It would take main first if you tick it: forecast to conflict with main on {joined(list(would[1]))} at "
+                f"{would[0][:7]}. Ticked, its team takes main in by a fix, your send standing through it."] + (
+            [] if said == ["No conflict is forecast."] else said)
     return " ".join(said)
 
 
@@ -691,28 +745,41 @@ def row_bits(r):
             r.get("conductor") or f"{r['team']}-conductor")
 
 
+def stopped_said(r):
+    """What a landings row says of its last landing at its head when sluice or its host stopped it, nothing of the
+    bolt's (rail-cards "A landing sluice or its host stopped keeps its box"): r's stopped, (head, words), as
+    plan.landing_rows gives it, and r's ops, the main-level ops whose card it is, who submits it again once that is
+    cleared; "" when none was stopped."""
+    if not r.get("stopped"):
+        return ""
+    head, words = r["stopped"]
+    return (f"Its last landing at {head[:7]} was stopped, nothing of the bolt's: {words.rstrip('.')}. "
+            f"{r.get('ops') or 'Main-level ops'} submits it again once that is cleared.")
+
+
 def row_counts(r):
-    """A landings row's counts, batches, verdict and conductor, the detail of its box."""
-    return "; ".join(x for x in row_bits(r) if x)
+    """A landings row's counts, batches, verdict and conductor, the detail of its box, after what stopped its last
+    landing at its head (stopped_said), first so a detail's budget keeps it."""
+    return " ".join(x for x in (stopped_said(r), "; ".join(x for x in row_bits(r) if x)) if x)
 
 
 def row_paragraph(n, r):
     """A landings row on the card's face, as Markdown: its place, bolt and conductor, its units and chores one a line,
-    its batches, sluice's verdict and when, how far main moved, what a yes frees, its forecast, and its reading,
-    preview and pull request as links."""
+    its batches, sluice's verdict and when, how far main moved, what a yes frees, its forecast, what stopped its last
+    landing at its head (stopped_said), and its reading, preview and pull request as links."""
     units, chores = list(r["units"]), list(r.get("chores") or [])
     moved = r.get("moved") or 0
     lines = [f"**{n}. {r['bolt']}** · {r.get('conductor') or r['team'] + '-conductor'}"
              + (" · *left on your last send*" if r.get("left") else ""), ""]
     lines += [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores] + [""]
     _, read, green, _ = row_bits(r)
-    said = ([f"Read in {read[8:]}."] if read else []) + [f"sluice is {green}."]
+    said = ([stopped_said(r)] if r.get("stopped") else []) + ([f"Read in {read[8:]}."] if read else []) + [f"sluice is {green}."]
     said.append(f"main has moved {plural(moved, 'landing')} since it was cut." if moved else "main has not moved since it was cut.")
     frees = r.get("frees")
     if frees:
         said.append(f"A yes frees {frees['team']} for {frees['next']}." if frees.get("next") else
                     f"A yes frees {frees['team']}, and nothing is planned for it.")
-    said.append(forecast_said(r.get("forecast") or [], r.get("forecast_why")))
+    said.append(forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main")))
     lines.append(" ".join(said))
     links = ([f"[Read {r['bolt']}]({r['link']})"] if r.get("link") else
              [f"Its reading could not be opened: {r['unread']}; crew tries it again when the rail is read, and "
@@ -737,15 +804,17 @@ def landings_card(f):
     since Pending You refuses a card's rationale beside questions. On its face, one Markdown artifact, a paragraph a row (row_paragraph), then
     the rows held with no box and why; in its details, every row's reading first, then its previews and pull request,
     as many as the card's artifacts leave room for. f: kit, rows (each the facts landing_card takes, with team,
-    conductor, forecast, forecast_why, link or unread and preview), held ([{bolt, why}]), left (the bolts the user
-    cleared on their last send), follows. Also handed back: heads, each row as <bolt>@<head> and :left for one the user
-    cleared, which the run record keeps on the card's post and change for the next raise to read (plan.landings_step),
-    and linked, since each row's reading was opened with it and the card has no reading of its own."""
+    conductor, forecast, forecast_why, link or unread and preview, and stopped when sluice or its host stopped its
+    last landing at its head, which its paragraph and its box's detail say, stopped_said), held ([{bolt, why}]), left
+    (the bolts the user cleared on their last send), ops (the main-level ops whose card it is), follows. Also handed
+    back: heads, each row as <bolt>@<head> and :left for one the user cleared, which the run record keeps on the card's
+    post and change for the next raise to read (plan.landings_step), and linked, since each row's reading was opened
+    with it and the card has no reading of its own."""
     kit, rows, held, left = f["kit"], [dict(r) for r in f["rows"]], list(f.get("held") or []), set(f.get("left") or [])
     key, form = f"land/{kit}", landings_form(len(rows))
     rows or fail(f"{key} has no bolt that can land, so it has no card")
     for r in rows:
-        r["left"] = r["bolt"] in left
+        r["left"], r["ops"] = r["bolt"] in left, f.get("ops")
     heads = [f"{r['bolt']}@{r['head'][:7]}" + (":left" if r["left"] else "") for r in rows]
     unread = [(r["bolt"], r["unread"]) for r in rows if r.get("unread")]
     why = unread[0][1] if len(rows) == 1 and unread else "; ".join(f"{b}: {w}" for b, w in unread)
@@ -769,7 +838,7 @@ def landings_card(f):
     def option(i, r):
         return {"id": f"land:{r['bolt']}", "label": cut(f"{i}. {r['bolt']}", LABEL),
                 "detail": by_words(("Left on your last send. " if r["left"] else "") + row_counts(r), DETAIL),
-                "consequence": by_words(forecast_said(r.get("forecast") or [], r.get("forecast_why")), DETAIL)}
+                "consequence": by_words(forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main")), DETAIL)}
     options = [option(i, r) for i, r in enumerate(rows, 1)]
     ticked = [o["id"] for o, r in zip(options, rows) if not r["left"]]
     then = by_words("After they land: main-level ops lands them through sluice in this order, closing each as it lands, "
@@ -884,20 +953,38 @@ def step_card(f):
                  recommendedIds=["quiet"])
 
 
+AMENDED = re.compile(r"^Amended\b[^:.]*:\s*")
+
+
+def first_words(text):
+    """An amendment's own first words, which title its record's card (record 0031 as amended 2026-10-24): the first
+    sentence of its paragraph, with its `Amended <date>:` lead, a list item's marker, its Markdown marks and its
+    closing stop left out."""
+    p = AMENDED.sub("", " ".join(MARKS.sub("", re.sub(r"^[-*+]\s+", "", (text or "").strip())).split()))
+    return SENTENCE.split(p, 1)[0].rstrip(".") if p else ""
+
+
 def record_card(f):
     """A decision record's card (record 0031 §5): a plain record's a hold-to-accept of low risk, holding the record
     whole as Markdown, its opening sentences the summary and the user's own words beside them; a record a rule of the
     user's decided between alternatives a choice asked once, loosen the rules as drafted and take the other path,
     accept the record as ruled, or send it back, its face the alternatives, the rules that decided and each loosened,
-    then the record. f: kit, number, title, opening, quoted (the user's words it records), text (the record, Markdown),
-    alternatives ({rules, other, text, recommended: loosen or accept}) or None, follows."""
+    then the record. An amendment's card is titled by the amendment's own first words, cut at whole words, not the
+    record's title, so each amendment of one record reads as its own question (record 0031 as amended 2026-10-24).
+    f: kit, number, title, opening, quoted (the user's words it records), text (the record, Markdown), amendment (its
+    first words, first_words) or None, alternatives ({rules, other, text, recommended: loosen or accept}) or None,
+    follows."""
     n = f"{int(f['number']):04d}"
     quoted = list(f.get("quoted") or [])
     words = "Your own words, recorded as your decision:\n" + "\n".join(f"“{q}”" for q in quoted) if quoted else ""
     record = markdown(f"Record {n}", f"record-{n}.md", f["text"])
-    alt = f.get("alternatives")
+    alt, amended = f.get("alternatives"), f.get("amendment")
+
+    def titled(head):
+        head += f" {n} in {f['kit']}: "
+        return head + (by_words(amended, TITLE - len(head)) if amended else f["title"])
     if not alt:
-        return built(f"record/{f['kit']}/{n}", f"Accept record {n} in {f['kit']}: {f['title']}",
+        return built(f"record/{f['kit']}/{n}", titled("Accept an amendment to record" if amended else "Accept record"),
                      f["opening"] + ("\n\n" + words if words else ""), words, (), [record], f.get("follows"),
                      urgency="whenever", kind="approve", intent="approve",
                      approve={"action": f"Accept record {n}", "risk": "low", "reversible": True}, recommendedIds=["approve"])
@@ -908,7 +995,7 @@ def record_card(f):
                {"id": "back", "label": "Send it back with a note", "consequence": "The design agent revises it from your note"}]
     summary = (f"Your rules decided this one: {rules} chose the record's path over the other, {alt['other']}. One decision: "
                "the record as ruled, or loosen the rules as drafted and take the other path.")
-    return built(f"record/{f['kit']}/{n}", f"Record {n} in {f['kit']}: {f['title']}", summary, words, (),
+    return built(f"record/{f['kit']}/{n}", titled("An amendment to record" if amended else "Record"), summary, words, (),
                  [markdown("Where your rules decided, and the rules loosened", f"record-{n}-rules.md", alt["text"]), record],
                  f.get("follows"), urgency="whenever", kind="choice", intent="decide", options=options,
                  recommendedIds=[alt.get("recommended") or "accept"])
@@ -962,6 +1049,39 @@ def proposal_form(argvs):
     if not k or k > CARD_NEW:
         return "approve"
     return "choice" if k == 1 else "multi" if k <= BOXES else "lists"
+
+
+def proposal_since(old_argvs, old_case, new_argvs, new_case):
+    """What a proposal's rewrite changed, read against the proposal it replaces, as the card that follows the one the
+    user answered says it (rail-cards "A card that follows one the user answered says so first"), from both
+    proposals' commands, parsed, and cases: each unit or chore it makes new that the old did not, and each the old made
+    new that it no longer does (new_units); each whose intent it words otherwise; each it newly drops, or no longer
+    drops; how many of its other commands changed; and that its case is rewritten. Sentences, [] when its commands and
+    its case are the old's."""
+    def intents(argvs):
+        return {a.unit: " ".join(a.intent.split()) for a in argvs
+                if a.cmd in ("unit", "chore") and a.sub in ("add", "amend", "split") and getattr(a, "intent", None)}
+
+    def drops(argvs):
+        return [a.unit for a in argvs if a.cmd in ("unit", "chore") and a.sub == "drop"]
+    was, now = new_units(old_argvs), new_units(new_argvs)
+    added, gone = [u for u in now if u not in was], [u for u in was if u not in now]
+    dropping, undropped = [u for u in drops(new_argvs) if u not in drops(old_argvs)], [u for u in drops(old_argvs) if u not in drops(new_argvs)]
+    old_i, new_i = intents(old_argvs), intents(new_argvs)
+    worded = [u for u in new_i if u in old_i and new_i[u] != old_i[u]]
+    named = set(added + gone + dropping + undropped)
+
+    def others(argvs):  # every other command, its words of intent left to worded
+        return [tuple(sorted((k, repr(v)) for k, v in vars(a).items() if k not in ("do", "label", "intent")))
+                for a in argvs if getattr(a, "unit", None) not in named]
+    o, n = others(old_argvs), others(new_argvs)
+    changed = max(sum(max(n.count(k) - o.count(k), 0) for k in set(n)), sum(max(o.count(k) - n.count(k), 0) for k in set(o)))
+    said = ([f"It adds {joined(added)}."] if added else []) + ([f"It no longer adds {joined(gone)}."] if gone else [])
+    said += ([f"It words {worded[0]}'s intent otherwise." if len(worded) == 1 else f"It words the intents of {joined(worded)} otherwise."]
+             if worded else [])
+    said += ([f"It drops {joined(dropping)}."] if dropping else []) + ([f"It no longer drops {joined(undropped)}."] if undropped else [])
+    said += [f"It changes {plural(changed, 'other command' if said else 'command')}."] if changed else []
+    return said + (["Its case is rewritten."] if " ".join((old_case or "").split()) != " ".join((new_case or "").split()) else [])
 
 
 def proposal_card(f):
@@ -1107,6 +1227,113 @@ def follows_of(kind, thing, entries, by):
         steps = [c for c in cards[deploys[-1] + 1:] if c["key"].startswith(f"op/{thing['env']}/") and c["key"] != thing.get("key")]
         return (steps[-1] if steps else cards[deploys[-1]])["card"]
     return None
+
+
+# ------------------------------------------------------------------------- a card asked again (record 0031)
+
+STANDS = "stands"  # the State of a follow-on crew withheld, its earlier card's answer standing (plan.card_posted)
+
+
+def standing(entries, key, owner):
+    """The card whose answer stands under a row's key (rail-cards "A follow-on with nothing changed is not posted"):
+    the one the owner's newest post under the key names when that post is a follow-on crew withheld (State stands);
+    None once a card is posted under it after, or when none was withheld. A post Pending You refused changes nothing,
+    having shown the user nothing. entries are in the order they were written."""
+    card = None
+    for e in entries:
+        if e.get("Act") != "card.post" or e.get("Key") != key or e.get("By") != owner:
+            continue
+        if e.get("State") == STANDS:
+            card = e.get("Card")
+        elif not e.get("Refused"):
+            card = None
+    return card
+
+
+def answered_before(entries, follows, key, owner):
+    """The card the user answered that a post under a row's key comes after (rail-cards "A card that follows one the
+    user answered says so first"), from the run record's entries, oldest first: the card the post follows (follows)
+    when its close shows it closed or declined, else the card whose answer stands under the key (standing). As {card,
+    posted, answered, answer}: when its last post and its close were recorded, as the run record writes them, and what
+    the user answered as its close recorded it (answer_said), None when it recorded none; None when the post follows
+    no card the user answered."""
+    def last(act, card):
+        return next((e for e in reversed(entries) if e.get("Act") == act and e.get("Card") == card and not e.get("Refused")), None)
+    shut = last("card.close", follows) if follows else None
+    card = follows if shut and (shut.get("State") or "closed") in ("closed", "declined") else standing(entries, key, owner)
+    if not card:
+        return None
+    shut, post = last("card.close", card) or {}, last("card.post", card) or {}
+    return {"card": card, "posted": post.get("At"), "answered": shut.get("At"), "answer": shut.get("Answer")}
+
+
+def said_at(at, day=None):
+    """A run record's time as a card says it, YYYY-MM-DD HH:MM UTC, its date left off when it is that of day, another
+    time of the run record's."""
+    m = re.fullmatch(r"(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(?::\d\d)?Z", at or "")
+    if not m:
+        return at
+    return f"{m.group(2)} UTC" if day and day.startswith(m.group(1)) else f"{m.group(1)} {m.group(2)} UTC"
+
+
+def sentences(said):
+    """Sentences said after a colon: each ending as a sentence ends, the first begun in lower case unless its first
+    word holds a capital past its first letter, a name as GitHub or UTC."""
+    out = [s if s[-1] in ".!?…" else s + "." for s in (x.strip() for x in said) if s]
+    if out and out[0][1:].split(" ", 1)[0] == out[0][1:].split(" ", 1)[0].lower():
+        out[0] = out[0][0].lower() + out[0][1:]
+    return " ".join(out)
+
+
+def answered_opening(earlier, since):
+    """The paragraph a card opens with when it follows one the user answered (rail-cards "A card that follows one the
+    user answered says so first"): that they answered the card before it, when that card was posted and by when crew
+    recorded their answer, what they answered, and what changed since, the event's sentences (since); None when the
+    event gives nothing changed, so the card is not posted. earlier as answered_before gives it."""
+    said = [s for s in since or [] if s and s.strip()]
+    if not said:
+        return None
+    posted, answered = earlier.get("posted"), earlier.get("answered")
+    times = (f", posted {said_at(posted)}" if posted else "") + (f", by {said_at(answered, posted)}" if answered else "")
+    what = earlier.get("answer") or "crew holds no record of what you answered"
+    return f"You answered the card before this one{times}: {what}. Since then: {sentences(said)}"
+
+
+def stands_said(earlier):
+    """What crew records and says of a follow-on it withholds, nothing having changed since the user answered the card
+    before it (earlier, as answered_before gives it), in its own words."""
+    by = f" by {said_at(earlier['answered'])}" if earlier.get("answered") else ""
+    return f"Not posted: nothing has changed since the user answered {earlier['card']}{by}, so their answer stands"
+
+
+def deploy_since(earlier, head):
+    """What changed since the user answered a deploy's card, as the card offered again says it: the head offered now
+    and the one they answered on (earlier, the followed card's recorded head or the one they approved), or that crew
+    holds no record of that one; nothing when the head is the one they answered on."""
+    if earlier and (head.startswith(earlier) or earlier.startswith(head)):
+        return []
+    return [f"The offer is now {head[:7]}, where you answered on {earlier[:7]}." if earlier else
+            f"The offer is now {head[:7]}, and crew holds no record of the head you answered on."]
+
+
+def step_since(followed, env, n, to=None):
+    """What changed since the user answered the card a step's card follows, from that card's key (followed): its
+    deploy's, deploy/<env>, ended, and this is its step n; a step's before it, op/<env>/<m>, is behind them, and this
+    is step n; nothing for any other key, or none."""
+    m = re.fullmatch(r"op/[a-z0-9][a-z0-9-]*/(\d+)", followed or "")
+    if m:
+        return [f"Step {m.group(1)} is behind you, and this is step {n}."]
+    if followed == f"deploy/{env}":
+        return [f"The deploy{f' of {to[:7]}' if to else ''} to {env} ended, and this is its step {n}."]
+    return []
+
+
+def opened(card, opening, follows):
+    """A card that follows one the user answered, its summary opening with what they answered and what changed since
+    (answered_opening), cut again at whole sentences, and its details opening with it too; following that card,
+    follows, when its builder set none."""
+    context = dict(card["context"], background="\n\n".join(x for x in (opening, card["context"].get("background")) if x))
+    return dict(card, summary=prose(f"{opening}\n\n{card['summary']}"), context=context, follows=card.get("follows") or follows)
 
 
 # ---------------------------------------------------------------------------------------- the act's decisions

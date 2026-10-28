@@ -422,11 +422,24 @@ has "$out" "Save the report every run, one that found nothing to do as well"; ha
 ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor; verify saves its report every run, and a verify with none has not ended"
 
 # A landing that conflicts lands nothing and goes back to the team as a fix that takes main into the bolt (plan.8,
-# teams.5, record 0026): main-ops submits the bolt with crew bolt submit and passes on sluice's words, the conductor
+# teams.5, record 0026), and one sluice or its host stopped is submitted again on the word that stands (plan.16 as
+# read 2026-10-24): main-ops submits the bolt with crew bolt submit and passes on sluice's words, the conductor
 # starts the fix and merges it as any fix, its agent merges main in, and nothing but sluice moves a bolt's branch or
-# main; the bolt's proof is its verification (record 0025), and ops proves and deploys nothing.
+# main; the bolt's proof is its verification (record 0025), and ops proves and deploys nothing. The user's send stands
+# for the bolt's work, so a ticked bolt that only took main in lands on that send, read with crew card read with or
+# without a card, and so do the user's words in ops's pane (record 0031 as amended 2026-10-24).
 expect_ok crewpy brief wldn main-ops
 for want in "tell the bolt's conductor and the user sluice's words" "its row has its box again on the kit's landings card once the fix has merged" \
+  "When it did not land for its own content, a conflict or a check that ran and failed" \
+  "its row keeps its box and the user's word stands for it: tell no conductor" \
+  "once it is cleared, submit that bolt again with the same command, on the send that still stands" "asking the user nothing" \
+  "the user's send that ticked it still lands it, the fix having only taken main in" "land it on that send, as above, with nothing asked" \
+  "A send stands for the bolt's work, not its head" \
+  "still lands on that send once its conductor tells you it is proven again, with nothing asked of the user" \
+  "with or without a landings card of the kit open" "a bolt it can't tell of, it names and leaves out of that command" \
+  "crew asks for again on a card saying what changed" \
+  "The user's words in this pane stand the same way for a bolt they named" \
+  "their send still stands for it: the close says so, and keeps it" \
   "never merge, rebase, reset or fast-forward main or a bolt's branch by git" "A host's own main lagging GitHub's stops nothing" \
   "shows every unit merged and the bolt's verification green" \
   "every kit's main checkout is an anchor the fleet's timer moves to GitHub's main within minutes" \
@@ -436,12 +449,15 @@ done
 lacks "$out" "git rebase --abort"; lacks "$out" "proof in dev"; lacks "$out" "read-tree"; lacks "$out" "behind GitHub's, crew refuses"
 expect_ok crewpy brief swb-1 conductor
 for want in "Take main into the bolt" "a submission to the bolt like any other" \
-  "once the bolt holds it and reads proven again, its row on the kit's landings card has its box again" \
+  "Once the bolt holds it and reads proven again, tell \`wldn-ops\` it is proven" \
+  "a bolt the user's send ticked lands on that same send, since taking main in leaves the bolt's own work as it was, with no new card" \
+  "otherwise crew gives its row on the kit's landings card its box again" \
+  "unless the user's send that ticked it still stands for its own work, which then lands it" \
   "That verification is the bolt's proof" \
   "an anchor at GitHub's main that the fleet's timer moves and nobody edits in or checks a branch out in: read the bolt by ref, \`git log bolt/<bolt>\`"; do
   has "$out" "$want"
 done
-lacks "$out" "Carry the bolt onto main"; lacks "$out" "proof file"
+lacks "$out" "Carry the bolt onto main"; lacks "$out" "proof file"; lacks "$out" "its row on the kit's landings card has its box again"
 expect_ok crewpy brief swb-1 coder
 for want in "Take main into the bolt" "\`git fetch -q origin\`, then \`git merge origin/main\`, never the host's own \`main\`" \
   "Never rebase the bolt's commits onto main" "keeping both intents, main's and the bolt's" \

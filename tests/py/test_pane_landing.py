@@ -6,13 +6,14 @@ and keeping the words on its host; and crew bolt land's reads of it, plan.pane_w
 plan.landing_word_read from the kept file. Reading the words in a transcript is test_transcript's; the cards' close,
 test_landing's, test_landings' and test_card_commands'."""
 import argparse
+import json
 
 import pytest
 
 import transcript
 
 import plan
-from test_landing import NONE_YET, QUEUED, TAKES_NONE, policy, ran_as, said
+from test_landing import NONE_YET, QUEUED, RAN, TAKES_NONE, policy, ran_as, said
 
 WORDS = "Land crw-5's bolt"
 HEAD = "crew submits nothing of bolt y"
@@ -144,7 +145,7 @@ class TestTheSubmission:
         assert not (plan.LANDINGS / "swancloud" / "y.json").exists()
 
     def test_a_submission_that_did_not_land_keeps_no_words(self, submit):
-        submit["outs"][1:] = [ran_as(1, "{}"), ran_as(0, said(1, new=OLD, github=OLD, held="no"))]
+        submit["outs"][1:] = [ran_as(1, json.dumps(dict(RAN, id=7))), ran_as(0, said(1, new=OLD, github=OLD, held="no"))]
         with pytest.raises(plan.Stopped):
             submit["run"](WORDS)
         assert submit["emitted"][0].get("refused") and "frm" not in submit["emitted"][0]
@@ -186,3 +187,83 @@ class TestTheWordRead:
         (tmp_path / "swancloud" / "y.json").write_text("{not json")
         with pytest.raises(plan.Refusal, match=r"can't read the user's words kept for bolt y's landing in .*y\.json"):
             plan.landing_word_read("swancloud", "y", "session/s-1/u-7")
+
+
+# ------------------------------------------------------------------------------------- a stop in ops's pane
+
+STOP = "Hold the phone bolt, don't land it yet"
+
+
+@pytest.fixture
+def leave(monkeypatch):
+    """crew bolt leave on stand-ins for what it reaches: the plan, ops's transcript, each bolt's row as its team's host
+    reads it (rows, a bolt with none reading unproven), this host's run record and the raise of the kit's card."""
+    got = {"emitted": [], "raised": [], "verdict": heard(), "teams": {"y": TEAM, "z": TEAM},
+           "rows": {"y": dict(bolt="y", box=True, facts=dict(head=NEW)), "z": dict(bolt="z", box=True, facts=dict(head=OLD))}}
+    monkeypatch.setattr(plan, "CONTEXT", {})
+    monkeypatch.setattr(plan, "locate", lambda fleet, kind, name, label: ("swancloud", "crew", "tip", Plan()))
+    monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
+    monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: got["teams"].get(b["Bolt"]))
+    monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (
+        (got["rows"][b["Bolt"]], None) if b["Bolt"] in got["rows"] else (None, "lands once its verification is green; now failed")))
+    monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
+    monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: got["emitted"].append(dict(f, Act=act, On=on)) or "eid")
+    monkeypatch.setattr(plan.record, "who", lambda: "swancloud-ops")
+    monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None, pane=None: got["raised"].append((label, kit, note)))
+
+    def run(excerpt=STOP, bolts=("y",)):
+        plan.bolt_leave({"teams": {}, "partitions": {}}, argparse.Namespace(bolt=list(bolts), label=None, excerpt=excerpt))
+        return got
+    got["run"] = run
+    return got
+
+
+class TestTheStop:
+    """main-level "A landing stopped in ops's pane is recorded as the user's words"; rail-cards "A bolt stopped in
+    ops's pane is shown as left"."""
+
+    def test_the_users_words_record_a_stop_at_the_bolts_head_holding_none_of_them_and_raise_its_kits_card(self, leave):
+        got = leave["run"]()
+        [e] = got["emitted"]
+        assert (e["Act"], e["On"], e["Head"], e["frm"], e["Chars"]) == ("bolt.leave", ["bolt/y"], NEW, ["session/s-1/u-7"], len(STOP))
+        assert STOP not in repr(e)
+        assert got["raised"] == [("swancloud", "crew", "y was stopped on your words in swancloud-ops's pane")]
+
+    def test_two_bolts_of_one_kit_raise_its_card_once(self, leave):
+        got = leave["run"](bolts=("y", "z"))
+        assert [(e["On"], e["Head"]) for e in got["emitted"]] == [(["bolt/y"], NEW), (["bolt/z"], OLD)]
+        assert got["raised"] == [("swancloud", "crew", "y and z were stopped on your words in swancloud-ops's pane")]
+
+    @pytest.mark.parametrize("v", [heard("agent:swancloud-operator"), heard(grade="refused"), heard("crew"), heard("tool"),
+                                   heard(grade="found"), heard(grade="unverified", reason="no transcript for session s-1")])
+    def test_words_crew_does_not_read_as_the_users_record_no_stop_as_a_landing_on_them_is_refused(self, leave, v):
+        leave["verdict"] = v
+        with pytest.raises(plan.Refusal) as e:
+            leave["run"]()
+        assert str(e.value) == plan.leave_word_refusal("y", v)
+        assert STOP not in str(e.value) and leave["emitted"] == [] and leave["raised"] == []
+
+    def test_another_agents_tell_is_named(self, leave):
+        assert plan.leave_word_refusal("y", heard("agent:swancloud-operator")) == (
+            "crew records no stop of bolt y: the words are swancloud-operator's, passed on with crew tell, and not the user's; "
+            "tell swancloud-operator that the user stops a landing on its kit's landings card or in main-level ops's pane")
+
+    def test_blank_words_ask_for_the_users(self, leave):
+        with pytest.raises(plan.Refusal, match="crew bolt leave needs the user's words"):
+            leave["run"]("  ")
+        assert leave["emitted"] == []
+
+    def test_a_bolt_no_team_holds_or_not_proven_has_no_landing_to_stop(self, leave):
+        leave["teams"].pop("z")
+        with pytest.raises(plan.Refusal, match="bolt z is held by no team, so it has no landing to stop"):
+            leave["run"](bolts=("y", "z"))
+        leave["teams"]["z"], leave["rows"] = TEAM, {"y": leave["rows"]["y"]}
+        with pytest.raises(plan.Refusal, match="bolt z does not read proven, so it has no landing to stop: lands once its "
+                                               "verification is green; now failed"):
+            leave["run"](bolts=("y", "z"))
+        assert leave["emitted"] == [] and leave["raised"] == []
+
+    def test_a_stop_is_ended_by_a_landing_on_the_users_words_after_it(self):
+        stop = dict(Act="bolt.leave", On=["bolt/y"], Head=NEW, From=["session/s-1/u-7"], Chars=len(STOP))
+        assert plan.left_of([stop], "land/crew", {"y": NEW}) == {"y": NEW[:7]}
+        assert plan.left_of([stop, submitted(frm="session/s-1/u-9")], "land/crew", {"y": NEW}) == {}

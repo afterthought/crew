@@ -22,3 +22,15 @@ crew's own main checkout, its main a branch that takes pull requests, and trimme
 state it then held: #137 conflict, #148 withdrawn, #153 landed and #160 testing; each record is verbatim.
 
 status-all.json	exit 0	sluice status main --all --json
+
+wait-failed-ran.json and wait-failed-not-run.json, the record `sluice wait <n> --json` prints of a submission sluice
+blamed (plan.landing_blame; tests/py/test_landing.py): written by hand on 2026-10-24 to sluice 0.36.4's own record,
+crates/sluice-core/src/records.rs at v0.36.4, `Submission` (192–223) and `FailedTask` (129–150), its keys in the
+order the recorded listing above prints them, and to how a round fills it (crates/sluice-core/src/step.rs: `result`
+the candidate's `result_word`, "failed" or "timed out"; a check that could not run kept with an empty `hash`, which
+serde leaves out, and its reason in `not_run`). wait-failed-ran: tests:logic ran and failed, its hash and its log
+kept. wait-failed-not-run: wldn's case of 2026-10-23, every required check left without a result because the host's
+Dagger engine did not answer, each with why.
+
+wait-failed-ran.json	exit 1	sluice wait 214 --timeout 9m --json
+wait-failed-not-run.json	exit 1	sluice wait 216 --timeout 9m --json

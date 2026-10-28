@@ -25,8 +25,12 @@
 # --no-wait --json` lands this worktree's head at once, as the stub wt-submit does, and prints {id, branch, ahead}; its
 # outcome waits for `sluice wait <id> --timeout <duration> --json`, which prints the submission's record, its state
 # landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; its verdict is in the record alone, as sluice
-# 0.36.4's is under --json, a conflict's paths, the ones the stub wt-submit names, or the failed check, the words of
-# $CREW_TEST_ROOT/sluice-fails, and nothing of it on standard error; `sluice wait` of an id it never gave exits 1
+# 0.36.4's is under --json, and nothing of it on standard error: a failed record carries `result` "failed" and
+# `failed`, as sluice 0.36.4's records.rs Submission and FailedTask have them, the failed check with a hash, a check
+# that ran, named by the words of $CREW_TEST_ROOT/sluice-fails, or each check $CREW_TEST_ROOT/sluice-could-not-run
+# names, a line `<task>: <why>`, with no hash and its why as `not_run`; a conflict's carries `conflict`, its paths the
+# ones the stub wt-submit names and `with` empty; the record listed by `sluice status` the same; `sluice wait` of an
+# id it never gave exits 1
 # with sluice's not-found error. To a branch whose policy takes pull requests (route.py --pulls) it answers as sluice
 # 0.36.4 does once intake has queued the pull request (crates/sluice/src/lib.rs submit_pull): the open one from this
 # worktree's branch into it, the stub gh's, opened when there is none, its number and no submission,
@@ -116,20 +120,26 @@ print(p["number"], "draft" if p["isDraft"] else "ready")' "$CREW_TEST_ROOT/gh-pu
     count=$common/stub-sluice-submissions
     if (( rc == 0 )); then n=$(cat "$count"); else n=$(( $(cat "$count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$count"; fi
     state=landed; (( rc == 1 )) && state=failed; (( rc == 2 )) && state=conflict
-    paths=$(sed -n 's/^conflict: //p' <<<"$said" | head -n 1)
-    checks=$(cat "$CREW_TEST_ROOT/sluice-fails" 2>/dev/null)
-    jq -n --argjson id "$n" --arg branch "$target" --arg state "$state" --arg path "$here" --arg paths "$paths" \
-      --arg checks "$checks" --argjson rc "$rc" \
-      '{schema: "sluice/submission@1", id: $id, branch: $branch, state: $state, from: {path: $path}, rc: $rc}
-       + if $state == "conflict" then {conflict: {paths: ($paths | if . == "" then [] else split(", ") end), with: []}}
-         elif $state == "failed" then {result: "failed", failed: [{task: $checks, hash: "stub"}]} else {} end' \
+    blame='{}'  # what sluice's record says of a submission it blamed or found in conflict
+    if (( rc == 1 )) && [[ -e ${CREW_TEST_ROOT:?}/sluice-could-not-run ]]; then
+      blame=$(jq -Rn '{result: "failed", failed: [inputs | select(length > 0) | capture("^(?<task>[^:]+): (?<not_run>.*)$")]}' \
+        < "$CREW_TEST_ROOT/sluice-could-not-run")
+    elif (( rc == 1 )); then
+      blame=$(jq -nc --arg checks "$(cat "$CREW_TEST_ROOT/sluice-fails" 2>/dev/null)" '{result: "failed", failed: [{task: $checks, hash: "stub"}]}')
+    elif (( rc == 2 )); then
+      blame=$(sed -n 's/^conflict: //p' <<<"$said" | head -n 1 \
+        | jq -Rn '{conflict: {paths: ([inputs] | first // "" | if . == "" then [] else split(", ") end), with: []}}')
+    fi
+    jq -n --argjson id "$n" --arg branch "$target" --arg state "$state" --arg path "$here" --argjson rc "$rc" \
+      --argjson blame "$blame" \
+      '{schema: "sluice/submission@1", id: $id, branch: $branch, state: $state, from: {path: $path}, rc: $rc} + $blame' \
       > "$common/stub-sluice-wait-$n.json"
     records=$common/stub-sluice-records-${target//\//-}.json
     [[ -e $records ]] || echo '[]' > "$records"
     jq --argjson id "$n" --arg branch "$target" --arg state "$state" --arg head "$head" --arg from "$from" --arg place "$place" \
-      --arg agent "${SLUICE_AGENT:-}" \
+      --arg agent "${SLUICE_AGENT:-}" --argjson blame "$blame" \
       '. + [{schema: "sluice/submission@1", id: $id, branch: $branch, head: $head, state: $state,
-             from: {agent: $agent, head: $from, worktree: $place}}]' "$records" > "$records.new" && mv "$records.new" "$records"
+             from: {agent: $agent, head: $from, worktree: $place}} + $blame]' "$records" > "$records.new" && mv "$records.new" "$records"
     if [[ -n $pr ]]; then
       (( rc == 0 )) && pulls merged >/dev/null
       jq -nc --arg branch "$target" --argjson pr "$pr" '{branch: $branch, pull_request: $pr, state: "queued: next on \($branch)"}'

@@ -20,6 +20,8 @@ What is still open now that every page is written. A working file: an item leave
 - **Move 2, crew's lasting reading (now):** no waiting process of crew's, a session's start listing its open waits, submission numbers on rows (0046 parts 1 to 4); one follower per host (`plan.12`).
 - **Move 3, Flume (when its first release runs a kind on a host):** stages as Flume places, waits, stuck and lost reads, and a team's room from Flume's status (0045 point 5); the slot machinery and the transcript reads leave crew whole.
 - **Move 4, Tailrace (when its push profile holds):** the deployer's mechanics leave swancloud.
+- **Move 5, teams out of crew (when Flume runs a unit's whole state machine):** the conductor, team ops, the team, the dispatcher, the slot bound, the give and team tells leave crew; capacity is Flume's room per host; the user chooses on the rail what runs and lands (record 0047 as amended 2026-10-28, proposed; the user's order: fires, Flume, then this).
+- **Move 6, roles on demand (after move 5):** no crew role stands; each is a kind Flume launches on a nudge naming a record, one run at a time per role and partition; the operator folds into `crew send` (record 0047 as amended, proposed).
 - **Stopgaps until move 3:** a slot lent to its bolt's fix (0045); a held unit's wait on the row (0044).
 
 ## Accepted, not built
