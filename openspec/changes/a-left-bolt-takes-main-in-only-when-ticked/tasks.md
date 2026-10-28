@@ -39,4 +39,4 @@
 
 ## 10. The change as a whole
 
-- [ ] 10.1 Every test the change affects passes; verify `tests/suite --affected` ends with "0 failed".
+- [x] 10.1 Every test the change affects passes; verify `tests/suite --affected` ends with "0 failed".
