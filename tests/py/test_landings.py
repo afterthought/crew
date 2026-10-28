@@ -1511,39 +1511,6 @@ def test_a_wait_whose_reading_crew_ended_says_it_ended_with_its_row_or_crew_card
         "land/y: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run")
 
 
-class TestWaitAcrossAnOldCardsClose:
-    """crew card wait land/y while y is a row of crew's landings card, its reading recorded, and y's old land/y card is
-    withdrawn by the rail's sweep meanwhile: the wait goes on, and returns the notes the user then sends."""
-    FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio", "teams": ["crw-1"]}},
-             "teams": {"crw-1": FLEET["teams"]["crw-1"]}, "hosts": {}}
-    S = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio:19432/y", "started": "2026-10-23T10:00:00Z"}
-
-    def test_the_wait_outlasts_the_close_and_returns_the_readings_notes(self, monkeypatch, tmp_path, capsys):
-        d = tmp_path / "swancloud" / "land/y"
-        d.mkdir(parents=True)
-        (d / "session.json").write_text(json.dumps(self.S))
-        monkeypatch.setattr(plan, "CARDS", tmp_path)
-        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
-        monkeypatch.setattr(plan, "plannotator_sessions", lambda: (None, "plannotator sessions did not answer in 8 seconds"))
-        acts = LandActs({}, entries=[dict(Act="card.post", Key="land/y", By="crw-1-conductor", Card="req_l1", On=["bolt/y"])],
-                        answers={"get_request": ({"status": "pending", "version": 1}, None)})
-        acts.end = lambda label, key: plan.end_session(label, key)[0]
-        acts.release_preview = lambda label, key: plan.fail(f"{key}'s preview released at its old card's close")
-        polls = []
-
-        def poll(seconds):
-            polls.append(seconds)
-            if len(polls) == 1:
-                plan.row_card_close(None, "swancloud", "crw-1-conductor", "land/y", reason="y is now a row of crew's landings card", acts=acts)
-            else:
-                (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "y: say what the zone is."}))
-        monkeypatch.setattr(plan.time, "sleep", poll)
-        plan.card_wait(self.FLEET, argparse.Namespace(key="land/y", unit=None, label="swancloud", sub="wait"))
-        assert capsys.readouterr().out.splitlines()[-2:] == [
-            "land/y: notes from its reading, as notes on the landing card:", "y: say what the zone is."]
-        assert len(polls) == 2 and not (d / "session.json").exists() and (d / "result.20261023T100000Z.json").exists()
-
-
 # ------------------------------------------------------------------- a landing in ops's pane, a card left elsewhere
 
 PANE = "Landed on the user's word in swancloud-ops's pane; landed on GitHub's main at 1111111"

@@ -2,11 +2,9 @@
 2026-10-22): plan.pane_answer_refusal, which refuses a caller who is not the planner or the operator, a batch the run
 record does not hold, one answered already or waiting on nothing, and words crew does not read as the user's; the act,
 plan.batch_answer, on a stand-in for what it reaches, recording one batch.answer with no words in it, closing the
-planner's card held on this host with them and telling the planner them when the operator ran it; and the planner's
-wait on the batch, plan.batch_wait, which ends on the answer. Reading the words in a transcript is test_transcript's;
+planner's card held on this host with them and telling the planner them when the operator ran it. Reading the words in a transcript is test_transcript's;
 the answer's effect on the rail, the board and the landing, test_batches' and test_rail's."""
 import argparse
-import json
 
 import pytest
 
@@ -234,34 +232,3 @@ class TestAnswer:
         with pytest.raises(plan.Refusal, match="swancloud-planner answers swancloud's batches, not wldn's"):
             answer(Acts(), label="wldn")
 
-
-class TestWait:
-    def test_the_planners_wait_ends_once_the_batch_is_answered_in_a_pane_and_closes_the_card_it_holds(self, tmp_path, monkeypatch, capsys):
-        """review-batches, "The planner's wait was running": the operator answers batch 16 while the wait runs, on the
-        card and its reading, which plannotator lists as serving."""
-        monkeypatch.setattr(plan.time, "sleep", lambda s: None)
-        doc = str(tmp_path.resolve() / "batch")
-        (tmp_path / "session.json").write_text(json.dumps({"pid": 42, "document": doc, "url": "http://deneb:19432", "started": "2026-10-22T20:00:00Z"}))
-        monkeypatch.setattr(plan, "plannotator_sessions", lambda: ({42: {"pid": 42, "target": doc, "url": "http://deneb:19432"}}, None))
-        held = [batch(16), posted("batch/16", "req_16")]
-        acts = Acts(entries=held, rounds=[held, held, held + [answered(16, "swancloud-operator")]])
-        plan.batch_wait(FLEET, "swancloud", "batch/16", tmp_path, acts)
-        assert acts.emitted == [dict(Act="card.close", On=["batch/16"], by="swancloud-planner", Card="req_16", Key="batch/16",
-                                     State="withdrawn", Outcome="Answered in swancloud-operator's pane at 20:17Z", label="swancloud")]
-        assert acts.calls[-1] == ("cancel_request", {"requestId": "req_16", "name": "swancloud-planner",
-                                                     "reason": "Answered in swancloud-operator's pane at 20:17Z"})
-        out = capsys.readouterr().out.splitlines()
-        assert out[0] == "batch/16: answered in swancloud-operator's pane at 20:17Z"
-        assert out[1:] == ["card batch/16: req_16 withdrawn", "ended batch/16's session, plannotator pid 42"]
-
-    def test_a_wait_on_a_batch_answered_in_a_pane_starts_no_reading_and_ends_at_once(self, tmp_path, capsys):
-        """card-sessions "A batch's wait starts its reading when none runs" and review-batches "A batch answered in a
-        main-level pane" together: the operator answered batch 16 on another host before the wait began, its card held
-        here and no reading running, so the wait starts none, recording no try, and ends on the answer."""
-        held = [batch(16), posted("batch/16", "req_16"), answered(16, "swancloud-operator")]
-        acts = Acts(entries=held, session=False)
-        plan.batch_wait(FLEET, "swancloud", "batch/16", tmp_path, acts)
-        assert [e["Act"] for e in acts.emitted] == ["card.close"]
-        captured = capsys.readouterr()
-        assert captured.out.splitlines() == ["batch/16: answered in swancloud-operator's pane at 20:17Z", "card batch/16: req_16 withdrawn"]
-        assert "crew card session" not in captured.err

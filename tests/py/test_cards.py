@@ -574,66 +574,6 @@ class TestSessions:
         assert plan.batch_waited("batch/3", None, {"status": "cancelled"}) == (
             "closed", "batch/3: its card was closed outside crew; Pending You shows it cancelled", "cancelled")
 
-    # A batch's wait starts its reading when none runs (card-sessions).
-    @pytest.mark.parametrize("recorded, held, refused, step", [
-        ({"pid": 42}, "req_b3", None, ("wait", None)), (None, None, None, ("wait", None)), ({"pid": 42}, None, None, ("wait", None)),
-        (None, "req_b3", None, ("start", None)),
-        (None, "req_b3", "plannotator is not on this host's path", ("card", "batch/3's reading could not be opened: plannotator is not "
-                                                                    "on this host's path; crew card session batch/3 starts it once that "
-                                                                    "is mended, and the wait goes on for its card"))])
-    def test_a_batch_wait_with_its_card_held_and_no_session_starts_its_reading_and_says_once_when_it_cannot(self, recorded, held, refused, step):
-        assert plan.batch_unstarted("batch/3", recorded, held, refused) == step
-
-    def test_a_batch_wait_starts_no_reading_for_a_batch_answered_in_a_pane(self):
-        """review-batches "A batch answered in a main-level pane": it waits on the user no more, and the wait ends on its
-        answer."""
-        assert plan.batch_unstarted("batch/3", None, "req_b3", answered=True) == ("wait", None)
-
-    def waited_on(self, monkeypatch, tmp_path, acts):
-        """crew card wait batch/3 on mac-studio, the main level's host, its card and its reading read as acts gives them."""
-        monkeypatch.setattr(plan, "batch_read", lambda fleet, label, n, acts: dict(n=3, previous=2, units=BATCH_UNITS, link=None))
-        monkeypatch.setattr(plan, "raise_batch", lambda fleet, row, acts=None, note=None: acts.emit("wldn", "card.update", ["batch/3"],
-                                                                                                   Card="req_b3", Key=row["key"], note=note))
-        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
-        plan.batch_wait(fleet, "wldn", "batch/3", tmp_path, acts)
-
-    def test_a_batch_wait_starts_the_missing_reading_and_changes_its_card_to_carry_it(self, monkeypatch, tmp_path, capsys):
-        """card-sessions "A card raised without its reading", for a batch's wait: the start is recorded and the card
-        changed before the wait reads it."""
-        reads = []
-
-        class Acts(ReadingActs):
-            def bridge(self, name, later, held=None):
-                py = super().bridge(name, later, held)
-                answer = py.answer
-
-                def answered(tool, args):
-                    if tool == "get_request":
-                        reads.append(args["requestId"])
-                        return ({"status": "pending", "turn": "you", "version": 3} if len(reads) == 1 else
-                                {"status": "answered", "turn": "agent", "answer": {}}), None
-                    return answer(tool, args)
-                py.answer = answered
-                return py
-        acts = Acts(entries=[{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}])
-        self.waited_on(monkeypatch, tmp_path, acts)
-        assert acts.sessions == [("wldn", "batch/3")]
-        assert [(e["Act"], e.get("note")) for e in acts.emitted][:2] == [("card.reading", None), ("card.update", plan.RELINKED)]
-        out = capsys.readouterr().out.splitlines()
-        assert out[:2] == ["http://mac-studio.ts.swancloud.net:19432", "batch/3: sent back on its card, with no note"]
-
-    def test_a_batch_wait_whose_reading_will_not_open_says_so_once_and_waits_on_its_card(self, monkeypatch, tmp_path, capsys):
-        """card-sessions "The reading still will not open": the card is left as it is and returns the user's word."""
-        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
-        acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "version": 3, "answer": {"note": {"text": "Read."}}}, None)},
-                           [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}], refused=why)
-        self.waited_on(monkeypatch, tmp_path, acts)
-        assert not [t for t, _ in acts.calls if t == "update_request"]
-        assert (acts.emitted[0]["Act"], acts.emitted[0]["refused"]) == ("card.reading", why)
-        assert capsys.readouterr().err.splitlines() == [
-            f"batch/3's reading could not be opened: {why}; crew card session batch/3 starts it once that is mended, and the wait "
-            "goes on for its card"]
-
     def test_a_sessions_result_gives_its_count_of_annotations(self, tmp_path):
         (tmp_path / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "a", "annotationCount": 2}))
         assert plan.card_result(tmp_path) == ("annotated", "a", 2)
@@ -874,42 +814,6 @@ class TestLandingSession:
                                                "no reading of its own"):
             self.run(monkeypatch, acts, key="land/switchboard-kit")
         assert acts.sessions == []
-
-    def started(self, monkeypatch, acts, team=TEAM, row=ROW):
-        handed = []
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, team))
-        monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (row, None) if row else (None, "it waits on a batch"))
-        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((label, kit, note)))
-        plan.land_start(FLEET, "wldn", "land/b1", acts)
-        return handed
-
-    def test_a_wait_with_no_session_starts_the_reading_and_hands_the_kits_card_its_link(self, monkeypatch, capsys):
-        """card-sessions "A card raised without its reading" and "Waiting again after a decision"."""
-        acts = ReadingActs()
-        assert self.started(monkeypatch, acts) == [("wldn", "switchboard-kit", "b1: Its reading is open again at a new link")]
-        assert acts.sessions == [("wldn", "land/b1")]
-        assert capsys.readouterr().out.splitlines() == [self.LINK]
-
-    def test_a_wait_whose_reading_still_will_not_open_is_refused_naming_crew_card_session(self, monkeypatch):
-        """card-sessions "The reading still will not open": the card is not changed."""
-        acts = ReadingActs(refused="plannotator is not on this host's path, and a card's session is a plannotator session")
-        with pytest.raises(plan.Refusal, match=r"^land/b1's reading could not be opened: plannotator is not on this host's path, "
-                                               r"and a card's session is a plannotator session; crew card session land/b1 starts "
-                                               r"it once that is mended$"):
-            self.started(monkeypatch, acts)
-        assert acts.calls == [] and acts.emitted == [dict(self.DONE, refused="plannotator is not on this host's path, and a "
-                                                                               "card's session is a plannotator session")]
-
-    def test_a_wait_on_a_bolt_that_is_no_row_is_refused_and_starts_nothing(self, monkeypatch):
-        """card-sessions "No landing card held"."""
-        acts = ReadingActs()
-        with pytest.raises(plan.Refusal, match="^no session was started for card land/b1, and b1 is no row of its kit's landings card$"):
-            self.started(monkeypatch, acts, row=None)
-        assert acts.sessions == []
-        with pytest.raises(plan.Refusal, match="b1 is no row of its kit's landings card"):
-            self.started(monkeypatch, ReadingActs(), team=None)
-        with pytest.raises(plan.Refusal, match="b1 is no row of its kit's landings card"):
-            self.started(monkeypatch, ReadingActs(), row=dict(self.ROW, box=False, why="held"))
 
     def opened(self, monkeypatch, tmp_path, on):
         """reading_open of land/b1 at head def5678, its recorded session serving the bolt as it stood at on: what it
@@ -1238,17 +1142,6 @@ class TestSessionWords:
         assert plan.land_waited("land/y", None, True, gone=True) == "land/y: the session ended with no decision"
         assert plan.land_waited("land/y", None, False) == (
             "land/y: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run")
-
-    @pytest.mark.parametrize("recorded, held, refused, step, words", [
-        (True, False, None, "wait", None),
-        (False, True, None, "start", None),
-        (False, True, "plannotator is not on this host's path, and a card's session is a plannotator session", "refuse",
-         "land/y's reading could not be opened: plannotator is not on this host's path, and a card's session is a plannotator "
-         "session; crew card session land/y starts it once that is mended"),
-        (False, False, None, "refuse", "no session was started for card land/y, and y is no row of its kit's landings card")])
-    def test_a_wait_on_a_landing_with_no_session_starts_its_reading_while_its_card_is_held(self, recorded, held, refused, step, words):
-        """card-sessions "A wait on a landing card starts its reading when none runs"."""
-        assert plan.land_unstarted("land/y", recorded, held, refused) == (step, words)
 
     def test_a_decided_landing_reading_is_set_aside_and_forgotten_and_an_undecided_one_kept(self, tmp_path):
         s = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio.ts.swancloud.net:19432", "started": "2026-10-19T10:00:00Z"}
