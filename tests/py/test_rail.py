@@ -358,7 +358,10 @@ class TestTheBranchAlone:
         assert plan.sweep_judgment("wldn", {"proposal/1"}, cards_, unread["wldn"], held["wldn"]) == {"live": [], "blind": []}
 
     def test_a_question_posted_on_a_host_that_does_not_answer_is_still_listed(self, monkeypatch):
-        entries = [dict(post("req_q1", None, by="swb-1-conductor"), Host="macbook-pro", Id="20261012T100000Z-000000-macbook-pro-1-1")]
+        # Posted an hour ago, since rail_record keeps the cards of the last CARD_DAYS days from today's date.
+        at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
+        entries = [dict(post("req_q1", None, by="swb-1-conductor"), Host="macbook-pro", At=at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        Id=f"{at:%Y%m%dT%H%M%SZ}-000000-macbook-pro-1-1")]
         cards_, unread, _ = self.read(monkeypatch, entries)
         assert [c["card"] for c in plan.question_cards(cards_, unread)] == ["req_q1"]
         assert [c["card"] for c in plan.question_cards(cards_, {"wldn": {"wldn/main": "could not fetch"}})] == []
