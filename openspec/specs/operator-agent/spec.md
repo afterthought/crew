@@ -86,7 +86,7 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 - **THEN** its brief has it tell `wldn-operator`, the partition's one operator
 
 ### Requirement: The console follows the run record
-`crew console up <label> flow` SHALL open a `flow` tab in the `console` workspace of the host's `<label>` session that runs `crew events --follow` for the partition, and SHALL start no agent. When the tab is already there it SHALL do nothing. `crew console down <label>` SHALL close the console's tabs.
+`crew console up <label> flow` SHALL open a `flow` tab in the `console` workspace of the host's `<label>` session that runs `crew events --follow` for the partition, and SHALL start no agent. When the tab is already there it SHALL do nothing. `crew console down <label>` SHALL close the console's tabs. The tab SHALL show an entry written on this host within a few seconds, and one from another host within a minute.
 
 #### Scenario: The tab is opened with no agent
 - **WHEN** `crew console up wldn flow` runs on mac-studio
@@ -99,6 +99,10 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 #### Scenario: Not asked for
 - **WHEN** `crew console up wldn` runs on a host with no `flow` tab open
 - **THEN** no `flow` tab is opened
+
+#### Scenario: An entry from another host
+- **WHEN** the `flow` tab runs on mac-studio and a conductor on the box starts a stage
+- **THEN** its line appears within a minute, and the tab fetched wldn's branch no more than once a minute meanwhile
 
 ### Requirement: The console has a rail tab
 `crew console up <label> rail` SHALL open a `rail` tab in the `console` workspace, split in two, as `crew console up <label>` SHALL while no host job runs the follower. The upper pane SHALL show the rail frame the host's follower writes, `crew rail --label <label>` as of its last read, drawn again whenever the frame changes, and SHALL follow itself while no one does. The lower pane SHALL be a shell with crew on its path. When the tab is already there, it SHALL open nothing.
