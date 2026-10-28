@@ -484,8 +484,8 @@ def follow_fetches(label, followed_here, follower, last, now, period=PERIOD):
     """Whether crew events --follow fetches a partition's branch now (plan.12's reading of 2026-10-28): never while the
     host's follower fetches it, the partition being one it follows (followed_here, board.labels_here) while someone
     holds the host's follower lock (follower, board.follower_here: job, tab, or unknown, a holder whose line is not
-    written yet); else once its own clock is due, period seconds after its last fetch (last, None when it has made none
-    since a SIGUSR1). A decision on plain facts (code.7)."""
+    written yet), at its start too; else once its own clock is due, period seconds after its last fetch (last, None
+    when it has made none, at its start or since a SIGUSR1). A decision on plain facts (code.7)."""
     if label in followed_here and follower != "none":
         return False
     return last is None or now - last >= period
@@ -501,9 +501,9 @@ def follow(fleet, labels, about):
     """Each entry of the labels as it reaches their branches, one line each, until interrupted. Each second it reads
     each branch's tip as this host's cache holds it, with no process (plan.tip_here), and when the tip moved, reads
     again only the run-record files of the day the follow began or later whose blob changed (changed_files), printing
-    what it has not printed (fresh). It fetches each branch at its start, and then once a minute only for a partition
-    the host's follower does not fetch (follow_fetches), which moves the cache itself, as a write on this host does;
-    SIGUSR1 makes its next fetch now. A branch's first read prints nothing, being what was there before. A branch that
+    what it has not printed (fresh). It fetches a branch only for a partition the host's follower does not fetch, which
+    moves the cache itself, as a write on this host does: at its start and then once a minute (follow_fetches); SIGUSR1
+    makes its next fetch now. A branch's first read prints nothing, being what was there before. A branch that
     cannot be read is said once, until it reads again. It asks no host for anything (read.5)."""
     import time
     import board  # board.py imports this module; the host's follower's lock and partitions are its
@@ -525,12 +525,9 @@ def follow(fleet, labels, about):
             for l in labels:
                 repo, ref = plan.state_of(fleet, l)
                 try:
-                    if l not in last:
-                        fetch = True
-                    else:
+                    if l in followed:
                         follower = follower or board.follower_here()
-                        fetch = follow_fetches(l, followed, follower, None if again else last[l], time.monotonic(), period)
-                    if fetch:
+                    if follow_fetches(l, followed, follower, None if again else last.get(l), time.monotonic(), period):
                         last[l] = time.monotonic()
                         plan.fetch(repo, ref, fresh=True)
                     tip = plan.tip_here(repo, ref)
