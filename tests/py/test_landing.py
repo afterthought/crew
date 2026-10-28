@@ -1145,6 +1145,32 @@ class TestTheStops:
         assert plan.stopped_at(got, "b", "e" * 40) is None and plan.stopped_at(got, "c", TIP) is None
 
 
+class TestWhatSluicesRecordMeans:
+    """Decision 2: what sluice's record of a landing's submission, #n, as `sluice status <n> --json` prints it on the
+    team's host, means for the landing (plan.landing_due): standing, out with sluice's exit for its state, or unread."""
+
+    @pytest.mark.parametrize("state", sorted(plan.STANDING))
+    def test_a_submission_in_the_queue_or_under_test_is_standing(self, state):
+        assert plan.landing_due(214, 0, json.dumps(dict(RAN, state=state))) == ("standing", state)
+
+    @pytest.mark.parametrize("state, rc", [("landed", "0"), ("failed", "1"), ("conflict", "2"), ("withdrawn", "4")])
+    def test_one_out_is_out_with_the_exit_its_wait_gives_it_and_its_record(self, state, rc):
+        doc = dict(RAN, state=state)
+        assert plan.landing_due(214, 0, json.dumps(doc)) == ("out", rc, doc)
+
+    def test_sluices_error_is_said_in_its_words(self):
+        assert plan.landing_due(412, 1, '{"error":{"kind":"not_found","message":"no submission 412","next":[]}}') == (
+            "unread", "sluice status 412 exited 1: no submission 412")
+        assert plan.landing_due(412, 255, "") == ("unread", "sluice status 412 exited 255")
+
+    def test_a_record_crew_does_not_read_is_unread(self):
+        assert plan.landing_due(412, 0, json.dumps(RAN)) == (
+            "unread", f"sluice status 412 printed no record of #412 crew reads: {plan.cut(' '.join(json.dumps(RAN).split()), 200)}")
+        assert plan.landing_due(214, 0, "queued") == ("unread", "sluice status 214 printed no record of #214 crew reads: queued")
+        assert plan.landing_due(214, 0, json.dumps(dict(RAN, state="paused"))) == (
+            "unread", "sluice's record has #214 in a state crew does not read: \"paused\"")
+
+
 class TestTheQueuedLanding:
     """Decision 1: a landing sluice has queued is its bolt's last bolt.submit marked Outcome queued (plan.submit_queued),
     in flight: no refusal, no stop and no landing, until an outcome follows it."""

@@ -3724,6 +3724,41 @@ def wait_again(sub, again):
 # sluice's exit for a submission out in each state (sluice 0.36.4 lib.rs exit_for), which landing_said reads.
 EXITS = {"landed": "0", "failed": "1", "conflict": "2", "withdrawn": "4"}
 
+# sluice's own record of one submission, read in the kit's main checkout on the team's host by a landing's read
+# (landing_read) and by crew bolt submit's wait once sluice itself failed on it (landing_ended): `sluice status <n>
+# --json`, the submission's record, decided or not, which every host that submits to its branch can read with sluice
+# stopped (sluice statement 26); landing_due reads it.
+SUBMISSION_STATUS = r"""cd "$1" || exit 2
+exec sluice status "$2" --json
+"""
+
+
+def landing_due(n, code, out):
+    """What sluice's record of a landing's submission, #n, means for the landing (plan.21, Decision 2), from what
+    SUBMISSION_STATUS printed on the team's host, read by facts checked against sluice 0.36.4's `sluice status <n>
+    --json` (read.2, tests/py/sluice-0.36.4/wait-failed-ran.json): ("standing", state) while the record has it in the
+    queue or a chain under test (STANDING); ("out", rc, doc) once it is out, rc sluice's exit for that state as its wait
+    gives it (EXITS) and doc the record, which landing_blame and verdict_of judge; or ("unread", words) for anything
+    else: sluice not answering, said in its error's message or the host's last words, a record that is not #n's, or a
+    state crew does not read. A decision of facts alone (code.7)."""
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        doc = None
+    if code != 0:  # sluice says why as {"error": {"message": ...}} under --json
+        said = doc.get("error") if isinstance(doc, dict) else None
+        said = said.get("message") if isinstance(said, dict) else None
+        said = said if isinstance(said, str) and said else cut(" ".join((out or "").split()), 200)
+        return "unread", f"sluice status {n} exited {code}" + (f": {said}" if said else "")
+    if not isinstance(doc, dict) or doc.get("schema") != SUBMISSION or doc.get("id") != n:
+        return "unread", f"sluice status {n} printed no record of #{n} crew reads: {cut(' '.join((out or '').split()), 200) or 'nothing'}"
+    state = doc.get("state")
+    if state in STANDING:
+        return "standing", state
+    if state in EXITS:
+        return "out", EXITS[state], doc
+    return "unread", f"sluice's record has #{n} in a state crew does not read: {cut(json.dumps(state), 60)}"
+
 
 def wait_outcome(n, code, out):
     """A landing's outcome from sluice's wait on its submission, #n (WAIT), read from the submission's state: sluice
