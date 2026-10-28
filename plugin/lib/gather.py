@@ -546,10 +546,13 @@ def kit(req, sites=False, running=None, board=False, fetch=False):
     ups = upstreams(main)
     # The kit's main now (now_ref): which changes and chores have landed, and the explorations, are read there.
     now = now_ref(has_origin(main))
-    if run(["git", "rev-parse", "--verify", "-q", f"{now}^{{commit}}"], main) is None:
+    main_at = run(["git", "rev-parse", "--verify", "-q", f"{now}^{{commit}}"], main)
+    if main_at is None:
         return {"ok": False, "error": f"{main} has no {now[len('refs/remotes/'):] if now.startswith('refs/remotes/') else 'branch main'} to read"}
-    out = {"ok": True, "main": changes(main, now), "chores": chores(main, now), "bolts": {}, "places": {},
-           "chore_places": {}, "fixes": []}
+    # main_at, the revision of main it was read at, by which the rail's sweep tells main moved under a kit's landings
+    # card (plan.landings_moved).
+    out = {"ok": True, "main": changes(main, now), "chores": chores(main, now), "main_at": main_at.strip(), "bolts": {},
+           "places": {}, "chore_places": {}, "fixes": []}
     # The kit's policy, as its main holds it: what gates its bolt branches, which crew reads before it gives a bolt.
     out["policy"] = run(["git", "show", f"{now}:.config/sluice.toml"], main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt

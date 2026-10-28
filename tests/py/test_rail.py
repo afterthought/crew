@@ -3,7 +3,8 @@ proposals, the run record's batches and the kits as surveyed; plan.rail_text on 
 make, the questions among them, and what the read's sweep did; plan.record_reading for what the rail reads of the run
 record; plan.sweep_judgment for the card sessions a read judges dead; and the sweep of the cards (record 0031 §1, §2):
 plan.sweep_judged, which judges from the rows, the run record and the cards which to close, ask after, post again or
-post, and plan.sweep_cards, which acts on a stand-in for Pending You, herdr and the kinds' raises. That crew rail reads
+post, and plan.sweep_cards, which acts on a stand-in for Pending You, herdr and the kinds' raises; and plan.sweep_moved,
+which raises each kit's landings card main moved under. That crew rail reads
 all of it from the branch and the hosts and sweeps on every host is the review journey's (t-journey-review), and the
 sweep's acts through the stubs the cards journey's (t-cards)."""
 import datetime
@@ -142,6 +143,23 @@ class TestRows:
         held["wldn"]["refused"] = {"apex-zones": ("c" * 40, "an older head's")}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land"
+
+    def test_a_bolt_forecast_at_its_head_to_conflict_with_main_takes_main_first_and_is_left_out_of_the_tell(self):
+        """crew-rail "A bolt taking main first" and "A conflict forecast at an older head"."""
+        conflict = dict(Act="forecast", On=["bolt/apex-zones"], Heads="bolt/apex-zones@abc1234 main@e4f5a6b", Paths="README.md",
+                        Reached="wait")
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {}, "forecasts": [conflict]}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: takes main first: forecast to conflict with main on README.md, "
+                                   "until its team's take-main fix moves its head")
+        assert land["cmds"] == [] and land["bolts"][0]["can"] is False
+        held["wldn"]["forecasts"] = [dict(conflict, Heads="bolt/apex-zones@ccccccc main@e4f5a6b")]
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land" and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
+
+    def test_the_record_reading_keeps_the_forecasts_the_land_row_reads(self):
+        e = dict(Act="forecast", On=["bolt/b"], Heads="bolt/b@abc1234 main@e4f5a6b", Paths="README.md")
+        assert plan.record_reading("wldn", [e, dict(Act="tell", On=["agent/x"])], the_plan(), NOW)["held"]["forecasts"] == [e]
 
     def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
         sv = survey()
@@ -1363,3 +1381,75 @@ def test_a_card_act_whose_reply_named_no_card_is_listed_after_the_questions():
     out = text(rows(), logs={"wldn": [fresh]})
     assert "card acts crew could not read:" in out
     assert f"card.post by swb-1-conductor on {BOX} (wldn), under ask/swb-1-conductor/hold: Pending You's reply named no card" in out
+
+
+class TestMainMoved:
+    """The rail read's raise of each kit's landings card main moved under (rail-cards "Main moves under an open card",
+    "Main has not moved"), plan.sweep_moved on a stand-in for the survey's revision of main, the one crew kept and the
+    raise, and what plan.rail_text says of it."""
+    M1, M2 = "a1b2c3d" + "0" * 33, "e4f5a6b" + "0" * 33
+
+    class Acts:
+        def __init__(self, mains, kept, here="mac-studio", refuse=None):
+            self.mains, self.kept, self.here, self.refuse, self.raised = mains, kept, here, refuse, []
+
+        def host(self):
+            return self.here
+
+        def main_at(self, label, kit, sv):
+            return self.mains.get(kit, (None, "chuck-herdr-alpha did not answer (ssh: connect to host timed out)"))
+
+        def kept_main(self, label, kit):
+            return self.kept.get(kit)
+
+        def raise_kit(self, label, kit):
+            self.raised.append(kit)
+            if self.refuse:
+                raise crew.Refusal(self.refuse)
+            return "req_k2"
+
+    def moved(self, acts, cards_=None, machine="mac-studio"):
+        fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine=machine)})
+        cards_ = cards_ if cards_ is not None else [dict(label="wldn", card="req_k1", key=f"land/{KIT}", by="wldn-ops", host="mac-studio")]
+        read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), cards=cards_)
+        return plan.sweep_moved(fleet, read, acts)
+
+    def test_a_card_main_moved_under_is_raised_again_and_said(self):
+        acts = self.Acts({KIT: (self.M2, None)}, {KIT: self.M1})
+        got = self.moved(acts)
+        assert acts.raised == [KIT]
+        assert got == {"raised": [dict(label="wldn", kit=KIT, was=self.M1, now=self.M2, card="req_k2", said=None)], "unread": []}
+        assert ("landings cards forecast again, main having moved:\n"
+                f"  land/{KIT} (wldn): main is at e4f5a6b, its rows forecast at a1b2c3d: raised again (req_k2)") in text([], moved=got)
+
+    def test_a_card_main_has_not_moved_under_is_raised_by_none(self):
+        acts = self.Acts({KIT: (self.M1, None)}, {KIT: self.M1})
+        assert self.moved(acts) == {"raised": [], "unread": []} and acts.raised == []
+
+    def test_off_the_main_machine_a_bolts_card_and_another_owners_are_raised_by_none(self):
+        acts = self.Acts({KIT: (self.M2, None)}, {})
+        assert self.moved(acts, machine=BOX) == {"raised": [], "unread": []}
+        others = [dict(label="wldn", card="req_b", key="land/tenant-environments", by="wldn-ops", host="mac-studio"),
+                  dict(label="wldn", card="req_c", key=f"land/{KIT}", by="swb-1-conductor", host="mac-studio"),
+                  dict(label="wldn", card="req_d", key=f"land/{KIT}", by="wldn-ops", host=BOX)]
+        assert self.moved(acts, others) == {"raised": [], "unread": []} and acts.raised == []
+
+    def test_a_kit_whose_revision_cant_be_read_is_said_and_a_refused_raise_too(self):
+        got = self.moved(self.Acts({}, {KIT: self.M1}))
+        assert got["unread"] == [dict(label="wldn", kit=KIT, why="chuck-herdr-alpha did not answer (ssh: connect to host timed out)")]
+        assert (f"  land/{KIT} (wldn): whether main moved under it can't be told: chuck-herdr-alpha did not answer "
+                "(ssh: connect to host timed out)") in text([], moved=got)
+        got = self.moved(self.Acts({KIT: (self.M2, None)}, {}, refuse="wldn/main could not be read"))
+        assert (f"  land/{KIT} (wldn): main is at e4f5a6b, its rows forecast at no revision crew kept: its raise refused: "
+                "wldn/main could not be read") in text([], moved=got)
+
+    def test_the_survey_names_the_revision_its_builder_read_or_why_it_cant(self):
+        """read.2: SweepActs.main_at reads the builder's kit as the rail's survey read it, with no read of its own."""
+        acts, sv = plan.SweepActs(FLEET), survey()
+        sv[BOX]["kits"]["/kit/main"]["main_at"] = self.M2
+        assert acts.main_at("wldn", KIT, sv) == (self.M2, None)
+        del sv[BOX]["kits"]["/kit/main"]["main_at"]
+        assert acts.main_at("wldn", KIT, sv) == (
+            None, f"crew on {BOX} names no revision of main it read /kit/main at, as a crew older than the read of it does")
+        assert acts.main_at("wldn", KIT, survey(ok=False)) == (None, f"{BOX} did not answer (ssh: connect to host timed out)")
+        assert acts.main_at("wldn", "atlas-kit", sv) == (None, "no team of wldn builds atlas-kit")
