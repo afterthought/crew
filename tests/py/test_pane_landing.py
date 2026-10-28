@@ -230,6 +230,49 @@ class TestTheWordRead:
             plan.landing_word_read("swancloud", "y", "session/s-1/u-7")
 
 
+class TestTheWordsAtAClose:
+    """bolt-teams "The user's words are kept on another host" (Decision 7): a read that closes a landing given on the
+    user's words in ops's pane, on another host than the one keeping them, fetches nothing from there; it closes the
+    landing card naming ops's pane and the time, and says which host keeps the words (plan.words_kept_where)."""
+
+    def test_words_kept_on_another_host_name_that_host(self):
+        assert plan.words_kept_where("mac-studio", "deneb") == "are kept on mac-studio, where it was submitted, not on deneb"
+
+    def test_words_kept_nowhere_here_say_so(self):
+        assert plan.words_kept_where("deneb", "deneb") == "are not kept on deneb"
+
+    def test_a_reads_close_on_a_host_keeping_no_words_names_the_pane_and_the_time_and_reaches_no_other_host(
+            self, monkeypatch, tmp_path, capsys):
+        P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "crw-5", "Repo": "crew"}, "work_of": lambda s, b: [],
+                           "units": lambda s: []})
+        at = "2026-10-28T09:41:00Z"
+        entries = [dict(submitted(frm="session/s-1/u-7", at=at, host="mac-studio"), Outcome="queued", Submission="412", Chars=len(WORDS)),
+                   dict(submitted(frm="session/s-1/u-7", at=at, host="mac-studio"), Outcome="landed", Submission="412", Chars=len(WORDS))]
+        tidied, wrote = [], []
+        monkeypatch.setattr(plan, "locate", lambda *a: ("swancloud", None, None, P()))
+        monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
+        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TEAM)
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: BEFORE.replace(f"GITHUB={OLD}", f"GITHUB={NEW}"))
+        monkeypatch.setattr(plan, "stages_for", lambda fleet, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
+        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: entries)
+        monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append(k.get("by")))
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
+        monkeypatch.setattr(plan, "tidy_after", lambda fleet, t, what, landed=None, **k: tidied.append(landed))
+        monkeypatch.setattr(plan, "LANDINGS", tmp_path)  # this host keeps no words
+        monkeypatch.setattr(plan.crew, "on_machine", lambda *a: pytest.fail(f"the close reached a host: {a[1:]}"))
+        monkeypatch.setattr(plan.record, "who", lambda: "crw-5-conductor")
+        assert plan.landing_close({}, "swancloud", "y", "412", entries)
+        landed = plan.landed_words(NEW, "")
+        assert wrote == ["swancloud-ops"]
+        assert tidied == [("y", f"Landed on the user's word in swancloud-ops's pane; {landed}",
+                           f"Landed on the user's word in swancloud-ops's pane at 09:41Z; {landed}", True)]
+        assert tidied[0][2] == plan.pane_landed(landed, "swancloud-ops", at, None)[1] and WORDS not in repr(tidied)
+        assert ("the user's words to land y are kept on mac-studio, where it was submitted, not on deneb: its landing card "
+                "closes naming swancloud-ops's pane and the time, without them") in capsys.readouterr().out
+
+
 # ------------------------------------------------------------------------------------- a stop in ops's pane
 
 STOP = "Hold the phone bolt, don't land it yet"

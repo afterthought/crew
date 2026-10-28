@@ -32,5 +32,5 @@
 
 ## 7. The user's words, and the waiter as a stopgap
 
-- [ ] 7.1 A read that closes a landing given on the user's words on another host closes its card naming ops's pane and the time, says which host keeps the words, and fetches nothing from it; the line naming where the words are is a decision of facts (design, Decision 7; Task notes 7.1); passes `tests/py/test_pane_landing.py`.
+- [x] 7.1 A read that closes a landing given on the user's words on another host closes its card naming ops's pane and the time, says which host keeps the words, and fetches nothing from it; the line naming where the words are is a decision of facts (design, Decision 7; Task notes 7.1); passes `tests/py/test_pane_landing.py`.
 - [ ] 7.2 The open-items page lists the landing's background waiter as a stopgap under `roles.5`, retired when sluice's push runs on the fleet's hosts or Flume submits landings, whichever first (design, Decision 8; Task notes 7.2); Verify `tests/suite --affected` ends with "0 failed".

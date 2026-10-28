@@ -2026,6 +2026,14 @@ def pane_landed(landed, by, at, words):
     return f"{pane}; {landed}", said
 
 
+def words_kept_where(pane_host, here):
+    """Where the user's words to land are kept, as a close that could not read them back on this host, here, says it
+    (plan.16, Decision 7): on the host the landing on their word in a pane was submitted from, pane_host, when that is
+    another, which the close reaches nothing on for them, since the card the user answered holds them (read.5); else
+    nowhere here. A decision of facts alone (code.7)."""
+    return f"are kept on {pane_host}, where it was submitted, not on {here}" if pane_host != here else f"are not kept on {here}"
+
+
 def landing_card_keys(entries, bolt, owner):
     """The keys under which the bolt's conductor (owner) holds an open landing card, from its host's run record:
     land/<bolt>, as crew raises it (record 0031), and land/<bolt>/<head>, as a conductor posted one before."""
@@ -3321,7 +3329,9 @@ def bolt_land(fleet, a, by=None, close_why=None):
     through sluice, a delete sluice refuses named in its words with the bolt out of the plan all the same (plan.19,
     land_delete), and its landing card closed there with where GitHub's main holds it (landed_words), after, for a landing
     on the user's word in ops's pane (pane_word_of), that word and their words kept on this host (landing_word_read),
-    as answered there (pane_landed); the words kept are removed once the landing is written. A bolt no team holds,
+    as answered there (pane_landed), or, with none kept here, the pane and the time, saying where the words are kept
+    (words_kept_where) and reaching nothing there for them (Decision 7); the words kept are removed once the landing is
+    written. A bolt no team holds,
     built outside a team, is read on the host and main checkout of a team of the partition building its kit, and lands
     the same way once main holds each of its units' changes and chores, on the user's word (roles.2). A held bolt whose
     landing the run record has queued is read first (plan.21, Decision 3), on its team's host (landing_read_on), so a
@@ -3389,8 +3399,7 @@ def bolt_land(fleet, a, by=None, close_why=None):
         after = plan_of(fleet, label)
         print(landed_line(a.bolt, t["kit"]["name"], head, t["name"], [x.name() for x in held_by(after, t["name"])] if after else None))
         if pane and kept is None:
-            here = crew.this_host()
-            where = f"are kept on {pane[3]}, where it was submitted, not on {here}" if pane[3] != here else f"are not kept on {here}"
+            where = words_kept_where(pane[3], crew.this_host())
             print(f"the user's words to land {a.bolt} {where}: its landing card closes naming {pane[0]}'s pane and the time, without them")
         tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, outcome, sent, bool(pane)))
         if pane:
