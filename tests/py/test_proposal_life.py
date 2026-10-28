@@ -510,7 +510,7 @@ def test_a_rewrite_after_the_users_note_acks_the_card_they_answered_and_its_new_
     ack, = [a for t, a in acts.calls if t == "ack_answer"]
     post, = [a for t, a in acts.calls if t == "post_request"]
     assert (ack["requestId"], ack["outcome"]) == ("req_p1", "Rewritten as proposal 2 after your note")
-    assert (post["idempotencyKey"], post["follows"], [o["id"] for o in post["options"]]) == ("proposal/1:2", "req_p1", ["add:b-new", "unticked"])
+    assert (post["idempotencyKey"], post["follows"], [o["id"] for o in post["options"]]) == ("proposal/1@wldn:2", "req_p1", ["add:b-new", "unticked"])
     assert [(e["Act"], e["Key"], e.get("Card")) for e in acts.emitted] == [("card.close", "proposal/1", "req_p1"), ("card.post", "proposal/1", "req_p2")]
     assert "update_request" not in [t for t, _ in acts.calls]
 
@@ -560,7 +560,7 @@ def test_a_rewrite_changing_neither_its_commands_nor_its_case_is_withheld_and_th
                                      ("Console first.", TestRaise.DOS + ['unit add w "W." --bolt console-pages']))
     post, = [a for t, a in acts.calls if t == "post_request"]
     assert post["follows"] == "req_p1" and "Since then: the planner rewrote it as proposal 3. It adds w." in post["summary"]
-    assert post["idempotencyKey"] == "proposal/1:2"
+    assert post["idempotencyKey"] == "proposal/1@wldn:2"
 
 
 ASKS = "Why is this a unit at all? Isn't it the chore we already have?"
@@ -635,7 +635,7 @@ def test_a_rewrite_of_a_card_with_questions_while_it_waits_withdraws_it_and_its_
     assert "update_request" not in calls
     assert calls["cancel_request"] == [{"requestId": "req_p1", "name": "wldn-planner", "reason": "Rewritten as proposal 2 after your note"}]
     post, = calls["post_request"]
-    assert (post["idempotencyKey"], post["follows"]) == ("proposal/1:2", "req_p1")
+    assert (post["idempotencyKey"], post["follows"]) == ("proposal/1@wldn:2", "req_p1")
     assert [(q["id"], [o["id"] for o in q["options"]]) for q in post["questions"]] == [
         ("rows-1", ["add:a-1", "add:a-2", "add:a-3"]), ("rows-2", ["add:a-4", "add:a-5", "add:b-6"])]
     assert emitted == [("card.close", "proposal/1", "req_p1", "withdrawn", plan.REASKED), ("card.post", "proposal/1", "req_p2", None, None)]
@@ -666,7 +666,7 @@ def test_a_rewrite_that_moves_its_card_to_another_form_withdraws_it_while_it_wai
     assert "update_request" not in calls
     assert calls["cancel_request"] == [{"requestId": "req_p1", "name": "wldn-planner", "reason": "Rewritten as proposal 2 after your note"}]
     post, = calls["post_request"]
-    assert (post["idempotencyKey"], post["follows"], asked in post) == ("proposal/1:2", "req_p1", True)
+    assert (post["idempotencyKey"], post["follows"], asked in post) == ("proposal/1@wldn:2", "req_p1", True)
     assert emitted == [("card.close", "proposal/1", "req_p1", "withdrawn", plan.RENEWED), ("card.post", "proposal/1", "req_p2", None, None)]
     assert capsys.readouterr().out.startswith("card proposal/1: req_p1 withdrawn, its kind having changed, and its new version follows it\n")
 

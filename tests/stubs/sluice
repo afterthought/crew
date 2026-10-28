@@ -24,7 +24,9 @@
 # conflict, and refuses a detached worktree as sluice does, exiting 2. `sluice submit <branch>
 # --no-wait --json` lands this worktree's head at once, as the stub wt-submit does, and prints {id, branch, ahead}; its
 # outcome waits for `sluice wait <id> --timeout <duration> --json`, which prints the submission's record, its state
-# landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; `sluice wait` of an id it never gave exits 1
+# landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; its verdict is in the record alone, as sluice
+# 0.36.4's is under --json, a conflict's paths, the ones the stub wt-submit names, or the failed check, the words of
+# $CREW_TEST_ROOT/sluice-fails, and nothing of it on standard error; `sluice wait` of an id it never gave exits 1
 # with sluice's not-found error. To a branch whose policy takes pull requests (route.py --pulls) it answers as sluice
 # 0.36.4 does once intake has queued the pull request (crates/sluice/src/lib.rs submit_pull): the open one from this
 # worktree's branch into it, the stub gh's, opened when there is none, its number and no submission,
@@ -114,8 +116,13 @@ print(p["number"], "draft" if p["isDraft"] else "ready")' "$CREW_TEST_ROOT/gh-pu
     count=$common/stub-sluice-submissions
     if (( rc == 0 )); then n=$(cat "$count"); else n=$(( $(cat "$count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$count"; fi
     state=landed; (( rc == 1 )) && state=failed; (( rc == 2 )) && state=conflict
-    jq -n --argjson id "$n" --arg branch "$target" --arg state "$state" --arg path "$here" --arg said "$said" --argjson rc "$rc" \
-      '{schema: "sluice/submission@1", id: $id, branch: $branch, state: $state, from: {path: $path}, said: $said, rc: $rc}' \
+    paths=$(sed -n 's/^conflict: //p' <<<"$said" | head -n 1)
+    checks=$(cat "$CREW_TEST_ROOT/sluice-fails" 2>/dev/null)
+    jq -n --argjson id "$n" --arg branch "$target" --arg state "$state" --arg path "$here" --arg paths "$paths" \
+      --arg checks "$checks" --argjson rc "$rc" \
+      '{schema: "sluice/submission@1", id: $id, branch: $branch, state: $state, from: {path: $path}, rc: $rc}
+       + if $state == "conflict" then {conflict: {paths: ($paths | if . == "" then [] else split(", ") end), with: []}}
+         elif $state == "failed" then {result: "failed", failed: [{task: $checks, hash: "stub"}]} else {} end' \
       > "$common/stub-sluice-wait-$n.json"
     records=$common/stub-sluice-records-${target//\//-}.json
     [[ -e $records ]] || echo '[]' > "$records"
@@ -136,8 +143,7 @@ print(p["number"], "draft" if p["isDraft"] else "ready")' "$CREW_TEST_ROOT/gh-pu
       printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "${2:-}"
       exit 1
     fi
-    jq -r .said "$f" >&2
-    jq -c 'del(.said, .rc)' "$f"
+    jq -c 'del(.rc)' "$f"
     exit "$(jq -r .rc "$f")"
     ;;
   branch\ create\ *\ --from\ *\ --json | branch\ delete\ *\ --into\ *\ --json)
