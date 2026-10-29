@@ -135,7 +135,12 @@
 #                                      main-level ops's landing of one kit's bolts, in the order the user's landings
 #                                      card gives: each bolt's branch submitted to its kit's main through sluice from a
 #                                      short-lived worktree on its team's host, queued behind the one before on one host,
-#                                      once it ended on another; each waited on in order and closed as it lands, one
+#                                      once it ended on another, recorded queued with sluice's number as soon as sluice
+#                                      has it; each waited on in order and closed as it lands, its outcome recorded and
+#                                      a landed bolt closed by the first act of crew's that reads it once sluice's record
+#                                      has it out, on its team's host: this command's end, the waiter it leaves there,
+#                                      the team's next read or crew bolt land; a close crew refuses recorded and said
+#                                      on the bolt's head line until a later read lifts it; one
 #                                      that did not land recorded at its head while the rest go on: one refused for its
 #                                      own content, a conflict or a check that ran and failed, held on its row; one
 #                                      sluice or its host stopped keeping its box and the user's word, and submitted
@@ -513,6 +518,10 @@ case $cmd in
     # landings card, its reading and preview opened or ended there; crew _land-card <label> <kit> [--note <words>], on
     # the partition's main machine: the kit's landings card raised from each row, which every event that changes a row
     # hands there (Decision 2 of one-landings-card-lands-the-proven-bolts-in-order, code.3)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _landing-read)  # crew _landing-read <label> <bolt>, on the bolt's team's host: its landing read from sluice's record
+    # of its queued submission, its outcome recorded once sluice has it out (plan.21), run by the landing's waiter as it
+    # stops and by every crew act that reads the bolt after
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   main)
     need_label "${3:-}"

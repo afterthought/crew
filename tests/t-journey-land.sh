@@ -29,9 +29,15 @@
 # (plan.19), the kit's landings card closed with where GitHub's main holds it, the row's reading ended and the preview
 # ops brought up again on the user's words released, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
 # that bolt is dropped too the team holds none and its conductor and ops start again at their next stop without it;
-# a bolt its conductor submits lands and is named as not closed, crew bolt land being main-level ops's, and its branch
-# taking a commit main lacks after the landing is kept on GitHub, sluice refusing its delete, and on the host,
-# named, its mark unset and the keeping recorded, and the team's next read leaves it; a bolt no team holds lands once
+# a bolt landed with a chore of its own still at ready has its close refused, said by the landing and recorded once,
+# in main-level ops's name, though the waiter's read and the submission's own each tried it, and its head line on the
+# board says it landed on main and was not closed, in those words; once the planner drops the chore, the team's read
+# that follows closes it, its branch, holding a commit main lacks after the landing, kept on GitHub, sluice refusing
+# its delete, and on the host, named, its mark unset and the keeping recorded, and the team's next read leaves it; a
+# landing outlives the crew bolt submit that queued it (plan.21): killed once sluice has queued the landing, its waiter
+# on the team's host calls sluice wait again while sluice is undecided, then reads the landing from sluice's record,
+# recording it landed and closing the bolt, and with the waiter stopped too, the conductor's next command reads and
+# closes it; a bolt no team holds lands once
 # its unit's change is on main; a delete sluice refuses is named in its words, the branch kept on GitHub; a bolt made
 # before gives went through sluice is deleted there once its landing's pull request put it there, no create run for
 # it; and dropping a held bolt removes its places and has sluice delete its branch, which holding a merge main lacks
@@ -53,7 +59,7 @@
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
-# Reads: plugin/hooks/ tests/units.sh
+# Reads: plugin/hooks/ plugin/lib/board.py tests/units.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/units.sh"
 units_world '[unit(u, "tenant-environments") for u in "abe"]; unit("c", "console-pages")
@@ -368,7 +374,7 @@ eq "$(drafted "$pr")" false
 # told from any made before by sluice's record of main read before the pull request is readied, and read again after.
 has "$out" "bolt/tenant-environments submitted to switchboard-kit's main, sluice's #"
 has "$out" " from pull request #$pr"
-eq "$(calls | grep -c "^$box sluice status main --all --json in ")" 2
+eq "$(calls | grep -c "^exec sluice status main --all --json$")" 2
 eq "$(calls | grep -E "^$box (gh pr ready|wt submit) " | cut -d' ' -f2-4)" $'gh pr ready\nwt submit main'
 eq "$(calls | grep -c "^$box gh pr ready .* --undo$")" 0
 grep -v "copy of bolt/tenant-environments" <<<"$out" | grep -q level && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
@@ -377,7 +383,11 @@ git -C "$k" merge-base --is-ancestor "$bolt_tip" main || fail "main lacks the me
 eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchboard-kit, main's"
 eq "$(git -C "$k" status --porcelain)" ""
 [[ ! -e $land ]] || fail "the landing's worktree is still there"
-eq "$(field mac-studio bolt.submit On) $(field mac-studio bolt.submit Head)" "bolt/tenant-environments $bolt_tip"
+# Recorded queued where it was submitted, and its outcome where it was read, the team's host (plan.21).
+eq "$(field mac-studio bolt.submit Outcome bolt/tenant-environments) $(field mac-studio bolt.submit Head bolt/tenant-environments)" "queued $bolt_tip"
+n=$(field mac-studio bolt.submit Submission bolt/tenant-environments)
+eq "$(field $box bolt.submit Outcome bolt/tenant-environments) $(field $box bolt.submit Submission bolt/tenant-environments) $(field $box bolt.submit Head bolt/tenant-environments)" \
+  "landed $n $bolt_tip"
 git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main); swb-1 builds ssh-fix"
 # The branch the conductor carries is the bolt it builds, so the landing makes no restart due.
@@ -397,8 +407,12 @@ grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land t
   "$CREW_TEST_LOG" || fail "the conductor was not told of the landing:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
-eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(act_tip)"
-eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
+eq "$(field $box bolt.land On bolt/tenant-environments) $(field $box bolt.land Commit bolt/tenant-environments)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(act_tip)"
+eq "$(field $box bolt.land Repo bolt/tenant-environments) $(field $box bolt.land Head bolt/tenant-environments)" "switchboard-kit $(git -C "$k" rev-parse main)"
+eq "$(field $box bolt.land By bolt/tenant-environments)" "wldn-ops"  # closed by the landing's read in main-level ops's name
+# The stub's record of a submission keeps no time it was submitted or told, so the bolt's age and split can't be told
+# and the entry carries neither, the landing going on (run-record "sluice's record can't be read at the landing").
+eq "$(field $box bolt.land Age bolt/tenant-environments)$(field $box bolt.land Split bolt/tenant-environments)" ""
 ok "a drop frees the last slot and closes the units workspace; the bolt, submitted again on the user's word once its checks can run, lands at GitHub's head, its worktree removed and the detached main checkout left as it was, and is closed as it lands, recording the commit main holds, sluice deleting its branch from GitHub and the host, closing the kit's landings card with where GitHub's main holds it and the timer, ending its row's reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
 
 # swb-1's other bolt dropped: the team holds none, its pane carries no branch, and each of its conductor and ops, whose
@@ -416,22 +430,42 @@ grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on cre
   fail "ops was not told why it was restarted:"$'\n'"$(calls)"
 ok "a team whose last bolt goes holds none: its pane carries no branch for sluice, and its conductor and ops are restarted at their next stop without it"
 
-# A bolt whose branch takes a commit after its landing: crew bolt land has sluice's delete refused, the branch kept on
-# GitHub, and keeps the host's at its commit, the user's, its mark unset and the keeping recorded on the team's host,
-# and the team's next read leaves it.
+# A bolt landed with a chore of its own still at ready (plan.21, plan.8's reading of 2026-10-27): its close is refused,
+# said by the landing, and recorded once in main-level ops's name, though the waiter's read and the submission's own
+# each tried it; its head line on the board says it landed on main and was not closed, in those words, and a team read
+# with the chore still at ready reads nothing more of it.
 crew bolt new zone-lists "The zone list grows." --repo switchboard-kit >/dev/null
 crew bolt give swb-1 zone-lists >/dev/null
-on_bolt() { git -C "$k" worktree add -q "$T/zone-lists" bolt/zone-lists && echo "$1" >> "$T/zone-lists/zones.txt" &&
-  commit_all "$T/zone-lists" "$2" && git -C "$k" worktree remove "$T/zone-lists" &&
-  git -C "$k" push -q origin bolt/zone-lists; }  # as sluice pushes a landing on a bolt on GitHub
-on_bolt north "feat: the zone list" || fail "the bolt took no commit"
-# Submitted by its conductor, whom crew bolt land refuses (roles.1): it lands, and is named as not closed.
-out=$(export CREW_AGENT=swb-1-conductor; crew bolt submit zone-lists 2>&1) || fail "the conductor's submission did not land:"$'\n'"$out"
-has "$out" "bolt/zone-lists landed and was not closed: swb-1-conductor does not write the plan with crew bolt land: tell wldn-planner, who proposes it; crew bolt land zone-lists closes it"
+crew chore add tidy-zones "Tidy the zone list." --bolt zone-lists >/dev/null
+# on_bolt <bolt> <line> <subject>: a commit on the bolt's branch, pushed as sluice pushes a landing on a bolt on GitHub
+on_bolt() { git -C "$k" worktree add -q "$T/$1" "bolt/$1" && echo "$2" >> "$T/$1/zones.txt" &&
+  commit_all "$T/$1" "$3" && git -C "$k" worktree remove "$T/$1" && git -C "$k" push -q origin "bolt/$1"; }
+on_bolt zone-lists north "feat: the zone list" || fail "the bolt took no commit"
+ready="chore tidy-zones has not landed on main: it is ready"
+out=$(export CREW_AGENT=wldn-ops; crew bolt submit zone-lists 2>&1) || fail "the landing did not land:"$'\n'"$out"
+has "$out" "bolt/zone-lists landed on switchboard-kit's main at"
+has "$out" "bolt/zone-lists landed and was not closed: $ready; crew's next read of the bolt closes it once that is mended"
 eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" "landed"
-on_bolt south "feat: one zone more, after the landing" || fail "the bolt took no commit after its landing"
+eq "$(plan -t Bolt -e "Bolt = 'zone-lists'" -c)" "1"
+eq "$(record_of $box | grep -c "^Refused: $ready$")" "1"
+eq "$(field $box bolt.land By bolt/zone-lists) | $(field $box bolt.land Refused bolt/zone-lists)" "wldn-ops | $ready"
+expect_ok crew board --label wldn
+has "$out" "zone-lists  swb-1 on $box  landed on main, not closed: $ready"
+has "$out" "bolt zone-lists: it landed on main and was not closed: $ready"
+out=$(export CREW_AGENT=swb-1-conductor; crew status swb-1 2>&1) || fail "the team could not be read:"$'\n'"$out"
+lacks "$out" "zone-lists landed and was not closed"
+eq "$(record_of $box | grep -c "^Refused: $ready$")" "1"
+ok "a bolt landed with a chore still at ready has its close refused, said and recorded once in main-level ops's name over the two reads that tried it, and its head line on the board says it landed on main and was not closed, in those words"
+
+# The branch takes a commit after its landing, and the planner drops the chore: the team's read that follows closes the
+# bolt, sluice refusing its branch's delete, so it is kept on GitHub and, at its commit, on the host, named, its mark
+# unset and the keeping recorded, and the team's next read leaves it.
+on_bolt zone-lists south "feat: one zone more, after the landing" || fail "the bolt took no commit after its landing"
 at=$(short bolt/zone-lists)
-expect_ok crew bolt land zone-lists
+expect_ok crew chore drop tidy-zones "folded into the next"
+eq "$(plan -t Bolt -e "Bolt = 'zone-lists'" -c)" "0"
+eq "$(field $box bolt.land By bolt/zone-lists) | $(field $box bolt.land Refused bolt/zone-lists) | $(field $box bolt.land Repo bolt/zone-lists)" \
+  "wldn-ops |  | switchboard-kit"
 has "$out" "bolt/zone-lists is kept on GitHub: sluice did not delete it: bolt/zone-lists at $(git -C "$k" rev-parse bolt/zone-lists) has not landed into main"
 has "$out" "bolt/zone-lists is kept at $at: bolt zone-lists has landed, and it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete"
 eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" ""
@@ -442,7 +476,84 @@ expect_ok crew status swb-1
 lacks "$out" "bolt/zone-lists"
 eq "$(short bolt/zone-lists)" "$at"
 git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/zone-lists >/dev/null || fail "the refused delete removed bolt/zone-lists from GitHub"
-ok "a landed bolt's branch holding a commit main lacks is kept on GitHub, sluice refusing its delete, and at its commit on the host, named, its mark unset and the keeping recorded, and the team's next read leaves it"
+ok "once the planner drops the chore the team's read closes the bolt, its branch, holding a commit main lacks, kept on GitHub, sluice refusing its delete, and at its commit on the host, named, its mark unset and the keeping recorded, and the team's next read leaves it"
+
+# A landing outlives its submitter (plan.21): crew bolt submit is killed once sluice has queued the landing, sluice still
+# undecided; the waiter it left on the team's host calls sluice wait again, a call at a time, while it exits 5, and, no
+# stage starting on the bolt meanwhile, then reads the landing from sluice's record, records it landed and closes the
+# bolt, no one running crew bolt land.
+# queued <bolt>: the bolt's landing is recorded queued where it was submitted, and its entry is on the branch, where
+# every host reads it (read.5)
+queued() { [[ $(field mac-studio bolt.submit Outcome "bolt/$1") == queued ]] &&
+  grep -q "^runs(mac-studio): bolt.submit bolt/$1 " <<<"$(git --git-dir "$ws" log --format=%s wldn/main)"; }
+# closed <bolt>: the plan holds the bolt no more
+closed() { [[ $(plan -t Bolt -e "Bolt = '$1'" -c) == 0 ]]; }
+# killed <bolt> <pid>: crew bolt submit of the bolt, run in the background as <pid>, killed with the python it runs
+killed() {
+  pkill -f "lib/plan.py bolt submit $1\$" || true; wait "$2" 2>/dev/null || true
+  until_ok bash -c '! pgrep -f "lib/plan.py bolt submit $1\$" >/dev/null' _ "$1" || fail "crew bolt submit $1 was not stopped"
+}
+# A test that stops before it lets sluice decide leaves no waiter of its own calling sluice wait.
+trap 'rm -f "$T/sluice-wait-holds"; pkill -f "lib/plan.py bolt submit ((far|near)-reach|north south east)\$" || true' EXIT
+crew bolt new far-reach "The zones reach far." --repo switchboard-kit >/dev/null
+crew bolt give swb-1 far-reach >/dev/null 2>&1
+crew unit add far-one "Unit far-one." --bolt far-reach >/dev/null
+on_bolt far-reach far "feat: far zones" || fail "the bolt took no commit"
+touch "$T/sluice-wait-holds"  # sluice has not decided
+(export CREW_AGENT=wldn-ops; crew bolt submit far-reach > "$T/far-reach.out" 2>&1) &
+submitter=$!
+until_ok queued far-reach || fail "the landing was not recorded queued:"$'\n'"$(cat "$T/far-reach.out")"
+killed far-reach "$submitter"
+n=$(field mac-studio bolt.submit Submission bolt/far-reach)
+far=$kd/places/land-far-reach
+waiter=$(cat "$(git -C "$far" rev-parse --absolute-git-dir)/crew-landing")
+kill -0 "$waiter" 2>/dev/null || fail "no waiter runs on the landing's submission #$n"
+export CREW_AGENT=swb-1-conductor
+expect_fail "bolt far-reach's landing is queued in sluice, submitted from $far: unit far-one's construct starts once it has landed or been refused" \
+  crew unit run far-one construct
+unset CREW_AGENT
+crew unit drop far-one "not in this bolt" >/dev/null
+echo 2 > "$T/sluice-wait-$n-fives"  # two waits more that sluice is undecided on, once it is no longer held
+: > "$CREW_TEST_LOG"
+rm "$T/sluice-wait-holds"
+until_ok closed far-reach || fail "the waiter's read did not close far-reach:"$'\n'"$(calls)"
+# sluice undecided on two more waits: the waiter spent both and called again after each (teams.5)
+eq "$(cat "$T/sluice-wait-$n-fives")" "0"
+(( $(calls | grep -c "^$box sluice wait main --timeout 9m --json in $(cd "$kd" && pwd -P)/places/land-far-reach$") >= 2 )) ||
+  fail "the waiter did not wait a call at a time:"$'\n'"$(calls)"
+until_ok bash -c '! kill -0 "$1" 2>/dev/null' _ "$waiter" || fail "the waiter outlived its read"
+eq "$(field $box bolt.submit Outcome bolt/far-reach) $(field $box bolt.submit Submission bolt/far-reach)" "landed $n"
+eq "$(field $box bolt.land By bolt/far-reach) $(field $box bolt.land Head bolt/far-reach)" "wldn-ops $(git -C "$k" rev-parse main)"
+[[ ! -e $far ]] || fail "the landing's worktree is still there"
+ok "a landing outlives the submitter that queued it: its waiter on the team's host calls sluice wait again while sluice is undecided, no stage starting on the bolt meanwhile, then reads the landing from sluice's record, records it landed and closes the bolt"
+
+# The waiter stopped as well before sluice decided: nothing records the landing until the conductor's next command,
+# whose team read finds the landing's worktree standing with no waiter alive and reads it, recording it landed and
+# closing the bolt.
+crew bolt new near-reach "The zones reach near." --repo switchboard-kit >/dev/null
+crew bolt give swb-1 near-reach >/dev/null 2>&1
+on_bolt near-reach near "feat: near zones" || fail "the bolt took no commit"
+touch "$T/sluice-wait-holds"
+(export CREW_AGENT=wldn-ops; crew bolt submit near-reach > "$T/near-reach.out" 2>&1) &
+submitter=$!
+until_ok queued near-reach || fail "the landing was not recorded queued:"$'\n'"$(cat "$T/near-reach.out")"
+killed near-reach "$submitter"
+near=$kd/places/land-near-reach
+waiter=$(cat "$(git -C "$near" rev-parse --absolute-git-dir)/crew-landing")
+# stopped <pid>: the process and everything it started, its children first, so the waiter's loop does not outlive the
+# process crew-landing names and read the landing itself
+stopped() { local c; for c in $(pgrep -P "$1"); do stopped "$c"; done; kill -KILL "$1" 2>/dev/null || true; }
+loop=$(pgrep -P "$waiter")
+stopped "$waiter"
+until_ok bash -c 'for p; do ! kill -0 "$p" 2>/dev/null || exit 1; done' _ "$waiter" $loop || fail "the waiter was not stopped"
+rm "$T/sluice-wait-holds"
+eq "$(plan -t Bolt -e "Bolt = 'near-reach'" -c) $(field $box bolt.submit Outcome bolt/near-reach)" "1 "
+out=$(export CREW_AGENT=swb-1-conductor; crew status swb-1 2>&1) || fail "the team could not be read:"$'\n'"$out"
+has "$out" "bolt/near-reach landed on switchboard-kit's main at"
+eq "$(plan -t Bolt -e "Bolt = 'near-reach'" -c)" "0"
+eq "$(field $box bolt.submit Outcome bolt/near-reach) $(field $box bolt.land By bolt/near-reach)" "landed wldn-ops"
+has "$(field $box bolt.land Why bolt/near-reach)" "read from sluice's record by swb-1-conductor"
+ok "a landing whose submitter and waiter were both stopped before sluice decided is read by the conductor's next command, which records it landed and closes the bolt"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null
@@ -577,14 +688,23 @@ out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 
 has "$out" "lands them: crew bolt submit north south east --label wldn"
 south=$(git -C "$k" rev-parse bolt/south)
 : > "$CREW_TEST_LOG"
-expect_fail "south did not land, as said above; north and east landed" crew bolt submit north south east
+# sluice decides none of them until all three are queued, as it decides a chain each queued behind the one before, so
+# each outcome is read once east has landed, whether the landing's waiter or the command reads it first
+touch "$T/sluice-wait-holds"
+(crew bolt submit north south east > "$T/group.out" 2>&1) &
+submitter=$!
+until_ok queued east || fail "east's landing was not recorded queued:"$'\n'"$(cat "$T/group.out")"
+rm "$T/sluice-wait-holds"
+wait "$submitter" && fail "expected failure: crew bolt submit north south east"$'\n'"$(cat "$T/group.out")"
+out=$(cat "$T/group.out")
+has "$out" "south did not land, as said above; north and east landed"
 eq "$(calls | grep "^$box wt submit " | sed 's/.* from //; s/ as .*//; s/.*land-//')" $'north\nsouth\neast'
 has "$out" "bolt/north landed on switchboard-kit's main at"
 has "$out" "bolt/south did not land: sluice refused it or found a conflict; switchboard-kit's main moved to"
 has "$out" "bolt/east landed on switchboard-kit's main at"
 eq "$(plan -t Bolt -e "Bolt = 'north' || Bolt = 'east'" -c) $(plan -t Bolt -e "Bolt = 'south'" -c)" "0 1"
-eq "$(field mac-studio bolt.submit Head bolt/south)" "$south"
-has "$(field mac-studio bolt.submit Refused bolt/south)" " conflict: regions.txt"
+eq "$(field $box bolt.submit Head bolt/south)" "$south"
+has "$(field $box bolt.submit Refused bolt/south)" " conflict: regions.txt"
 has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"Landed on GitHub's main: north at"
 closed=$(field $box card.close Outcome kit/switchboard-kit)  # whole in the run record, cut on the card
 has "$closed" "and east at"
@@ -637,7 +757,7 @@ grep -q "^$box wt submit main" "$CREW_TEST_LOG" && fail "crew submitted south ag
 [[ ! -e $CREW_TEST_ROOT/sluice-stands-90 ]] || fail "crew's wait on #90 again did not reach sluice"
 has "$out" "bolt/south landed on switchboard-kit's main at"
 eq "$(plan -t Bolt -e "Bolt = 'south'" -c)" "0"
-eq "$(field mac-studio bolt.land Repo bolt/south)" "switchboard-kit"
+eq "$(field $box bolt.land Repo bolt/south)" "switchboard-kit"
 calls | grep -q "^$box pendingyou post_request " && fail "a landings card was posted for south's landing"
 ok "a ticked bolt sluice refused keeps the user's send through a fix that only takes main in: no card asks for it, ops reads it with no card open under the earlier send, and the command it prints, run again after its landing stood in sluice, waits on that landing again, submitting nothing, and lands it"
 
