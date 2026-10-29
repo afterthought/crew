@@ -21,4 +21,4 @@
 
 ## 5. The change's tests
 
-- [ ] 5.1 The tests the change affects pass. Verify `tests/suite --affected` ends with "0 failed".
+- [x] 5.1 The tests the change affects pass. Verify `tests/suite --affected` ends with "0 failed".
