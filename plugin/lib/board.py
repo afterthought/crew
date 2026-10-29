@@ -202,8 +202,8 @@ def board_data(fleet, labels, read, now):
     every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind,
     and each of them its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
     the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22). Each ledger has its
-    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, user, hold, nobody}, now: {holder, what,
-    since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
+    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, team_or_kit, user, hold, nobody}, now:
+    {holder, what, since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
     the design agent's band shows (records_proposed)."""
@@ -1079,18 +1079,62 @@ def queue_of(state):
     return gather.submissions_of(state["doc"]) if "doc" in state else (None, state["why"])
 
 
-def kept_gone(before, now, history, at):
-    """sluice's record of a kit's submissions once its queue moved with nothing gathered (Decision 7 of
-    a-bolts-row-shows-its-age-and-who-holds-it): the last gather's (history), and each submission that stood before
-    (before) and has left the queue the watch's line now holds (now) that the record holds no outcome for, kept as it
-    last stood, told at the line's time (at), so its time in the gate counts until the next gather reads sluice's
-    record of it; the record as it was while it, the queue or the line's time can't be read (read.1). A decision on
-    plain facts (code.7)."""
-    if history is None or now is None or not isinstance(at, str) or not at:
-        return history
-    standing, told = {x["id"] for x in now}, {x["id"] for x in history if x.get("told")}
-    gone = [dict(x, told=at) for x in before or [] if x["id"] not in standing and x["id"] not in told]
-    return [x for x in history if x["id"] not in {g["id"] for g in gone}] + gone
+def kept_submissions(kept, doc, bolts):
+    """What the follower keeps of a kit's submissions (Decision 2 of a-rows-age-and-holder-come-from-the-followers-overview),
+    {number: {id, bolt, branch, worktree, pull_head, submitted, started, decided, event}}, taken from what it kept
+    (kept) and an overview's document its watch printed or the clock or a gather asked (doc), for the bolts its read
+    asks of the kit (bolts), reading nothing else: each submission standing on a bolt's branch, or on main from bolt/<b>
+    or a pull request opened from it, with when it was submitted and, once a candidate testing it gives it, when its
+    checks began, never cleared after; each kept one the document no longer holds standing decided at the time its
+    branch's recent events give for it, its event kept, or at the document's own time, `gone`, a withdrawal or a
+    decision the events' window missed, and one a document with no time decides nothing (read.1); each the recent
+    events name decided that it lacks, decided before the follower saw it, added with its decision alone; and one of a
+    bolt no longer asked dropped. A submission on main whose bolt it can't tell, from a pull request alone, is kept with
+    bolt None while the document holds it, standing or in its events, so plan.bolt_facts takes it by the number the run
+    record's queued bolt.submit names. A document crew can't read changes nothing. A decision on plain facts (code.7)."""
+    standing, why = gather.submissions_of(doc)
+    if why:
+        return dict(kept)
+    recent = {x["id"]: x for x in gather.decided_in(doc)[0]}
+    asked, at = {f"bolt/{b}": b for b in bolts}, gather.text(doc.get("at"))
+
+    def bolt_of(x):
+        """The bolt a submission is of and whether it is kept: a bolt's branch's, or main's from one, else None on main."""
+        if x["branch"] in asked:
+            return asked[x["branch"]], True
+        if x["branch"] == "main":
+            return next((asked[w] for w in (x.get("worktree"), x.get("pull_head")) if w in asked), None), True
+        return None, False
+    out = {n: x for n, x in kept.items() if x["bolt"] is None or x["bolt"] in bolts}
+    stands = set()
+    for x in standing:
+        b, ours = bolt_of(x)
+        if ours:
+            was = out.get(x["id"], {})
+            stands.add(x["id"])
+            out[x["id"]] = {"id": x["id"], "bolt": b, "branch": x["branch"], "worktree": x["worktree"], "pull_head": x["pull_head"],
+                            "submitted": x["submitted"] or was.get("submitted"), "started": was.get("started") or x["started"],
+                            "decided": None, "event": None}
+    for n, x in list(out.items()):
+        if n in stands or x["decided"]:
+            continue
+        ev = recent.get(n)
+        if ev is not None and ev["decided"]:
+            out[n] = dict(x, decided=ev["decided"], event=ev["event"])
+        elif at:
+            out[n] = dict(x, decided=at, event="gone")
+    for n, x in recent.items():
+        b, ours = bolt_of(x)
+        if ours and n not in out and x["decided"]:
+            out[n] = {"id": n, "bolt": b, "branch": x["branch"], "worktree": x["worktree"], "pull_head": None,
+                      "submitted": None, "started": None, "decided": x["decided"], "event": x["event"]}
+    return {n: x for n, x in out.items() if x["bolt"] is not None or n in stands or n in recent}
+
+
+def decided_kept(kept):
+    """The submissions the follower kept of a kit that are decided (kept_submissions), by number, as a kit's answer
+    carries them (decided)."""
+    return [x for _, x in sorted(kept.items()) if x["decided"]]
 
 
 def queue_kits(kits):
@@ -1381,7 +1425,8 @@ class Follower:
     written from it. On each tick, and only then, it asks Pending You after the cards its card sweep would act on, in one
     bridge, none when there are none, and every sweep judges with those answers until the next tick. It follows each
     kit's queue through sluice's overview watch (Watches), with watch, and a new line is the queue's move, taken into
-    the kept read with nothing gathered; a kit no watch follows has its overview asked once at each tick. SIGUSR1 makes
+    the kept read with nothing gathered, each submission of a held bolt kept from its submit to its decision
+    (kept_submissions); a kit no watch follows has its overview asked once at each tick. SIGUSR1 makes
     the next tick now."""
 
     def __init__(self, lock, period=PERIOD, watch=True):
@@ -1389,6 +1434,8 @@ class Follower:
         self.labels, self.fleet_, self.tick_at, self.seen, self.unfetched, self.here = [], None, 0.0, None, {}, {}
         # the overview watches, None for a follower that keeps none (crew _follow --once), whose gathers read the queues
         self.watches = Watches() if watch else None
+        # what it kept of each kit's submissions from what its watches printed, by (host, main) (kept_submissions)
+        self.subs = {}
         # the partitions a refresh found a batch due for, by the state tip its read held and whether the tell went
         # through (plan.batch_told)
         self.told = {}
@@ -1502,6 +1549,7 @@ class Follower:
         if self.watches is not None and self.last["read"] is not None:
             seeded = self.watches.seed(self.kept.kits)  # the overviews the read's gathers made, each new watch's first line
             self.requeue(m.get("queues", ()))
+            self.rekeep()
             self.watches.sync(fleet, queue_kits(self.kept.kits), tick=False)
             if seeded:
                 self.last["stamps"] = dict(self.last["stamps"], queues=self.watches.stamp())
@@ -1518,19 +1566,30 @@ class Follower:
 
     def requeue(self, moved_):
         """Each kit whose queue moved has its kept answer's submissions remade from what its watch or the clock's ask
-        last read (queue_of), the read's rows and frames drawn from it with nothing gathered (Decision 7), and its kept
-        record of sluice's the last gather read holds each that left the queue as it last stood (kept_gone)."""
+        last read (queue_of), the read's rows and frames drawn from it with nothing gathered (Decision 7)."""
         for host, main in moved_:
             state, (_, answer) = self.watches.states.get((host, main)), self.kept.kits.get(host, {}).get(main, (None, None))
             if state is None or not (answer or {}).get("ok"):
                 continue
-            before = answer.get("submissions")
             answer["submissions"], why = queue_of(state)
-            if "history" in answer:
-                answer["history"] = kept_gone(before, answer["submissions"], answer["history"], (state.get("doc") or {}).get("at"))
             answer.pop("submissions_error", None)
             if why:
                 answer["submissions_error"] = why
+
+    def rekeep(self):
+        """What the follower keeps of each shown kit's submissions (kept_submissions), taken from the document its watch,
+        the clock's ask or a gather last read of the kit, and the kit's kept answer given the decided among them
+        (decided_kept), so neither a line nor a gather throws away what was kept; a kit no longer shown let go."""
+        shown = queue_kits(self.kept.kits)
+        self.subs = {k: v for k, v in self.subs.items() if k in shown}
+        for host, main in sorted(shown):
+            req, answer = self.kept.kits[host][main]
+            doc = self.watches.states.get((host, main), {}).get("doc")
+            if isinstance(doc, dict):
+                self.subs[(host, main)] = kept_submissions(self.subs.get((host, main), {}), doc, req["bolts"])
+            if (host, main) in self.subs:
+                answer["decided"] = decided_kept(self.subs[(host, main)])
+                answer.pop("decided_error", None)
 
     def read(self, fleet, looked, stamps):
         """A read of what moved: the tips this host's caches hold handed in (no fetch), each unmoved kit served from what
@@ -1543,6 +1602,7 @@ class Follower:
                     plan.READ.keep_tip(repo, ref, tip)
         self.kept.stamps, plan.READ.follower, said, asked = stamps["kits"], self.kept, io.StringIO(), self.kept.cards is None
         self.kept.queued = {k: list(queue_of(s)) for k, s in (self.watches.states if self.watches is not None else {}).items() if "doc" in s}
+        self.kept.decided = {k: [decided_kept(self.subs.get(k, {})), None] for k in self.kept.queued}
         try:
             with contextlib.redirect_stderr(said):
                 read = flow_read(fleet, self.labels, sweep=True)

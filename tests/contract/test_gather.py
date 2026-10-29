@@ -1,6 +1,7 @@
 """What crew assumes of git when gather.py reads a kit, each case naming what assumes it: Stages reads a unit's
 stage from the changes main and its bolt's branch hold, its place, and its fix (state.2, plan.12; crew bolts, crew
 board and crew sites read every host's kits through gather.kit, once per host)."""
+import json
 import os
 import re
 import subprocess
@@ -48,59 +49,65 @@ class Kit:
 
 
 def test_a_kits_queue_handed_in_is_its_submissions_and_sluice_is_not_run(repo, tmp_path, monkeypatch):
-    """The host's follower hands a kit's gather its queue as its overview watch read it (the crew-board spec, One watch
-    for each kit), so the gather runs no sluice; with none handed it reads the overview itself."""
+    """The host's follower hands a kit's gather its queue as its overview watch read it, and what it kept of each
+    submission it saw decided (the crew-board spec, One watch for each kit), so the gather runs no sluice and gives
+    both back; with none handed it reads the overview itself."""
     k = Kit(repo, tmp_path)
     doc = {"schema": "sluice/overview@1", "branches": []}
     ran = []
     monkeypatch.setattr(gather, "overview", lambda main: ran.append(main) or (doc, None))
     req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"]}
-    got = gather.kit(dict(req, queued=[[{"id": 41, "branch": "bolt/te"}], None]), stamped=True)
+    kept = {"id": 40, "branch": "bolt/te", "worktree": "unit/b", "submitted": "2026-10-28T14:00:00Z", "started": "2026-10-28T14:05:00Z",
+            "decided": "2026-10-28T14:17:00Z", "event": "landed"}
+    got = gather.kit(dict(req, queued=[[{"id": 41, "branch": "bolt/te"}], None], decided=[[kept], None]), stamped=True)
     assert got["submissions"] == [{"id": 41, "branch": "bolt/te"}] and "submissions_error" not in got and "overview" not in got
-    assert gather.kit(dict(req, queued=[None, "its overview watch ended"]))["submissions_error"] == "its overview watch ended"
+    assert got["decided"] == [kept] and "decided_error" not in got
+    gone = gather.kit(dict(req, queued=[None, "its overview watch ended"], decided=[[kept], None]))
+    assert gone["submissions_error"] == "its overview watch ended" and gone["decided"] == [kept], "a gather threw away what was kept"
+    assert gather.kit(dict(req, queued=[[], None]))["decided_error"] == "the host's follower handed in its queue and nothing it kept of the decided"
     assert ran == []
     got = gather.kit(req)
     assert got["submissions"] == [] and "overview" not in got and ran == [str(repo.path)]
     assert gather.kit(req, stamped=True)["overview"] == doc, "the follower's gather did not give back the overview its watch starts from"
 
 
-def test_a_kits_gather_reads_sluices_record_of_each_asked_bolt_and_of_main_once_each_in_its_main_checkout(repo, tmp_path, monkeypatch):
-    """The crew-board spec, A held bolt's decided merges: a gather of a kit reads sluice's record of each held bolt's
-    branch and of main with `sluice status <branch> --all --json`, a process each, in the kit's main checkout, keeping
-    of main the bolt's landing alone, and with its queue handed in runs no overview of its own; a bolt sluice holds no
-    record of yet is none, and a record that can't be read is said (plan.20, read.1). sluice here is a script on the
-    path answering as sluice 0.51.3 does (tests/py/sluice-0.51.3/)."""
+def test_a_kits_gather_reads_sluice_only_through_one_overview_and_with_its_queue_handed_in_starts_no_sluice(repo, tmp_path, monkeypatch):
+    """The crew-board spec, A held bolt's decided merges: a gather of a kit asked two held bolts runs one `sluice
+    overview --json` in the kit's main checkout and no `sluice status`, for either bolt's branch or main, its decided
+    read from the overview's recent events; with the follower's queue handed in it starts no sluice process at all
+    (plan.20, read.1). sluice here is a script on the path that logs every call and answers the overview in the shape
+    sluice 0.56.0 prints it (tests/py/sluice-0.56.0/), an event naming its submissions as ids."""
     k = Kit(repo, tmp_path)
     repo.git("branch", "bolt/new")
-    bin_, log = tmp_path / "bin", tmp_path / "sluice.log"
+    bin_, log, recorded = tmp_path / "bin", tmp_path / "sluice.log", tmp_path / "overview.json"
     bin_.mkdir()
-    sub = '{"schema": "sluice/submission@1", "id": %d, "branch": "%s", "state": "landed", "submitted": "2026-10-28T10:0%d:00Z", ' \
-          '"told": "2026-10-28T10:1%d:00Z", "from": {"worktree": "%s"%s}}'
-    docs = {"bolt/te": '{"branch": "bolt/te", "submissions": [%s]}' % (sub % (41, "bolt/te", 1, 1, "unit/a", "")),
-            "main": '{"branch": "main", "submissions": [%s, %s]}' % (sub % (42, "main", 2, 2, "pull/7", ', "head": "bolt/te"'),
-                                                                     sub % (43, "main", 3, 3, "pull/8", ', "head": "bolt/other"'))}
-    for b, d in docs.items():
-        (tmp_path / f"{b.replace('/', '-')}.json").write_text(d)
+    recorded.write_text(json.dumps({"schema": "sluice/overview@1", "at": "2026-10-28T14:20:00Z", "branches": [
+        {"branch": "bolt/te", "submissions": [{"id": 42, "branch": "bolt/te", "state": "queued", "submitted": "2026-10-28T14:18:00Z",
+                                               "from": {"worktree": "unit/b"}}], "candidates": [],
+         "recent": [{"at": "2026-10-28T14:17:00Z", "event": "landed", "ids": [41]}], "recent_from": {"41": "unit/a"}},
+        {"branch": "main", "submissions": [], "candidates": [], "recent": [], "recent_from": {}}]}))
     (bin_ / "sluice").write_text(f"""#!/bin/sh
 echo "$(pwd -P) $*" >> {log}
 case "$*" in
-  "status bolt/te --all --json") cat {tmp_path}/bolt-te.json ;;
-  "status main --all --json") cat {tmp_path}/main.json ;;
-  "status bolt/new --all --json") echo '{{"error":{{"kind":"not_found","message":"no branch bolt/new; branches with records: bolt/te, main"}}}}'; exit 1 ;;
+  "overview --json") cat {recorded} ;;
   *) echo "sluice: $* is not stubbed" >&2; exit 2 ;;
 esac
 """)
     (bin_ / "sluice").chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
-    got = gather.kit({"main": str(repo.path), "dir": str(k.dir), "bolts": ["te", "new"], "queued": [[], None]})
-    assert "history_error" not in got and [(s["id"], s["branch"], s["worktree"], s["pull_head"], s["told"]) for s in got["history"]] == [
-        (41, "bolt/te", "unit/a", None, "2026-10-28T10:11:00Z"), (42, "main", "pull/7", "bolt/te", "2026-10-28T10:12:00Z")]
+    req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te", "new"]}
+    got = gather.kit(dict(req, queued=[[], None], decided=[[], None]))
+    assert not log.exists(), f"a gather with its queue handed in ran sluice: {log.read_text()}"
+    assert (got["submissions"], got["decided"]) == ([], [])
+    got = gather.kit(req)
     main = os.path.realpath(repo.path)
-    assert log.read_text().splitlines() == [f"{main} status bolt/te --all --json", f"{main} status bolt/new --all --json",
-                                            f"{main} status main --all --json"]
-    (tmp_path / "main.json").write_text("not json")
-    assert gather.kit({"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"], "queued": [[], None]})["history_error"] == \
-        "sluice status main printed no JSON"
+    assert log.read_text().splitlines() == [f"{main} overview --json"]
+    assert "decided_error" not in got and [s["id"] for s in got["submissions"]] == [42]
+    assert [(s["id"], s["branch"], s["worktree"], s["decided"]) for s in got["decided"]] == [(41, "bolt/te", "unit/a", "2026-10-28T14:17:00Z")]
+    (bin_ / "sluice").write_text(f"#!/bin/sh\necho \"$(pwd -P) $*\" >> {log}\necho 'error: unexpected argument' >&2\nexit 2\n")
+    got = gather.kit(req)
+    assert got["decided_error"] == got["submissions_error"] == "sluice overview exited 2: error: unexpected argument"
+    assert [l.split(" ", 1)[1] for l in log.read_text().splitlines()] == ["overview --json", "overview --json"]
 
 
 def test_main_holds_its_open_and_archived_changes_an_archived_one_without_its_date(repo, tmp_path):

@@ -2191,14 +2191,35 @@ class TestAgeAndSplit:
                "pull_head": "bolt/b"}]
 
     def test_a_bolt_lands_with_its_age_and_split_to_sluices_landing(self):
+        """A bolt lands: given 6h 10m before sluice landed it, with team 3h 20m, kit 25m, user 2h 05m, hold 0 and nobody
+        20m, its landing's checks' start given as a record that keeps one would give it."""
+        later = START + datetime.timedelta(hours=9)
+        checked = [dict(self.LANDED[0], started=at(345))]
+        assert plan.landing_split(self.ENTRIES, self.PLAN, self.PLAN.bolt("b"), "chuck-herdr-alpha", "switchboard-kit", (checked, None), later) == {
+            "Age": "370", "Split": "team 200, kit 25, team-or-kit 0, user 125, hold 0, nobody 20"}
+
+    def test_a_landing_whose_checks_start_sluices_record_does_not_keep_is_team_or_kit(self):
+        """sluice 0.51.3's record gives when the landing was submitted and decided, not when its checks began."""
         later = START + datetime.timedelta(hours=9)
         assert plan.landing_split(self.ENTRIES, self.PLAN, self.PLAN.bolt("b"), "chuck-herdr-alpha", "switchboard-kit", (self.LANDED, None), later) == {
-            "Age": "370", "Split": "team 200, kit 25, user 125, hold 0, nobody 20"}
+            "Age": "370", "Split": "team 200, kit 0, team-or-kit 25, user 125, hold 0, nobody 20"}
+
+    def test_a_merge_whose_checks_start_sluices_record_does_not_keep_is_team_or_kit_and_split_still_sums_to_age(self):
+        """b's merge #41 stood in sluice for seventeen minutes, and sluice's record read at the landing gives when it was
+        submitted and decided but not when its checks began."""
+        later = START + datetime.timedelta(hours=9)
+        entries = self.ENTRIES[:3] + [{"Act": "stage.start", "On": ["stage/a/merge", "unit/a", "agent/swb-1-unit-1"], "At": at(200)},
+                                      {"Act": "stage.end", "On": ["stage/a/merge", "unit/a", "agent/swb-1-unit-1"], "At": at(220)}] + self.ENTRIES[3:]
+        merged = {"id": 41, "branch": "bolt/b", "head": None, "state": "landed", "submitted": at(201), "told": at(218), "worktree": "unit/a",
+                  "pull_head": None}
+        got = plan.landing_split(entries, self.PLAN, self.PLAN.bolt("b"), "chuck-herdr-alpha", "switchboard-kit", ([merged] + self.LANDED, None), later)
+        assert got == {"Age": "370", "Split": "team 203, kit 0, team-or-kit 42, user 105, hold 0, nobody 20"}
+        assert sum(int(w.rsplit(" ", 1)[1]) for w in got["Split"].split(", ")) == int(got["Age"])
 
     def test_a_bolt_no_landing_of_which_landed_is_timed_to_the_entry(self):
         now = START + datetime.timedelta(minutes=330)
         got = plan.landing_split(self.ENTRIES, self.PLAN, self.PLAN.bolt("b"), "chuck-herdr-alpha", "switchboard-kit", ([], None), now)
-        assert got == {"Age": "330", "Split": "team 200, kit 0, user 125, hold 0, nobody 5"}
+        assert got == {"Age": "330", "Split": "team 200, kit 0, team-or-kit 0, user 125, hold 0, nobody 5"}
 
     def test_sluices_record_that_cant_be_read_or_a_give_that_cant_leaves_both_off(self):
         """sluice status fails on the team's host as b's landing is recorded."""
