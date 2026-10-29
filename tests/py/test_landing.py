@@ -1299,6 +1299,13 @@ class TestTheCardsClose:
         assert plan.landed_words("c" * 40, "46") == (
             "landed on GitHub's main at ccccccc (#46); every host's folder follows by swancloud's timer within minutes")
 
+    def test_the_close_names_the_commit_landed_and_says_nothing_of_a_preview(self):
+        """rail-cards "A landed row" (record 0043): a card about a landed revision carries its commit, and no preview."""
+        landed = plan.landed_words("1a2b3c4" + "0" * 33, "46")
+        assert "1a2b3c4" in landed and "preview" not in landed.lower() and "bring it up" not in landed
+        _, sent = plan.pane_landed(landed, "swancloud-ops", "2026-10-22T21:04:09Z", "Land it")
+        assert "preview" not in sent.lower()
+
     def test_a_head_sluice_did_not_make_is_named_without_a_number(self):
         for n in ("", None, "46 47", "x"):
             assert plan.landed_words("c" * 40, n) == (
@@ -1472,24 +1479,42 @@ class TestTheLandingsPoint:
 
 
 class TestThePreview:
-    """A landing's card lists the addresses of a preview of the bolt's head when the kit declares one, follows the head
-    with it, says one that failed, and releases it when the card closes (rail-cards, record 0031 §3)."""
+    """A landings row carries what brings its bolt's preview up, asks sluice for nothing at its read, keeps one brought
+    up from the card at its head and releases one at another, says one that failed, and is asked again only on the
+    user's word (rail-cards, record 0043)."""
     HEAD, NEW = "abc1234" + "0" * 33, "def5678" + "0" * 33
 
-    @pytest.mark.parametrize("declared, recorded, listed, alive, step", [
-        (False, None, False, False, "none"),
-        (True, None, False, False, "ask"),
-        (True, HEAD, True, False, "keep"),
-        (True, HEAD, False, True, "keep"),
-        (True, HEAD, False, False, "ask"),
-        (True, NEW, True, True, "replace"),
-        (False, HEAD, True, False, "release"),
-        (False, NEW, False, False, "release"),
+    @pytest.mark.parametrize("declared, recorded, step", [
+        (False, None, "none"),
+        (True, None, "none"),
+        (True, HEAD, "keep"),
+        (True, NEW, "release"),
+        (False, HEAD, "release"),
+        (False, NEW, "release"),
     ])
-    def test_what_crew_does_with_the_preview_at_each_raise(self, declared, recorded, listed, alive, step):
-        """"Asked again with nothing changed": the recorded preview of the head kept, nothing asked; "The head moves":
-        the old head's replaced; a kit that declares none asks nothing."""
-        assert plan.preview_step(declared, recorded, self.HEAD, listed, alive) == step
+    def test_what_a_rows_read_does_with_the_preview_brought_up_from_its_card(self, declared, recorded, step):
+        """"A moved head releases the preview of the old one and asks for none": nothing is ever asked at a read."""
+        assert plan.preview_step(declared, recorded, self.HEAD) == step
+
+    @pytest.mark.parametrize("recorded, listed, alive, step", [
+        (None, False, False, "ask"),
+        (HEAD, True, False, "keep"),
+        (HEAD, False, True, "keep"),
+        (HEAD, False, False, "ask"),
+        (NEW, True, True, "replace"),
+    ])
+    def test_what_crew_card_preview_does_with_the_things_preview(self, recorded, listed, alive, step):
+        """"Asked twice": one up or coming up at the revision is given back, no second asked."""
+        assert plan.asked_step(recorded, self.HEAD, listed, alive) == step
+
+    @pytest.mark.parametrize("p, note", [
+        ({"head": HEAD, "state": "up", "addresses": {}}, "y: Its preview of abc1234 is up"),
+        ({"head": HEAD, "state": "starting", "addresses": {}}, "y: Its preview of abc1234 is coming up"),
+        ({"head": HEAD, "why": "sluice exited 2"}, "y: Its preview of abc1234 could not be brought up"),
+    ])
+    def test_an_asks_note_says_whether_it_is_up_coming_up_or_could_not_be(self, p, note):
+        """"Brought up": the note names the thing and whether it is up."""
+        assert plan.asked_note("y", p) == note
 
     @pytest.mark.parametrize("shown, outcome, note", [
         ("addresses", "failed", "Its preview of abc1234 did not come up"),
@@ -1503,6 +1528,147 @@ class TestThePreview:
 
     def test_a_previews_end_is_a_change_of_the_card_in_its_words(self):
         assert plan.landing_act("preview", head=self.HEAD, words="Its preview of abc1234 is up") == ("change", "Its preview of abc1234 is up")
+
+    def test_what_a_card_shows_of_a_recorded_preview(self):
+        r = {"head": self.HEAD}
+        listed = {"head": self.HEAD, "name": "preview/1", "state": "up", "addresses": {"web": "http://w"}}
+        assert plan.preview_shown(r, listed, False) == listed
+        assert plan.preview_shown(dict(r, outcome={"state": "failed", "why": "port 4321 in use"}), None, False) == {"head": self.HEAD, "why": "port 4321 in use"}
+        assert plan.preview_shown(r, None, True) == {"head": self.HEAD, "why": "sluice has not named it yet"}
+        assert plan.preview_shown(r, None, False) == {"head": self.HEAD, "why": "sluice no longer lists it"}
+
+    def test_a_revision_another_record_names_keeps_sluices_preview_and_one_crew_cant_read_releases_none(self):
+        """"Two cards asking one revision share sluice's one preview": crew releases it only with its last record."""
+        r = {"head": self.HEAD, "main": "/kit/main"}
+        others = [("/p/a.json", {"head": self.HEAD, "main": "/kit/main"}), ("/p/b.json", {"head": self.NEW, "main": "/kit/main"}),
+                  ("/p/c.json", {"head": self.HEAD, "main": "/other/main"})]
+        assert plan.shared_by(r, others) == (["/p/a.json"], [])
+        assert plan.shared_by(r, others[1:]) == ([], [])
+        assert plan.shared_by(r, others[1:] + [("/p/d.json", None)]) == ([], ["/p/d.json"])
+
+    def test_a_thing_the_card_does_not_carry_is_refused_naming_those_it_does(self):
+        """"A thing the card does not carry"."""
+        assert plan.preview_target("land/crew", "y", {"y": ("bolt/y", self.HEAD), "z": None}) == ("bolt/y", self.HEAD)
+        with pytest.raises(plan.Refusal, match="land/crew carries no w to bring up: it carries y and z"):
+            plan.preview_target("land/crew", "w", {"y": None, "z": None})
+        with pytest.raises(plan.Refusal, match="batch/7 carries no a/demo to bring up: it carries nothing that must run"):
+            plan.preview_target("batch/7", "a/demo", {})
+
+    def test_the_cards_owner_brings_up_what_it_carries_and_a_person_may_too(self):
+        """"Asked by anyone but the owner"."""
+        kits = ("crew",)
+        assert plan.preview_owner("land/crew", "swancloud", kits) == "swancloud-ops"
+        assert plan.preview_owner("batch/7", "swancloud", kits) == "swancloud-planner"
+        for key in ("land/y", "proposal/3", "deploy/prod"):
+            with pytest.raises(plan.Refusal, match=f"{key} carries nothing crew brings up"):
+                plan.preview_owner(key, "swancloud", kits)
+        assert plan.preview_caller("swancloud-ops", "swancloud-ops", "land/crew") is None
+        assert plan.preview_caller("chuck@mac-studio", "swancloud-ops", "land/crew") is None
+        assert plan.preview_caller("crw-1-conductor", "swancloud-ops", "land/crew") == (
+            "land/crew is swancloud-ops's card: swancloud-ops brings up what it carries, on the user's words on it")
+
+    def test_a_previews_row_is_its_bolts_on_a_landings_card_and_its_cards_own_key_on_any_other(self):
+        """"A card closed elsewhere": the rail's sweep judges a landings row's preview by its row."""
+        assert plan.preview_row_key("land/crew", "y") == "land/y" and plan.preview_row_key("batch/7", "a/demo") == "batch/7"
+
+
+class TestARowsPreview:
+    """A landings row's read on its team's host (plan.preview_row): what brings the preview up, or "no preview", sluice
+    asked for nothing; one brought up from the card at the head listed as sluice lists it; one at another head, or with
+    no [preview] now, released, nothing asked at the new head; and one an older crew asked at the row's post released
+    at the first read (rail-cards, record 0043, Migration Plan)."""
+    HEAD, OLD = "abc1234" + "0" * 33, "0123456" + "0" * 33
+    KEY = "land/crew"
+
+    @pytest.fixture(autouse=True)
+    def sluice(self, monkeypatch, tmp_path):
+        """sluice's previews as this host lists them (listed), and each read and release crew asks of it (asked)."""
+        monkeypatch.setattr(plan, "PREVIEWS", tmp_path / "previews")
+        self.listed, self.asked = [], []
+
+        def read(main, *args, timeout=None):
+            self.asked.append(args)
+            if args[0] == "previews":
+                return self.listed, None
+            if args[0] == "release":
+                return {"preview": args[1], "released": True}, None
+            raise AssertionError(f"sluice {args} asked")
+        monkeypatch.setattr(plan, "sluice_read", read)
+        return tmp_path / "previews"
+
+    def record(self, key, thing, head, **more):
+        p = plan.preview_path("wldn", key, thing)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(dict(key=key, thing=thing, branch=f"bolt/{thing}", head=head, main="/kit/main", asked="2026-10-28T10:00:00Z", **more)))
+        return p
+
+    def test_a_kit_that_declares_a_preview_carries_its_branch_and_head_and_sluice_is_asked_nothing(self):
+        """rail-cards "A kit that declares a preview"."""
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, True, None) == {"branch": "bolt/y", "head": self.HEAD, "state": "ask"}
+        assert self.asked == []
+
+    def test_a_kit_that_declares_none_says_no_preview(self):
+        """rail-cards "A kit that declares none"."""
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, False, None) == {"head": self.HEAD, "none": True}
+        assert self.asked == []
+
+    def test_a_policy_crew_cannot_read_says_why_and_leaves_crews_record(self):
+        """rail-cards "The policy can't be read"."""
+        p = self.record(self.KEY, "y", self.OLD)
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, None, "fatal: bad object") == {"head": self.HEAD, "why": "fatal: bad object", "policy": True}
+        assert p.exists() and self.asked == []
+
+    def test_one_brought_up_at_this_head_is_listed_as_sluice_lists_it(self):
+        """rail-cards "Brought up": its row lists sluice's addresses."""
+        self.record(self.KEY, "y", self.HEAD, name="preview/1")
+        self.listed = [{"name": "preview/1", "branch": "bolt/y", "revision": self.HEAD, "state": "up", "addresses": {"web": "http://w"}}]
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, True, None) == dict(
+            head=self.HEAD, name="preview/1", state="up", addresses={"web": "http://w"})
+        assert self.asked == [("previews",)]
+
+    def test_a_moved_head_releases_the_old_heads_preview_and_asks_none_at_the_new(self, capsys):
+        """rail-cards "The head moves with a preview up"."""
+        p = self.record(self.KEY, "y", self.OLD, name="preview/0")
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, True, None) == {
+            "branch": "bolt/y", "head": self.HEAD, "state": "ask", "released": self.OLD}
+        assert self.asked == [("release", "preview/0")] and not p.exists()
+        assert "released y's preview of 0123456 from land/crew, preview/0" in capsys.readouterr().out
+
+    def test_a_policy_that_now_declares_none_releases_the_preview(self):
+        self.record(self.KEY, "y", self.HEAD)
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, False, None) == {"head": self.HEAD, "none": True, "released": self.HEAD}
+        assert self.asked == [("release", self.HEAD)]
+
+    def test_a_preview_an_older_crew_asked_at_the_rows_post_is_released_at_the_first_read(self, sluice, capsys):
+        """Migration Plan: no preview is left held."""
+        (sluice / "wldn").mkdir(parents=True)
+        (sluice / "wldn" / "y.json").write_text(json.dumps({"head": self.OLD, "main": "/kit/main", "name": "preview/0"}))
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, True, None) == {"branch": "bolt/y", "head": self.HEAD, "state": "ask"}
+        assert self.asked == [("release", "preview/0")] and not (sluice / "wldn" / "y.json").exists()
+        assert "released y's preview of 0123456 from land/y, preview/0" in capsys.readouterr().out
+
+    def test_a_revision_another_card_names_is_kept_up_for_it(self, capsys):
+        """Two cards ask one revision: the first record to go leaves sluice's preview for the other."""
+        p = self.record(self.KEY, "y", self.OLD)
+        other = self.record("batch/7", "a/demo", self.OLD)
+        assert plan.preview_row("wldn", self.KEY, "y", self.HEAD, True, None)["released"] == self.OLD
+        assert self.asked == [] and not p.exists() and other.exists()
+        assert ("y's preview of 0123456 from land/crew is put away, and sluice keeps it up for a/demo's from batch/7, which "
+                "names it too") in capsys.readouterr().out
+        assert plan.preview_release("wldn", "batch/7", "a/demo") == ("released a/demo's preview of 0123456 from batch/7", True)
+        assert self.asked == [("release", self.OLD)]
+
+    def test_a_row_that_leaves_the_card_releases_every_preview_of_its_bolt(self, sluice):
+        """rail-cards "The bolt lands with its preview up" and "A fix holds the landing"."""
+        self.record(self.KEY, "y", self.HEAD, name="preview/1")
+        self.record("land/swancloud", "y", self.HEAD + "1")
+        (sluice / "wldn" / "y.json").write_text(json.dumps({"head": self.OLD, "main": "/kit/main"}))
+        self.record(self.KEY, "z", "fedcba9" + "0" * 33)
+        said = plan.preview_release_row("wldn", "y")
+        assert said == ("released y's preview of abc1234 from land/crew, preview/1; released y's preview of abc1234 from "
+                        "land/swancloud; released y's preview of 0123456 from land/y")
+        assert plan.preview_files("wldn") == [(plan.preview_path("wldn", self.KEY, "z"), self.KEY, "z", False)]
+        assert plan.preview_release_row("wldn", "y") is None
 
     LISTED = [
         {"name": "preview/0123456789ab", "branch": "main", "revision": HEAD, "state": "up", "addresses": {"web": "http://w"}},
