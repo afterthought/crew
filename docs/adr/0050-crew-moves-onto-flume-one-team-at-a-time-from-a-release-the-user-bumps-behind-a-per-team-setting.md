@@ -1,0 +1,52 @@
+---
+status: proposed
+date: 2026-10-29
+decision-makers: the user, flume-sluice-build (the plan), swancloud-design (the record)
+consulted: swancloud-ops, swancloud-operator
+---
+
+# crew moves onto Flume one team at a time: every host runs a release the user bumps, upgrades land on main behind a per-team setting, and the old path leaves once no team uses it
+
+Status: proposed to the user on 2026-10-29, as `briefs.15` has it; accepted only on their yes.
+
+Deciders: the user, on flume-sluice-build's card (Pending You req_9cba01f77fc44b34b9b4, "Yes, that plan"), as swancloud-operator relayed the plan and the user's words to swancloud on 2026-10-29; the card is flume-sluice-build's, which this agent cannot read, so the words are quoted as relayed. The three points of the plan are the user's. The release the freeze starts at, the words under each point and the rules drawn are the design agent's, asked on this card.
+
+Amends: `plan.19` (record 0032's released mode becomes the only mode); record 0047 move 5 (reached a team at a time); `_open.md`'s moves.
+Sources: the plan as relayed (below); record 0032 point 5 (crew's plugin runs live or released, per host; released: a bump chore pins crew at a version in swancloud's catalog, sluice lands it, the deployer deploys, sessions load the plugin from the nix store); record 0047 moves 5 and 6 and the user's order (fires, Flume, then teams out of crew); record 0049 (move 3 skipped; crew goes from move 2 to move 5 when Flume's first build runs a kind on a host); rules `plan.18`, `plan.19`, `code.5`, `code.10`, `roles.2`, `roles.5`; swancloud `lib/claude-account-tools.nix` on `origin/main` 2026-10-29 (`crewPlugin` is `<space>/crew/main/plugin`, the anchor the views timer moves, and `crew` on the user's path execs it) and the reading in swancloud's `docs/architecture/agents.md` ("crew's plugin loads from its working tree … so a crew commit is live in the next session without a deploy"); crew's tags on GitHub 2026-10-29: v0.36.1 at 16f84c54 (2026-10-28 19:23Z), v0.37.0 at 865cfd32 (2026-10-29 13:26Z, the landing of `a-card-carries-what-the-stages-run-made` on the user's send), main at v0.37.0; swancloud-ops's reading of the same (tell of 2026-10-29).
+
+## Context and problem statement
+
+Records 0047 and 0049 say where crew ends: when Flume runs a unit's whole state machine the teams leave crew (move 5), then no crew role stands (move 6), in the user's order: the fires first, then Flume, then the teams out. They do not say how a running fleet gets from today's crew to that one without a landing that breaks every team at once.
+
+Today every host loads crew from the `crew/main` anchor the fleet's timer moves (swancloud's `crewPlugin`), so a landing on crew's main is on every host within minutes, every team's at once, and nothing holds a host at a crew that works. Record 0032 point 5 designed two modes, live and released, with every host starting live and released coming once a crew release had been captured and deployed; swancloud built neither, and no host is released. With the refactor coming, the question is what must be true of crew's delivery and of each change to crew while the teams move.
+
+flume-sluice-build's plan, at the user's word ("Yes, that plan"), as relayed:
+
+1. Freeze on a crew release: every host's crew comes from a tagged release, and it moves only when the user bumps it. Set that where each host's configuration is managed, and confirm the version each host runs.
+2. Upgrades land on crew main in place and stay backward compatible: Flume support sits behind a per-team setting in `teams.json`, and a team without it runs today's path unchanged.
+3. Teams move one at a time; the old path is removed once no team uses it. The refactor itself has not started and waits on the user.
+
+## Considered options
+
+1. The plan as the user approved it, the freeze starting at v0.37.0, crew's newest tag and what every host runs now. Chosen.
+2. The plan with the freeze at v0.36.1, the tag the plan names: v0.37.0 was tagged the day the plan was approved, at the landing of `a-card-carries-what-the-stages-run-made` on the user's send, so pinning v0.36.1 takes that bolt off every host. Not chosen; the user's to say on this card, and a note naming v0.36.1 sets the first pin there.
+3. Freezing by holding crew's main, no landings until the refactor is in. Rejected: main lands through sluice on the user's send, the refactor must land somewhere, and a held main is a held refactor; the freeze belongs on what hosts load, not on the branch.
+4. Every team moved at once at move 5, as record 0047 reads alone. Rejected by the plan: one at a time, the old path kept until no team uses it.
+
+## Decision outcome
+
+Option 1, in four parts.
+
+1. **Every host runs crew released, at the tag the fleet pins, and the pin moves only on the user's bump.** Record 0032's released mode is the only mode: swancloud pins crew's release tag as it pins sluice's (`packages/sluice`), every session loads crew's plugin and the `crew` command from the store at that tag, and the pin moves the way the sluice pin moves, a release captured as a signal, the user's word, a bump landed through sluice and deployed. No host loads crew from a worktree the timer moves, live or main. The first pin is v0.37.0, so the freeze changes nothing a host runs: v0.36.1, the tag the plan names, is the one before it, and v0.37.0 carries a bolt the user sent. The `crew/main` anchor stays what it is, the kit's checkout for teams and records (`plan.18`); only what sessions load moves to the store. Until swancloud's unit lands and is deployed, hosts load the anchor and every landing still reaches them, which swancloud's `agents.md` reading says; swancloud-ops confirms each host's version once the pin is deployed and replies to madswan's operator.
+2. **Every change to crew lands on main in place and keeps every team's current path working.** Flume support is behind a per-team setting in `teams.json`: a team with it off runs today's path unchanged, the conductor's launch and wait, team ops, the slots, the give, the team's tells. swancloud writes the setting for every team in its teams list (`lib/crew-teams.nix`), off until the team moves, and crew reads it as it reads every field of the file, required and with no default (`code.5`): the file's version moves with the field, and the swancloud deploy that writes it precedes the crew bump that requires it. So "a team without it" is a team whose setting is off; no team's entry is without the field.
+3. **Teams move one at a time, each on the user's word, and the old path leaves once no team uses it.** A move is one team's setting turned on in swancloud's teams list (`roles.2`: a change to the teams is on the user's word), with a crew bump where the move needs one; the old path, the conductor's launch and wait, team ops, the give, the slot bound and the team's tells, leaves crew in a landing of its own once every team's setting is on. That landing is record 0047's move 5, reached a team at a time rather than at once, and move 6 follows it as 0047 has it.
+4. **The refactor waits on the user.** Nothing of it is queued, built or placed until the user starts it; this record settles only its shape when it starts: the freeze first, then every change behind the setting, then the teams one by one. The freeze itself is swancloud's to build now, on the yes.
+
+### Consequences
+
+- `plan.19` is amended: crew's plugin reaches a host released, pinned by swancloud from crew's release tags and moved only by the user's bump, never live and never from a checkout; marked proposed.
+- `core.md` gains `roles.8`, drawn from parts 2 and 3, marked proposed.
+- `_open.md`'s move 5 says it is reached a team at a time behind the setting, and *Decisions waiting* lists this record.
+- On the yes: one swancloud unit, `crew-reaches-every-host-released-at-the-tag-the-fleet-pins`, cited as `afterthought/crew:docs/adr/0050-…` (a crew package at the pinned tag in the shape of `packages/sluice`, the plugin and the `crew` command loaded from it, the first pin v0.37.0 or the tag the user names, crew's releases among the fleet's release signals, and swancloud's `agents.md` reading rewritten); the deploy is ops's on the user's word (swancloud `deploy.1`). No crew unit now: the `teams.json` field and the first change behind it come with the refactor, when the user starts it.
+- On a note naming v0.36.1: the first pin is v0.36.1, said in that unit, and the user knows `a-card-carries-what-the-stages-run-made` leaves every host until the next bump.
+- Nothing else in crew changes: `roles.5` holds, and the stopgaps listed in `_open.md` leave at move 5 as record 0049 has it.
