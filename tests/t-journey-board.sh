@@ -191,8 +191,16 @@ ok "the host's follower, with no tab open, writes each partition's frames there 
 # the box's kit moves nothing at the next tick; a merge of unit a queued in sluice, its watch printing a new line, puts
 # the submission's number on a's row at the next look, with nothing gathered and no sluice run but the watches; and a
 # dev server started on the box shows on b's line after the next tick, with nothing gathered.
-written() { python3 -c 'import os, sys; print(os.stat(sys.argv[1]).st_ino)' "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json"; }
-rewritten() { [[ $(written) != "$1" ]] && grep -q "^$box \(stamp\|gather\)\$" "$T/reads.log"; }
+# written: each partition's rail, board and agents' frames by their files, and rewritten, a round whose every frame is
+# new, so its reads are over before the next are counted: a round goes on past wldn's rail, to swancloud's frames and,
+# at its first write of each partition, a read of crew's version (board.here_read)
+written() { python3 -c 'import os, sys; print(" ".join(str(os.stat(p).st_ino) for p in sys.argv[1:]))' "$(home_of mac-studio)"/.cache/crew/board/{wldn,swancloud}{.rail,,.agents}.json; }
+rewritten() {
+  local was=($1) now=($(written)) i
+  (( ${#was[@]} == 6 && ${#now[@]} == 6 )) || return 1
+  for i in "${!was[@]}"; do [[ ${now[i]} != "${was[i]}" ]] || return 1; done
+  grep -q "^$box \(stamp\|gather\)\$" "$T/reads.log"
+}
 railtext() { jq -r .text "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json"; }
 unit_of() { jq -c --arg u "$1" '.partitions[0].construction[] | select(.bolt == "tenant-environments") | .units[] | select(.unit == $u)' "$frame"; }
 only_stamps() { eq "$(grep -c "^$box " "$T/reads.log") $(grep -v ' overview --json --watch' "$CREW_TEST_LOG" | grep -c " ssh $box ")" "$(reads $box stamp) $(reads $box stamp)"; }
