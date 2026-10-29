@@ -250,7 +250,7 @@ crew SHALL keep one landings card for each kit with a proven bolt waiting on its
 
 #### Scenario: A row's head moves while the card waits
 - **WHEN** `land/crew` waits on the user as a list of `y` and `z`, and a fix's merge moves `z`'s head to `def5678`
-- **THEN** the card is changed in place, its note saying `z`'s head is now `def5678`, and `z`'s row carries its reading and preview of `def5678`
+- **THEN** the card is changed in place, its note saying `z`'s head is now `def5678`, and `z`'s row carries its reading of `def5678` and, where the kit's policy names a preview, `bolt/z` at `def5678` as what brings it up
 
 #### Scenario: A yes frees the team for its next bolt
 - **WHEN** swc-1's bolt `y` is a row of `land/crew`, and the last unit of swc-1's other bolt `z` merges with sluice green at its head, and `d` is the next planned bolt of swc-1's kit
@@ -705,62 +705,24 @@ A proposal's card SHALL hold the proposal whole, picture, text and case, linking
 - **WHEN** the user approves `land/y`'s card without opening its session
 - **THEN** the conductor tells main-level ops to land `y` as before, and nothing waits on the session
 
-### Requirement: A landing's card lists the addresses of a preview of its head
-When a bolt becomes a row of its kit's landings card in a kit whose sluice policy, as the bolt's head holds it, declares `[preview]`, crew SHALL first ask sluice, on the team's host, for a preview of the bolt's head on the bolt's branch, and SHALL put the row on the card once sluice has named the preview's addresses, without waiting for the preview's stack to come up. The row SHALL list each address under the name the kit's policy gives it, beside its reading's link, and the card SHALL say that a preview lands nothing and that the send is the word to land. A kit whose policy at the head declares no `[preview]` SHALL get no preview. Nothing about a preview SHALL hold, refuse or delay the card or the landing.
-
-#### Scenario: A kit that declares a preview
-- **WHEN** bolt `y` reads proven at head `abc1234` in a kit whose policy at `abc1234` declares `[preview]` with addresses `web` and `api`
-- **THEN** sluice is asked for a preview of `bolt/y` at `abc1234` on the team's host, and `y`'s row on `land/crew` lists `web` and `api` with the addresses sluice named, saying the preview is coming up and lands nothing
-
-#### Scenario: A kit that declares none
-- **WHEN** bolt `y` reads proven in a kit whose policy at its head has no `[preview]` table
-- **THEN** sluice is asked for nothing, and `y`'s row carries no preview and no word of one
-
-#### Scenario: Approved without opening the preview
-- **WHEN** the user sends `land/crew` with `y` ticked without opening any of its addresses
-- **THEN** main-level ops lands `y` as for any ticked row, and nothing waits on the preview
-
-#### Scenario: Asked again with nothing changed
-- **WHEN** crew raises `land/crew` again with `y` at the same head, as the rail's sweep does for a card that was lost
-- **THEN** sluice gives back the preview crew already asked for, its addresses unchanged, and no second preview is made
-
 ### Requirement: A preview that fails is said on the card and holds nothing
-A preview sluice refuses, that crew cannot ask for or read, or whose addresses sluice does not name within twenty seconds, SHALL be said on its row with sluice's or crew's reason, and the row SHALL be on the card all the same. A preview whose stack fails to come up after its row listed its addresses SHALL change the card in place, while it waits on the user, to say so on that row with the end of what the preview's command printed, its addresses no longer listed; one whose addresses came too late SHALL change the card in place to list them once it is up. A card the user has answered SHALL be left as it is. None of this SHALL hold the landing.
+A preview sluice refuses, that crew cannot ask for or read, or whose addresses sluice does not name within twenty seconds of the ask, SHALL be said on its row or line with sluice's or crew's reason, the card changed in place while it waits on the user. A preview whose stack fails to come up after its addresses were listed SHALL change the card in place to say so with the end of what the preview's command printed, its addresses no longer listed; one whose addresses came too late SHALL change the card in place to list them once it is up. A card the user has answered SHALL be left as it is. None of this SHALL hold the landing.
 
 #### Scenario: The host's sluice has no preview command
-- **WHEN** the team's host runs a sluice that refuses `sluice preview` and bolt `y` reads proven
-- **THEN** `y`'s row on `land/crew` says the preview could not be asked and why, and lists no addresses
+- **WHEN** swancloud-ops runs `crew card preview land/crew y` and the team's host runs a sluice that refuses `sluice preview`
+- **THEN** `land/crew` is changed in place, `y`'s row saying its preview could not be brought up and why, listing no addresses, and `y` keeps its box
+
+#### Scenario: A line naming a branch sluice does not land
+- **WHEN** the planner runs `crew card preview batch/7 a/demo` for a line naming `unit/a` at `abc1234`, and sluice refuses since no `[branches]` table names `unit/a`
+- **THEN** batch 7's card is changed in place, saying under `a` that `demo` could not be brought up, in sluice's words
 
 #### Scenario: The stack fails to come up
 - **WHEN** `y`'s row lists a preview's addresses and the preview's command then exits non-zero
 - **THEN** the card is changed in place with a note that `y`'s preview did not come up, the row says so with the last lines of what the command printed and lists no addresses, and `y` keeps its box
 
 #### Scenario: The host is busy when the card is raised
-- **WHEN** sluice waits for room on the team's host and names no preview within twenty seconds of `y`'s row being raised, and the preview later comes up
+- **WHEN** sluice waits for room on the team's host and names no preview within twenty seconds of the ask, and the preview later comes up
 - **THEN** the row says its preview is not there yet, and the card is then changed in place with a note that `y`'s preview is up, listing its addresses
-
-### Requirement: The preview follows the bolt's head and ends with the card
-When a merge moves a bolt's head while it is a row of its kit's landings card, crew SHALL release the preview it asked for at the old head and ask for one at the new head, and the row SHALL list the new preview's addresses. When the bolt leaves the card, landed, held for a fix, or dropped, crew SHALL release its preview on the team's host. A rail read SHALL release, on each host, a preview crew asked for whose bolt is no row of an open landings card. crew SHALL release only a preview it asked for, never one asked for by hand or by another tool.
-
-#### Scenario: The head moves
-- **WHEN** a fix's merge moves bolt `y`'s head from `abc1234` to `def5678` while `y` is a row of `land/crew`
-- **THEN** `abc1234`'s preview is released, one is asked for at `def5678`, and `y`'s row lists `def5678`'s addresses
-
-#### Scenario: The bolt lands
-- **WHEN** `crew bolt land y` closes `y`
-- **THEN** the preview of `y`'s head is released on the team's host, and `sluice previews` there no longer lists it
-
-#### Scenario: A fix holds the landing
-- **WHEN** a fix started on bolt `y` holds its row
-- **THEN** the preview is released, and a new one is asked for when `y` reads proven again at its new head
-
-#### Scenario: A preview crew did not ask for
-- **WHEN** a person previewed an earlier revision of `bolt/y` themselves, and `y` later lands
-- **THEN** crew releases the preview of the head it asked for, and leaves the person's preview as it is
-
-#### Scenario: A card closed elsewhere
-- **WHEN** `land/crew` is closed with no crew command closing it and `y` is no row of an open landings card, and the rail is read
-- **THEN** the sweep on `y`'s team's host releases the preview crew asked for, and says so
 
 ### Requirement: A card follows only a card in its owner's name
 A card crew posts SHALL follow only a card the run record shows posted in the same owner's name, since Pending You takes `follows` only to a card of the asker's own. When the card its thing would follow is another owner's, it SHALL follow nothing and be posted all the same. A deploy's card SHALL never follow a landing's card; the landings it carries are named on its face.
@@ -1157,3 +1119,119 @@ A bolt whose landing main-level ops recorded the user's words stopping SHALL be 
 #### Scenario: Ticked after a stop
 - **WHEN** the user then ticks `z` on a send of `land/crew`
 - **THEN** `z` is no longer left, and lands on that send or takes main first as any ticked bolt
+
+### Requirement: A landing row carries what brings its bolt's preview up
+Where the kit's policy at a bolt's head declares `[preview]`, the bolt's row on its kit's landings card SHALL carry what brings the preview up, the bolt's branch and its head, and SHALL say that the preview comes up only when the user asks for it on the card and goes when they are done. Where the policy declares none, the row SHALL say "no preview". crew SHALL ask sluice for nothing when it posts or changes the row.
+
+#### Scenario: A kit that declares a preview
+- **WHEN** bolt `y` reads proven at head `abc1234` in a kit whose policy at `abc1234` declares `[preview]`
+- **THEN** `y`'s row on `land/crew` names `bolt/y` at `abc1234` as what brings its preview up, says to write on the card to bring it up, and sluice on the team's host lists no preview of `abc1234`
+
+#### Scenario: A kit that declares none
+- **WHEN** bolt `y` reads proven in a kit whose policy at its head has no `[preview]` table
+- **THEN** `y`'s row says "no preview", and sluice is asked for nothing
+
+#### Scenario: The policy can't be read
+- **WHEN** the kit's policy at `y`'s head can't be read on the team's host
+- **THEN** `y`'s row says its preview can't be told and why, and `y` keeps its box
+
+#### Scenario: Approved without a preview
+- **WHEN** the user sends `land/crew` with `y` ticked and never asked for its preview
+- **THEN** main-level ops lands `y` as for any ticked row, and no preview of `y` was made
+
+### Requirement: The user asks for a preview by writing on the card
+A card that carries a thing that must run SHALL say, in its words, that the user brings it up by writing on the card naming it, and puts it away by writing that they are done. The card's owner, woken by the user's words, SHALL run `crew card preview <key> <thing>` to bring it up and `crew card preview <key> <thing> --done` to release it, `<thing>` a landings row's bolt or a batch line's `<unit>/<name>`. No card SHALL ask the user to run a command.
+
+#### Scenario: The user asks on the landings card
+- **WHEN** the user writes "bring up y's preview" on `land/crew` while it waits on them
+- **THEN** swancloud-ops is woken, runs `crew card preview land/crew y`, and the card stays open waiting on the user's send
+
+#### Scenario: A thing the card does not carry
+- **WHEN** `crew card preview land/crew w` is run and `w` is no row of `land/crew`
+- **THEN** crew refuses, naming the rows that carry a preview, and asks sluice for nothing
+
+#### Scenario: Asked by anyone but the owner
+- **WHEN** a conductor runs `crew card preview land/crew y`
+- **THEN** crew refuses, naming swancloud-ops as the card's owner
+
+### Requirement: A preview asked for from a card is brought up through sluice and listed while it is up
+`crew card preview` SHALL bring the thing up with `sluice preview <branch> <revision>` on the host where its kit's work is, as the row or line names them, and SHALL change the card in place listing each address sluice names, under the name sluice gives it, while the preview is up. Asked again while one is up or coming up at the same revision, crew SHALL give it back and make no second.
+
+#### Scenario: Brought up
+- **WHEN** swancloud-ops runs `crew card preview land/crew y` with `y`'s row at `abc1234`, and the kit's policy names addresses `web` and `api`
+- **THEN** sluice is asked for a preview of `bolt/y` at `abc1234` on `y`'s team's host, and `land/crew` is changed in place, its note saying `y`'s preview is up, `y`'s row listing `web` and `api` with sluice's addresses and saying a preview lands nothing
+
+#### Scenario: Asked twice
+- **WHEN** `crew card preview land/crew y` is run again while `y`'s preview of `abc1234` is up
+- **THEN** sluice gives back the same preview, and `y`'s row lists the same addresses
+
+### Requirement: A preview is released on the user's done and when its card or row ends
+crew SHALL release a preview it brought up from a card when the owner runs `--done` on the user's word, when the card closes, when the bolt lands, is held for a fix or is dropped, and when the row or line that carries it leaves the card; and the card, while it waits, SHALL say it was released. A rail read SHALL release, on each host, a preview crew brought up whose card is closed or whose row is gone. crew SHALL release only a preview it asked for.
+
+#### Scenario: The user is done
+- **WHEN** the user writes "done with y's preview" on `land/crew` and swancloud-ops runs `crew card preview land/crew y --done`
+- **THEN** `y`'s preview is released on the team's host, and `y`'s row again names `bolt/y` at its head and says to write on the card to bring it up
+
+#### Scenario: The bolt lands with its preview up
+- **WHEN** `crew bolt land y` closes `y` while its preview is up
+- **THEN** the preview is released on the team's host, and `sluice previews` there no longer lists it
+
+#### Scenario: A fix holds the landing
+- **WHEN** a fix started on bolt `y` holds its row while its preview is up
+- **THEN** the preview is released, and none is asked when `y` reads proven again
+
+#### Scenario: A preview crew did not ask for
+- **WHEN** a person previewed an earlier revision of `bolt/y` themselves, and `y` later lands
+- **THEN** crew releases only the preview it brought up, and leaves the person's preview as it is
+
+#### Scenario: A card closed elsewhere
+- **WHEN** `land/crew` is closed with no crew command closing it while `y`'s preview is up, and the rail is read
+- **THEN** the sweep on `y`'s team's host releases the preview, and says so
+
+### Requirement: A moved head releases the preview of the old one and asks for none
+When a merge moves a bolt's head while it is a row of its kit's landings card, crew SHALL change the row in place to name the new head as what brings the preview up, SHALL release a preview it brought up at the old head, and SHALL say so on the row; it SHALL ask for no preview at the new head until the user asks again.
+
+#### Scenario: The head moves with a preview up
+- **WHEN** a fix's merge moves bolt `y`'s head from `abc1234` to `def5678` while `y`'s preview of `abc1234` is up
+- **THEN** `abc1234`'s preview is released, `y`'s row names `bolt/y` at `def5678` and says its preview of `abc1234` was released as the head moved, and sluice lists no preview of `def5678`
+
+### Requirement: A batch's card carries what each unit's stages recorded as made
+A batch's card SHALL carry, under each unit, every line its stages recorded as made, named by the stage that recorded it, each with its name, what it is and its address or its branch and revision, exactly as the run wrote them. crew SHALL make, check and rewrite none of it. A unit whose stages recorded nothing SHALL carry no such line and no word of one.
+
+#### Scenario: A spike recorded by a code stage
+- **WHEN** unit `a`'s code stage recorded `{"name": "spike", "kind": "page", "address": "https://example.test/spike"}` and `a` is in batch 7
+- **THEN** batch 7's card names, under `a`, the code stage's `spike`, a page, at `https://example.test/spike`, as written
+
+#### Scenario: A thing that must run
+- **WHEN** unit `a`'s code stage recorded `{"name": "demo", "kind": "preview", "branch": "bolt/y", "revision": "abc1234"}`
+- **THEN** batch 7's card names under `a` the `demo` preview, brought up from `bolt/y` at `abc1234`, says to write on the card to bring it up, and lists no address
+
+#### Scenario: A line crew cannot read as a made thing
+- **WHEN** a line of `a`'s is not a JSON object naming a name and what it is
+- **THEN** the card carries the line's text as written, saying crew could not read it as a made thing, and the card is raised all the same
+
+#### Scenario: Nothing recorded
+- **WHEN** no stage of unit `b` recorded anything as made
+- **THEN** batch 7's card says nothing of made things under `b`
+
+### Requirement: A batch's card changes in place as lines are added
+When a stage of a unit in a batch whose card waits on the user records a line its card does not yet carry, crew SHALL change that card in place, its note naming the unit and the line's name. A card the user has answered SHALL be left as it is.
+
+#### Scenario: A line added while the card waits
+- **WHEN** batch 7's card waits on the user and unit `a`'s code stage, still running, records a page `notes`
+- **THEN** batch 7's card is changed in place with a note that `a` recorded `notes`, and carries it under `a`
+
+#### Scenario: A line added after the user answered
+- **WHEN** the user has answered batch 7's card and `a`'s stage records another line
+- **THEN** batch 7's card is left as it is
+
+### Requirement: A card about a landed revision carries its commit and no preview
+A card about a revision that has landed, a deploy's card and the close of a landings card's row that landed, SHALL carry the commit it landed as, and SHALL carry no preview and no word of bringing one up.
+
+#### Scenario: A deploy's card
+- **WHEN** main's head `9f8e7d6` is offered to `prod`
+- **THEN** `deploy/prod`'s card names `9f8e7d6`, and carries no preview, no branch to bring one up and no word of one
+
+#### Scenario: A landed row
+- **WHEN** `y` lands on GitHub's main as `1a2b3c4` and its card closes
+- **THEN** the close names `1a2b3c4` as the commit it landed as, and says nothing of a preview
