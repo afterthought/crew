@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-29
 decision-makers: the user, flume-sluice-build (the plan), swancloud-design (the record)
 consulted: swancloud-ops, swancloud-operator
@@ -7,9 +7,9 @@ consulted: swancloud-ops, swancloud-operator
 
 # crew moves onto Flume one team at a time: every host runs a release the user bumps, upgrades land on main behind a per-team setting, and the old path leaves once no team uses it
 
-Status: proposed to the user on 2026-10-29, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-29, on their card (req_a1741af98ffd4838abe6, "Approved", no note): the first pin is v0.37.0.
 
-Deciders: the user, on flume-sluice-build's card (Pending You req_9cba01f77fc44b34b9b4, "Yes, that plan"), as swancloud-operator relayed the plan and the user's words to swancloud on 2026-10-29; the card is flume-sluice-build's, which this agent cannot read, so the words are quoted as relayed. The three points of the plan are the user's. The release the freeze starts at, the words under each point and the rules drawn are the design agent's, asked on this card.
+Deciders: the user, on flume-sluice-build's card (Pending You req_9cba01f77fc44b34b9b4, "Yes, that plan"), as swancloud-operator relayed the plan and the user's words to swancloud on 2026-10-29; the card is flume-sluice-build's, which this agent cannot read, so the words are quoted as relayed. The three points of the plan are the user's. The release the freeze starts at, the words under each point and the rules drawn are the design agent's, accepted on this card.
 
 Amends: `plan.19` (record 0032's released mode becomes the only mode); record 0047 move 5 (reached a team at a time); `_open.md`'s moves.
 Sources: the plan as relayed (below); record 0032 point 5 (crew's plugin runs live or released, per host; released: a bump chore pins crew at a version in swancloud's catalog, sluice lands it, the deployer deploys, sessions load the plugin from the nix store); record 0047 moves 5 and 6 and the user's order (fires, Flume, then teams out of crew); record 0049 (move 3 skipped; crew goes from move 2 to move 5 when Flume's first build runs a kind on a host); rules `plan.18`, `plan.19`, `code.5`, `code.10`, `roles.2`, `roles.5`; swancloud `lib/claude-account-tools.nix` on `origin/main` 2026-10-29 (`crewPlugin` is `<space>/crew/main/plugin`, the anchor the views timer moves, and `crew` on the user's path execs it) and the reading in swancloud's `docs/architecture/agents.md` ("crew's plugin loads from its working tree … so a crew commit is live in the next session without a deploy"); crew's tags on GitHub 2026-10-29: v0.36.1 at 16f84c54 (2026-10-28 19:23Z), v0.37.0 at 865cfd32 (2026-10-29 13:26Z, the landing of `a-card-carries-what-the-stages-run-made` on the user's send), main at v0.37.0; swancloud-ops's reading of the same (tell of 2026-10-29).
@@ -44,9 +44,9 @@ Option 1, in four parts.
 
 ### Consequences
 
-- `plan.19` is amended: crew's plugin reaches a host released, pinned by swancloud from crew's release tags and moved only by the user's bump, never live and never from a checkout; marked proposed.
-- `core.md` gains `roles.8`, drawn from parts 2 and 3, marked proposed.
-- `_open.md`'s move 5 says it is reached a team at a time behind the setting, and *Decisions waiting* lists this record.
+- `plan.19` is amended: crew's plugin reaches a host released, pinned by swancloud from crew's release tags and moved only by the user's bump, never live and never from a checkout; accepted with the record.
+- `core.md` gains `roles.8`, drawn from parts 2 and 3, accepted with the record.
+- `_open.md`'s move 5 says it is reached a team at a time behind the setting, and *Accepted, not built* lists the swancloud unit.
 - On the yes: one swancloud unit, `crew-reaches-every-host-released-at-the-tag-the-fleet-pins`, cited as `afterthought/crew:docs/adr/0050-…` (a crew package at the pinned tag in the shape of `packages/sluice`, the plugin and the `crew` command loaded from it, the first pin v0.37.0 or the tag the user names, crew's releases among the fleet's release signals, and swancloud's `agents.md` reading rewritten); the deploy is ops's on the user's word (swancloud `deploy.1`). No crew unit now: the `teams.json` field and the first change behind it come with the refactor, when the user starts it.
 - On a note naming v0.36.1: the first pin is v0.36.1, said in that unit, and the user knows `a-card-carries-what-the-stages-run-made` leaves every host until the next bump.
 - Nothing else in crew changes: `roles.5` holds, and the stopgaps listed in `_open.md` leave at move 5 as record 0049 has it.
