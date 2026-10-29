@@ -3,8 +3,9 @@ plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_
 plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
 goes with its place (plan.10) and plan.branch_said for what is said of it, plan.bolt_branch_judged for a bolt's own
 branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing,
-plan.overview_runs and plan.run_kept for a worktree sluice has a run in, and plan.release_kept for one sluice did not
-release before its removal. The documents under sluice-0.36.4/ were recorded from sluice 0.36.4 on deneb, 2026-10-22,
+plan.overview_runs and plan.run_kept for a worktree sluice has a run in, plan.release_kept for one sluice did not
+release before its removal, plan.made_works, plan.crews_place and plan.stranger_said for a place crew made and one it
+did not, and plan.freed_recorded for the entry that names what the tidy removed. The documents under sluice-0.36.4/ were recorded from sluice 0.36.4 on deneb, 2026-10-22,
 their scratch folder written /scratch: a kit whose place a ran `sluice exec main -- sleep 25` (overview-run.json) until
 it ended (overview-ended.json); and on mac-studio, 2026-10-23, the same way: a kit whose policy's release command,
 `sh -c 'echo tearing down; exit 1'`, failed after a `sluice exec main -- true` in places/unit-u, `sluice release
@@ -32,10 +33,12 @@ LANDED = dict(GOING, on_main=True, moved=True)
 CUT = dict(GOING, on_main=True, moved=False)
 
 
-def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix=GOING, dropped=()):
-    """units: each unit the plan holds, in bolt t, or as (unit, its bolt or None for the queue)."""
+def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix=GOING, dropped=(), made=None):
+    """units: each unit the plan holds, in bolt t, or as (unit, its bolt or None for the queue); made, the work this
+    host's run record holds a start of, the branch's own unless given."""
     return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), dict((u, "t") if isinstance(u, str) else u for u in units),
-                          set(on_main), lambda bolt: set(merged), lambda b: fix, dropped=set(dropped))
+                          set(on_main), lambda bolt: set(merged), lambda b: fix, chores_of=lambda ref: set(), dropped=set(dropped),
+                          made={branch} if made is None else made)
 
 
 class TestOver:
@@ -101,6 +104,112 @@ class TestOver:
         ("places/land-gone", "bolt/elsewhere", ""), ("places/land-gone", "", ""), ("places/gone", "bolt/gone", "")])
     def test_a_worktree_crew_did_not_make_is_never_touched(self, path, branch, up):
         assert over(path, branch, up, units=()) is None
+
+
+class TestCrewsPlace:
+    """plan.9, as read on 2026-10-28 (signal 2026-10-28-swancloud-design-9a4472f9/01): swc-3's tidy removed the design
+    agent's hand-cut swancloud/places/chore-sluice-0-52-1 and its branch chore/sluice-0-52-1, reading them as a crew
+    chore in no plan by their names alone. A place is crew's only when it stands at crew's own path for the work its
+    branch names and this host's run record holds that work's stage.start or fix.start, a refused one included."""
+    HAND = ("places/chore-sluice-0-52-1", "chore/sluice-0-52-1")
+
+    def test_a_hand_cut_worktree_named_like_a_chore_is_left_alone_and_named(self):
+        assert over(*self.HAND, "bolt/t", made=set()) is None
+        assert plan.crews_place(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, set()) is False
+        assert plan.stranger_said(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, "deneb") == (
+            f"{KD}/places/chore-sluice-0-52-1 is not crew's, and is left to whoever made it: deneb's run record holds no "
+            "start of chore/sluice-0-52-1")
+
+    def test_a_place_whose_start_this_hosts_record_holds_is_crews_and_judged(self):
+        assert over(*self.HAND, "bolt/t", made={"chore/sluice-0-52-1"}) == ("sluice-0-52-1", "chore sluice-0-52-1 is in no plan")
+        assert over("places/a", "unit/a", "bolt/t", made={"unit/a"}, units=()) == ("a", "unit a is in no plan")
+        assert over("places/fix-t--y", "fix/t/y", "bolt/t", made={"fix/t/y"}, fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")
+
+    @pytest.mark.parametrize("path, branch, made", [
+        ("places/a", "unit/a", {"chore/a", "fix/t/a"}), ("places/chore-c", "chore/c", {"unit/c"}),
+        ("places/fix-t--y", "fix/t/y", {"unit/y", "fix/t/z"})])
+    def test_a_start_of_other_work_makes_no_place_crews(self, path, branch, made):
+        assert over(path, branch, "bolt/t", made=made, units=()) is None
+        assert plan.crews_place(f"{KD}/{path}", branch, KD, made) is False
+
+    @pytest.mark.parametrize("path, branch, own", [
+        ("places/other", "unit/a", "places/a"), ("places/c", "chore/c", "places/chore-c"), ("places/fix-y", "fix/t/y", "places/fix-t--y")])
+    def test_one_at_another_path_than_crews_for_its_branch_is_a_stranger_whatever_the_record_holds(self, path, branch, own):
+        assert over(path, branch, "bolt/t", units=()) is None
+        assert plan.crews_place(f"{KD}/{path}", branch, KD, {branch}) is False
+        assert plan.stranger_said(f"{KD}/{path}", branch, KD, "deneb").endswith(f": crew's place for {branch} is {KD}/{own}")
+
+    @pytest.mark.parametrize("path, branch", [
+        ("places/land-t", "bolt/t"), ("places/design-x", "design/x"), ("elsewhere/a", "unit/a"), ("places/x", "fix/legacy")])
+    def test_any_other_worktree_is_no_stranger(self, path, branch):
+        assert plan.crews_place(f"{KD}/{path}", branch, KD, set()) is None
+
+    def test_while_the_record_cannot_be_read_no_place_is_judged_or_named(self):
+        """read.1: crew removes nothing on a guess."""
+        assert over(*self.HAND, "bolt/t", made=None) == ("sluice-0-52-1", "chore sluice-0-52-1 is in no plan")  # over()'s default
+        assert plan.tidy_over(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, "bolt/t", {"t"}, {}, set(), lambda b: set(),
+                              lambda b: GOING, made=None) is None
+        assert plan.crews_place(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, None) is None
+
+
+class TestMadeWorks:
+    """What this host's run record says crew started (plan.9): the work a stage.start or fix.start names."""
+
+    def test_a_start_refused_or_not_names_its_unit_chore_or_fix(self):
+        es = [{"Act": "stage.start", "On": ["stage/a/code", "unit/a", "agent/t-unit-1"]},
+              {"Act": "stage.start", "On": ["stage/c/code", "chore/c"], "Refused": "made but not ready"},
+              {"Act": "fix.start", "On": ["fix/t/y", "bolt/t", "agent/t-unit-2", "unit/waits"]},
+              {"Act": "fix.start", "On": ["fix/t/z", "bolt/t"], "Refused": "every slot is in flight"}]
+        assert plan.made_works(es) == {"unit/a", "chore/c", "fix/t/y", "fix/t/z"}
+
+    def test_no_other_act_makes_a_place(self):
+        es = [{"Act": "unit.add", "On": ["unit/a"]}, {"Act": "slot.free", "On": ["agent/t-unit-1", "chore/c"]},
+              {"Act": "stage.end", "On": ["stage/a/code", "unit/a"]}, {"Act": "fix.merge", "On": ["fix/t/y"]}]
+        assert plan.made_works(es) == set()
+
+
+class TestHostMade:
+    """The record of making a place is this host's own (plan.9): every day's file of its runs/<host>/ for the labels
+    building the kit, the oldest included; one that cannot be read judges no place (read.1)."""
+
+    def test_every_days_file_of_this_host_is_read_and_no_other_hosts(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plan.record, "ROOT", tmp_path)
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+        for host, day, on in (("deneb", "2026-10-07", "chore/old"), ("deneb", "2026-10-29", "unit/new"), ("mac-studio", "2026-10-15", "unit/there")):
+            f = tmp_path / "swancloud" / "runs" / host / f"{day}.rec"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(plan.record.DESCRIPTOR + f"Id: {day}-{host}\nAt: {day}T10:00:00Z\nHost: {host}\nBy: x\nAct: stage.start\nOn: {on}\n\n")
+        assert plan.host_made(["swancloud", "madswan"]) == ({"chore/old", "unit/new"}, None)
+
+    def test_a_file_that_cannot_be_read_judges_nothing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(plan.record, "ROOT", tmp_path)
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+        (tmp_path / "swancloud" / "runs" / "deneb" / "2026-10-29.rec").mkdir(parents=True)  # a folder, so its read fails
+        works, why = plan.host_made(["swancloud"])
+        assert works is None and why.startswith(f"deneb's run record at {tmp_path}/swancloud/runs/deneb could not be read: ")
+
+
+class TestRemovalRecorded:
+    """plan.9: a removal is recorded on the entry of the act in whose command it happens, naming the place in Paths:
+    the slot.free of the slot that held its work, written once the tidy has run; one no slot.free carries, the landing's
+    place or a place whose slot an earlier command freed, is said in the tidy's output alone, since a drop's and a
+    landing's entries are written, and read in the same command, before the tidy on the team's host runs."""
+
+    def test_each_slot_free_held_back_names_the_place_the_tidy_removed_of_its_work(self, monkeypatch):
+        emitted = []
+        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: emitted.append((label, act, on, f)))
+        freed = [("wldn", ["agent/t-unit-1", "unit/a"], "team(t): free t-unit-1", f"{KD}/places/a"),
+                 ("wldn", ["agent/t-unit-2", "unit/b"], "team(t): free t-unit-2", f"{KD}/places/b")]
+        plan.freed_recorded(freed, [f"{KD}/places/a", f"{KD}/places/land-t"])
+        assert emitted == [("wldn", "slot.free", ["agent/t-unit-1", "unit/a"], dict(why="team(t): free t-unit-1", Paths=f"{KD}/places/a")),
+                           ("wldn", "slot.free", ["agent/t-unit-2", "unit/b"], dict(why="team(t): free t-unit-2", Paths=None))]
+
+    def test_a_removal_reads_as_one_in_crew_events_and_a_forecast_still_as_its_conflict(self):
+        import record
+        e = {"At": "2026-10-29T10:00:00Z", "Act": "slot.free", "On": ["agent/t-unit-1", "unit/a"], "From": [], "Commit": [],
+             "Paths": f"{KD}/places/a"}
+        assert record.line(e).endswith(f"agent/t-unit-1 unit/a (removed {KD}/places/a)")
+        assert record.line(dict(e, Act="forecast", Paths="a.txt", Reached="told")).endswith("(conflict on a.txt, told)")
 
 
 class TestFixBranchesOver:
