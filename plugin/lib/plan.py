@@ -9370,17 +9370,24 @@ def bolt_said(fleet, t, b, doc, done, two, say, left=False):
         land_hand(fleet, t["label"], b.get("Repo") or t["kit"]["name"], note=left_said(b.name(), doc["onto"], paths) if left else None)
 
 
+# The time sluice's forecast of a bolt against main is given on a conductor's wait, by its branch name or from a place
+# on it: `submit --check` fetches from the remote before it forecasts, which took 10 to 24 seconds in deneb's slow bursts
+# of 2026-10-28, so a minute and not a wait's POLL (swancloud-design, 2026-10-29). One that runs out is said and recorded
+# as unread (unread_said), never as no conflict (read.1).
+FORECAST_BOUND = 60
+
+
 def sluice_check(main, bolt):
     """`sluice submit main --check --head bolt/<bolt> --json` run in the kit's main checkout on this host, which needs
-    no worktree on the bolt's branch (sluice's ADR 0039): (its exit, its output, its standard error), the exit None when
-    it could not be run, the error then its why."""
+    no worktree on the bolt's branch (sluice's ADR 0039), given FORECAST_BOUND seconds: (its exit, its output, its
+    standard error), the exit None when it could not be run or did not answer in time, the error then its why."""
     try:
         r = subprocess.run(["sluice", "submit", "main", "--check", "--head", f"bolt/{bolt}", "--json"], cwd=main,
-                           capture_output=True, text=True, timeout=POLL)
+                           capture_output=True, text=True, timeout=FORECAST_BOUND)
     except FileNotFoundError:
         return None, "", "this host has no sluice on its path"
     except subprocess.TimeoutExpired:
-        return None, "", f"it did not answer within {POLL} seconds"
+        return None, "", f"it did not answer within {FORECAST_BOUND} seconds"
     except OSError as e:
         return None, "", str(e)
     return r.returncode, r.stdout, r.stderr
@@ -9426,13 +9433,14 @@ fi
 """
 
 
-def script_here(script, *args):
+def script_here(script, *args, timeout=None):
     """A bash script run on this host with its arguments: (its exit, its output, its standard error), the exit None when
-    it could not be run or did not answer within POLL seconds, the error then its why."""
+    it could not be run or did not answer within timeout seconds, POLL when not given, the error then its why."""
+    timeout = timeout or POLL
     try:
-        r = subprocess.run(["bash", "-c", script, "crew", *args], capture_output=True, text=True, timeout=POLL, env=gitenv())
+        r = subprocess.run(["bash", "-c", script, "crew", *args], capture_output=True, text=True, timeout=timeout, env=gitenv())
     except subprocess.TimeoutExpired:
-        return None, "", f"it did not answer within {POLL} seconds"
+        return None, "", f"it did not answer within {timeout} seconds"
     except OSError as e:
         return None, "", str(e)
     return r.returncode, r.stdout, r.stderr
@@ -9486,8 +9494,9 @@ def place_checked(bolt, said, err):
 def bolt_check(team_kit, bolt):
     """sluice's forecast of a bolt against its kit's main, on this host, the team's (teams.21): read by its branch name
     (sluice_check), or from a place on it (FORECAST_PLACE, <kit>/places/forecast-<bolt>) for a legacy bolt whose tip
-    names a remote that holds no branch of it (forecast_way, plan.19). (sluice's exit, its answer, its standard error),
-    as sluice_check gives them, and the line naming crew's own place when git could not remove it, or None."""
+    names a remote that holds no branch of it (forecast_way, plan.19), either given FORECAST_BOUND seconds. (sluice's
+    exit, its answer, its standard error), as sluice_check gives them, and the line naming crew's own place when git
+    could not remove it, or None."""
     main = team_kit["main"]
     code, out, err = script_here(BOLT_TIP, main, bolt, kit.DECLARATION)
     if code is None:
@@ -9498,7 +9507,7 @@ def bolt_check(team_kit, bolt):
         return (None, "", why), None
     if way == "branch":
         return sluice_check(main, bolt), None
-    code, out, err = script_here(FORECAST_PLACE, main, f"{team_kit['dir']}/places/forecast-{bolt}", bolt)
+    code, out, err = script_here(FORECAST_PLACE, main, f"{team_kit['dir']}/places/forecast-{bolt}", bolt, timeout=FORECAST_BOUND)
     if code is None:
         return (None, "", err), None
     if code:
