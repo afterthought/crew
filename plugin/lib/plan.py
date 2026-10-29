@@ -3649,14 +3649,19 @@ def history_read(printed, bolt):
 def landing_split(entries, plan_, b, host, kit_name, history, now):
     """The fields a held bolt's bolt.land entry records of its time (run-record "A bolt's landing entry records its time
     by holder", plan.20), a decision of facts alone (code.7): Age, its whole minutes from its newest give to its
-    landing, and Split, those minutes by holder in HOLDERS' order, each named, `team 200, kit 25, user 125, hold 0,
-    nobody 20`, made by the board's own rule (bolt_facts, bolt_time) from the partition's run record (entries) and
-    sluice's record of the bolt's submissions (history, history_read's), nothing standing since it landed. Its landing
-    is when sluice told the newest of its landings on main that landed, or now when none did. {} when its give or
-    sluice's record can't be read, so the entry carries neither and the landing goes on (read.1)."""
+    landing, and Split, those minutes by holder in HOLDERS' order, each named, `team 200, kit 0, team-or-kit 25, user
+    125, hold 0, nobody 20`, made by the board's own rule (bolt_facts, bolt_time) from the partition's run record
+    (entries) and sluice's record of the bolt's submissions (history, history_read's), each told one decided when sluice
+    told it, any never told standing as its record has it. sluice 0.51.3's record keeps no start of a submission's
+    checks, so its stay is the team's or the kit's, unsplit, where the record gives none. Its landing is when sluice told
+    the newest of its landings on main that landed, or now when none did. {} when its give or sluice's record can't be
+    read, so the entry carries neither and the landing goes on (read.1)."""
     subs, why = history
     told = max((x["told"] for x in subs or [] if x.get("branch") == "main" and x.get("state") == "landed" and x.get("told")), default=None)
-    tm = time_at(bolt_facts(entries, plan_, b.name(), b.get("Team"), host, kit_name, ([], None), history), utc(told) if told else now)
+    standing = [x for x in subs or [] if not x.get("told") and x.get("state") in STANDING]
+    decided = [dict(x, decided=x.get("told"), started=x.get("started")) for x in subs or [] if x not in standing]
+    tm = time_at(bolt_facts(entries, plan_, b.name(), b.get("Team"), host, kit_name, (standing, None), (None, why) if why else (decided, None)),
+                 utc(told) if told else now)
     if "unknown" in tm:
         return {}
     return {"Age": str(tm["age"]), "Split": ", ".join(f"{h.replace('_', '-')} {tm['shares'][h]}" for h in HOLDERS)}

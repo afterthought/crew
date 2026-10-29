@@ -16,7 +16,7 @@
 
 ## 4. The landing's split follows the same rule
 
-- [ ] 4.1 A landing entry's `Split` names team-or-kit and sums to `Age`, from its one read of sluice's record on the team's host (design, Decision 5; Task notes 4.1). Passes `tests/py/test_landing.py` in the logic tier (`tests/suite logic`).
+- [x] 4.1 A landing entry's `Split` names team-or-kit and sums to `Age`, from its one read of sluice's record on the team's host (design, Decision 5; Task notes 4.1). Passes `tests/py/test_landing.py` in the logic tier (`tests/suite logic`).
 
 ## 5. The views
 

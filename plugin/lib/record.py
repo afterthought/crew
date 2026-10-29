@@ -72,7 +72,8 @@ DESCRIPTOR = """\
 # crew's own message, on a card's post or change raised without it), a card's close's Answer (what the user answered
 # on it, in crew's words made from names alone, cards.answer_said), a landing's Repo (the kit it landed on),
 # Head (the commit that kit's main holds afterwards, plan.14), and, for a bolt a team held, its Age (whole minutes from
-# its newest give to its landing) and Split (those minutes by holder, `team 200, kit 25, user 125, hold 0, nobody 20`,
+# its newest give to its landing) and Split (those minutes by holder, `team 200, kit 12, team-or-kit 13, user 125,
+# hold 0, nobody 20`, team-or-kit a submission's stay in sluice crew can't split between queued and under test,
 # plan.20), a landing's submission's Submission (sluice's number for it, on its bolt.submit from the moment sluice queued
 # it, plan.21), a branch.kept's Head (the commit a unit's, chore's or
 # fix's branch the tidy kept is at) and Count (its commits whose patch its bolt, or main, lacks, plan.10), crew's own
