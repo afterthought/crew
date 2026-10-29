@@ -24,5 +24,5 @@
 
 ## 6. Docs and the run
 
-- [ ] 6.1 README and the crew skill say the follower reads sluice only through the overview, and that a stay crew can't split shows as team or kit (Task notes 6.1). `tests/suite t-docs` ends with "0 failed".
+- [x] 6.1 README and the crew skill say the follower reads sluice only through the overview, and that a stay crew can't split shows as team or kit (Task notes 6.1). `tests/suite t-docs` ends with "0 failed".
 - [ ] 6.2 `tests/moon.yml` is in step with the tests' reads, and the tests the change affects pass (Task notes 6.2). `tests/suite --affected` ends with "0 failed".
