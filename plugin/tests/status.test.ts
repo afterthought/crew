@@ -87,3 +87,39 @@ test("a ledger's standing merge and landing are drawn with their numbers", async
   expect(lines.findIndex((l) => /^ {2}crew {2}◕◔ {2}curation-and-holds {2}landing #355 queued {2}0 of 2 merged$/.test(l))).toBeGreaterThanOrEqual(0)
   expect(lines.findIndex((l) => /a-queued-unit-can-take-a-signal {2}verify 3\/3 {2}#41 under test {2}unit-1$/.test(l))).toBeGreaterThanOrEqual(0)
 })
+
+// crew-board "A held bolt's head line shows its age and who held its time": the head line ends with the bolt's age,
+// its minutes by holder and who holds it now, as board.py's bolt_row draws it, and the band shows it as it is (plan.20).
+test("a ledger's head line is drawn with the bolt's age and who holds it", async ($, on) => {
+  const ledger = [
+    [['  ', null], ['crew', null], ['  ', null], ['◕◔', null], ['  ', null], ['curation-and-holds', null], ['  ', null], ['0 of 2 merged', null],
+      ['  ', null], ['3h 05m: team 2h 10m, kit 12m, user 40m, nobody 3m; user since 14:02, batch/12', null]],
+  ]
+  const ui = await band($, on, { env: { CREW_AGENT: 'crw-1-conductor', CREW_LABEL: 'swancloud' }, views: { ...VIEWS, views: { 'crw-1-conductor': ledger } } })
+  const lines = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
+  expect(lines.findIndex((l) => /^ {2}crew {2}◕◔ {2}curation-and-holds {2}0 of 2 merged {2}3h 05m: team 2h 10m, kit 12m, user 40m, nobody 3m; user since 14:02, batch\/12$/.test(l))).toBeGreaterThanOrEqual(0)
+})
+
+// crew-board "Minutes that can't be split": a head line holding minutes crew can't split between the team and the kit
+// names them team or kit, and why, and the band shows it as board.py's bolt_row draws it (plan.20).
+test("a ledger's head line holding a team-or-kit share is drawn with why", async ($, on) => {
+  const said = '3h 20m: team 2h 10m, team or kit 12m, nobody 58m; team or kit since 14:05, #41; team or kit: sluice keeps no start of its checks'
+  const ledger = [
+    [['  ', null], ['crew', null], ['  ', null], ['◕◔', null], ['  ', null], ['curation-and-holds', null], ['  ', null], ['0 of 2 merged', null],
+      ['  ', null], [said, null]],
+  ]
+  const ui = await band($, on, { env: { CREW_AGENT: 'crw-1-conductor', CREW_LABEL: 'swancloud' }, views: { ...VIEWS, views: { 'crw-1-conductor': ledger } } })
+  const lines = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
+  expect(lines.indexOf(`  crew  ◕◔  curation-and-holds  0 of 2 merged  ${said}`)).toBeGreaterThanOrEqual(0)
+})
+
+// A bolt that landed on main and whose close crew refused (plan.21): main-level ops's band draws its head line in the
+// attention gutter with the refusal's words, as its views say it.
+test("main-level ops's band draws a landed bolt crew could not close", async ($, on) => {
+  const unclosed = [['! ', null], ['crew', null], ['  ', null], ['crw-1', 'dim'], ['  ', null], ['●', null], ['  ', null], ['doctor-rows', null],
+    ['  ', null], ['landed on main, not closed: chore tidy-rows has not landed on main: it is ready', null], ['  ', null], ['1 of 1 merged', null]]
+  const views = { ...VIEWS, views: { ...VIEWS.views, 'swancloud-ops': [[['swancloud operations', 'bold']], unclosed] } }
+  const ui = await band($, on, { env: { CREW_AGENT: 'swancloud-ops', CREW_LABEL: 'swancloud' }, views })
+  expect(await ui.find({ type: 'Text', text: /^! crew {2}crw-1 {2}● {2}doctor-rows {2}landed on main, not closed: chore tidy-rows has not landed on main: it is ready/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /curation-and-holds/ })).toBeUndefined()
+})

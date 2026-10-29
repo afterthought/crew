@@ -258,6 +258,8 @@ for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bol
   "or sooner, when another bolt reads proven after their send: then it closes it saying what their send still lands, and a new card follows it asking for the rest" \
   "and first the bolts a send on an earlier card still lands, whose card closed as the one you read followed it, even while that one waits on the user" \
   "Nothing waits on a host, and no agent is told main moved" \
+  "whichever act reads it first once sluice's record has the landing out" "so a landing never waits on your session staying up" \
+  "crew's next read of the bolt closes it once what it named is mended, at its team's next read or at" "bolt land <bolt>\`, which you may run" \
   "Submit every bolt the user ticked with one command, in the card's order" "bolt submit <bolt> <bolt>... --label wldn" \
   "keyed \`land/<kit>\`, which crew raises in your name" "card read land/<kit> --label wldn" \
   "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
