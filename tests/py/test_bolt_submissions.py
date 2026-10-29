@@ -1,9 +1,10 @@
 """Every submission's number on its bolt's row (bolt-teams "A submission's number is on its bolt's row from the
 submit", teams.22, record 0046 part 2): the gather's read of sluice's queue, gather.submissions_of, on sluice 0.51.3's
 own overview (tests/py/sluice-0.51.3/), every field guarded and a document of another schema said; gather.queue's
-failures, each said, on a stand-in for the process; sluice's record of every submission a branch has had,
-gather.decided_of and gather.history, on its own `status --all` documents; whose line each submission is,
-plan.submission_rows; and what
+failures, each said, on a stand-in for the process; the submissions an overview's recent events name decided,
+gather.decided_in, on sluice 0.56.0's and 0.51.3's own overviews (tests/py/sluice-0.56.0/); sluice's record of every
+submission a branch has had, gather.decided_of, as the landing reads it once, on its own `status --all` documents;
+whose line each submission is, plan.submission_rows; and what
 crew bolts shows of them, plan.bolts_data and plan.bolts_text, beside the rest of crew bolts in test_rail.py and
 test_chores.py."""
 import json
@@ -19,6 +20,7 @@ import gather
 import plan
 
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.51.3"
+RECENT = pathlib.Path(__file__).parent / "sluice-0.56.0" / "overview-recent.json"
 
 
 def overview():
@@ -164,37 +166,58 @@ def test_a_record_of_another_shape_is_said(doc, why):
     assert gather.decided_of(doc) == (None, why)
 
 
-def test_the_history_reads_each_bolts_branch_and_main_once_and_keeps_of_main_the_bolts_landing_alone(monkeypatch):
-    asked = []
+# ------------------------------------------------------------------- the decided an overview's recent events name
 
-    def ran(args, **kw):
-        asked.append((args, kw["cwd"]))
-        branch = args[2]
-        if branch == "bolt/crew-costs-an-idle-host-nothing":
-            return Ran(0, (RECORDED / "status-bolt-all.json").read_text())
-        if branch == "main":
-            return Ran(0, (RECORDED / "status-main-all.json").read_text())
-        return Ran(1, (RECORDED / "status-not-found.json").read_text().replace("bolt/no-such-bolt-here", branch))
-    monkeypatch.setattr(gather.subprocess, "run", ran)
-    got, why = gather.history("/k/main", ["crew-costs-an-idle-host-nothing", "just-given"])
-    assert why is None and [s["id"] for s in got] == [356, 357, 358, 359, 361, 362, 363]
-    assert asked == [(["sluice", "status", b, "--all", "--json"], "/k/main")
-                     for b in ("bolt/crew-costs-an-idle-host-nothing", "bolt/just-given", "main")]
+def recent():
+    return json.loads(RECENT.read_text())
 
 
-@pytest.mark.parametrize("run, why", [
-    (FileNotFoundError("sluice"), "this host has no sluice on its path"),
-    (subprocess.TimeoutExpired("sluice", 15), "sluice status bolt/y did not answer within 15 seconds"),
-    (Ran(1, '{"error":{"kind":"not_found","message":"no submission bolt/y"}}'), "sluice status bolt/y exited 1: no submission bolt/y"),
-    (Ran(2, "", "error: unexpected argument '--all' found\n"), "sluice status bolt/y exited 2: error: unexpected argument '--all' found"),
-    (Ran(0, "not json"), "sluice status bolt/y printed no JSON")])
-def test_a_history_that_cant_be_read_says_why(monkeypatch, run, why):
-    def ran(args, **kw):
-        if isinstance(run, BaseException):
-            raise run
-        return run
-    monkeypatch.setattr(gather.subprocess, "run", ran)
-    assert gather.history("/k/main", ["y"]) == (None, why)
+def test_each_number_a_branchs_recent_events_name_is_decided_at_its_events_time_from_the_place_it_came_from():
+    """crew-board "A row drawn from the overview": sluice 0.56.0's events name their submissions as a list, ids."""
+    got, why = gather.decided_in(recent())
+    assert why is None and [(s["id"], s["branch"], s["worktree"], s["event"], s["decided"]) for s in got][:3] == [
+        (365, "bolt/crew-reads-a-bolts-time-and-its-landing", "fix/crew-reads-a-bolts-time-and-its-landing/take-main", "landed", "2026-10-28T19:30:45Z"),
+        (366, "bolt/crew-reads-a-bolts-time-and-its-landing", "unit/a-bolts-row-shows-its-age-and-who-holds-it", "landed", "2026-10-28T20:40:09Z"),
+        (367, "bolt/crew-reads-a-bolts-time-and-its-landing", "unit/a-landing-is-read-from-sluices-record", "landed", "2026-10-28T21:56:08Z")]
+    assert all((s["pull_head"], s["submitted"], s["started"]) == (None, None, None) for s in got), "an event was read for what it does not give"
+    main = [(s["id"], s["worktree"]) for s in got if s["branch"] == "main"]
+    assert len(main) == 10 and main[4] == (355, "pull/198"), "a landing by pull request is named by its pull request alone"
+
+
+def test_an_event_naming_its_one_submission_as_id_is_read_as_sluice_0_51_3_printed_it():
+    blamed = [(s["id"], s["event"], s["worktree"]) for s in gather.decided_in(recent())[0] if s["branch"] == "bolt/crews-chores-of-the-24th-night"]
+    assert blamed == [(313, "blamed", "chore/a-stage-drives-a-browser-only-the-kits-way"),
+                      (315, "blamed", "chore/crew-needs-help-prints-its-usage-and-records-nothing"),
+                      (316, "blamed", "chore/a-failed-taking-with-no-conflict-is-said-in-gits-words")]
+    assert [s["id"] for s in gather.decided_in(overview())[0]] == [313, 315, 316]
+
+
+def test_a_standing_submission_is_none_decided():
+    assert {s["id"] for s in gather.decided_in(recent())[0]}.isdisjoint({317, 318})
+
+
+def test_a_recent_field_missing_or_mistyped_is_none_and_a_number_that_is_none_is_left_out():
+    """read.2: a missing value never becomes text."""
+    doc = recent()
+    landed = doc["branches"][0]
+    landed["recent"][0]["at"] = 1730000000
+    del landed["recent"][1]["event"]
+    landed["recent"][2]["ids"] = [367, "368", True]
+    landed["recent"].append("landed #369")
+    landed["recent_from"] = ["unit/a"]
+    doc["branches"][1]["recent"] = None
+    doc["branches"][2] = dict(doc["branches"][2], branch=None)
+    got, why = gather.decided_in(doc)
+    assert why is None and [(s["id"], s["worktree"], s["event"], s["decided"]) for s in got] == [
+        (365, None, "landed", None), (366, None, None, "2026-10-28T20:40:09Z"), (367, None, "landed", "2026-10-28T21:56:08Z")]
+
+
+@pytest.mark.parametrize("doc, why", [
+    (dict(recent(), schema="sluice/overview@2"), "sluice overview printed sluice/overview@2, not the sluice/overview@1 crew reads"),
+    ([], "sluice overview printed no schema, where crew reads sluice/overview@1"),
+    (dict(recent(), branches={}), "sluice overview's sluice/overview@1 holds no list of branches")])
+def test_an_overview_of_another_schema_names_no_decided_and_says_why(doc, why):
+    assert gather.decided_in(doc) == (None, why)
 
 
 # --------------------------------------------------------------------------------------- whose line each one is
