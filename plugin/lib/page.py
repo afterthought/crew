@@ -989,10 +989,10 @@ def page(fleet, a):
     repo, ref = plan.state_of(fleet, label)
     day, stamp = record.when(a.since) if a.since else ("0000-00-00", None)
     tips = {}
-    entries, missing = record.gather(fleet, [label], day, tips)
+    entries, missing = record.gather(fleet, [label], day, tips)  # the branch alone: no host is asked for the record (read.5)
     branch = f"{label}/main"
-    if branch in missing:
-        fail(f"no page is written: {branch} of {repo} could not be read ({missing.pop(branch)}), and the page names the commit it is drawn from")
+    if missing:
+        fail(f"no page is written: {branch} of {repo} could not be read ({missing.get(branch)}), and the page names the commit it is drawn from")
     tip = tips.get(label) or fail(f"no page is written: {branch} of {repo} is not started, so there is no commit to draw from: crew state init {label}")
     # The board's read, of this partition alone: the branch's tip is the one just fetched, so both views are of one
     # commit. A host, plan or signal home it could not read is in the board's attention, and the page still written.
@@ -1002,10 +1002,9 @@ def page(fleet, a):
     part = bd["partitions"][0]
     pl = next((f[3] for f in read["found"] if f[0] == label and f[2] == part["plan"]), None)
     d = data(entries, stamp)
-    for h, why in describe(fleet, label, repo, part["plan"] or tip, d, pl, read["sv"] if pl else None).items():
-        missing.setdefault(h, why)
+    unreachable = describe(fleet, label, repo, part["plan"] or tip, d, pl, read["sv"] if pl else None)  # hosts, for their kits alone
     d["made"] = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "label": label, "repo": repo, "commit": tip, "plan": part["plan"], "since": stamp,
-                 "unreachable": missing}
+                 "unreachable": unreachable}
     d["board"] = dict(part, read_at=bd["read_at"], unread=bd["unread"])
     d["deploys"] = deploys(d, entries, fleet["partitions"][label]["machine"], stamp)
     d["docks"] = docks(d, fleet, label)
@@ -1021,7 +1020,7 @@ def page(fleet, a):
         print(f"the other partitions are not linked: {out} is neither named {label}.html nor in a folder {label}")
     if not d["entries"]:
         print("nothing has been recorded" + (f" since {stamp}" if stamp else ""))
-    for h, why in missing.items():
+    for h, why in unreachable.items():
         print(f"{h} did not answer: {why}")
 
 

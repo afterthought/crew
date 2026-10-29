@@ -124,6 +124,7 @@ class TestQuiet:
         ("bash /x/plugin/bin/crew unit wait u", True), ("crew bolt submit b", False), ("wt submit main", False),
         ("sleep 600; echo wait", False), (None, False)])
     def test_only_crews_waits_are_background_work_a_restart_may_end(self, command, wait):
+        # crew card wait is gone (teams.24), and one still running from before is still read as crew's.
         assert hold.crew_wait(command) is wait
 
 

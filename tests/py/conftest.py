@@ -18,3 +18,14 @@ def no_process(monkeypatch):
         monkeypatch.setattr(subprocess, name, refuse)
     for name in ("system", "popen", "execv", "execvp", "execvpe", "spawnv", "spawnvp", "fork"):
         monkeypatch.setattr(os, name, refuse)
+
+
+@pytest.fixture(autouse=True)
+def pushed(monkeypatch):
+    """record.emit pushes each entry it writes through record.reach, which fetches and pushes the partition's branch:
+    here reach stands for it, recording each label it was asked to push, so every case that emits still runs and one
+    can say the push was asked (read.5)."""
+    import record
+    asked = []
+    monkeypatch.setattr(record, "reach", lambda label, eid=None: asked.append(label) or 0)
+    return asked

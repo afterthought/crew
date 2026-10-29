@@ -1,6 +1,8 @@
 """A team's slots, panes and status on its host (teams.1, teams.2, teams.9, teams.15, read.1, read.2), as crew unit run,
 crew unit wait, crew fix and crew status decide them in one process: crew.slot_for for the slot a unit or fix runs in,
-crew.reaped for what a team's read does with a slot, crew.held_object for how the run record names what a slot holds,
+crew.lent_for for the slot a fix that finds every slot in flight takes lent, and Team.take and Team.give_back for the
+lending kept in the team's files (record 0045), crew.reaped for what a team's read does with a slot, crew.held_object
+for how the run record names what a slot holds,
 crew.slot_pane_at for where a slot's pane opens, crew.listed for reading herdr's listings, crew.herdr_made for reading
 what herdr made, crew.name_back for when crew gives an agent its dropped name back and crew.found_answer for reading
 an agent on another host, crew.context_of and crew.holds_said for what status shows, and the words crew says when a
@@ -31,6 +33,71 @@ class TestSlotFor:
             crew.slot_for("swb-1", SLOTS, held, "e")
         assert str(e.value) == "all 4 of swb-1's slots are in flight: unit-1 holds a; unit-2 holds b; unit-3 holds c; unit-4 holds d"
 
+    def test_work_waiting_in_a_slot_lent_to_a_fix_is_refused_until_the_fix_gives_it_back(self):
+        held = [["unit-1", "unit", "a", "/p/a"], ["unit-2", "fix", "fix/te/tidy", "/p/fix-te--tidy"]]
+        with pytest.raises(crew.Refusal) as e:
+            crew.slot_for("swb-1", SLOTS, held, "b", [["unit-2", "chore", "b", "/p/chore-b"]])
+        assert str(e.value) == ("b waits in swb-1-unit-2, lent to fix/te/tidy: it goes on there once that fix has merged "
+                                "or been dropped")
+
+
+class TestLentFor:
+    """A fix that finds every slot in flight (teams.1, teams.3, record 0045): crw-5 on 2026-10-28, four verified chores
+    in its four slots with no agent running, waiting on one fix that could get no slot."""
+
+    HELD = [[s, "chore", c, f"/p/chore-{c}"] for s, c in zip(SLOTS, "abcd")]
+
+    def test_with_every_slot_holding_verified_work_waiting_the_fix_takes_the_first_lent(self):
+        assert crew.lent_for("crw-5", SLOTS, self.HELD, {s: "idle" for s in SLOTS}, set()) == "unit-1"
+        assert crew.lent_for("crw-5", SLOTS, self.HELD, {}, set()) == "unit-1"
+
+    def test_a_slot_whose_agent_is_running_is_never_lent(self):
+        status = {"unit-1": "working", "unit-2": "blocked", "unit-3": "done"}
+        assert crew.lent_for("crw-5", SLOTS, self.HELD, status, set()) == "unit-3"
+
+    def test_a_slot_whose_stage_is_under_way_or_that_holds_a_fix_is_never_lent(self):
+        held = [["unit-1", "fix", "fix/b/other", "/p/fix-b--other"]] + self.HELD[1:]
+        assert crew.lent_for("crw-5", SLOTS, held, {}, {"unit-2", "unit-3"}) == "unit-4"
+
+    def test_with_no_slot_that_can_be_lent_the_fix_is_refused_naming_why_each_is_not(self):
+        held = [["unit-1", "fix", "fix/b/other", "/p/fix-b--other"]] + self.HELD[1:]
+        with pytest.raises(crew.Refusal) as e:
+            crew.lent_for("crw-5", SLOTS, held, {"unit-2": "working", "unit-4": "blocked"}, {"unit-3"})
+        assert str(e.value) == ("all 4 of crw-5's slots are in flight, and none can be lent to a fix: unit-1 holds fix/b/other; "
+                                "unit-2's agent is working on b; unit-3's stage on c has not ended; unit-4's agent is blocked on d")
+
+
+class TestLending:
+    """The lending kept in the team's files on its host (teams.1, teams.9): the slots file holds the fix, the lent file
+    the work it waits for, which the slot is given back to when the fix's slot is freed."""
+
+    @pytest.fixture
+    def team(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        t = {"name": "crw-5", "label": "swancloud", "session": "swancloud", "kit": {"main": "/k"}, "machine": "deneb", "units": 4}
+        team = crew.Team(None, t)
+        team.ensure()
+        team.write("slots", TestLentFor.HELD)
+        team.write("panes", [[s, f"w2:p{n}"] for n, s in enumerate(SLOTS, 1)])
+        team.herdr = crew.Herdr("swancloud")
+        team.herdr.listed["agent"] = [{"pane_id": "w2:p1", "agent_status": "working"}, {"pane_id": "w2:p2", "agent_status": "idle"}]
+        return team
+
+    def test_a_fix_that_finds_every_slot_in_flight_takes_one_lent_and_the_work_goes_on_there_once_it_is_given_back(self, team):
+        assert team.take("fix", "fix/b/tidy", "/p/fix-b--tidy", {"unit-2"}) == ("unit-3", True)
+        assert team.held("unit-3") == ["unit-3", "fix", "fix/b/tidy", "/p/fix-b--tidy"]
+        assert team.lent("unit-3") == ["unit-3", "chore", "c", "/p/chore-c"]
+        with pytest.raises(crew.Refusal, match="c waits in crw-5-unit-3, lent to fix/b/tidy"):
+            team.take("chore", "c", "/p/chore-c")
+        assert team.give_back("unit-3") == "c"
+        assert team.held("unit-3") == ["unit-3", "chore", "c", "/p/chore-c"] and team.lines("lent") == []
+        assert team.take("chore", "c", "/p/chore-c") == ("unit-3", False)
+
+    def test_a_unit_or_chore_never_borrows_a_slot(self, team):
+        with pytest.raises(crew.Refusal, match="all 4 of crw-5's slots are in flight: unit-1 holds a"):
+            team.take("chore", "e", "/p/chore-e")
+        assert team.lines("lent") == []
+
 
 class TestReaped:
     @pytest.mark.parametrize("stage, said", [
@@ -49,6 +116,10 @@ class TestReaped:
     ])
     def test_while_its_agent_works_it_is_kept(self, stage, said):
         assert crew.reaped("swb-1-unit-1", "swb-1", "a", stage, "working") == ("keep", said)
+
+    def test_a_slot_lent_to_a_fix_is_given_back_to_the_work_it_was_lent_from(self):
+        assert crew.reaped("swb-1-unit-2", "swb-1", "fix/te/tidy", "merged", "idle", "b") == (
+            "free", "swb-1-unit-2 is given back to b: fix/te/tidy has merged into its bolt")
 
     @pytest.mark.parametrize("stage", ["construct", "code", "verify", "fix", "unknown", "none"])
     def test_work_that_goes_on_keeps_its_slot_and_says_nothing(self, stage):

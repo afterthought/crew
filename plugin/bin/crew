@@ -81,7 +81,8 @@
 #                                      the agent has been quiet past --stuck (15 minutes) with nothing of its own
 #                                      running, or is gone, or a verify's agent has ended its turn with nothing of
 #                                      its own running and no report saved, which has not ended, said then and never
-#                                      stuck, or the timeout (an hour) passes, and says which,
+#                                      stuck, or the timeout (an hour) passes, or the Claude session that started
+#                                      the wait ends, recording nothing, and says which,
 #                                      first saying, in sluice's words, each conflict or failed check sluice's
 #                                      overview shows for a submission from the stage's place. A stuck answer lists
 #                                      the branch's commits since the stage began and quotes the agent's last words
@@ -117,8 +118,10 @@
 # repository; a meeting's signals stay in the partition's first blueprints repo:
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
-#                                      every bolt, unit and chore of the plans, each one's stage read from its kit, and
-#                                      each held bolt's verification, sluice's verdict on its last landing
+#                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
+#                                      each held bolt's verification, sluice's verdict on its last landing, and each
+#                                      merge and landing standing in sluice's queue with its number and state on its
+#                                      line, a queue that can't be read said once on the bolt's head line
 #   crew bolt  new|give|order|drop|land ...
 #                                      give has sluice make bolt/<bolt> on GitHub from main (sluice branch create, on the
 #                                      team's host), with no worktree, before the plan write; refused, nothing changed,
@@ -137,14 +140,27 @@
 #                                      card gives: each bolt's branch submitted to its kit's main through sluice from a
 #                                      short-lived worktree on its team's host, queued behind the one before on one host,
 #                                      once it ended on another; each waited on in order and closed as it lands, one
-#                                      that did not land recorded at its head and held on its row while the rest go on,
-#                                      the command exiting non-zero naming it; sluice pushes to GitHub, and the landing
-#                                      pushes nothing and levels no host. In a kit whose main takes pull requests, it
+#                                      that did not land recorded at its head while the rest go on: one refused for its
+#                                      own content, a conflict or a check that ran and failed, held on its row; one
+#                                      sluice or its host stopped keeping its box and the user's word, and submitted
+#                                      again once that is cleared; a landing still standing in sluice at the bolt's
+#                                      head, as after ops's session ended, waited on again with nothing submitted,
+#                                      one at another head said; the command exiting non-zero naming each; sluice
+#                                      pushes to GitHub, and the landing pushes nothing and levels no host. In a kit
+#                                      whose main takes pull requests, it
 #                                      readies each bolt's draft pull request first, and a landing that does not land
 #                                      leaves it a draft, as a fix's start or a merge into the bolt keeps it, until the
 #                                      next submit readies it; with --excerpt, on the user's words in ops's pane,
 #                                      submitted only once crew reads them in ops's own transcript as the user's, no
 #                                      words in the run record
+#   crew bolt  leave <bolt>... --excerpt "<the user's words>" [--label L]
+#                                      main-level ops's record of the user's words in its pane stopping the bolts'
+#                                      landing, read in ops's own transcript as the user's as submit's are, refused
+#                                      as it refuses, no words in the run record; the kit's landings card raised,
+#                                      showing each unticked as left. A bolt the user left, so or by clearing it on
+#                                      their send, is forecast against main as any, its row keeping its box and saying
+#                                      whether it would take main first, and no take-main fix is told for it until they
+#                                      tick it, ops lands it on their words or its head moves
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
@@ -178,7 +194,7 @@
 #                                      dev servers) and Operation (bolts landed this week, each environment's deploys
 #                                      and the operations waiting); each rail row a marker on its object, what needs
 #                                      attention at the foot; it answers nothing
-#   crew card  session|wait|end <key> [<unit>] [--label L]
+#   crew card  session|end <key> [<unit>] [--label L]
 #                                      the plannotator session on what a rail row's card asks the user to read, which
 #                                      crew starts with a batch's card, a landing card and a long proposal's: session
 #                                      prints its link (the running one's, else one started on this host with no
@@ -188,35 +204,45 @@
 #                                      carry a new link, or one it stands without, while it waits on the user, land/<kit>
 #                                      having none of its own, as a batch's and a long proposal's change the planner's,
 #                                      recording the start, a proposal's only for one of more than fifteen new units, and an old
-#                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
-#                                      waits for the user's decision in it and prints it with their words, for a batch
-#                                      card waits on the card too, printing its note and every annotation, and closes
-#                                      the card, recording the batch read in the planner's name when the session is
-#                                      sent and no card of it closes there, and for a bolt's reading prints its
-#                                      annotations as notes on its row
-#                                      and its approval as landing nothing, leaving the card, starting the reading
-#                                      first when none runs while the bolt is a row that can land, refused naming crew
-#                                      card session land/<bolt> when it will not open, a batch's starting it first
-#                                      too, and when it will not open saying why once, naming crew card session
-#                                      batch/<n>, and waiting on the card alone; end ends it, as the card's close
-#                                      does, and a bolt's reading as its row's end does, which no close of a card of
-#                                      the bolt's own does
+#                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; end
+#                                      ends it, as the card's close does, and a bolt's reading as its row's end does,
+#                                      which no close of a card of the bolt's own does. Nothing of crew's waits on a
+#                                      session or a card: crew card wait is refused at once, naming crew card read
+#                                      <key>, which gives what the user decided
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
-#                                      input: ends the sessions there whose card is closed or whose row is gone; not
+#                                      input: ends the sessions there whose card is closed or whose row is gone, tells
+#                                      the owner of each reading there the user sent and nobody read, once, to run crew
+#                                      card read <key>, and records a batch's reading approved with no notes read; not
 #                                      for hand use
 #   crew card  read <key> [--label L] [--json]
-#                                      where the asker's card stands: its status, whose turn, the user's answer and words;
+#                                      where the asker's card stands: its status, whose turn, the user's answer and words,
+#                                      and what the user sent from its reading: a batch's card and reading together
+#                                      (batch/<n>), the planner's, its note and every annotation, the card closed and
+#                                      the batch recorded read; a bolt's reading (land/<bolt>), its conductor's, its
+#                                      annotations as notes on its row and its approval as landing nothing, the card
+#                                      left and the reading set aside; a long proposal's reading's decision;
 #                                      an approval the user declined is closed with their words; for a kit's landings
 #                                      card (land/<kit>), the bolts the user ticked in its order and the crew bolt
-#                                      submit that lands them
+#                                      submit that lands them, after those an earlier send still lands at their head
+#                                      now; what an earlier send still lands, with or without a card open, naming a
+#                                      bolt it can't tell of; a sent card is raised first, so a ticked bolt that was
+#                                      left and conflicts with main takes main first, its conductor told the fix, and
+#                                      the submit leaves it out
 #   crew card  answer batch/<n> --excerpt "<words>" [--label L]
 #                                      the planner's or the operator's: the user's answer to a batch in their own words
 #                                      in its pane, recorded once crew reads the words in that agent's own session
 #                                      transcript as the user's, never an agent's, a tool's or crew's own, with no
 #                                      words in the run record; closes the batch's card held on this host with the
-#                                      words, or names the host whose rail closes it, ends the planner's wait on it,
-#                                      and tells the planner the words when the operator ran it; refused for a batch
+#                                      words, or names the host whose rail closes it, and tells the planner the words when the operator ran it; refused for a batch
 #                                      answered already or waiting on nothing
+#   crew card  preview <key> <thing> [--done] [--label L]
+#                                      the card's owner's, main-level ops's for a kit's landings card (land/<kit>) and
+#                                      the planner's for a batch's (batch/<n>), on the user's words on the card: brings
+#                                      up a thing it carries that must run, a landings row's bolt at its head or a batch
+#                                      line's <unit>/<name> at the branch and revision its stage recorded, through sluice
+#                                      preview on the host of the team holding its work, and changes the card in place
+#                                      to list its addresses while it is up; --done puts it away; refused for any other
+#                                      caller, key or thing, naming those the card carries
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
@@ -240,7 +266,8 @@
 #                                      the partition's reviewer, started fresh for the batch of changes due, in a
 #                                      review tab beside the planner; --wait waits for its summary, records the batch,
 #                                      raises its card with its reading session in the planner's name, and closes the
-#                                      tab
+#                                      tab; it ends sooner, recording nothing, when the Claude session that started it
+#                                      ends
 #   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
 #                                      kit's main: the status recorded with its commit; --proposed raises the record's
@@ -253,10 +280,22 @@
 #                                      left, or lost to the design agent, is posted again saying the older copy is
 #                                      dead; --accepted or --rejected closes it with the commit. A status the file
 #                                      does not hold is refused
-#   crew console  up|down <label>      the partition's console in this host's operator session <label>, starting no
-#                                      agent: a flow tab following the run record, a rail tab (crew rail above, a shell
-#                                      below) and a board tab drawn from the rail tab's read, each tab's command run
-#                                      again where a restart left its pane a shell; down closes them
+#   crew console  up|down <label> [flow] [rail] [board]
+#                                      the partition's console in this host's operator session <label>, starting no
+#                                      agent: a shell tab with crew on its path, and only the tabs named, a flow tab
+#                                      following the run record, a rail tab (the rail the host's follower writes above,
+#                                      a shell below) and a board tab drawn from the follower's read; the rail tab opens
+#                                      of itself too while no host job follows, since it then follows itself. Each tab
+#                                      already open is kept, named or not, its command run again where a restart left
+#                                      its pane a shell, and one the user closed stays closed unless named; down closes
+#                                      them
+#   crew _follow  [--once]             the host's follower with no tab, the command swancloud's job runs on each host:
+#                                      one read for every partition with an operator session here, fetching once a
+#                                      minute and showing this host's writes within seconds, reading only what moved
+#                                      and following each kit's queue through sluice's overview watch; due restarts
+#                                      handed out once crew's checkout or the teams file moved, the rail's frame, the
+#                                      board's and the agents' views written, a frame stale after three minutes; one
+#                                      follower to a host, holding its lock, a second waiting for it
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
 #   crew tell     --board < word.json  a word from a dock of the board, as its listener pipes it ({label, key, to,
@@ -287,7 +326,7 @@
 #   crew update   [<host>|--all]       every standing agent whose start crew's update, or its brief's, has made due
 #                                      restarted on crew as it now is once it is idle, a conductor fresh and every
 #                                      other with its conversation; crew's Stop hook does the same at the end of a due
-#                                      agent's turn, and each console's rail tab once crew's checkout moves
+#                                      agent's turn, and the host's follower once crew's checkout moves
 #
 # Operations on a partition's environments, a deploy being one kind (plan.14), run where the partition's main level
 # runs (lib/ops.py says each in full):
@@ -304,10 +343,12 @@
 #   crew ops steps <env> --label L --json
 #                                      any other operation and its state, on its own or after a deploy
 #
-# What happened, read from the run record every command that moves work appends on the host it ran on:
+# What happened, read from the run record every command that moves work appends on the host it ran on and pushes to
+# the partition's branch as it writes it:
 #   crew events   [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-#                                      the entries of the partition's branch and of every host it runs on, in time order
-#   crew events   --push [--label L]   carry this host's run record to the partition's branch now
+#                                      the entries on the partition's branch, in time order; no host is asked;
+#                                      --follow prints this host's entries at once and another's within the minute
+#   crew events   --push [--label L]   push what of this host's run record a refused push left on it
 #   crew trace    <object>             one bolt's, unit's or signal's history: what was done, by whom, in which
 #                                      session, with which commit, and what it led to
 #   crew page     <label> [--out <file>] [--since <time>]
@@ -342,10 +383,9 @@
 #                                      path printed with each partition's commit, each host that did not answer, each
 #                                      published file it could not read, and that no use is published when none is
 #
-# A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
-# "git" tab (gitgui in the kit and the blueprints repo), and "<team> units", one pane per slot in flight, which
-# exists only while a unit or fix is. A team's panes and state live on its host, so a command about a team runs
-# there. Add --force to act on an agent that is working.
+# A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and no
+# git tab, and "<team> units", one pane per slot in flight, which exists only while a unit or fix is. A team's panes
+# and state live on its host, so a command about a team runs there. Add --force to act on an agent that is working.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -400,7 +440,7 @@ case $cmd in
   page) exec python3 "$here/../lib/page.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;
   ops) exec python3 "$here/../lib/ops.py" "${args[@]:1}" ;;
-  board | _views | _board) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
+  board | _views | _board | _rail | _follow) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
   hold | go | update | _hold | _go | _update | _renew) exec python3 "$here/../lib/hold.py" "${args[@]}" ;;
   tell) [[ ${2:-} == --board && $# == 2 ]] && { py tell --board; exit; }
     py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
@@ -461,8 +501,17 @@ case $cmd in
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
-  _preview)  # crew _preview <label> <bolt> <head>: a landing card's preview of the bolt's head, asked of sluice and
-    # waited on to its end in a process of its own on the team's host, which the card's raise hands it to (code.9)
+  _preview)  # crew _preview <label> <key> <thing> <branch> <revision>: the preview of a thing a card carries, asked
+    # of sluice and waited on to its end in a process of its own on the team's host, which crew card preview hands it
+    # to (code.9)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _card-preview | _preview-release)  # crew _card-preview <label> <key> <thing> <team> [--done], on the team's host:
+    # a card's thing brought up or put away there, which crew card preview hands it to; crew _preview-release <label>
+    # <key>: every preview brought up from a card released on this host, which the card's close hands it to (code.3)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _made | _batch-card)  # crew _made <label> <unit>... [--card <key>] --json, on the units' team's host: what each
+    # unit's stages recorded as made, kept there, which a batch's raise reads; crew _batch-card <label> <n> [--note
+    # <words>], on the partition's main machine: batch n's card raised, which a stage's new made line hands there
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   _land-row | _land-card)  # crew _land-row <label> <bolt> --json, on the bolt's team's host: its row on its kit's
     # landings card, its reading and preview opened or ended there; crew _land-card <label> <kit> [--note <words>], on
@@ -485,34 +534,11 @@ case $cmd in
   revive) one _revive ;;
   console)
     need_label "${3:-}"
-    case ${2:-} in up | down) one _console "$2" "$3" ;; *) echo "usage: crew console up|down <label>" >&2; exit 2 ;; esac ;;
+    case ${2:-} in up | down) one _console "$2" "$3" "${@:4}" ;; *) echo "usage: crew console up|down <label> [flow] [rail] [board]" >&2; exit 2 ;; esac ;;
   operator)  # the console's name before record 0035, which a host's timer may still run: it opens the console
-    [[ ${2:-} == up ]] || { echo "usage: crew console up|down <label> (crew operator up is crew console up now)" >&2; exit 2; }
+    [[ ${2:-} == up ]] || { echo "usage: crew console up|down <label> [flow] [rail] [board] (crew operator up is crew console up now)" >&2; exit 2; }
     echo "crew operator up is crew console up now; the operator is <label>-operator, at the main level" >&2
     need_label "${3:-}"
     one _console up "$3" ;;
-  _rail)  # crew _rail <label>: the rail tab's list, printed again every 30 seconds and as soon as the run record gains
-    # an entry; a burst of entries refreshes it once. Once the follow ends, it refreshes on the clock alone. Each refresh
-    # is one read (crew _views), which prints the rail as crew rail does, ending the card sessions crew rail ends, and
-    # writes the board for the board tab. Whenever crew's checkout or the teams file has moved since the last refresh,
-    # the partition's agents here that it made due a restart are handed theirs (crew _update, teams.19).
-    label=${2:?usage: crew _rail <label>}
-    exec 3< <(bash "$0" events --follow --label "$label" 2>/dev/null)
-    seen=
-    while :; do
-      now=$(git -C "$here/../.." rev-parse HEAD 2>/dev/null)$(cksum < "$HOME/.config/crew/teams.json" 2>/dev/null)
-      if [[ -n $seen && $now != "$seen" ]]; then
-        updated=$(bash "$0" _update --label "$label" 2>&1 || true)
-      fi
-      seen=$now
-      out=$(bash "$0" _views "$label" 2>&1 || true)
-      printf '\033[H\033[2J%s\n' "$out"
-      [[ -z ${updated:-} ]] || printf '\n%s\n' "$updated"
-      if read -r -t 30 -u 3 _; then
-        while read -r -t 2 -u 3 _; do :; done
-      elif (( $? <= 128 )); then
-        sleep 30
-      fi
-    done ;;
   *) usage; exit 2 ;;
 esac

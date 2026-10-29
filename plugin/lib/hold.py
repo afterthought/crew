@@ -59,7 +59,8 @@ def hosts_named(fleet, which):
 
 def crew_wait(command):
     """Whether a background command is one of crew's waits, which only reads and which the agent starts again after a
-    restart: crew unit wait, crew chore wait, crew card wait, crew fix ... --wait, crew review ... --wait."""
+    restart: crew unit wait, crew chore wait, crew fix ... --wait, crew review ... --wait, and any other crew command
+    ending in a wait, a card's wait from before crew kept none among them (teams.24)."""
     return bool(command and re.search(r"(^|[\s/;&|(])crew\s", command) and re.search(r"(^|\s)(--)?wait(\s|$)", command))
 
 
@@ -334,7 +335,7 @@ def go(fleet, a):
     for label in sorted(fleet["partitions"]):
         if label in fleet["hosts"].get(host, {}).get("sessions", {}):
             try:
-                plan.console_cmd(fleet, argparse.Namespace(act="up", label=label))
+                plan.console_cmd(fleet, argparse.Namespace(act="up", label=label, tabs=[]))
             except Refusal as e:
                 print(e, file=sys.stderr)
     update_here(fleet, argparse.Namespace(label=None))

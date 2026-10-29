@@ -485,9 +485,10 @@ class TestSplitBolt:
     while that remote's bolt/<bolt> lacks the tip, is refused naming both commits, what is lacked and the landing."""
     LOCAL, THERE = "1" * 40, "2" * 40
 
-    def facts(self, there=THERE, held="no", merges=2, read=None):
+    def facts(self, there=THERE, held="no", merges=2, carried=None, read=None):
         return dict(local=None if read or there == "-" else self.LOCAL, there=None if read else there,
-                    held=None if read or there == "-" else held, merges=None if read or there == "-" else merges, read=read)
+                    held=None if read or there == "-" else held, merges=None if read or there == "-" else merges,
+                    carried=None if read or there == "-" else carried, read=read)
 
     def refusal(self, kind="unit", name="u", **f):
         return plan.split_refusal(kind, name, "b", "mac-studio", "origin", self.facts(**f))
@@ -509,6 +510,17 @@ class TestSplitBolt:
     def test_a_chores_or_a_fixs_merge_is_refused_naming_it(self, kind, name):
         assert self.refusal(kind, name).startswith(
             f"bolt/b is split: its tip on mac-studio, 1111111, names origin for it, so sluice would form {kind} {name}'s merge on")
+
+    def test_a_fix_that_took_the_hosts_merges_in_lets_its_merge_through(self):
+        """plan.19 as read for batch 34's reviewer: a diverged bolt's way on is a fix cut from GitHub's head that takes
+        the host copy's merges in; its head holds the host's tip, so sluice's merge on GitHub's copy drops none."""
+        assert self.refusal("fix", "carry-the-hosts-merges", carried="yes") is None
+
+    def test_a_fix_that_did_not_take_them_in_is_refused_naming_the_carry(self):
+        assert self.refusal("fix", "f", carried="no").endswith(
+            "makes the two one; a fix that takes mac-studio's merges in first (git merge bolt/b in its place) carries "
+            "them, and merges")
+        assert "git merge" not in self.refusal() and "git merge" not in self.refusal("chore", "c")
 
     def test_a_copy_that_holds_the_hosts_tip_lets_the_merge_through(self):
         # Equal, or ahead with merges sluice landed there from another host: held either way, nothing dropped.

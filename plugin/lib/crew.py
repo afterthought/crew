@@ -823,6 +823,11 @@ def herdr_in(session):
     return _SESSIONS.setdefault(session, Herdr(session))
 
 
+def herdr_fresh():
+    """herdr's sessions listed again at their next read: a long-lived process's, the host's follower at its tick."""
+    _SESSIONS.clear()
+
+
 def waits_on_question(fleet, name):
     """Whether an agent crew starts waits on a question in its pane, as a tell and a greeting read it: (herdr's status
     of it, None when it is not up; whether it waits; what crew could not read to know, or None). It waits when herdr
@@ -1728,6 +1733,62 @@ def held_said(host, h):
     return f"{host} is held by {h['by']}{since}: {h['why']}. crew starts no agent there until crew go {host}"
 
 
+SHA = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
+
+
+def files_ref(common, name):
+    """A ref's commit read from a git folder's files, with no process: its loose file, else its line in packed-refs;
+    "" when neither holds it, in a folder whose refs are files; None when the files can't say, a symbolic ref, a
+    reftable folder or a file that can't be read, for the caller to ask git (read.1)."""
+    common = pathlib.Path(common)
+    if (common / "reftable").exists():
+        return None
+    try:
+        text = (common / name).read_text().strip()
+        return text if SHA.fullmatch(text) else None
+    except (FileNotFoundError, NotADirectoryError):
+        pass
+    except OSError:
+        return None
+    try:
+        lines = (common / "packed-refs").read_text().splitlines()
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return None
+    for line in lines:
+        sha, _, ref = line.partition(" ")
+        if ref == name and SHA.fullmatch(sha):
+            return sha
+    return ""
+
+
+def head_here(root=None):
+    """crew's checkout's commit, read from its files with no process (files_ref): its .git, a folder or a linked
+    worktree's file naming one, its HEAD, and the branch HEAD names in the folder its worktrees share; through git
+    rev-parse only when the files can't say. None when neither can read it."""
+    root = pathlib.Path(root or HOME)
+    try:
+        dot = root / ".git"
+        if dot.is_dir():
+            gitdir = dot
+        else:
+            line = dot.read_text().strip()
+            gitdir = root / line[len("gitdir: "):] if line.startswith("gitdir: ") else None
+        if gitdir:
+            head = (gitdir / "HEAD").read_text().strip()
+            if SHA.fullmatch(head):
+                return head
+            common = gitdir / (gitdir / "commondir").read_text().strip() if (gitdir / "commondir").exists() else gitdir
+            got = files_ref(common, head[len("ref: "):]) if head.startswith("ref: ") else None
+            if got:
+                return got
+    except OSError:
+        pass
+    r = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True)
+    return (r.stdout.strip() or None) if r.returncode == 0 else None
+
+
 def crew_version(root=None):
     """This host's crew: (its checkout's commit, its version), the version being the release tag at or before the
     commit, with `+<n>` for the commits past it; the version None when no release tag is reachable, and both None when
@@ -1955,32 +2016,70 @@ def down_said(team):
     return f"{team} is down; crew up {team} brings it back"
 
 
-def slot_for(team, slots, held, name):
+def slot_for(team, slots, held, name, lent=()):
     """The slot a unit or fix runs in (teams.1): the one holding it, else the first of the team's slots that holds
     nothing, as (slot, whether it is newly taken); held is the slots file's lines, split. Refused, naming what each
-    holds, when every slot is in flight."""
+    holds, when every slot is in flight; and for work waiting in a slot lent to a fix (lent, the lent file's lines,
+    split), which goes on there once the fix's slot is freed (lent_said)."""
     for f in held:
         if f[2:3] == [name]:
             return f[0], False
+    for f in lent:
+        if f[2:3] == [name]:
+            fail(lent_said(team, f[0], name, next((h[2] for h in held if h[0] == f[0] and len(h) > 2), "a fix")))
     holding = {f[0] for f in held if len(f) > 2}
     free = [s for s in slots if s not in holding]
     free or fail(f"all {len(slots)} of {team}'s slots are in flight: " + "; ".join(f"{f[0]} holds {' '.join(f[2:3])}" for f in held))
     return free[0], True
 
 
-def reaped(agent, team, name, stage, status):
+def reaped(agent, team, name, stage, status, lent=None):
     """What a team's read does with a slot (teams.1): ("free", what it says) once its work has merged, landed, been
-    dropped from the plan or left the team's bolt and its agent is not working; ("keep", what it says, or None) while
-    that agent works; (None, None) while its work goes on."""
+    dropped from the plan or left the team's bolt and its agent is not working, a slot lent to a fix given back to the
+    work it was lent from (lent, its name); ("keep", what it says, or None) while that agent works; (None, None) while
+    its work goes on."""
     if stage not in ("merged", "landed", "dropped", "left"):
         return None, None
     if status == "working":
         return "keep", {"dropped": f"{agent} still holds {name}, dropped from the plan: its agent is working; it is freed once that settles",
                         "left": f"{agent} still holds {name}, which has left {team}'s bolt: its agent is working; it is freed once that "
                                 "settles"}.get(stage)
-    return "free", {"dropped": f"{agent} is free: {name} was dropped from the plan",
-                    "landed": f"{agent} is free: {name} has landed on main",
-                    "left": f"{agent} is free: {name} has left {team}'s bolt"}.get(stage, f"{agent} is free: {name} has merged into its bolt")
+    why = {"dropped": f"{name} was dropped from the plan", "landed": f"{name} has landed on main",
+           "left": f"{name} has left {team}'s bolt"}.get(stage, f"{name} has merged into its bolt")
+    return "free", f"{agent} is given back to {lent}: {why}" if lent else f"{agent} is free: {why}"
+
+
+# The states herdr reads of an agent that runs: at work, or stopped on a question with its turn open (Herdr.status).
+RUNNING = ("working", "blocked")
+
+
+def lent_for(team, slots, held, status, owed):
+    """The slot a fix takes lent when every slot is in flight (teams.1, teams.3, record 0045), until crew launches
+    through Flume: the first of the team's slots holding a unit or chore whose agent is not running, herdr reading it
+    neither working nor blocked (status, by slot), and that owes no stage an end (owed, the slots the stages file
+    names), so its work waits and holds no agent; held is the slots file's lines, split. Refused, naming why each slot
+    is not lent, when none is: a slot holding a fix, one whose agent runs and one whose stage is under way are never
+    lent, so a team never runs more agents than it has slots."""
+    lines = {f[0]: f for f in held if len(f) > 2}
+    why = []
+    for s in slots:
+        f = lines.get(s)
+        if not f:
+            continue
+        if f[1] == "fix":
+            why.append(f"{s} holds {f[2]}")
+        elif status.get(s) in RUNNING:
+            why.append(f"{s}'s agent is {status[s]} on {f[2]}")
+        elif s in owed:
+            why.append(f"{s}'s stage on {f[2]} has not ended")
+        else:
+            return s
+    fail(f"all {len(slots)} of {team}'s slots are in flight, and none can be lent to a fix: " + "; ".join(why))
+
+
+def lent_said(team, slot, work, fix):
+    """What crew says of work waiting in a slot lent to a fix (teams.1): it goes on there once the fix's slot is freed."""
+    return f"{work} waits in {team}-{slot}, lent to {fix}: it goes on there once that fix has merged or been dropped"
 
 
 def held_object(kind, name, bolt=""):
@@ -2492,25 +2591,21 @@ class Team(Agents):
         """The slots file's line for a slot, split, or None."""
         return next((l for l in self.lines("slots") if l[0] == slot), None)
 
+    def lent(self, slot):
+        """The work waiting in a slot lent to a fix, its line as the slots file held it, split, or None (teams.1)."""
+        return next((l for l in self.lines("lent") if l[0] == slot and len(l) > 2), None)
+
     def panes(self):
-        """The team's workspace, "<team>": a conductor tab holding the conductor and ops, and on a Mac a git tab with
-        gitgui in the kit and in the blueprints repo; each opened when its pane is not there, a dead one closed first
-        (mend), and the conductor's beside ops when only ops' is there (opened)."""
+        """The team's workspace, "<team>": its conductor tab holding the conductor and ops, and no git tab, on a Mac as
+        on a box; each opened when its pane is not there, a dead one closed first (mend), and the conductor's beside ops
+        when only ops' is there (opened). A git tab an earlier crew opened there is left as it stands, the user's to
+        close."""
         t, live = self.t, self.herdr.live
-        self.mend(("conductor", "ops", "git-kit", "git-blueprints"))
+        self.mend(("conductor", "ops"))
         if not live(self.pane("conductor")):
             self.opened(self.name, "conductor", t["kit"]["main"], "conductor", beside=self.pane("ops"))
         if not live(self.pane("ops")):
             self.put("panes", "ops", self.split(self.pane("conductor"), "right", t["kit"]["main"]))
-        # gitgui draws with terminal graphics, which are too slow to use over a remote host's connection.
-        if t.get("kind") != "darwin":
-            return
-        if not live(self.pane("git-kit")):
-            self.tab(self.name, "git", t["kit"]["main"], "git-kit")
-            self.herdr.run("pane", "run", self.pane("git-kit"), "gitgui")
-        if not live(self.pane("git-blueprints")):
-            self.put("panes", "git-blueprints", self.split(self.pane("git-kit"), "right", t["blueprints"]["main"]))
-            self.herdr.run("pane", "run", self.pane("git-blueprints"), "gitgui")
 
     def slot_pane(self, slot, path):
         """The slot's pane, opened in "<team> units" when it is not there (slot_pane_at), a dead one closed first (mend);
@@ -2526,23 +2621,42 @@ class Team(Agents):
             self.herdr.run("tab", "rename", tab, "units")
         self.put("panes", slot, p)
 
-    def take(self, kind, name, place):
-        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken)."""
-        held = self.lines("slots")
-        slot, new = slot_for(self.name, self.slots, held, name)
+    def take(self, kind, name, place, owed=None):
+        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken). Given
+        owed, the slots whose stage the stages file owes an end, a fix that finds every slot in flight takes one lent
+        (lent_for), the work it holds kept in the lent file until the fix's slot is given back (give_back)."""
+        held, lent = self.lines("slots"), self.lines("lent")
+        try:
+            slot, new = slot_for(self.name, self.slots, held, name, lent)
+        except Refusal:
+            if owed is None:
+                raise
+            slot = lent_for(self.name, self.slots, held, {s: self.status(s) for s in self.slots}, owed)
+            self.write("lent", [l for l in lent if l[0] != slot] + [l for l in held if l[0] == slot])
+            held, new = [l for l in held if l[0] != slot], True
         if new:
             self.write("slots", held + [[slot, kind, name, place]])
         return slot, new
 
+    def give_back(self, slot):
+        """The slot's line dropped, and the work it was lent from, if any, back in it (teams.1): that work's name, or
+        None."""
+        back = self.lent(slot)
+        self.write("slots", [l for l in self.lines("slots") if l[0] != slot] + ([back] if back else []))
+        if back:
+            self.drop("lent", slot)
+        return back[2] if back else None
+
     def free(self, slot, ending=None, bolt=""):
-        """End a slot's agent, close its pane and give the slot back, recorded (teams.1); the units workspace goes with
-        the last slot. None once it is free, else what crew says of the agent it could not end (stop). bolt is the bolt
-        a fix given as fix/<name> is of, read from its branch when not given."""
+        """End a slot's agent, close its pane and give the slot back, recorded (teams.1), to the work it was lent from
+        when it was lent to a fix (give_back); the units workspace goes with the last slot. None once it is free, else
+        what crew says of the agent it could not end (stop). bolt is the bolt a fix given as fix/<name> is of, read from
+        its branch when not given."""
         why = self.stop(slot, ending)
         if why:
             return why
         line = self.held(slot)
-        self.drop("slots", slot)
+        self.give_back(slot)
         if line and len(line) > 2:
             if line[1] == "fix" and not bolt and not (line[2].startswith("fix/") and "/" in line[2][4:]):
                 bolt = subprocess.run(["git", "-C", self.t["kit"]["main"], "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{line[2]}"],

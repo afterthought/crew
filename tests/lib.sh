@@ -13,6 +13,9 @@ CREW=$(cd "$TESTS/.." && pwd -P)
 export CREW_TEST_ROOT=$T CREW_TEST_LOG=$T/calls.log CREW_TEST_CLAUDE_LOG=$T/claude.log
 export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
 unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH HERDR_SESSION SLUICE_BRANCH GIT_DIR GIT_WORK_TREE
+# A suite an agent starts carries its Claude session's process id, which crew's waits end with (teams.24): a test's
+# wait runs in no session but one the test names.
+unset CLAUDE_PID
 # A wt run that starts the suite, a hook's, hands it worktrunk's own variables, among them the file its shell wrapper
 # reads a cd from: a test's wt never writes there, or the run ends trying to cd into a removed scratch dir.
 unset $(env | sed -n 's/^\(WORKTRUNK_[A-Za-z0-9_]*\)=.*/\1/p')
@@ -179,6 +182,12 @@ world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
 state_repo() { local r; r=$(remote "$1"); mkdir -p "$(dirname "$r")"; [ -d "$r" ] || git init -q --bare "$r"; }
 
 commit_all() { git -C "$1" add -A && git -C "$1" commit -qm "${2:-wip}"; }
+# act_tip [<ref>] [<git dir>]: the newest commit of a state branch, wldn/main of $ws unless named, that is an act's and
+# no run-record entry's own, which follows each act on the branch as a commit of its own (read.5)
+act_tip() { git --git-dir "${2:-$ws}" log -1 --format=%H --invert-grep --grep='^runs(' "${1:-wldn/main}"; }
+# acts_since <commit> [<ref>] [<git dir>]: how many acts' commits the state branch holds since the commit, its entries'
+# own commits left out
+acts_since() { git --git-dir "${3:-$ws}" rev-list --count --invert-grep --grep='^runs(' "$1..${2:-wldn/main}"; }
 # rewrite <file> <sed script>: the file edited in place, alike under macOS's sed and the GNU sed devenv's shell puts first
 rewrite() { sed -e "$2" "$1" > "$1.new" && mv "$1.new" "$1"; }
 
@@ -204,6 +213,17 @@ kit() {
 }
 # push <checkout>: its main pushed to its origin, as a landing on GitHub's main leaves it, so crew reads it as main now
 push() { git -C "$1" push -q origin main; }
+# push_state <clone>: a hand edit of the state branch pushed as crew pushes its own writes (state.1): a push refused
+# because the branch moved, an entry a crew command still running pushed at the same moment (read.5), is rebased onto
+# the new tip and pushed again
+push_state() {
+  local n
+  for n in 1 2 3 4 5 6 7 8 9; do
+    git -C "$1" push -q origin wldn/main 2>/dev/null && return
+    git -C "$1" pull -q --rebase origin wldn/main || return
+  done
+  git -C "$1" push -q origin wldn/main
+}
 
 # blueprints <owner/name>: a bare remote with signals/moves.rec and .gitattributes on main
 blueprints() {

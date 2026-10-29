@@ -14,17 +14,22 @@ cards it raises itself, with why a card's reading could not be opened in Unread,
 try of a batch's or a long proposal's reading made after its card was raised, by crew card session, the batch's wait or
 the rail's read: done when it started the reading, refused with crew's own message when it could not.
 
-Each write to a flywheel's branch of its state repository also carries the host's entries there, to the same path
-under runs/<host>/: the branch's file becomes the union by Id of what it had and what the host has, so a host only
-ever adds to its own files and a host that is asleep or rebuilt loses nothing it had carried. Reading takes the
-branch first, then whatever each host it can reach has not yet carried.
+Each entry reaches the flywheel's branch of its state repository as it is written: the command that appended it
+pushes it there, to the same path under runs/<host>/, as a commit of its own from this host, before it goes on. The
+branch's file becomes the union by Id of what it had and what the host has, so a host only ever adds to its own files
+and a host that is asleep or rebuilt loses nothing it pushed. A push that is refused is said once and changes nothing
+the command does; the entry waits in the host's file and goes first with the host's next. Every read, crew events,
+crew trace, the batches, the rail, the board and the page, reads the branch alone and asks no host (read.5).
 
   record.py emit --label L --act A [--on X]... [--from X]... [--commit C]... [--why W] [--refused R] [--field K=V]...
                 [--id I]                  append one entry, with the id a commit already names if given; prints its id
   record.py session                       the caller's Claude session as <host>:<id>, what a forwarded command carries
   record.py events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-                                          the entries of the partition's branch and of every host it runs on, in time order
-  record.py events --push [--label L]     carry this host's entries to the branch now, in a commit of their own
+                                          the entries on the partition's branch, in time order; --follow reads the
+                                          branch as this host's cache holds it each time its tip moves, which this
+                                          host's writes move at once, and fetches it once a minute where the host's
+                                          follower does not, so another host's entries show within the minute
+  record.py events --push [--label L]     push what of this host's entries a refused push left, each a commit of its own
   record.py trace <object> [--label L]    one bolt's, unit's, chore's or signal's history, read from the entries alone
 
 An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>,
@@ -33,9 +38,9 @@ the partition), and
 what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>. A signal is
 named by its full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>, which is the one signal of that capture
 numbered NN."""
-import argparse, datetime, itertools, json, os, pathlib, re, signal, subprocess, sys
-# getpass, queue, tempfile and threading are imported where they are used, so a command that writes one entry starts
-# without them.
+import argparse, datetime, itertools, json, os, pathlib, re, signal, sys
+# getpass, tempfile and time are imported where they are used, so a command that writes one entry starts without
+# them.
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -43,6 +48,9 @@ import crew  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 ROOT = pathlib.Path.home() / ".local/state/crew"
+# The clock the host's follower (board.py) and crew events --follow fetch a partition's branch on, never faster
+# (plan.12's reading of 2026-10-28); crew's tests set CREW_TEST_PERIOD, so no tick of it falls inside a step (tests.8).
+PERIOD = 60
 DESCRIPTOR = """\
 # crew's run record: one entry per act of crew's that moved work, appended by crew on this host and never
 # rewritten. Read it with recsel, or with crew events and crew trace.
@@ -50,7 +58,7 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form Answer
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
@@ -61,7 +69,8 @@ DESCRIPTOR = """\
 # conflicting Paths and how it Reached the later unit (told, prompt or settle) or the conductor (wait), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
 # Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's Count, a
 # card act's Card (the Pending You card's id), Key (the rail row's card key) and Unread (why its reading could not open,
-# crew's own message, on a card's post or change raised without it), a landing's Repo (the kit it landed on)
+# crew's own message, on a card's post or change raised without it), a card's close's Answer (what the user answered
+# on it, in crew's words made from names alone, cards.answer_said), a landing's Repo (the kit it landed on)
 # and Head (the commit that kit's main holds afterwards, plan.14), a branch.kept's Head (the commit a unit's, chore's or
 # fix's branch the tidy kept is at) and Count (its commits whose patch its bolt, or main, lacks, plan.10), crew's own
 # order of two units a forecast found in conflict, the unit.after that puts one After the other or the one that Lifted
@@ -71,7 +80,7 @@ DESCRIPTOR = """\
 # suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
          "Forecast", "Batch", "Units", "Count", "Card", "Key", "Unread", "Base", "Phase", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
-         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form")
+         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form", "Answer")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
@@ -189,10 +198,11 @@ def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None,
     except OSError as e:
         print(f"crew: the run record at {path} could not be written: {e.strerror or e}", file=sys.stderr)
         return None
+    reach(label, eid)
     return eid
 
 
-# ------------------------------------------------------------------------------------- carried to the branch
+# ------------------------------------------------------------------------------------- pushed to the branch
 
 def blocks(text):
     """The entries of run-record text as written, {Id: the entry's lines}, descriptors and comments left out."""
@@ -210,15 +220,16 @@ def blocks(text):
 
 
 def mark(label):
-    """Where this host notes the newest entry it has carried for the label."""
+    """Where this host notes the newest entry of the label its branch holds from here."""
     return ROOT / label / "runs" / ".carried"
 
 
-def carry(label, at_branch):
-    """The host's run-record files of the label as its branch must hold them, {path on the branch: text}, and the
-    newest id among the entries looked at. A day's file on the branch becomes the union by Id of the branch's entries
-    and the host's, in Id order, and is left out when the branch already holds every entry the host has. Days before
-    the newest carried one are not looked at. at_branch(path) reads a file at the branch's tip, or None."""
+def unpushed(label, at_branch):
+    """The host's entries of the label that its branch lacks, oldest first, each (its id, its lines, its day's path on
+    the branch, that file's text once it is added), and the newest id looked at. A day's file on the branch becomes the
+    union by Id of the branch's entries and the host's, in Id order (record.4), each entry's file holding the entries
+    before it in the chain, so each is a commit of its own on the one before. Days before the newest pushed one are not
+    looked at. at_branch(path) reads a file at the branch's tip, or None."""
     host = crew.this_host()
     d = ROOT / label / "runs" / host
     try:
@@ -226,7 +237,7 @@ def carry(label, at_branch):
     except OSError:
         done = ""
     since = f"{done[0:4]}-{done[4:6]}-{done[6:8]}" if len(done) >= 8 else ""
-    out, newest = {}, None
+    chain, newest = [], None
     for f in sorted(d.glob("*.rec")) if d.is_dir() else []:
         if f.stem < since:
             continue
@@ -236,22 +247,64 @@ def carry(label, at_branch):
         newest = max([newest or "", *mine])
         path = f"runs/{host}/{f.name}"
         have = blocks(at_branch(path) or "")
-        if set(mine) <= set(have):
-            continue
-        union = {**mine, **have}
-        out[path] = DESCRIPTOR + "\n".join(union[k] for k in sorted(union))
-    return out, newest
+        for eid in sorted(set(mine) - set(have)):
+            have[eid] = mine[eid]
+            chain.append((eid, mine[eid], path, DESCRIPTOR + "\n".join(have[k] for k in sorted(have))))
+    return sorted(chain, key=lambda c: c[0]), newest
+
+
+def entry_message(text, agent):
+    """The message of an entry's own commit on the branch, from its lines: runs(<host>): <act> <first On>, refused
+    when it records a refusal, then (<agent>), and the Crew-Entry trailer naming it (plan.2). A field the entry lacks
+    is left out."""
+    f = {}
+    for l in text.splitlines():
+        m = FIELD.match(l)
+        if m:
+            f.setdefault(m.group(1), m.group(2).strip())
+    words = " ".join(w for w in (f.get("Act"), f.get("On"), "refused" if f.get("Refused") else None, f"({agent})") if w)
+    return ("runs" + (f"({f['Host']})" if f.get("Host") else "") + f": {words}\n\nCrew-Entry: {f.get('Id')}\n")
+
+
+def reach(label, eid=None):
+    """Push each entry of this host's record of the label that its branch lacks, oldest first, normally the one just
+    written, each a commit of its own and all in one push, by the write every state write takes (read.5, state.1), on
+    this host before the command goes on; then note the newest the branch holds from here. Returns how many were
+    pushed. With eid, the entry just written, a push that is refused is said once on standard error, naming it, and
+    changes nothing else the command does (record.2): the entry stays in the host's file, and its next push takes it
+    first. With none, as crew events --push runs it, the refusal is the command's."""
+    import plan  # plan.py imports this module; its git layer is only needed here
+    where, seen = f"{label}/main", {"n": 0}
+    try:
+        repo, ref = plan.state_of(crew.load(), label)
+        where = f"{ref} of {repo}"
+        tip = plan.fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+
+        def make(tip):
+            chain, seen["newest"] = unpushed(label, lambda path: plan.show(repo, tip, path))
+            seen["n"] = len(chain)
+            return [({path: text}, entry_message(lines, who())) for _, lines, path, text in chain]
+        if make(tip):
+            plan.land(repo, ref, None, make)
+    except (Refusal, OSError) as e:
+        why = " ".join(str(e).split())  # one line, though git's and recfix's own words may span several
+        if eid is None:
+            fail(f"nothing reached {where}: {why}")
+        print(f"crew: entry {eid} did not reach {where}: {why}; {crew.this_host()} keeps it and pushes it with its next entry", file=sys.stderr)
+        return None
+    mark_carried(label, seen.get("newest"))
+    return seen["n"]
 
 
 def mark_carried(label, newest):
-    """After a push carried entries up to newest, start the next carry from that day."""
+    """Once the branch holds every entry up to newest, start the next push from that day."""
     if not newest:
         return
     try:
         mark(label).parent.mkdir(parents=True, exist_ok=True)
         mark(label).write_text(newest + "\n")
     except OSError as e:
-        print(f"crew: could not note what was carried at {mark(label)}: {e.strerror or e}", file=sys.stderr)
+        print(f"crew: could not note what was pushed at {mark(label)}: {e.strerror or e}", file=sys.stderr)
 
 
 # ----------------------------------------------------------------------------------------------- reading
@@ -282,29 +335,9 @@ def parse(text):
     return out
 
 
-def hosts_of(fleet, label):
-    """The hosts a partition runs on: its teams', its main level's, and each holding an operator session named for it."""
-    p = crew.partition_of(fleet, label)
-    hosts = {p["machine"]} | {fleet["teams"][t]["machine"] for t in p["teams"]}
-    hosts |= {h for h, v in fleet["hosts"].items() if (v.get("sessions") or {}).get(label, {}).get("partition") == p["partition"]}
-    return sorted(hosts)
-
-
-READ = r"""since=$1; shift
-for l in "$@"; do
-  for f in "$HOME/.local/state/crew/$l"/runs/*/*.rec; do
-    [ -f "$f" ] || continue
-    n=$(basename "$f" .rec)
-    [[ $n < $since ]] && continue
-    cat "$f"; echo
-  done
-done
-"""
-
-
 def on_branch(fleet, label, since_day, tips=None):
-    """The entries carried to the label's branch of its state repository, from since_day on. tips, when given, is
-    told the commit they were read at, {label: sha}, None for a branch not started."""
+    """The entries the label's branch of its state repository holds, from since_day on. tips, when given, is told the
+    commit they were read at, {label: sha}, None for a branch not started."""
     import plan  # plan.py imports this module; its git layer is only needed here
     repo, ref = plan.state_of(fleet, label)
     tip = plan.fetch(repo, ref)
@@ -313,21 +346,16 @@ def on_branch(fleet, label, since_day, tips=None):
     if not tip:
         return []
     out = []
-    for path in plan.git(repo, "ls-tree", "-r", "--name-only", tip, "--", "runs/").splitlines():
+    for path in plan.paths_at(repo, tip, "runs/"):
         if path.endswith(".rec") and pathlib.PurePath(path).stem >= since_day:
             out += parse(plan.show(repo, tip, path) or "")
     return out
 
 
 def gather(fleet, labels, since_day, tips=None):
-    """Every entry of the labels' run records from since_day on: what each label's branch holds, then what each
-    host has not yet carried, one call per host, duplicates dropped by Id and sorted by time then Id; and what did
-    not answer, with why. A host that does not answer is shown as far as it had carried. tips, when given, is told
-    the commit each branch was read at, as on_branch tells it."""
-    by_host = {}
-    for l in labels:
-        for h in hosts_of(fleet, l):
-            by_host.setdefault(h, []).append(l)
+    """Every entry of the labels' run records from since_day on, read from each label's branch alone, sorted by time
+    then Id; and each branch that could not be read, {<label>/main: why}. No host is asked for the record (read.5).
+    tips, when given, is told the commit each branch was read at, as on_branch tells it."""
     entries, missing = {}, {}
     for l in labels:
         try:
@@ -335,13 +363,6 @@ def gather(fleet, labels, since_day, tips=None):
                 entries.setdefault(e["Id"], e)
         except Refusal as err:
             missing[f"{l}/main"] = str(err)
-    for h, ls in sorted(by_host.items()):
-        r = crew.on_machine(fleet, h, ["bash", "-c", READ, "crew", since_day, *ls])
-        if r.returncode:
-            missing[h] = (r.stderr.strip().splitlines() or [f"exit {r.returncode}"])[-1]
-            continue
-        for e in parse(r.stdout):
-            entries.setdefault(e["Id"], e)
     return sorted(entries.values(), key=lambda e: (e["At"], e["Id"])), missing
 
 
@@ -434,7 +455,7 @@ def events(fleet, a):
     if a.push:
         import plan
         for l in labels:
-            plan.carry_now(fleet, l)
+            plan.push_now(fleet, l)
         return
     if a.follow:
         return follow(fleet, labels, a.about)
@@ -447,72 +468,91 @@ def events(fleet, a):
 
 def events_text(found, missing, stamp, about=None, as_json=False):
     """crew events: the entries gathered at or after stamp, those naming about alone when given, one line each, then
-    each host that did not answer; or the same as JSON."""
+    each branch that could not be read; or the same as JSON."""
     found = [e for e in found if e["At"] >= stamp and (not about or names(e, about))]
     if as_json:
         return json.dumps({"entries": found, "unreachable": missing}, indent=1)
     return "\n".join([line(e) for e in found] + [f"{h} did not answer: {why}" for h, why in missing.items()])
 
 
+def fresh(seen, entries):
+    """What crew events --follow prints next: the entries read whose Id it has not seen, in time order."""
+    return sorted((e for e in entries if e["Id"] not in seen), key=lambda e: (e["At"], e["Id"]))
+
+
+def follow_fetches(label, followed_here, follower, last, now, period=PERIOD):
+    """Whether crew events --follow fetches a partition's branch now (plan.12's reading of 2026-10-28): never while the
+    host's follower fetches it, the partition being one it follows (followed_here, board.labels_here) while someone
+    holds the host's follower lock (follower, board.follower_here: job, tab, or unknown, a holder whose line is not
+    written yet), at its start too; else once its own clock is due, period seconds after its last fetch (last, None
+    when it has made none, at its start or since a SIGUSR1). A decision on plain facts (code.7)."""
+    if label in followed_here and follower != "none":
+        return False
+    return last is None or now - last >= period
+
+
+def changed_files(was, now, day):
+    """The run-record files a follow reads again at a moved tip: each of the day the follow began or later whose blob is
+    not the one it last read ({path: blob} then and now), in order."""
+    return sorted(p for p, b in now.items() if p.endswith(".rec") and pathlib.PurePath(p).stem >= day and was.get(p) != b)
+
+
 def follow(fleet, labels, about):
-    """Each entry of the labels on every reachable host as it is appended, one tail per host, until interrupted. The
-    files are named by the UTC date, so the tails start again when it changes."""
-    import queue, threading
-    lines = queue.Queue()
-    procs = []
+    """Each entry of the labels as it reaches their branches, one line each, until interrupted. Each second it reads
+    each branch's tip as this host's cache holds it, with no process (plan.tip_here), and when the tip moved, reads
+    again only the run-record files of the day the follow began or later whose blob changed (changed_files), printing
+    what it has not printed (fresh). It fetches a branch only for a partition the host's follower does not fetch, which
+    moves the cache itself, as a write on this host does: at its start and then once a minute (follow_fetches); SIGUSR1
+    makes its next fetch now. A branch's first read prints nothing, being what was there before. A branch that
+    cannot be read is said once, until it reads again. It asks no host for anything (read.5)."""
+    import time
+    import board  # board.py imports this module; the host's follower's lock and partitions are its
+    import plan  # plan.py imports this module; its git layer is only needed here
 
     def stop(*_):
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGHUP, stop)
-
-    def read(p):
-        buf = []
-        for raw in p.stdout:
-            if raw.strip():
-                buf.append(raw.rstrip("\n"))
-                continue
-            if buf:
-                lines.put("\n".join(buf))
-            buf = []
-
-    def start(day):
-        tomorrow = (datetime.date.fromisoformat(day) + datetime.timedelta(days=1)).isoformat()
-        by_host = {}
-        for l in labels:
-            for h in hosts_of(fleet, l):
-                by_host.setdefault(h, []).append(l)
-        for h, ls in sorted(by_host.items()):
-            files = " ".join(f'"$HOME/.local/state/crew/{l}/runs/{h}/{d}.rec"' for l in ls for d in (day, tomorrow))
-            cmd = f"exec tail -q -n 0 -F {files} 2>/dev/null"
-            argv = ["bash", "-c", cmd] if h == crew.this_host() else ["ssh", "-o", "BatchMode=yes", fleet["hosts"][h]["ssh"], cmd]
-            p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-            procs.append(p)
-            threading.Thread(target=read, args=(p,), daemon=True).start()
-
+    tick = {"now": False}
+    signal.signal(signal.SIGUSR1, lambda *_: tick.update(now=True))
+    period, here = int(os.environ.get("CREW_TEST_PERIOD") or PERIOD), crew.this_host()
+    day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    seen, said, tips, files, last = {}, {}, {}, {}, {}
     try:
-        day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-        start(day)
         while True:
-            try:
-                text = lines.get(timeout=5)
-            except queue.Empty:
-                now = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-                if now != day:
-                    for p in procs:
-                        p.terminate()
-                    procs.clear()
-                    day = now
-                    start(day)
-                continue
-            for e in parse(text):
+            again, tick["now"] = tick["now"], False
+            followed, follower, new = set(board.labels_here(fleet, here)), None, []
+            for l in labels:
+                repo, ref = plan.state_of(fleet, l)
+                try:
+                    if l in followed:
+                        follower = follower or board.follower_here()
+                    if follow_fetches(l, followed, follower, None if again else last.get(l), time.monotonic(), period):
+                        last[l] = time.monotonic()
+                        plan.fetch(repo, ref, fresh=True)
+                    tip = plan.tip_here(repo, ref)
+                    tip is not None or fail(f"its tip in crew's cache of {repo} can't be read")
+                    if l in seen and tip == tips.get(l):
+                        continue
+                    listing = plan.blobs_at(repo, tip, "runs/") if tip else {}
+                    changed = changed_files(files.get(l, {}), listing, day)
+                    got = [e for t in plan.cat_file(repo, [listing[p] for p in changed]) for e in parse(t or "")]
+                except Refusal as e:
+                    why = " ".join(str(e).split())
+                    if said.get(l) != why:
+                        print(f"{l}/main did not answer: {why}", file=sys.stderr, flush=True)
+                    said[l] = why
+                    continue
+                said.pop(l, None)
+                if l in seen:
+                    new += fresh(seen[l], got)
+                seen[l], tips[l], files[l] = seen.get(l, set()) | {e["Id"] for e in got}, tip, listing
+            for e in fresh((), new):
                 if not about or names(e, about):
                     print(line(e), flush=True)
+            time.sleep(1)
     except KeyboardInterrupt:
         pass
-    finally:
-        for p in procs:
-            p.terminate()
 
 
 def followed(obj):
@@ -559,7 +599,7 @@ def trace(fleet, a):
     if start is None:
         for h, why in missing.items():
             print(f"{h} did not answer: {why}", file=sys.stderr)
-        sys.exit(f"no entry names {' or '.join(candidates)}" + (" (some hosts did not answer)" if missing else ""))
+        sys.exit(f"no entry names {' or '.join(candidates)}" + (f" ({' and '.join(missing)} could not be read)" if missing else ""))
     for e in lineage(found, start):
         print(line(e, zoe=True))
     for h, why in missing.items():

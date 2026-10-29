@@ -111,7 +111,7 @@ A dispatcher SHALL run on each host where the partition's teams run, in a herdr 
 - **THEN** each host has its own dispatcher, and asking either one about allocation answers for its host only
 
 ### Requirement: Main-level ops lands bolts by one procedure
-The main-level ops SHALL land bolts whose verification is green on the user's word: their send on a kit's landings card, which crew raises in ops's name, the word for every bolt they ticked, in the card's order unless their note moves one; or their words in ops's own pane. It SHALL submit them with one `crew bolt submit <bolt>...` in that order, which queues each in sluice behind the one before and closes each with `crew bolt land` as it lands. It SHALL push nothing, level no host and move no branch by git. A bolt that does not land SHALL be told to its conductor in sluice's words, the rest going on. A landing SHALL deploy nothing. Until a kit's deployer records its deploys through crew, the main-level ops SHALL deploy that kit's main only on the user's word for that deploy. A failure after landing SHALL be a fix on main.
+The main-level ops SHALL land bolts whose verification is green on the user's word: their send on a kit's landings card, which crew raises in ops's name, the word for every bolt they ticked, in the card's order unless their note moves one; or their words in ops's own pane. It SHALL submit them with one `crew bolt submit <bolt>...` in that order, which queues each in sluice behind the one before and closes each with `crew bolt land` as it lands. It SHALL push nothing, level no host and move no branch by git. A bolt that does not land for its own content, a conflict or a failed check, SHALL be told to its conductor in sluice's words, the rest going on. A bolt whose landing sluice or its host stopped SHALL be reported as a finding outside any bolt and submitted again by the same `crew bolt submit` once what stopped it is cleared, on the word it has, with no new word of the user's. A landing SHALL deploy nothing. Until a kit's deployer records its deploys through crew, the main-level ops SHALL deploy that kit's main only on the user's word for that deploy. A failure after landing SHALL be a fix on main.
 
 #### Scenario: Landing
 - **WHEN** the user sends swb-1's bolt ticked on willdan's landings card
@@ -140,6 +140,10 @@ The main-level ops SHALL land bolts whose verification is green on the user's wo
 #### Scenario: The brief lands bolts together
 - **WHEN** main-level ops's brief is read
 - **THEN** it says to submit every bolt the user ticked with one `crew bolt submit` in the card's order, and says nothing of landing one bolt at a time
+
+#### Scenario: A landing sluice stopped
+- **WHEN** `crew bolt submit y z` says `y` did not land because the host could not run main's checks, nothing of the bolt's
+- **THEN** the main-level ops tells no conductor, records what stopped it as a signal and tells the planner, `z` lands all the same, and once the host runs checks again ops runs `crew bolt submit y` on the user's send that still stands, asking the user nothing
 
 ### Requirement: Signals reach the plan only through a route
 Signals SHALL stay in the partition's first blueprints repo, in the signals model its `signals/README.md` gives. A bolt's agents SHALL record a finding outside their bolt as a signal there with `crew signal`. A signal SHALL become work only through a `route` move written by `crew unit add --signal`.
@@ -481,3 +485,33 @@ When a bolt whose landing was submitted on the user's words in ops's pane is clo
 #### Scenario: Landed on the card
 - **WHEN** the user sent `land/crew` with `y` ticked on Pending You, and ops ran `crew bolt submit y`, which closed `y` as it landed
 - **THEN** `land/crew` closes as any landings card the user answered, naming no pane
+
+### Requirement: Ops lands a bolt on a send that still stands
+`crew card read land/<kit>` SHALL name each bolt an earlier send of the user's still lands, at its head now, with the `crew bolt submit` that lands it, whether or not a landings card of the kit is open; a bolt whose head now crew cannot read SHALL be named as one it cannot tell of, and left out of the command. Main-level ops SHALL land such a bolt on that send, asking the user nothing, once its conductor says it is proven.
+
+#### Scenario: No card open
+- **WHEN** the user's send on `land/crew` ticked `z`, its card closed with `z` held for sluice's refusal, `z`'s take-main fix has merged, and no landings card of crew is open
+- **THEN** `crew card read land/crew` by swancloud-ops names `z` as landing on the user's earlier send and prints `crew bolt submit z --label swancloud`, and refuses nothing
+
+#### Scenario: A head crew cannot read
+- **WHEN** an earlier send ticked `z`, and `z`'s branch is on no ref crew can read where the kit's forecasts are made
+- **THEN** `crew card read land/crew` says it cannot tell whether the send still lands `z`, and why, and the command it prints leaves `z` out
+
+#### Scenario: The brief lands on a standing send
+- **WHEN** main-level ops's brief is read
+- **THEN** it says a bolt the user ticked whose head moved only by taking main in lands on that send once its conductor says it is proven, with nothing asked, and that the user's words in ops's pane stand the same way
+
+### Requirement: A landing stopped in ops's pane is recorded as the user's words
+When the user's own words in main-level ops's pane stop a bolt's landing, ops SHALL run `crew bolt leave <bolt>... --excerpt "<the user's words>"`. Before recording anything, crew SHALL read the words in the caller's own live session transcript as it reads a landing said in ops's pane, and SHALL refuse in the same cases, recording no stop. A stop SHALL be recorded on each bolt as a `bolt.leave` entry naming its head, the caller, its session, the transcript record the words were read from and the words' length, and holding none of the words (`record.3`), and crew SHALL raise the bolt's kit's landings card. A stop SHALL end when the user ticks the bolt on a send of that card, when ops lands it on the user's words, or when its head moves.
+
+#### Scenario: Stopped in the pane
+- **WHEN** the user types "Hold the phone bolt, don't land it yet" in swancloud-ops's pane, and ops runs `crew bolt leave builds-reach-the-phone --excerpt "Hold the phone bolt, don't land it yet"`
+- **THEN** a `bolt.leave` entry on `bolt/builds-reach-the-phone` is recorded with its head, the transcript record and the words' length, and none of the words, and `land/swancloud` is raised showing it unticked as left
+
+#### Scenario: Words that are not the user's
+- **WHEN** ops runs `crew bolt leave builds-reach-the-phone --excerpt "<words>"` with words only another agent's tell holds
+- **THEN** crew refuses, naming the tell, and records no stop
+
+#### Scenario: Landed on their words later
+- **WHEN** the user later tells ops to land the bolt, and ops runs `crew bolt submit builds-reach-the-phone --excerpt "<their words>"`
+- **THEN** the stop ends, and the bolt is no longer left

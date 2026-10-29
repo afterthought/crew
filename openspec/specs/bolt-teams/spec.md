@@ -176,7 +176,7 @@ A bolt SHALL be the branch `bolt/<bolt>`, made on GitHub from main by sluice at 
 - **THEN** crew refuses, saying it has merged and that a new fix undoes it, and records the refusal
 
 ### Requirement: A bolt lands on main on the user's word
-Bolts whose verification is green SHALL be landed by the partition's main-level ops on the user's word, by one procedure: `crew bolt submit <bolt>...` submits each bolt's branch to its kit's main through sluice, in the order given, and closes each with `crew bolt land` as it lands; it deploys nothing, pushes nothing and levels no host. Each SHALL be submitted from a short-lived worktree on its branch at `<kit>/places/land-<bolt>` on its team's host, in the name of whoever asked, removed once its outcome is in. A bolt that does not land SHALL move nothing, and the bolts after it SHALL go on. The command SHALL exit non-zero when any bolt did not land, naming each.
+Bolts whose verification is green SHALL be landed by the partition's main-level ops on the user's word, by one procedure: `crew bolt submit <bolt>...` submits each bolt's branch to its kit's main through sluice, in the order given, and closes each with `crew bolt land` as it lands; it deploys nothing, pushes nothing and levels no host's checkout. Each SHALL be submitted from a short-lived worktree on its branch at `<kit>/places/land-<bolt>` on its team's host, in the name of whoever asked, removed once its outcome is in. A bolt that does not land SHALL move nothing, and the bolts after it SHALL go on. The command SHALL exit non-zero when any bolt did not land, naming each.
 
 #### Scenario: The bolt lands
 - **WHEN** the user sends swb-1's bolt ticked on its kit's landings card and main-level ops runs `crew bolt submit <bolt>`
@@ -951,7 +951,7 @@ A team's conductor and ops that crew starts while the team holds a bolt SHALL ha
 - **THEN** its environment has no `SLUICE_BRANCH` and its pane no `sluice_branch` token
 
 ### Requirement: The bolt is forecast against main on the conductor's waits
-Each time the conductor waits on a stage through crew, crew SHALL forecast each bolt the team holds against its kit's main and everything queued there, by `sluice submit main --check --head bolt/<bolt> --json` in the kit's main checkout, moving no branch, and the wait SHALL say each forecast once for the same bolt head, revision of main and submissions queued on main it meets, recording it as a `forecast` on the bolt.
+Each time the conductor waits on a stage through crew, crew SHALL forecast each bolt the team holds against its kit's main and everything queued there, by `sluice submit main --check --head bolt/<bolt> --json` in the kit's main checkout, moving no branch, and the wait SHALL say each forecast once for the same bolt head, revision of main and submissions queued on main it meets, recording it as a `forecast` on the bolt. For a bolt the user left on its kit's landings card or stopped in their words to main-level ops, the wait SHALL say a conflict with what main has landed once as one to take nothing in for while it is left, and SHALL give no take-main fix; once the user ticks it, the wait SHALL give the fix for the same heads as for any bolt.
 
 #### Scenario: Main landed a change to the bolt's lines
 - **WHEN** main has landed a change to `shared.txt` that the bolt's own work also changed, and the conductor waits on a unit's stage
@@ -968,6 +968,14 @@ Each time the conductor waits on a stage through crew, crew SHALL forecast each 
 #### Scenario: A sluice that can't forecast a branch
 - **WHEN** the host's sluice refuses `--head`
 - **THEN** the wait says once for the bolt's head that it can't forecast the bolt against main, and why, and goes on
+
+#### Scenario: A bolt the user left
+- **WHEN** swc-3 holds `builds-reach-the-phone`, which the user cleared on their send of `land/swancloud`, and main has landed a change to `packages/swancloud-doctor/default.nix` that the bolt also changed
+- **THEN** the wait says once that the bolt, which the user left, is forecast to conflict with main on `packages/swancloud-doctor/default.nix`, that nothing is to be taken in while it is left, and that crew tells the take-main fix once they tick it; it gives no `crew fix` command, and the forecast is recorded with `Reached: left`
+
+#### Scenario: Ticked at the same heads
+- **WHEN** the user ticks `builds-reach-the-phone` on a later send, neither it nor main having moved, and the conductor waits again
+- **THEN** the wait gives the take-main fix for it, unless the card's raise already told it at those heads
 
 ### Requirement: A landing is read from GitHub's main
 `crew bolt submit` SHALL judge whether a bolt landed by main now, never by sluice's exit alone. For a kit with an origin remote, main now is GitHub's `origin/main` after a fetch. For a kit with no origin, it is the kit's own `main`. Before it submits, crew SHALL read main now on the team's host, and SHALL refuse, submitting nothing, when it cannot. After sluice's outcome it SHALL read main now again, after a fresh fetch, together with whether it holds the bolt's tip that was submitted. The bolt has landed when main now moved and holds that tip, whatever sluice exited. crew SHALL then say where main holds it, mark the bolt's branch landed, and send ops on to `crew bolt land`. When sluice's exit was not 0, crew SHALL also name the exit and sluice's last words as what came after its push, sluice's to report apart from the landing. crew SHALL say that main is where it was only when main now did not move. When main now moved but does not hold the bolt, crew SHALL say the bolt did not land and name where main now is. When main now cannot be read after the submission, crew SHALL say it cannot tell whether the bolt landed, naming why and sluice's exit, and SHALL mark nothing and say nothing of where main is.
@@ -1020,11 +1028,11 @@ A team SHALL build one bolt at a time, and MAY hold one more that is proven and 
 - **THEN** swc-1 builds `ssh-fix`, and `crew status swc-1` names both bolts, `doctor-rows` as waiting to land
 
 ### Requirement: A give to a team holding a waiting bolt restarts its roles at their next stop
-A give to a team that holds a proven bolt SHALL restart neither its conductor nor its ops at once: each SHALL be restarted at its next stop, once idle, as an agent whose team's bolt changed under it is, the conductor fresh and ops with its conversation. The conductor's greeting at that restart SHALL name the bolt it now builds, the bolt that waits to land, the landing card it holds for that bolt with the line that adopts it, and each fix in flight on it. A give to a team that holds no bolt SHALL restart both at once, as before.
+A give to a team that holds a proven bolt SHALL restart neither its conductor nor its ops at once: each SHALL be restarted at its next stop, once idle, as an agent whose team's bolt changed under it is, the conductor fresh and ops with its conversation. The conductor's greeting at that restart SHALL name the bolt it now builds, the bolt that waits to land as a row of its kit's landings card, main-level ops's, that crew tells it when the user sends that bolt's reading and `crew card read land/<bolt>` then gives the notes, and each fix in flight on it. It SHALL name no wait to start. A give to a team that holds no bolt SHALL restart both at once, as before.
 
 #### Scenario: A give while the conductor waits on its landing card
-- **WHEN** `crew bolt give swc-1` gives `ssh-fix` while swc-1-conductor runs `crew card wait land/doctor-rows` in the background and is otherwise idle
-- **THEN** the conductor is restarted fresh once idle, and its first message says it builds `ssh-fix`, that `doctor-rows` waits to land, and how to adopt its landing card `land/doctor-rows`
+- **WHEN** `crew bolt give swc-1` gives `ssh-fix` while swc-1 holds `doctor-rows`, a row of its kit's landings card, and swc-1-conductor is idle
+- **THEN** the conductor is restarted fresh once idle, and its first message says it builds `ssh-fix`, that `doctor-rows` waits to land as a row of the kit's landings card, that crew tells it when the user sends `land/doctor-rows`'s reading and `crew card read land/doctor-rows` gives the notes, and names no `crew card wait`
 
 ### Requirement: A brief names nothing of a change's content but what crew reads
 No brief crew gives an agent SHALL name a proof list, a task's shape or a design's sections. The construct's brief SHALL say that what a change holds is the kit's, from OpenSpec's schema and the kit's `openspec/config.yaml`, which `/opsx:propose` hands it, and SHALL name of a change only what crew reads: its name, which is the unit's; its tasks' tick boxes; its proposal's `## Touches` block; and its archive at merge. The results section every brief carries SHALL name no proof list.
@@ -1136,7 +1144,7 @@ crew SHALL read or mark no pull request on GitHub for a kit whose sluice policy 
 - **THEN** crew runs no `gh` command, and the landing, fix or merge goes on as before
 
 ### Requirement: A split bolt takes no merge
-A bolt is split when its host's own `bolt/<bolt>` has a tip whose policy names a remote for the bolt and the bolt's branch on that remote, read after a fetch, does not hold that tip. A unit's, chore's or fix's merge into a split bolt SHALL be refused before anything is submitted, naming both commits, the merges the remote's copy lacks, and the bolt's landing as the way on. A landing SHALL NOT be refused for it.
+A bolt is split when its host's own `bolt/<bolt>` has a tip whose policy names a remote for the bolt and the bolt's branch on that remote, read after a fetch, does not hold that tip. A unit's, chore's or fix's merge into a split bolt SHALL be refused before anything is submitted, naming both commits, the merges the remote's copy lacks, and the bolt's landing as the way on. A landing SHALL NOT be refused for it while the remote's copy holds nothing the host's tip lacks; one whose two copies have diverged SHALL be refused, as a landing submits the bolt where it lives.
 
 #### Scenario: A merge into a split bolt
 - **WHEN** a unit's merge starts on bolt `b`, whose host's tip names `origin` for it, while `origin`'s `bolt/b`, after a fetch, stands at an older commit that lacks two merges the host holds
@@ -1161,6 +1169,181 @@ A bolt is split when its host's own `bolt/<bolt>` has a tip whose policy names a
 #### Scenario: GitHub's copy cannot be read
 - **WHEN** a merge starts on a bolt whose host's tip names `origin` and the read or fetch of `origin`'s `bolt/b` fails
 - **THEN** the merge is refused, naming the bolt and git's words, since crew cannot tell whether it is split
+
+### Requirement: A landing submits the bolt where it lives
+Before it cuts the landing's worktree, `crew bolt submit` SHALL fetch the bolt's branch from the kit's origin on the team's host. A bolt on GitHub, whose GitHub copy's policy names a remote for it, SHALL be submitted at GitHub's head, never the host's copy. When the host's copy is behind GitHub's head or missing, crew SHALL first set it to GitHub's head, guarded by the value it read, and say so. The worktree SHALL then hold GitHub's head, and its push SHALL move nothing on GitHub.
+
+#### Scenario: The host's copy lags GitHub's
+- **WHEN** `crew bolt submit b` runs while GitHub's `bolt/b`, after a fetch, holds two merges the host's `bolt/b` lacks, and the host's copy holds nothing GitHub's lacks
+- **THEN** crew sets the host's `bolt/b` to GitHub's head, which sluice's guard lets through, says it levelled the copy naming both commits, cuts the landing's worktree at GitHub's head, and submits that head, so main holds both merges once it lands
+
+#### Scenario: The host's copy is level with GitHub's
+- **WHEN** `crew bolt submit b` runs and the host's `bolt/b` is GitHub's head
+- **THEN** crew writes no ref, says nothing of levelling, and submits that head as before
+
+#### Scenario: The host has no copy
+- **WHEN** `crew bolt submit b` runs on a host that has no `bolt/b` of its own while GitHub's `bolt/b` names `origin` for it
+- **THEN** crew makes the host's `bolt/b` at GitHub's head and submits that head
+
+#### Scenario: GitHub moved after crew read it
+- **WHEN** crew levels the host's copy to the head it fetched, and sluice's guard refuses the write because GitHub's branch moved since
+- **THEN** nothing is submitted, no landing worktree is made, and the command says the bolt did not land in the guard's words, so ops runs the landing again
+
+#### Scenario: A legacy bolt's host tip is ahead of GitHub's copy
+- **WHEN** `crew bolt submit b` runs on a split bolt whose host tip holds a merge GitHub's `bolt/b` lacks, while GitHub's copy holds nothing the host's lacks
+- **THEN** crew writes no ref and submits the host's tip, as the split's refusal names the landing as the way on, and its push moves GitHub's branch forward to that tip
+
+#### Scenario: The two copies have diverged
+- **WHEN** `crew bolt submit b` runs while GitHub's `bolt/b` holds a merge the host's copy lacks and the host's copy holds one GitHub's lacks
+- **THEN** nothing is submitted and no ref is written, and the command says `b` did not land, naming both commits and the merges each lacks, since either submission would drop merges
+
+#### Scenario: A bolt that lives on its host
+- **WHEN** `crew bolt submit b` runs on a bolt made on its host before gives went through sluice, whose GitHub copy is absent or names no remote for it, or in a kit with no origin
+- **THEN** crew writes no ref and submits the host's `bolt/b` as before
+
+#### Scenario: GitHub's copy cannot be read
+- **WHEN** `crew bolt submit b` runs and the read or fetch of `origin`'s `bolt/b` fails
+- **THEN** nothing is submitted, no landing worktree is made, and the command says `b` did not land, naming git's words
+
+#### Scenario: A landing worktree that stands from before
+- **WHEN** `<kit>/places/land-b` stands on `bolt/b` from an earlier attempt and crew levels the host's copy to GitHub's head
+- **THEN** the worktree's files are brought to GitHub's head without writing a ref, and it is submitted clean at that head; when git cannot bring them, nothing is submitted, in git's words
+
+### Requirement: A waiting bolt's conflict with main tells its conductor the take-main fix
+When the forecast of a bolt's row on its kit's landings card finds a conflict with what main holds, crew SHALL tell the bolt's conductor, through `crew tell`, the take-main fix to start now, in the words a conductor's wait gives for a conflict with main, and SHALL record the forecast on the bolt with the bolt's head, main's revision and the files. It SHALL be told once for the same bolt head and revision of main, whichever forecast recorded it first. A bolt the user left SHALL NOT be told: its forecast SHALL be recorded once as one found while it is left, which holds no tell back once the user ticks it.
+
+#### Scenario: Main moves under a waiting bolt
+- **WHEN** swc-1 holds `y`, proven and a row of `land/crew`, and main lands a change to `README.md` that `y` also changes, moving GitHub's main to `e4f5a6b`
+- **THEN** swc-1-conductor is told `y` is forecast to conflict with main on `README.md`, with `crew fix swc-1 take-main-e4f5a6b "Take main into the bolt: it is forecast to conflict on README.md"`, and a `forecast` on `bolt/y` is recorded with `y`'s head, `main@e4f5a6b` and `README.md`
+
+#### Scenario: Told once
+- **WHEN** the card is raised again and neither `y` nor main has moved
+- **THEN** swc-1-conductor is told nothing more, and `y` is still held taking main first
+
+#### Scenario: The wait said it first
+- **WHEN** a conductor's wait recorded `y`'s forecast against main at the same head and revision of main
+- **THEN** the card's raise tells swc-1-conductor nothing of it
+
+#### Scenario: The team holds two bolts
+- **WHEN** swc-1 holds `y`, waiting to land, and `x`, which it builds
+- **THEN** the fix's command names `--bolt y`
+
+#### Scenario: The conductor cannot be told
+- **WHEN** swc-1-conductor's pane does not take the tell
+- **THEN** nothing is recorded for the forecast, `y` is still held taking main first, and the next raise tells it again
+
+#### Scenario: A left bolt
+- **WHEN** `z` is left on `land/crew` and main lands a change to `README.md` that `z` also changes
+- **THEN** swc-1-conductor is told nothing, and a `forecast` on `bolt/z` is recorded with `Reached: left`
+
+#### Scenario: A left bolt ticked
+- **WHEN** the user then ticks `z`, neither `z` nor main having moved
+- **THEN** swc-1-conductor is told the take-main fix for `z`, and a `forecast` on `bolt/z` is recorded with `Reached: told`
+
+### Requirement: A wait's forecast conflict with main changes the kit's landings card
+When a conductor's wait records a bolt forecast to conflict with what main has landed, and the bolt is a row of its kit's landings card, crew SHALL raise that card again at once, so the row takes main first without waiting for main to move again.
+
+#### Scenario: The wait finds it
+- **WHEN** swc-1 holds `y`, a row of `land/crew` with a box, and swc-1-conductor's wait records `y` forecast to conflict with main on `shared.txt`
+- **THEN** `land/crew` is raised again on the main level's host, holding `y` taking main first
+
+#### Scenario: A conflict with a queued submission
+- **WHEN** the wait forecasts `y` to conflict on `shared.txt` with `#7`, queued on main ahead of it
+- **THEN** `land/crew` is not raised for it, and `y` keeps its box
+
+### Requirement: A landing that did not land is the bolt's only for its own content
+When `crew bolt submit` ends with a bolt not on main, crew SHALL judge it the bolt's only when sluice's record of the landing's own submission has it in conflict, or blamed for a check that ran and failed or that its time limit cut off; never by sluice's exit or words alone. The bolt's SHALL be recorded refused at the head submitted.
+
+#### Scenario: A conflict is the bolt's
+- **WHEN** `crew bolt submit z` waits on its submission and sluice's record has it in conflict on `README.md`
+- **THEN** the command fails, saying `z` did not land and that its team takes main into it, and the run record's `bolt.submit` for `z` carries `Refused` and the head submitted
+
+#### Scenario: A check that ran and failed
+- **WHEN** sluice's record has the submission failed with `tests:logic` holding a failing result
+- **THEN** the landing is the bolt's and recorded refused, as for a conflict
+
+### Requirement: A landing stopped by sluice or its host is recorded stopped
+Any end of `crew bolt submit` with the bolt not on main that is not the bolt's SHALL be recorded as stopped at the head submitted, with what stopped it and no refusal, and crew's words SHALL say nothing of the bolt's stopped it and tell ops to submit it again once that is cleared, with no new word of the user's.
+
+#### Scenario: Checks the host could not run
+- **WHEN** sluice's record has the submission failed, every failed check left without a result and none cut off by a time limit
+- **THEN** the command fails, saying `z` did not land, that nothing of the bolt's stopped it, which checks could not run, and that ops submits it again once the host can run them, with no new word; and the `bolt.submit` for `z` carries no `Refused`, its `Outcome` stopped, its `Why` those words and its `Head`
+
+#### Scenario: sluice itself fails
+- **WHEN** sluice exits 3, main does not hold the bolt, and crew's waits again end with sluice's record of the submission still standing, or no record of it
+- **THEN** the landing is recorded stopped at the head submitted, in sluice's last words, and crew says ops submits it again once sluice is cleared
+
+#### Scenario: A refusal at once with no record of a conflict
+- **WHEN** sluice answers the submission at once with exit 2 and records no submission of the head in conflict
+- **THEN** the landing is recorded stopped, in sluice's words, and holds nothing
+
+### Requirement: A submission's number is on its bolt's row from the submit
+While a submission stands in sluice's queue, crew SHALL show its number and state on its bolt's row in `crew bolts`, text and JSON, from the first read after the submit, whoever made it, read from sluice's record of the queue on the team's host: a merge into `bolt/<bolt>` on its unit's, chore's or fix's line, and the bolt's landing on its kit's main, from `bolt/<bolt>` or a pull request opened from it, on the bolt's head line.
+
+#### Scenario: A unit's merge under test
+- **WHEN** unit `a`'s merge agent runs `sluice submit bolt/y --no-wait --json` and sluice answers `#41`, which it then tests
+- **THEN** the next `crew bolts` shows `a`'s line with `#41 under test`, and its JSON gives `a` a submission of id 41 and state `testing`
+
+#### Scenario: A bolt's landing queued on main
+- **WHEN** main-level ops's `crew bolt submit y` has been answered `#355` and sluice has it queued on main
+- **THEN** `crew bolts` shows `y`'s head line with `landing #355 queued`
+
+#### Scenario: Read again after the session that submitted it ended
+- **WHEN** a conductor restarts while unit `a`'s merge `#41` stands passed on `bolt/y` and nothing waits on it
+- **THEN** `crew bolts` still shows `a`'s line with `#41 passed, to land next`
+
+#### Scenario: Decided
+- **WHEN** sluice lands `#41` on `bolt/y`
+- **THEN** `a`'s line shows no submission and reads its stage as merged once the bolt holds its change archived
+
+#### Scenario: sluice's record can't be read
+- **WHEN** `sluice overview --json` fails on the team's host, or prints a document crew does not read
+- **THEN** each held bolt of that kit on the host says its submissions can't be read and why, once, and no line shows a number or says it has none
+
+### Requirement: A landing standing in sluice is waited on again, not submitted again
+When `crew bolt submit <bolt>` finds the bolt's landing standing in sluice on its kit's main at the bolt's head, it SHALL submit nothing and SHALL wait on that submission again, as it waits on one it made, saying it waits on the number it found; the landing's end SHALL be read and recorded as for any landing. A landing standing at another head SHALL be said, naming its number and head, and the bolt SHALL be submitted as before.
+
+#### Scenario: Ops restarted while its landing stood
+- **WHEN** swancloud-ops's session ended while `crew bolt submit y` waited on `#355`, still queued on main at `y`'s head, and the restarted ops runs `crew bolt submit y`
+- **THEN** nothing is submitted, the command says it waits on `#355` again, and once sluice lands it `y` is said landed and recorded as any landing is
+
+#### Scenario: A standing landing at an older head
+- **WHEN** `#350` stands on main for `y` at `abc1234`, and `y`'s head is now `def5678`
+- **THEN** `crew bolt submit y` says `#350` stands at `abc1234`, and submits `y` at `def5678` as before
+
+### Requirement: A stage's made things are read from its place
+Until crew runs stages through Flume, what a stage's run recorded as made SHALL be read from `made.jsonl` in the place's own git directory, one line per thing, as the run wrote it. A place with no such file SHALL have made nothing, and its cards SHALL carry no link of its.
+
+#### Scenario: A place that recorded two things
+- **WHEN** unit `a`'s place's git directory holds `made.jsonl` with two lines
+- **THEN** crew reads both lines, in order, byte for byte
+
+#### Scenario: A place that recorded nothing
+- **WHEN** unit `a`'s place has no `made.jsonl`
+- **THEN** crew reads nothing made for `a`, and refuses nothing
+
+#### Scenario: The file can't be read
+- **WHEN** `made.jsonl` in `a`'s place exists and can't be read
+- **THEN** the wait says so on standard error, naming the file, keeps what it copied before, and goes on waiting
+
+### Requirement: The conductor's wait keeps a copy of what each stage made
+The conductor's wait SHALL read the place's `made.jsonl` at each look and at the stage's end, and SHALL keep each line it has not kept before, as written, in a copy on the team's host under the unit and the stage that was running when it first saw the line, so the lines outlive the place's tidy. When it keeps a new line for a unit in a batch whose card is open, it SHALL hand that card's change to the partition's main machine. The copies SHALL go when the unit's bolt lands or is dropped.
+
+#### Scenario: A line written while the code stage runs
+- **WHEN** the conductor's `crew unit wait a` runs over `a`'s code stage and the code agent appends a line to `made.jsonl`
+- **THEN** the wait keeps that line under `a`'s code stage, once, however many looks see it
+
+#### Scenario: A line seen at a later stage
+- **WHEN** a line was in `made.jsonl` before the verify stage started and no wait saw it during code
+- **THEN** the wait over verify keeps it under the verify stage, the stage that was running when crew first saw it
+
+#### Scenario: The place is tidied
+- **WHEN** unit `a` merges and its place is removed
+- **THEN** the copy of `a`'s lines is still on the team's host, and batch 7's card still carries them
+
+#### Scenario: The bolt lands
+- **WHEN** `crew bolt land y` closes bolt `y`, which holds unit `a`
+- **THEN** the copy of `a`'s lines is gone from the team's host
 
 ### Requirement: A conductor reads a stuck report before it asks
 On a stuck report, the conductor SHALL read the agent's words and the branch's commits the report carries before it asks anyone, and act on what they settle, never reading the agent's pane. Only when they settle nothing SHALL it ask the user, saying what the report carries, and run the stage again or wait again on the user's word.

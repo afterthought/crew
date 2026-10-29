@@ -3,7 +3,7 @@
 # GitHub after a fetch and made ready through the kit's declaration as every worktree crew makes is (plan.17), a setup
 # that fails refusing the stage until a second run sets the place up; each stage of a unit takes a slot, starts a fresh
 # agent in the unit's place and sends its prompt; the waits end each stage at its deliverable and record it; the
-# team's read records an end nobody waited on, fetching and gathering once; a verify whose agent ended its turn with no
+# team's read records an end nobody waited on, fetching and gathering once; a wait whose session has ended ends with it; a verify whose agent ended its turn with no
 # report has not ended, and its unit's merge is refused naming the report (record 0007); verify's report ends it;
 # code's prompt names an unmerged unit's overlapping Touches; a stuck answer lists the branch's commits since the stage
 # began and quotes the agent's last words (teams.4); a wait says a conflict sluice's overview shows for the
@@ -37,7 +37,7 @@ eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team)" "swb-1"
 eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
 eq "$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
 [[ ! -e $kd/bolts ]] || fail "give made a worktree for the bolt"
-eq "$(field mac-studio bolt.give On) $(field mac-studio bolt.give Commit)" "bolt/tenant-environments team/swb-1 WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
+eq "$(field mac-studio bolt.give On) $(field mac-studio bolt.give Commit)" "bolt/tenant-environments team/swb-1 WilldanGroup/crew-state@$(act_tip)"
 clean_forecast
 ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give has sluice make the bolt's branch on GitHub from main, and no worktree"
 
@@ -67,6 +67,10 @@ change "$kd/places/a" a 0 3; commit_all "$kd/places/a" "docs(a): the change"
 status swb-1-unit-1 working
 expect_ok crew unit wait a --stuck 0 --timeout 0
 eq "$out" "construct on a is still running after the wait's 0 ms: swb-1-unit-1 is working; nothing is recorded yet"
+( exit 0 ) & ended=$!; wait $ended
+CLAUDE_PID=$ended expect_ok as $box "$CREW/plugin/bin/crew" unit wait a --stuck 3600000
+eq "$out" "the session that started this wait has ended, so the wait ends with it: construct on a is still running, swb-1-unit-1 is working; nothing is recorded yet"
+eq "$(field $box stage.end Ended stage/a/construct)" ""
 status swb-1-unit-1 idle
 expect_ok crew unit wait a
 eq "$out" "swb-1-unit-1 delivered construct on a: its change is committed at $(short unit/a)"
@@ -74,7 +78,7 @@ eq "$(field $box stage.end Ended stage/a/construct)" "delivered"
 eq "$(field $box stage.end Delivered stage/a/construct)" "unit/a@$(short unit/a)"
 eq "$(field $box stage.end Result stage/a/construct)" "planned"
 eq "$(cat "$stages")" ""
-ok "a wait reads the stage still running while its agent works, then records its end with what it delivered"
+ok "a wait reads the stage still running while its agent works, ends with the session that started it, recording nothing, then records its end with what it delivered"
 
 echo a > "$kd/places/a/a-work"; commit_all "$kd/places/a" "feat(a): its own work"; tick a 1.1
 touch "$T/moon-fails"
