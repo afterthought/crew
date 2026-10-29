@@ -3659,7 +3659,7 @@ def landing_split(entries, plan_, b, host, kit_name, history, now):
     tm = time_at(bolt_facts(entries, plan_, b.name(), b.get("Team"), host, kit_name, ([], None), history), utc(told) if told else now)
     if "unknown" in tm:
         return {}
-    return {"Age": str(tm["age"]), "Split": ", ".join(f"{h} {tm['shares'][h]}" for h in HOLDERS)}
+    return {"Age": str(tm["age"]), "Split": ", ".join(f"{h.replace('_', '-')} {tm['shares'][h]}" for h in HOLDERS)}
 
 
 def landing_time(fleet, t, plan_, b, entries, now):
@@ -11982,7 +11982,9 @@ def bolts_text(data):
 
 # ------------------------------------------------------------------------------------------------- a bolt's time
 
-HOLDERS = ("team", "kit", "user", "hold", "nobody")
+HOLDERS = ("team", "kit", "team_or_kit", "user", "hold", "nobody")
+HOLDER_SAID = {"team_or_kit": "team or kit"}  # a holder as its line names it, where its key is not its words
+UNSPLIT = "team or kit: sluice keeps no start of its checks"  # why minutes are the team's or the kit's, said once
 STALLED = 5  # minutes nobody has held a bolt before its row says it is stalled (teams.23's measure)
 
 
@@ -11990,17 +11992,20 @@ def bolt_time(start, end, stages, submissions, cards, holds):
     """Where a held bolt's time went (plan.20, record 0044), a decision of facts alone (code.7): from its newest give
     (start) to end, the time now or its landing, cut at every start and end the facts hold, each piece going to the
     first holder that applies: the team while a stage of its work runs other than a merge; the kit while one of its
-    submissions is under test; the team while a merge stage runs or one of its submissions stands in sluice not under
-    test; the user while a card of the bolt's is open; a hold while one is recorded on it; else nobody. A team at work
-    is not idle whatever else happens, a gate's checks are the gate's while the merge agent waits on them, and waiting
-    on people counts only while nothing moves, so the shares sum to the age. stages are [{start, end, merge, what}],
-    submissions [{submitted, started, decided, state, what}], cards [{at, until, key}] and holds [{at, until, what}],
-    every time aware and an end of None running to end. A submission is under test from the start of its checks to its
-    decision; one testing with no start of checks, and one decided, whose record in sluice 0.51.3 keeps no start of
-    checks, count under test for their whole stay, so a decided merge's queued minutes go to the kit until sluice keeps
-    that start (the design's Decision 3). Returns {age, shares: {holder: minutes}, now: {holder, what, since}, stalled}
-    in whole minutes, since the time the holder at end began to hold the bolt, and stalled once nobody has held it for
-    STALLED minutes."""
+    submissions is under test, from the start of its checks to its decision; the team or the kit, unsplit
+    (team_or_kit), while one of its submissions is in sluice with no start of its checks crew holds, from its submit to
+    its decision, or to end while it stands testing, and for the whole run of a merge stage that ended when crew holds no
+    submit of its work within it, so no minute crew can't split goes to the team under its merge stage, nor to the kit;
+    the team while a merge stage runs, one of its submissions stands in sluice not under test, or a decided one stood
+    from its submit to the start of its checks; the user while a card of the bolt's is open; a hold while one is
+    recorded on it; else nobody. A team at work is not idle whatever else happens, a gate's checks are the gate's while
+    the merge agent waits on them, and waiting on people counts only while nothing moves, so the shares sum to the age.
+    stages are [{start, end, merge, what, work}], work the branch of a unit, chore or fix the stage is of; submissions
+    [{submitted, started, decided, state, what, worktree}], worktree the branch it came from, one with no submit, a
+    decision alone, placing no minute; cards [{at, until, key}] and holds [{at, until, what}], every time aware and an
+    end of None running to end (the design's Decision 3). Returns {age, shares: {holder: minutes}, now: {holder, what,
+    since}, stalled} in whole minutes, since the time the holder at end began to hold the bolt, and stalled once nobody
+    has held it for STALLED minutes."""
     facts = []
 
     def put(a, b, rank, holder, what):
@@ -12008,18 +12013,27 @@ def bolt_time(start, end, stages, submissions, cards, holds):
         if a < b:
             facts.append((rank, a, b, holder, what))
     for s in stages:
-        put(s["start"], s.get("end"), 3 if s.get("merge") else 1, "team", s.get("what"))
-    for s in submissions:
-        if s.get("decided") or s.get("state") == "testing":
-            checks = s.get("started") or s["submitted"]
-            put(checks, s.get("decided"), 2, "kit", s.get("what"))
-            put(s["submitted"], checks, 3, "team", s.get("what"))
+        if not s.get("merge"):
+            put(s["start"], s.get("end"), 1, "team", s.get("what"))
+        elif s.get("end") and not any(x.get("submitted") and x.get("worktree") is not None and x.get("worktree") == s.get("work")
+                                      and s["start"] <= x["submitted"] <= s["end"] for x in submissions):
+            put(s["start"], s["end"], 3, "team_or_kit", s.get("what"))
         else:
-            put(s["submitted"], None, 3, "team", s.get("what"))
+            put(s["start"], s.get("end"), 4, "team", s.get("what"))
+    for s in submissions:
+        if not s.get("submitted"):
+            continue
+        if s.get("started"):
+            put(s["started"], s.get("decided"), 2, "kit", s.get("what"))
+            put(s["submitted"], s["started"], 4, "team", s.get("what"))
+        elif s.get("decided") or s.get("state") == "testing":
+            put(s["submitted"], s.get("decided"), 3, "team_or_kit", s.get("what"))
+        else:
+            put(s["submitted"], None, 4, "team", s.get("what"))
     for c in cards:
-        put(c["at"], c.get("until"), 4, "user", c.get("key"))
+        put(c["at"], c.get("until"), 5, "user", c.get("key"))
     for h in holds:
-        put(h["at"], h.get("until"), 5, "hold", h.get("what"))
+        put(h["at"], h.get("until"), 6, "hold", h.get("what"))
     facts.sort(key=lambda f: (f[0], f[1]))
     cuts = sorted({start, end} | {t for f in facts for t in f[1:3]})
     secs, pieces = dict.fromkeys(HOLDERS, 0.0), []
@@ -12041,25 +12055,30 @@ def bolt_time(start, end, stages, submissions, cards, holds):
             "stalled": holder == "nobody" and (end - since).total_seconds() >= STALLED * 60}
 
 
-def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, history, unread=None):
+def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, decided, unread=None):
     """What a held bolt's time is split from (bolt_time), read from what crew already keeps, a decision of facts alone
     (code.7): the partition's run record (entries, oldest first, read from its branch, read.5) and sluice's submissions
-    of the kit, those standing as the gather or the follower's watch read them (submissions, gather.submissions_of's
-    (list, why)) and every one its branches have had (history, gather.decided_of's (list, why), with each the follower
-    saw leave the queue since, told at the line's time, board.kept_gone). The start is the bolt's
-    newest give not refused. Its stages are each stage.start of a unit or chore of the bolt's, and each fix.start and
-    fix.merge of a fix of it, fix/<bolt>/<f>, not refused, to the next stage.end naming the same stage and agent, or
-    running yet, a merge told by its stage/<u>/merge or by fix.merge. Its submissions are those submission_rows gives
-    the bolt's lines and its landing, a merge into bolt/<bolt> from a unit's, chore's or fix's branch of it and a
-    landing on main from bolt/<bolt> or a pull request opened from it, the standing read standing over sluice's record
-    of the same number. Its cards are each card posted and not yet closed, a card lost to its owner and posted again
+    of the kit as its overview gave them, those standing as the gather or the follower's watch read them (submissions,
+    gather.submissions_of's (list, why)) and those decided (decided, (list, why)): what the follower kept of each from
+    its submit to its decision (board.kept_submissions), or, with no follower, those the overview's recent events name
+    (gather.decided_in), or at a landing sluice's record of the bolt's submissions read once (landing_split). The start
+    is the bolt's newest give not refused. Its stages are each stage.start of a unit or chore of the bolt's, and each
+    fix.start and fix.merge of a fix of it, fix/<bolt>/<f>, not refused, to the next stage.end naming the same stage and
+    agent, or running yet, a merge told by its stage/<u>/merge or by fix.merge, each with its work, the unit's, chore's
+    or fix's branch. Its submissions are those submission_rows gives the bolt's lines and its landing, a merge into
+    bolt/<bolt> from a unit's, chore's or fix's branch of it and a landing on main from bolt/<bolt>, a pull request
+    opened from it, or whose number the Submission of a queued bolt.submit of the bolt names, since a landing's events
+    name its pull request alone, each with the branch it came from (worktree), the standing read standing over the
+    decided of the same number; a decided one with no submit, decided before the follower saw it, places no minute and is
+    left out. Its cards are each card posted and not yet closed, a card lost to its owner and posted again
     under its key counting as one, that is the bolt's: under land/<bolt>; a batch's holding a unit of it; a proposal's
     whose plan.propose names the bolt or its work, or one of its chain does; its kit's landings card, land/<kit>, from
     the end of its last merge on; a question an agent of the team holding it asked since the give; or one whose post
     names the bolt or its work. Its holds are its team's host's, each host.hold to its host.go, what for being who held
     the host (the one hold crew records, the design's Decision 4). Returns {start, stages, submissions, cards, holds}
     as bolt_time takes them, or {unknown: why} when the give or the run record can't be read, and {unknown: why,
-    start} when the give is read and sluice's record of a submission is not, so no share is guessed (read.1)."""
+    start} when the give is read and the submissions are not, or one gives no time it was submitted or decided, so no
+    share is guessed (read.1)."""
     if unread:
         return {"unknown": "its age can't be told: " + "; ".join(f"{k} could not be read ({v})" for k, v in unread.items())}
     give = next((e for e in reversed(entries) if e.get("Act") == "bolt.give" and not e.get("Refused") and f"bolt/{bolt}" in (e.get("On") or [])), None)
@@ -12091,35 +12110,43 @@ def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, history, 
                 continue
             _, name, stage = obj.split("/", 2)
             merge, what = stage == "merge", f"{stage} on " + ("chore " if f"chore/{name}" in on else "") + name
+            branch = next((o for o in on if o in work), None)
         else:
             obj = next((o for o in on if o.startswith(fixes)), None)
             if not obj:
                 continue
             merge = act == "fix.merge"
-            what = f"merge of {obj}" if merge else f"fix {obj}"
+            what, branch = f"merge of {obj}" if merge else f"fix {obj}", obj
         later = ends.get((obj, agent_of(on)), [])
         j = bisect.bisect_right(later, i)
-        stages.append({"start": utc(e["At"]), "end": utc(entries[later[j]]["At"]) if j < len(later) else None, "merge": merge, "what": what})
+        stages.append({"start": utc(e["At"]), "end": utc(entries[later[j]]["At"]) if j < len(later) else None, "merge": merge, "what": what,
+                       "work": branch})
     last_merge = max((s["end"] for s in stages if s["merge"] and s["end"]), default=None)
 
     subs, why = submissions
-    hist, hwhy = history
-    if why or hwhy:
-        return {"unknown": f"who held its time can't be told: its submissions can't be read: {why or hwhy}", "start": start}
+    done, dwhy = decided
+    if why or dwhy:
+        return {"unknown": f"who held its time can't be told: its submissions can't be read: {why or dwhy}", "start": start}
+    landings = {str(e.get("Submission")) for e in entries if e.get("Act") == "bolt.submit" and e.get("Outcome") == "queued"
+                and e.get("Submission") and f"bolt/{bolt}" in (e.get("On") or [])}
 
     def of_bolt(x):
         w = x.get("worktree") or ""
         if x.get("branch") == f"bolt/{bolt}":
             return w in work or w.startswith(fixes)
-        return x.get("branch") == "main" and (w == f"bolt/{bolt}" or (w.startswith("pull/") and x.get("pull_head") == f"bolt/{bolt}"))
+        return x.get("branch") == "main" and (w == f"bolt/{bolt}" or (w.startswith("pull/") and x.get("pull_head") == f"bolt/{bolt}")
+                                              or str(x.get("id")) in landings)
     gate = {}
-    for x in [x for x in hist if of_bolt(x)] + [x for x in subs if of_bolt(x)]:
-        decided = x.get("told")
-        if not x.get("submitted") or (x.get("state") not in STANDING and not decided):
+    for x, standing in [(x, False) for x in done if of_bolt(x)] + [(x, True) for x in subs if of_bolt(x)]:
+        if not (x.get("submitted") if standing else x.get("decided")):
             return {"unknown": f"who held its time can't be told: sluice's record of #{x['id']} gives no time it was "
-                               + ("submitted" if not x.get("submitted") else "decided"), "start": start}
-        gate[x["id"]] = {"submitted": utc(x["submitted"]), "started": utc(x.get("started")), "decided": utc(decided),
-                         "state": x.get("state"), "what": f"#{x['id']}"}
+                               + ("submitted" if standing else "decided"), "start": start}
+        if standing and x.get("state") not in STANDING:
+            return {"unknown": f"who held its time can't be told: sluice's record of #{x['id']} gives no time it was decided", "start": start}
+        if not x.get("submitted"):  # decided before the follower saw it: its merge stage's rule places that run (bolt_time)
+            continue
+        gate[x["id"]] = {"submitted": utc(x["submitted"]), "started": utc(x.get("started")), "decided": None if standing else utc(x["decided"]),
+                         "state": x.get("state") or x.get("event"), "what": f"#{x['id']}", "worktree": x.get("worktree")}
 
     chain, named = {}, set()
 
@@ -12203,26 +12230,27 @@ def span(m):
 
 def time_said(tm, now):
     """A held bolt's time as its head line on the board and its land line on the rail end with it (the design's
-    Decision 5): its age, each holder's minutes in HOLDERS' order but a holder that held none, and who holds it now and
-    since when, the card's key for the user, the submission for the kit, the stage for the team, what the hold is for,
-    or that it is stalled once nobody has held it STALLED minutes, `3h 05m: team 2h 10m, kit 12m, user 40m; user since
-    14:02, batch/12`; or why it can't be told, after its age once that is known (time_at)."""
+    Decision 5 of a-bolts-row-shows-its-age-and-who-holds-it): its age, each holder's minutes in HOLDERS' order but a
+    holder that held none, and who holds it now and since when, the card's key for the user, the submission for the
+    kit, the stage for the team, what the hold is for, or that it is stalled once nobody has held it STALLED minutes,
+    `3h 05m: team 2h 10m, kit 12m, user 40m; user since 14:02, batch/12`; minutes crew can't split named `team or kit`,
+    and why, once (UNSPLIT); or why it can't be told, after its age once that is known (time_at)."""
     if "unknown" in tm:
         return (f"{span(tm['age'])}; " if "age" in tm else "") + tm["unknown"]
-    shares = ", ".join(f"{h} {span(tm['shares'][h])}" for h in HOLDERS if tm["shares"][h])
+    shares = ", ".join(f"{HOLDER_SAID.get(h, h)} {span(tm['shares'][h])}" for h in HOLDERS if tm["shares"][h])
     n = tm["now"]
     since = utc(n["since"]) if isinstance(n["since"], str) else n["since"]
     at = f"{since.astimezone():%H:%M}" if since.astimezone().date() == now.astimezone().date() else f"{since.astimezone():%Y-%m-%d %H:%M}"
     who = (f"stalled since {at}" if tm["stalled"] else f"held since {at}: {n['what']}" if n["holder"] == "hold" else
-           f"nobody since {at}" if n["holder"] == "nobody" else f"{n['holder']} since {at}, {n['what'] or 'a question'}")
-    return span(tm["age"]) + (f": {shares}" if shares else "") + f"; {who}"
+           f"nobody since {at}" if n["holder"] == "nobody" else f"{HOLDER_SAID.get(n['holder'], n['holder'])} since {at}, {n['what'] or 'a question'}")
+    return span(tm["age"]) + (f": {shares}" if shares else "") + f"; {who}" + (f"; {UNSPLIT}" if tm["shares"]["team_or_kit"] else "")
 
 
 def held_time(fleet, entries, unread, plan_, b, k, now):
     """A held bolt's time to now, as its rows carry it (plan.20): bolt_time's split of bolt_facts' facts, read from the
     partition's run record (entries, oldest first, and unread, its branches that could not be read) and its kit as the
-    gather or the host's follower last read it (k, Stages.kit's), its submissions standing and sluice's record of them,
-    a kit not read or either not read saying why; since as ISO 8601, so the board's JSON carries it, and the words
+    gather or the host's follower last read it (k, Stages.kit's), its submissions standing and decided as the overview
+    gave them and the follower kept them, a kit not read or either not read saying why; since as ISO 8601, so the board's JSON carries it, and the words
     its lines end with (time_said). The board and the rail each call it at the time they draw, from the same read, so
     the two never differ for one bolt and a redraw from a kept read ages it reading nothing."""
     t = fleet["teams"].get(b.get("Team")) or {}
@@ -12234,7 +12262,7 @@ def held_time(fleet, entries, unread, plan_, b, k, now):
             return None, k[f"{key}_error"]
         return (k[key], None) if isinstance(k.get(key), list) else (None, f"{what} was not read")
     facts = bolt_facts(entries, plan_, b.name(), b.get("Team"), t.get("machine"), b.get("Repo") or ((k or {}).get("kit") or {}).get("name"),
-                       pair("submissions", "sluice's queue"), pair("history", "sluice's record of its submissions"), unread)
+                       pair("submissions", "sluice's queue"), pair("decided", "what sluice's overview names decided"), unread)
     tm = time_at(facts, now)
     if "now" in tm:
         tm = dict(tm, now=dict(tm["now"], since=tm["now"]["since"].astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))

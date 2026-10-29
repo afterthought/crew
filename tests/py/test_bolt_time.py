@@ -1,7 +1,7 @@
 """A held bolt's age and who held its time (plan.20, record 0044; crew-board "Each minute of a bolt's life goes to one
 holder" and "A held bolt's head line shows its age and who held its time"): the split, plan.bolt_time, a decision of
 facts alone, each case a scenario of the crew-board delta; and what it is split from, plan.bolt_facts, read from the
-run record and sluice's submissions."""
+run record and sluice's submissions as its overview gave them and the follower kept them."""
 import datetime
 
 from facts import START, at, plan_text
@@ -54,11 +54,57 @@ def test_a_stage_beside_a_merge_under_test_is_the_teams():
     assert got["now"] == {"holder": "team", "what": "code on c", "since": t(10)}
 
 
-def test_a_decided_merge_whose_checks_start_is_not_kept_is_the_kits_whole_stay():
-    """sluice's record of #41, landed, gives when it was submitted and decided but not when its checks began."""
-    got = split(30, stages=[{"start": t(0), "end": t(25), "merge": True, "what": "merge on a"}],
-                submissions=[{"submitted": t(3), "started": None, "decided": t(20), "state": "landed", "what": "#41"}])
-    assert got["shares"] == shares(team=8, kit=17, nobody=5)
+MERGE = {"start": t(0), "end": t(25), "merge": True, "what": "merge on a", "work": "unit/a"}
+
+
+def test_a_decided_merge_with_its_checks_start():
+    """#41, landed, was submitted at 14:00, its checks began at 14:05 as the follower saw while it stood, and it was
+    decided at 14:17: 14:00 to 14:05 the team's, 14:05 to 14:17 the kit's, and no minute of it team-or-kit."""
+    got = split(30, stages=[dict(MERGE, end=t(20))],
+                submissions=[{"submitted": t(0), "started": t(5), "decided": t(17), "state": "landed", "what": "#41", "worktree": "unit/a"}])
+    assert got["shares"] == shares(team=8, kit=12, nobody=10)
+
+
+def test_a_decided_merge_whose_checks_start_is_not_kept_is_team_or_kit_though_its_merge_stage_ran():
+    """#41, landed, submitted at 14:00 and decided at 14:17, its checks' start kept nowhere: 14:00 to 14:17 are
+    team-or-kit, though a's merge stage ran throughout, and none of them the team's or the kit's."""
+    got = split(30, stages=[MERGE], submissions=[{"submitted": t(3), "started": None, "decided": t(20), "state": "landed", "what": "#41",
+                                                  "worktree": "unit/a"}])
+    assert got["shares"] == shares(team=8, team_or_kit=17, nobody=5)
+
+
+def test_a_merge_that_ended_before_the_follower_saw_it_is_team_or_kit_for_its_whole_run():
+    """The follower started after a's merge stage of 13:50 to 14:20 and its submission were over: 13:50 to 14:20 are
+    team-or-kit; a decision alone, the merge's own seen in the recent events, places no minute."""
+    alone = {"submitted": None, "started": None, "decided": t(28), "state": None, "what": "#41", "worktree": "unit/a"}
+    got = split(40, stages=[dict(MERGE, end=t(30))], submissions=[alone])
+    assert got["shares"] == shares(team_or_kit=30, nobody=10)
+    other = {"submitted": t(10), "started": t(12), "decided": t(15), "state": "landed", "what": "#40", "worktree": "unit/c"}
+    assert split(40, stages=[dict(MERGE, end=t(30))], submissions=[other])["shares"] == shares(team_or_kit=27, kit=3, nobody=10), \
+        "another unit's submission was taken for the merge's own"
+
+
+def test_a_merge_stage_running_with_no_submission_held_is_the_teams():
+    got = split(12, stages=[dict(MERGE, end=None)])
+    assert got["shares"] == shares(team=12) and got["now"] == {"holder": "team", "what": "merge on a", "since": t(0)}
+
+
+def test_a_standing_submission_testing_with_no_start_of_checks_is_team_or_kit_from_its_submit():
+    got = split(20, submissions=[{"submitted": t(5), "started": None, "decided": None, "state": "testing", "what": "#9"}])
+    assert got["shares"] == shares(nobody=5, team_or_kit=15) and got["now"] == {"holder": "team_or_kit", "what": "#9", "since": t(5)}
+
+
+def test_minutes_that_cant_be_split_are_said_as_team_or_kit_with_why_once():
+    """crew-board "Minutes that can't be split": twelve minutes of b's age were a decided merge's stay in sluice whose
+    checks' start crew does not hold."""
+    now = t(30)
+    got = split(30, stages=[{"start": t(0), "end": t(10), "merge": False, "what": "code on a"}],
+                submissions=[{"submitted": t(12), "started": None, "decided": t(24), "state": "landed", "what": "#41", "worktree": "unit/a"},
+                             {"submitted": t(25), "started": None, "decided": None, "state": "testing", "what": "#42", "worktree": "unit/c"}])
+    assert got["shares"] == shares(team=10, team_or_kit=17, nobody=3)
+    since = f"{t(25).astimezone():%H:%M}"
+    assert plan.time_said(got, now) == f"30m: team 10m, team or kit 17m, nobody 3m; team or kit since {since}, #42; team or kit: sluice keeps no start of its checks"
+    assert plan.time_said(split(30, stages=[{"start": t(0), "end": t(10), "merge": False, "what": "code on a"}]), now).count("team or kit") == 0
 
 
 def test_a_card_counts_only_while_nothing_moves_and_a_hold_only_while_no_one_else_holds():
@@ -90,9 +136,10 @@ def test_the_shares_sum_to_the_age():
     """Pieces that are not whole minutes still give whole minutes that add up."""
     sec = datetime.timedelta(seconds=1)
     got = plan.bolt_time(GIVE, t(10) + 50 * sec, [{"start": t(0) + 20 * sec, "end": t(3) + 40 * sec, "merge": False}],
-                         [{"submitted": t(4), "started": None, "decided": t(6) + 30 * sec, "state": "landed"}],
-                         [{"at": t(7), "until": None, "key": "land/b"}], [])
-    assert got["age"] == 10 and sum(got["shares"].values()) == 10
+                         [{"submitted": t(4), "started": None, "decided": t(6) + 30 * sec, "state": "landed"},
+                          {"submitted": t(6) + 40 * sec, "started": t(6) + 50 * sec, "decided": t(7) + 10 * sec, "state": "landed"}],
+                         [{"at": t(7) + 20 * sec, "until": None, "key": "land/b"}], [])
+    assert got["age"] == 10 and sum(got["shares"].values()) == 10 and got["shares"]["team_or_kit"] == 2
 
 
 def test_a_stage_with_no_end_runs_to_the_end():
@@ -103,11 +150,6 @@ def test_a_stage_with_no_end_runs_to_the_end():
 def test_a_card_closed_before_the_give_is_left_out_and_one_open_across_it_counts_from_the_give():
     got = split(30, cards=[{"at": t(-60), "until": t(-10), "key": "batch/3"}, {"at": t(-5), "until": t(10), "key": "batch/4"}])
     assert got["shares"] == shares(user=10, nobody=20)
-
-
-def test_a_standing_submission_testing_with_no_start_of_checks_counts_from_its_submit():
-    got = split(20, submissions=[{"submitted": t(5), "started": None, "decided": None, "state": "testing", "what": "#9"}])
-    assert got["shares"] == shares(nobody=5, kit=15) and got["now"] == {"holder": "kit", "what": "#9", "since": t(5)}
 
 
 def test_a_submission_standing_not_under_test_is_the_teams():
@@ -137,9 +179,9 @@ def given(minutes=0):
     return e("bolt.give", minutes, "bolt/b", "team/swb-1")
 
 
-def facts_of(entries, standing=(), history=(), unread=None):
+def facts_of(entries, standing=(), decided=(), unread=None):
     return plan.bolt_facts(entries, PLAN, "b", "swb-1", "chuck-herdr-alpha", "switchboard-kit", (list(standing), None),
-                           (list(history), None), unread)
+                           (list(decided), None), unread)
 
 
 def mins(m):
@@ -160,11 +202,11 @@ def test_the_give_is_the_newest_and_its_stages_pair_with_their_ends():
     got = facts_of(entries)
     assert got["start"] == mins(0)
     assert got["stages"] == [
-        {"start": mins(5), "end": mins(30), "merge": False, "what": "code on a"},
-        {"start": mins(6), "end": None, "merge": False, "what": "code on chore c"},
-        {"start": mins(50), "end": mins(55), "merge": False, "what": "fix fix/b/take-main"},
-        {"start": mins(56), "end": None, "merge": True, "what": "merge of fix/b/take-main"},
-        {"start": mins(57), "end": mins(70), "merge": True, "what": "merge on a"}]
+        {"start": mins(5), "end": mins(30), "merge": False, "what": "code on a", "work": "unit/a"},
+        {"start": mins(6), "end": None, "merge": False, "what": "code on chore c", "work": "chore/c"},
+        {"start": mins(50), "end": mins(55), "merge": False, "what": "fix fix/b/take-main", "work": "fix/b/take-main"},
+        {"start": mins(56), "end": None, "merge": True, "what": "merge of fix/b/take-main", "work": "fix/b/take-main"},
+        {"start": mins(57), "end": mins(70), "merge": True, "what": "merge on a", "work": "unit/a"}]
 
 
 def test_the_users_card():
@@ -175,7 +217,7 @@ def test_the_users_card():
                e("card.close", 30, Card="req_1", Key="land/switchboard-kit", State="closed"),
                e("card.post", 60, Card="req_2", Key="land/switchboard-kit", By="wldn-ops")]
     got = plan.time_at(facts_of(entries), mins(120))
-    assert got["shares"]["user"] == 60 and got["shares"]["team"] == 60
+    assert got["shares"]["user"] == 60 and got["shares"]["team_or_kit"] == 60, "a merge with no submit held was counted the team's"
     assert got["now"] == {"holder": "user", "what": "land/switchboard-kit", "since": mins(60)}
 
 
@@ -228,19 +270,34 @@ def test_the_kits_landings_card_counts_from_the_bolts_last_merge():
     assert facts_of(entries[:2])["cards"] == []
 
 
-def test_the_bolts_submissions_standing_over_its_record_and_none_of_another_bolts():
-    hist = [{"id": 41, "branch": "bolt/b", "state": "landed", "submitted": at(5), "told": at(20), "worktree": "unit/a", "pull_head": None},
-            {"id": 42, "branch": "bolt/b", "state": "queued", "submitted": at(21), "told": None, "worktree": "chore/c", "pull_head": None},
-            {"id": 43, "branch": "bolt/o", "state": "landed", "submitted": at(5), "told": at(9), "worktree": "unit/x", "pull_head": None},
-            {"id": 44, "branch": "main", "state": "withdrawn", "submitted": at(30), "told": at(31), "worktree": "pull/9", "pull_head": "bolt/b"},
-            {"id": 45, "branch": "bolt/b", "state": "landed", "submitted": at(5), "told": at(6), "worktree": "unit/stray", "pull_head": None}]
+def test_the_bolts_submissions_standing_over_the_decided_and_none_of_another_bolts():
+    """What the follower kept decided and what stands in the overview's queue, of b's work and its landing alone."""
+    def kept(n, branch, worktree, submitted, decided, pull_head=None, started=None, event="landed"):
+        return {"id": n, "bolt": "b", "branch": branch, "worktree": worktree, "pull_head": pull_head, "submitted": submitted,
+                "started": started, "decided": decided, "event": event}
+    decided = [kept(41, "bolt/b", "unit/a", at(5), at(20), started=at(8)), kept(43, "bolt/o", "unit/x", at(5), at(9)),
+               kept(44, "main", "pull/9", at(30), at(31), pull_head="bolt/b", event="gone"), kept(45, "bolt/b", "unit/stray", at(5), at(6)),
+               kept(47, "bolt/b", "chore/c", None, at(4), event="blamed")]
     standing = [{"id": 42, "branch": "bolt/b", "state": "testing", "submitted": at(21), "started": at(25), "worktree": "chore/c", "pull_head": None},
                 {"id": 46, "branch": "main", "state": "queued", "submitted": at(40), "started": None, "worktree": "bolt/b", "pull_head": None}]
-    got = facts_of([given(0)], standing, hist)["submissions"]
-    assert got == [{"submitted": mins(5), "started": None, "decided": mins(20), "state": "landed", "what": "#41"},
-                   {"submitted": mins(21), "started": mins(25), "decided": None, "state": "testing", "what": "#42"},
-                   {"submitted": mins(30), "started": None, "decided": mins(31), "state": "withdrawn", "what": "#44"},
-                   {"submitted": mins(40), "started": None, "decided": None, "state": "queued", "what": "#46"}]
+    got = facts_of([given(0)], standing, decided)["submissions"]
+    assert got == [{"submitted": mins(5), "started": mins(8), "decided": mins(20), "state": "landed", "what": "#41", "worktree": "unit/a"},
+                   {"submitted": mins(30), "started": None, "decided": mins(31), "state": "gone", "what": "#44", "worktree": "pull/9"},
+                   {"submitted": mins(21), "started": mins(25), "decided": None, "state": "testing", "what": "#42", "worktree": "chore/c"},
+                   {"submitted": mins(40), "started": None, "decided": None, "state": "queued", "what": "#46", "worktree": "bolt/b"}]
+
+
+def test_a_landing_by_pull_request_is_the_bolts_by_the_number_its_queued_submit_names():
+    """crew-board "A landing by pull request": main's recent events name #52, from pull/9, landed, and the run record's
+    queued bolt.submit of b names #52."""
+    decided = [{"id": 52, "bolt": None, "branch": "main", "worktree": "pull/9", "pull_head": None, "submitted": at(30), "started": None,
+                "decided": at(45), "event": "landed"},
+               {"id": 53, "bolt": None, "branch": "main", "worktree": "pull/10", "pull_head": None, "submitted": at(31), "started": None,
+                "decided": at(46), "event": "landed"}]
+    submit = e("bolt.submit", 30, "bolt/b", "team/swb-1", Outcome="queued", Submission="52")
+    other = e("bolt.submit", 31, "bolt/o", "team/swb-2", Outcome="queued", Submission="53")
+    assert [x["what"] for x in facts_of([given(0), submit, other], decided=decided)["submissions"]] == ["#52"]
+    assert facts_of([given(0)], decided=decided)["submissions"] == [], "a landing by pull request was taken with no submit naming it"
 
 
 def test_a_give_that_cant_be_read_is_said_and_shows_no_share():
@@ -256,11 +313,12 @@ def test_a_record_that_cant_be_read_is_said():
 
 def test_submissions_that_cant_be_read_keep_the_age_and_tell_no_share():
     got = plan.bolt_facts([given(0)], PLAN, "b", "swb-1", "chuck-herdr-alpha", "switchboard-kit", ([], None),
-                          (None, "sluice status bolt/b exited 1: no such branch"))
+                          (None, "its overview watch ended (sluice overview --watch exited 1)"))
     assert plan.time_at(got, mins(65)) == {
-        "unknown": "who held its time can't be told: its submissions can't be read: sluice status bolt/b exited 1: no such branch", "age": 65}
+        "unknown": "who held its time can't be told: its submissions can't be read: its overview watch ended (sluice overview --watch exited 1)",
+        "age": 65}
 
 
 def test_a_decided_submission_with_no_time_it_was_decided_is_said():
-    hist = [{"id": 41, "branch": "bolt/b", "state": "landed", "submitted": at(5), "told": None, "worktree": "unit/a", "pull_head": None}]
-    assert facts_of([given(0)], history=hist)["unknown"] == "who held its time can't be told: sluice's record of #41 gives no time it was decided"
+    decided = [{"id": 41, "branch": "bolt/b", "event": "landed", "submitted": at(5), "decided": None, "worktree": "unit/a", "pull_head": None}]
+    assert facts_of([given(0)], decided=decided)["unknown"] == "who held its time can't be told: sluice's record of #41 gives no time it was decided"

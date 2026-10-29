@@ -71,9 +71,9 @@ def kits(ok=True):
            "slots": {"swb-1": [{"slot": "unit-1", "kind": "unit", "name": "a"}, {"slot": "unit-4", "kind": "fix", "name": "fix/tenant-environments/edge"}]},
            "sites": {"/kit/places/a": {"here": "http://unit-a--switchboard-kit.localhost", "tailnet": "https://unit-a--switchboard-kit--box.dev"}},
            "routes": [{"name": "unit-a--switchboard-kit", "url": "http://unit-a.localhost"}],
-           "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}], "submissions": [], "history": []}
+           "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}], "submissions": [], "decided": []}
     brd = {"ok": True, "main": ["done-one"], "places": {}, "reports": {}, "bolts": {"board-done": {"head": "e" * 40, "head_at": ago(10), "changes": []}},
-           "fixes": [], "slots": {}, "sites": {}, "routes": [], "submissions": [], "history": []}
+           "fixes": [], "slots": {}, "sites": {}, "routes": [], "submissions": [], "decided": []}
     mac = {"mac-studio": {"ok": True, "kits": {"/a/main": {"ok": True, "main": [], "places": {}, "reports": {}, "bolts": {}, "fixes": []}}}}
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
@@ -1623,7 +1623,7 @@ class TestTime:
     def test_the_json_carries_the_age_the_shares_and_the_holder_now(self):
         logs = [dict(Act="stage.start", On=["stage/a/code", "unit/a", "agent/swb-1-unit-1"], At=ago(50))]
         te = data(logs=logs)["partitions"][0]["construction"][0]
-        assert te["time"] == {"age": 200, "shares": {"team": 50, "kit": 0, "user": 0, "hold": 0, "nobody": 150},
+        assert te["time"] == {"age": 200, "shares": {"team": 50, "kit": 0, "team_or_kit": 0, "user": 0, "hold": 0, "nobody": 150},
                               "now": {"holder": "team", "what": "code on a", "since": ago(50)}, "stalled": False,
                               "said": f"3h 20m: team 50m, nobody 2h 30m; team since {hm(50)}, code on a"}
         assert json.loads(json.dumps(te))["time"] == te["time"]

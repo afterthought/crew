@@ -1566,13 +1566,13 @@ class TestLandTime:
 
     def read(self):
         sv = survey()
-        sv[BOX]["kits"]["/kit/main"].update(submissions=[], history=[])
+        sv[BOX]["kits"]["/kit/main"].update(submissions=[], decided=[])
         found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
         return dict(found=found, rows=plan.rail_rows(FLEET, found, sv, [], {}, None), cards=[], sv=sv, unread={}, errors={}, props=[],
                     landings=[], gives={}, signals={"wldn": ([], {})}, ops={"wldn": []}, logs={"wldn": list(self.LOGS)})
 
     def test_a_bolt_waiting_on_the_users_yes_says_its_age_the_users_share_and_that_the_user_holds_it(self):
-        said = f"5h 00m: team 30m, user 2h 00m, nobody 2h 30m; user since {self.hm(120)}, land/{KIT}"
+        said = f"5h 00m: team or kit 30m, user 2h 00m, nobody 2h 30m; user since {self.hm(120)}, land/{KIT}; team or kit: sluice keeps no start of its checks"
         out = plan.rail_text(FLEET, ["wldn"], self.read(), NOW).splitlines()
         assert " " * 29 + f"apex-zones, swb-2 on {BOX}: can land; {said}" in out
 
@@ -1585,7 +1585,7 @@ class TestLandTime:
 
     def test_a_kit_not_read_says_why_its_time_cant_be_told_after_its_age(self):
         read = self.read()
-        del read["sv"][BOX]["kits"]["/kit/main"]["history"]
+        del read["sv"][BOX]["kits"]["/kit/main"]["decided"]
         out = plan.rail_text(FLEET, ["wldn"], read, NOW)
-        assert ("can land; 5h 00m; who held its time can't be told: its submissions can't be read: sluice's record of its "
-                "submissions was not read") in out
+        assert ("can land; 5h 00m; who held its time can't be told: its submissions can't be read: what sluice's overview names "
+                "decided was not read") in out

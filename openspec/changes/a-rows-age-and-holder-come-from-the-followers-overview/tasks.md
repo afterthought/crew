@@ -11,8 +11,8 @@
 
 ## 3. A decided merge's stay is split only where crew holds its checks' start
 
-- [ ] 3.1 `bolt_time` gives a submission's stay with no checks' start, and an ended merge stage with no submit crew holds, to team-or-kit, and never to the team under the merge stage; `time_said` names the share and its reason (design, Decision 3; Task notes 3.1). Passes `tests/py/test_bolt_time.py` in the logic tier (`tests/suite logic`).
-- [ ] 3.2 `bolt_facts` and `held_time` read the kept or overview `decided` in place of history, give each stage its work, and take a landing by its queued number (design, Decision 4; Task notes 3.2). Passes `tests/py/test_bolt_time.py` and `tests/py/test_rail.py` in the logic tier (`tests/suite logic`).
+- [x] 3.1 `bolt_time` gives a submission's stay with no checks' start, and an ended merge stage with no submit crew holds, to team-or-kit, and never to the team under the merge stage; `time_said` names the share and its reason (design, Decision 3; Task notes 3.1). Passes `tests/py/test_bolt_time.py` in the logic tier (`tests/suite logic`).
+- [x] 3.2 `bolt_facts` and `held_time` read the kept or overview `decided` in place of history, give each stage its work, and take a landing by its queued number (design, Decision 4; Task notes 3.2). Passes `tests/py/test_bolt_time.py` and `tests/py/test_rail.py` in the logic tier (`tests/suite logic`).
 
 ## 4. The landing's split follows the same rule
 
