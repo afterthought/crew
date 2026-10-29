@@ -8578,16 +8578,23 @@ def handed(t, slot, eid):
     return words
 
 
-def background(info):
-    """What an agent's own session says it still waits on: (the background tasks it started and has not been told are
-    over, when its transcript last wrote, None), or (None, None, what crew could not read)."""
+def session_transcript(info):
+    """The transcript of the agent's own session, from herdr's item for it: (its path, None), or (None, what crew could
+    not read)."""
     sess = info.get("agent_session")
     sid = sess.get("value") if isinstance(sess, dict) else None
     if not isinstance(sid, str) or not sid:
-        return None, None, "herdr names no session for it"
+        return None, "herdr names no session for it"
     path = transcript.find(sid)
-    if path is None:
-        return None, None, f"no transcript for its session {sid}"
+    return (path, None) if path else (None, f"no transcript for its session {sid}")
+
+
+def background(info):
+    """What an agent's own session says it still waits on: (the background tasks it started and has not been told are
+    over, when its transcript last wrote, None), or (None, None, what crew could not read)."""
+    path, why = session_transcript(info)
+    if why:
+        return None, None, why
     pending = transcript.pending(path)
     if pending is None:
         return None, None, f"its transcript {path} can't be read"
@@ -8597,10 +8604,32 @@ def background(info):
 def turn_of(info):
     """When the agent's own session says its turn ended, with nothing sent to it since (transcript.turn_over), or None
     while a turn goes on or crew can't read it."""
-    sess = info.get("agent_session")
-    sid = sess.get("value") if isinstance(sess, dict) else None
-    path = transcript.find(sid) if isinstance(sid, str) and sid else None
+    path, _ = session_transcript(info)
     return transcript.turn_over(path) if path else None
+
+
+def stuck_report(fleet, t, o, info):
+    """What a wait reads of an agent it finds stuck, in that look and only then (teams.4, record 0007), for stuck_said:
+    its last words since the stage began, from its own transcript (transcript.last_words), and the commits along its
+    branch's first parent in the kit's main checkout on the team's host, a chore's its own beyond its bolt, read at
+    the ref the bolt is read at, as its deliverable's own head is (gather.own_head, plan.11), with the branch's head;
+    each as what crew could not read where it could not, which the report says and still stands (read.1)."""
+    path, why = session_transcript(info)
+    words = why or transcript.last_words(path, o.start)
+    if words is None:
+        words = f"its transcript {path} can't be read"
+    main, ref = t["kit"]["main"], f"refs/heads/{o.branch()}"
+    base, commits = None, None
+    if o.chore:
+        bolt = bolt_of_unit(fleet, t, main, o.name, "chore")
+        base, why = gather.bolt_read(main, bolt) if bolt else (None, f"crew can't tell which bolt {o.branch()} was made from")
+        if not base:
+            commits = why or f"this host has neither bolt/{bolt} nor origin/bolt/{bolt}"
+    if commits is None:
+        commits = gather.since(main, ref, base)
+        if commits is None:
+            commits = f"git could not read {o.branch()} in {main}"
+    return {"words": words, "commits": commits, "head": short_head(main, ref) or None, "where": path}
 
 
 def ended_turn(o, status, pending, over):
@@ -8811,8 +8840,9 @@ def sluice_read(main, *args, timeout=POLL):
 
 def stage_wait(fleet, a):
     """Wait on the stage a slot's agent, or ops, owes, until it ends at its deliverable, stops short, is stuck, its agent
-    is gone, a verify's agent has ended its turn with no report (ended_turn), or the timeout passes, and print the one
-    line that says which. A delivered end is recorded here; nothing else is. The wait holds waits/<slot>.lock for its
+    is gone, a verify's agent has ended its turn with no report (ended_turn), or the timeout passes, and print the
+    answer that says which, a stuck one carrying what the agent last wrote and what its branch holds since the stage
+    began, read in the look that finds it stuck (stuck_report). A delivered end is recorded here; nothing else is. The wait holds waits/<slot>.lock for its
     life, so crew needs knows a wait is there to hand its words to. A unit's settle that ends delivered or short orders
     or lifts its unit's forecast orders, and its line says so (settle_said). Each look also reads sluice's overview,
     and says at once, before that line, each conflict or blame sluice records for a submission from the stage's place
@@ -8862,7 +8892,7 @@ def stage_wait(fleet, a):
             status = info.get("agent_status") if info else None
             got, missing = deliverable(fleet, t, o, place) if words is None and owed and status != "working" else (None, None)
             now = datetime.datetime.now(datetime.timezone.utc)
-            quiet, over = (False, "is working", None), False
+            quiet, over, report = (False, "is working", None), False, None
             if status == "working":
                 seen_working = now
             elif info is not None and not got:
@@ -8870,8 +8900,10 @@ def stage_wait(fleet, a):
                 pending, last, unread = background(info)
                 quiet = (*quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working), unread)
                 over = ended_turn(o, status, pending, turn_of(info) if o.stage == "verify" and pending == [] else None)
+                if quiet[0] and not over:  # what it said and did, read before it is called stuck
+                    report = stuck_report(fleet, t, o, info)
             remaining = deadline - time.monotonic()
-            how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0, over)
+            how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0, over, report)
             if how == "ended":
                 print(ended_said(t, agent))
                 return
@@ -8939,14 +8971,70 @@ def settle_said(fleet, t, unit, said):
     return " ".join([said if said.endswith(".") else f"{said}."] + [f"{x}." for x in more])
 
 
-def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time, over=False):
+# What a stuck report lists of a branch's commits, and how many characters of the agent's last words it quotes.
+STUCK_COMMITS, STUCK_WORDS = 10, 2000
+
+
+def report_time(at, day):
+    """A time as a stuck report says it, in UTC: 23:06Z on the day given, the stage's start's, else in full."""
+    at = at.astimezone(datetime.timezone.utc)
+    return at.strftime("%H:%MZ") if at.date() == day else at.strftime("%Y-%m-%dT%H:%MZ")
+
+
+def stuck_said(o, agent, doing, missing, unread, words, commits, branch, head, start, where=None):
+    """What a wait says of a stage it finds stuck (teams.4, record 0007), read before anyone is asked: the stuck line,
+    with what crew could not read of the agent's own work (unread); then what the stage's branch holds since it began,
+    from the commits gather.since gave, (short sha, committer time, subject) newest first, or a string saying what crew
+    could not read, those committed before start left out, at most STUCK_COMMITS listed and the rest counted, or that it
+    holds none, naming its head; then the agent's last words since the stage began, words as transcript.last_words gave
+    them, (text, at), ("", None) for none written, or a string saying what crew could not read, each line quoted and a
+    longer message cut at STUCK_WORDS characters on a line's end, with how many more are in the transcript at where.
+    Nothing read is judged here: the conductor reads it."""
+    day = start.astimezone(datetime.timezone.utc).date()
+    out = [f"{agent} is stuck in {o.phrase()}: {doing}, with {missing} and nothing it needs said through crew"
+           + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else "") + "."]
+    if isinstance(commits, str):
+        out.append(f"crew could not read what {branch} holds since it began: {commits}.")
+    else:
+        made = []
+        for sha, at, subject in commits:
+            try:
+                t = utc(at)
+            except ValueError:
+                continue
+            if t and t >= start:
+                made.append(f"  {sha} {report_time(t, day)} {subject}")
+        if made:
+            out.append(f"Since it began, {branch} holds {len(made)} commit{'' if len(made) == 1 else 's'}, newest first:")
+            out += made[:STUCK_COMMITS] + ([f"  and {len(made) - STUCK_COMMITS} more"] if len(made) > STUCK_COMMITS else [])
+        else:
+            out.append(f"Since it began, {branch} holds no commit; " + (f"its head is {head}." if head else "crew could not read its head."))
+    if isinstance(words, str):
+        out.append(f"crew could not read its last words: {words}.")
+    elif not words[0]:
+        out.append("It has written nothing since the stage began.")
+    else:
+        text, at = words
+        cut = text
+        if len(text) > STUCK_WORDS:
+            end = text.rfind("\n", 0, STUCK_WORDS + 1)
+            cut = text[:end] if end > 0 else text[:STUCK_WORDS]
+        out.append(f"Its last words, at {report_time(at, day)}:")
+        out += [f"  > {line}".rstrip() for line in cut.splitlines()]
+        if cut != text:
+            out.append(f"  ({len(text) - len(cut)} more characters in {where or 'its transcript'})")
+    return "\n".join(out)
+
+
+def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time, over=False, report=None):
     """One look of a wait at the stage o its agent owes, as facts (teams.4): the words a stop-short handed it, whether
     the stage is still owed, whether the agent is gone, what it delivered (got, and missing: what the wait says of the
-    deliverable, or of what it lacks), quiet, (stuck, what the agent is doing, what crew could not read of it), and
-    over, whether a verify's agent has ended its turn with nothing of its own running (ended_turn): with no report, the
-    verify has not ended, and the wait says so then, never calling it stuck (record 0007). Returns how the wait ends
-    and the line it prints, "ended" when something else recorded the end, or (None, what the agent is doing) to look
-    again."""
+    deliverable, or of what it lacks), quiet, (stuck, what the agent is doing, what crew could not read of it), over,
+    whether a verify's agent has ended its turn with nothing of its own running (ended_turn): with no report, the
+    verify has not ended, and the wait says so then, never calling it stuck (record 0007), and report, what the wait
+    read of a stuck agent, its last words, its branch's commits and head and where its transcript is (stuck_report),
+    without which no stage is called stuck. Returns how the wait ends and the line it prints, "ended" when something
+    else recorded the end, or (None, what the agent is doing) to look again."""
     if words is not None:
         return "short", f"{agent} stopped short in {o.phrase()}. It needs: {words}"
     if not owed:
@@ -8960,8 +9048,9 @@ def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time,
                            "verify ends only at its report; nothing is recorded")
     stuck, doing, unread = quiet
     if stuck:
-        return "stuck", (f"{agent} is stuck in {o.phrase()}: {doing}, with {missing} and nothing it needs said"
-                         + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
+        report is not None or fail(f"crew found {agent} stuck in {o.phrase()} with nothing read of what it said or did")
+        return "stuck", stuck_said(o, agent, doing, missing, unread, report["words"], report["commits"], o.branch(),
+                                   report["head"], o.start, report.get("where"))
     if out_of_time:
         return "running", f"{o.phrase()} is still running after the wait's {timeout} ms: {agent} {doing}; nothing is recorded yet"
     return None, doing

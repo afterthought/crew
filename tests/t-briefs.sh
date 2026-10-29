@@ -387,12 +387,15 @@ expect_ok crewpy brief swb-1 coder; has "$out" "Every task is yours."; lacks "$o
 ok "the coder's brief names no work that needs dev"
 
 # A stage ends at its deliverable (teams.4): the conductor waits for every stage and fix through crew and reads no pane
-# for an outcome, takes a stuck stage to the user and runs a stopped-short one again with the answer; the stage agents
+# for an outcome, reads a stuck stage's report first, acting on what it settles and taking it to the user only when it
+# settles nothing (record 0007 as amended 2026-10-23), and runs a stopped-short one again with the answer; the stage agents
 # say what they need with crew needs, and ops, which runs no stage, tells the conductor; verify's report is written once,
 # whole, every run, one with nothing to do as well, and a verify with no report has not ended (record 0007).
 expect_ok crewpy brief swb-1 conductor
 for want in "unit wait <unit>\` as a background command" "you never read a pane for one" "**Stuck**" \
-  "run the stage again or wait again only on the user's word" "fix swb-1 <name> --wait\`" \
+  "run the stage again or wait again only on the user's word" "Read the report's words and commits first, never its pane" \
+  "only when the report settles nothing" "When the words say the agent needs something, get it as for a stop-short" \
+  "When the commits and words show the stage's work done and its next step following, take that step" "fix swb-1 <name> --wait\`" \
   "run the stage again with the answer as its words" "**Not ended**: a verify's agent ended its turn with no report saved" \
   "run the verify again only on the user's word"; do
   has "$out" "$want"
@@ -560,7 +563,8 @@ expect_ok crewpy brief swb-1 verify; has "$out" "\"changed and not declared\""
 expect_ok crewpy brief swb-1 conductor
 for want in "run verify, once" "Its recommendations are taken as they stand: post no card for it, ask the user nothing about it, take nothing of it to the planner, and choose no findings yourself" \
   "unit run <unit> code \"Fix every finding the verify report at <path> marks fix.\"" "Once that delivers, the unit goes on to merge, with no verify again" \
-  "A finding marked leave is left" "A fix round that stops short, is stuck or is no longer running is a stuck stage" \
+  "A finding marked leave is left" "A fix round reported stuck is read as every stuck report is, its words and commits first" \
+  "is stuck with a report that settles nothing is a stuck stage" \
   "Its merge stage archives the unit's change first" "run its verify, once, and act on its report as for a unit"; do
   has "$out" "$want"
 done

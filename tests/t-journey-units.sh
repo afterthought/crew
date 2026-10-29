@@ -5,7 +5,8 @@
 # agent in the unit's place and sends its prompt; the waits end each stage at its deliverable and record it; the
 # team's read records an end nobody waited on, fetching and gathering once; a verify whose agent ended its turn with no
 # report has not ended, and its unit's merge is refused naming the report (record 0007); verify's report ends it;
-# code's prompt names an unmerged unit's overlapping Touches; a wait says a conflict sluice's overview shows for the
+# code's prompt names an unmerged unit's overlapping Touches; a stuck answer lists the branch's commits since the stage
+# began and quotes the agent's last words (teams.4); a wait says a conflict sluice's overview shows for the
 # stage's submission, before its answer (record 0032); a merge in a kit whose main takes no pull requests asks nothing
 # of GitHub, and, once main takes them, a merge drafts the bolt's ready landing pull request before its prompt is sent,
 # and one whose gh fails does not start, naming the repository in gh's words (bolt-teams). The units journey's other
@@ -130,6 +131,24 @@ change "$kd/places/b" b 0 2; commit_all "$kd/places/b" "docs(b): the change"
 touches b 'src/b/**' src/a/x
 expect_ok crew unit run b code
 eq "$(prompt_to swb-1-unit-2)" "'/opsx:apply b Its Touches overlap those of a, ahead of it in the bolt and not merged, on src/a/x against src/a/**; a'\"'\"'s change is $kd/places/a/openspec/changes/a/.'"
+ok "code's prompt names the Touches it overlaps of an unmerged unit ahead of it"
+
+# Quiet past the limit with a task open, b's coder has committed and written why it stopped: its wait reads both in the
+# look that finds it stuck, and its answer lists the commit and quotes the words (teams.4, record 0007).
+echo b > "$kd/places/b/b-work"; commit_all "$kd/places/b" "feat(b): the first part"
+said=$(ls "$(home_of $box)"/.claude*/projects/*/"sid-$(pane swb-1-unit-2 | tr : -).jsonl" | head -1)
+printf '{"type": "assistant", "timestamp": "%s", "message": {"id": "m1", "stop_reason": "end_turn", "content": [{"type": "text", "text": "I stopped: the second task needs the table'"'"'s name decided."}]}}\n' \
+  "$(ago 0)" >> "$said"
+status swb-1-unit-2 idle
+expect_ok crew unit wait b --stuck 0
+eq "$(head -1 <<<"$out")" "swb-1-unit-2 is stuck in code on b: quiet for 0 minutes, with 0 of 2 tasks ticked at its head and nothing it needs said through crew."
+eq "$(sed -n 2p <<<"$out")" "Since it began, unit/b holds 1 commit, newest first:"
+has "$(sed -n 3p <<<"$out")" "  $(short unit/b) "; has "$(sed -n 3p <<<"$out")" " feat(b): the first part"
+has "$(sed -n 4p <<<"$out")" "Its last words, at "
+eq "$(sed -n 5p <<<"$out")" "  > I stopped: the second task needs the table's name decided."
+eq "$(field $box stage.end Ended stage/b/code)" ""
+ok "a stuck answer lists the branch's commits since the stage began and quotes the agent's last words, and records no end"
+
 looks() { grep -c " agent get swb-1-unit-2$" "$CREW_TEST_LOG" || true; }
 n=$(looks)
 crew unit wait b --stuck 3600000 --timeout 1800000 > "$T/wait.out" 2>&1 &
@@ -139,7 +158,7 @@ kill -0 $waiting 2>/dev/null || fail "the wait returned before b's tasks were ti
 tick b 1.1; tick b 1.2
 wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
 eq "$(tail -1 "$T/wait.out")" "swb-1-unit-2 delivered code on b: every task is ticked (2/2) at $(short unit/b)"
-ok "code's prompt names the Touches it overlaps of an unmerged unit ahead of it, and a wait that saw a task open sees it ticked at its next look"
+ok "a wait that saw a task open sees it ticked at its next look"
 
 
 # Each look of a wait reads sluice's overview beside the refs: a conflict sluice recorded for the merge's submission

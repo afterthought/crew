@@ -1,6 +1,6 @@
 """What crew reads of a Claude Code transcript, on transcripts written as Claude Code writes them: what an agent's own
-transcript says it still waits on (teams.4), transcript.pending and last_at, and whether its turn is over,
-transcript.turn_over; a signal's excerpt checked and graded
+transcript says it still waits on (teams.4), transcript.pending and last_at, whether its turn is over,
+transcript.turn_over, and its last words since a stuck stage began, transcript.last_words; a signal's excerpt checked and graded
 (signals.2, signals.5), transcript.check; and whether a session received a prompt crew sent (teams.15),
 transcript.end and received. A file read is no process, so these are logic cases; that crew pipes transcript.py to
 the agent's host is the journeys'."""
@@ -72,6 +72,63 @@ def test_a_turn_ended_and_then_sent_something_is_not_over(tmp_path):
 def test_a_subagents_message_is_not_the_sessions_turn(tmp_path):
     sub = {"type": "assistant", "isSidechain": True, "timestamp": LONG_AGO, "message": {"stop_reason": "end_turn"}}
     assert transcript.turn_over(write(tmp_path, ENDED[0], sub)) is None
+
+
+# The agent's last words since its stage began (teams.4, record 0007), for a stuck report: one model message written as a
+# record per content block under one message.id, as Claude Code 2.1.308 writes it (read on deneb, 2026-10-23).
+SINCE = datetime.datetime(2026, 10, 23, 2, 0, tzinfo=datetime.timezone.utc)
+
+
+def block(mid, at, *content, **more):
+    return dict(type="assistant", timestamp=at, message={"id": mid, "role": "assistant", "content": list(content)}, **more)
+
+
+def text(s):
+    return {"type": "text", "text": s}
+
+
+CALL = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "tests/suite logic"}}
+RESULT = {"type": "user", "timestamp": "2026-10-23T02:31:00.000Z", "message": {"role": "user", "content": [
+    {"type": "tool_result", "tool_use_id": "t1", "content": "1 failed"}]}}
+
+
+class TestLastWords:
+    def test_a_message_written_across_records_is_read_whole_its_tool_call_passed_over(self, tmp_path):
+        path = write(tmp_path, block("m1", "2026-10-23T02:30:00.000Z", text("I stopped: the suite fails twice.")),
+                     block("m1", "2026-10-23T02:30:01.000Z", CALL),
+                     block("m1", "2026-10-23T02:30:02.000Z", text("The second task is committed.")))
+        assert transcript.last_words(path, SINCE) == (
+            "I stopped: the suite fails twice.\n\nThe second task is committed.",
+            datetime.datetime(2026, 10, 23, 2, 30, tzinfo=datetime.timezone.utc))
+
+    def test_the_last_message_with_words_is_chosen_over_a_later_tool_call(self, tmp_path):
+        path = write(tmp_path, block("m1", "2026-10-23T02:30:00.000Z", text("Running the suite once more.")),
+                     block("m2", "2026-10-23T02:30:05.000Z", CALL), RESULT)
+        assert transcript.last_words(path, SINCE)[0] == "Running the suite once more."
+
+    def test_a_subagents_message_is_never_the_agents_words(self, tmp_path):
+        path = write(tmp_path, block("m1", "2026-10-23T02:30:00.000Z", text("Mine.")),
+                     block("m2", "2026-10-23T02:40:00.000Z", text("A subagent's summary."), isSidechain=True))
+        assert transcript.last_words(path, SINCE)[0] == "Mine."
+
+    def test_a_message_before_the_stage_began_is_not_quoted(self, tmp_path):
+        path = write(tmp_path, block("m1", "2026-10-23T01:59:59.000Z", text("Hello from before.")), RESULT)
+        assert transcript.last_words(path, SINCE) == ("", None)
+
+    def test_a_message_with_no_time_crew_reads_is_passed_over(self, tmp_path):
+        path = write(tmp_path, block("m1", "2026-10-23T02:30:00.000Z", text("Timed.")), block("m2", "not a time", text("Untimed.")))
+        assert transcript.last_words(path, SINCE)[0] == "Timed."
+
+    def test_a_message_whose_content_is_a_string_is_its_words(self, tmp_path):
+        path = write(tmp_path, {"type": "assistant", "timestamp": "2026-10-23T02:30:00.000Z", "message": {"content": "Done."}})
+        assert transcript.last_words(path, SINCE)[0] == "Done."
+
+    def test_a_transcript_crew_cannot_read_is_none(self, tmp_path):
+        assert transcript.last_words(tmp_path / "gone.jsonl", SINCE) is None
+        assert transcript.last_words(None, SINCE) is None
+        bad = tmp_path / "bad.jsonl"
+        bad.write_text("not json\n")
+        assert transcript.last_words(bad, SINCE) is None
 
 
 # What crew reads of a transcript to check a signal's excerpt (signals.2, signals.5), and whether a session received a

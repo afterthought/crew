@@ -3,20 +3,23 @@ plan.ended_words for a stage whose end something else recorded, Owed.phrase for 
 plan.owed_of for the stage crew needs ends short, and how the agent of that stage is then ended in fact (plan.short_end,
 plan.short_taken, crew.Agents.stop's over). That a wait records the end it sees, and that a stop-short reaches the
 waiting wait or the conductor and ends its agent, are the journey's (t-journey-slots, t-journey-prompts)."""
+import datetime
 import types
 
 import pytest
 
-from facts import owed
+from facts import START, owed
 
 import crew
 import plan
 
 WORKING, QUIET = (False, "is working", None), (False, "has been quiet for 3 minutes, under the limit of 15 minutes", None)
+# What a wait read of a stuck agent that wrote nothing and committed nothing since its stage began (stuck_report).
+SILENT = {"words": ("", None), "commits": [], "head": "abc1234", "where": "/home/.claude/projects/-w/s1.jsonl"}
 
 
-def look(o=None, words=None, owed_=True, gone=False, got=None, missing="", quiet=WORKING, out_of_time=False, over=False):
-    return plan.look(o or owed("construct"), "swb-1-unit-1", 0, words, owed_, gone, got, missing, quiet, out_of_time, over)
+def look(o=None, words=None, owed_=True, gone=False, got=None, missing="", quiet=WORKING, out_of_time=False, over=False, report=SILENT):
+    return plan.look(o or owed("construct"), "swb-1-unit-1", 0, words, owed_, gone, got, missing, quiet, out_of_time, over, report)
 
 
 class TestLook:
@@ -35,11 +38,18 @@ class TestLook:
         assert look(gone=True, missing="nothing committed") == (
             "gone", "swb-1-unit-1 is no longer running: construct on a delivered nothing and said nothing it needs")
 
-    def test_a_quiet_agent_past_the_limit_is_stuck_saying_what_it_lacks(self):
+    def test_a_quiet_agent_past_the_limit_is_stuck_saying_what_it_lacks_and_what_it_said_and_did(self):
         assert look(o=owed("merge"), missing="bolt/b not yet holding it", quiet=(True, "quiet for 0 minutes", None)) == (
-            "stuck", "swb-1-unit-1 is stuck in merge on a: quiet for 0 minutes, with bolt/b not yet holding it and nothing it needs said")
-        assert look(o=owed("settle"), missing="nothing committed since it began", quiet=(True, "quiet for 0 minutes", None)) == (
-            "stuck", "swb-1-unit-1 is stuck in settle on a: quiet for 0 minutes, with nothing committed since it began and nothing it needs said")
+            "stuck", "swb-1-unit-1 is stuck in merge on a: quiet for 0 minutes, with bolt/b not yet holding it and nothing it "
+                     "needs said through crew.\nSince it began, unit/a holds no commit; its head is abc1234.\n"
+                     "It has written nothing since the stage began.")
+        assert look(o=owed("settle"), missing="nothing committed since it began", quiet=(True, "quiet for 0 minutes", None))[1].startswith(
+            "swb-1-unit-1 is stuck in settle on a: quiet for 0 minutes, with nothing committed since it began and nothing it "
+            "needs said through crew.\n")
+
+    def test_no_stage_is_called_stuck_before_what_it_said_and_did_is_read(self):
+        with pytest.raises(plan.Refusal, match="with nothing read of what it said or did"):
+            look(missing="nothing committed", quiet=(True, "quiet for 20 minutes", None), report=None)
 
     def test_a_verify_whose_agent_ended_its_turn_with_no_report_has_not_ended_and_is_never_called_stuck(self):
         # crw-4, 2026-10-23: a verify whose agent ended its turn with no report saved where crew reads it was called
@@ -54,9 +64,10 @@ class TestLook:
         assert look(o=owed("verify"), got="report/verify-a-20261012-1001.md", missing="the report is /r/verify-a-20261012-1001.md", over=True)[0] == "delivered"
         assert look(o=owed("verify"), got="report/verify-a-20261012-1001.md", missing="the report is /r/verify-a-20261012-1001.md", gone=True)[0] == "delivered"
 
-    def test_stuck_names_what_crew_could_not_read_of_its_own_work(self):
-        assert look(missing="nothing committed", quiet=(True, "quiet for 20 minutes", "no transcript for its session s1"))[1].endswith(
-            "; crew could not read whether it waits on work of its own (no transcript for its session s1)")
+    def test_stuck_names_what_crew_could_not_read_of_its_own_work_on_its_first_line(self):
+        assert look(missing="nothing committed", quiet=(True, "quiet for 20 minutes", "no transcript for its session s1"))[1].split("\n")[0].endswith(
+            "nothing it needs said through crew; crew could not read whether it waits on work of its own (no transcript for "
+            "its session s1).")
 
     @pytest.mark.parametrize("quiet, doing", [(WORKING, "is working"), (QUIET, QUIET[1])])
     def test_out_of_time_it_is_still_running_and_nothing_is_recorded(self, quiet, doing):
@@ -65,6 +76,77 @@ class TestLook:
 
     def test_else_it_looks_again(self):
         assert look(quiet=QUIET) == (None, QUIET[1])
+
+
+def at(hhmm, day=START.date()):
+    h, m = map(int, hhmm.split(":"))
+    return datetime.datetime(day.year, day.month, day.day, h, m, tzinfo=datetime.timezone.utc)
+
+
+def commit(sha, hhmm, subject, day="2026-10-12"):
+    return sha, f"{day}T{hhmm}:00Z", subject
+
+
+class TestStuckSaid:
+    """What a stuck report carries (teams.4, record 0007 as amended 2026-10-23): what the agent last wrote and what its
+    branch holds since the stage began, so nobody opens its pane to learn it. slc-1's fix round, 2026-10-23, committed
+    its fix and went quiet; its wait said only "nothing it needs said", and the conductor asked the user (signal
+    2026-10-23-slc-1-conductor-a4b46840/01)."""
+
+    def said(self, words=("", None), commits=(), head="abc1234", unread=None, o=None, where="/home/.claude/projects/-w/s1.jsonl"):
+        return plan.stuck_said(o or owed("code"), "swb-1-unit-1", "quiet for 20 minutes", "2 of 4 tasks ticked at its head",
+                               unread, words, list(commits) if not isinstance(commits, str) else commits, "unit/a", head, START, where)
+
+    def test_the_commits_since_it_began_and_its_last_words_with_their_time(self):
+        words = ("I stopped: tests/py/test_tenants.py fails the same way after two attempts.\n"
+                 "The second task is committed; the third needs the table's name decided.", at("11:06"))
+        assert self.said(words, [commit("def5678", "11:02", "feat(a): the second task"), commit("abc1234", "10:51", "feat(a): the first task")]) == (
+            "swb-1-unit-1 is stuck in code on a: quiet for 20 minutes, with 2 of 4 tasks ticked at its head and nothing it "
+            "needs said through crew.\n"
+            "Since it began, unit/a holds 2 commits, newest first:\n"
+            "  def5678 11:02Z feat(a): the second task\n"
+            "  abc1234 10:51Z feat(a): the first task\n"
+            "Its last words, at 11:06Z:\n"
+            "  > I stopped: tests/py/test_tenants.py fails the same way after two attempts.\n"
+            "  > The second task is committed; the third needs the table's name decided.")
+
+    def test_none_committed_since_it_began_names_its_head(self):
+        assert "\nSince it began, unit/a holds no commit; its head is abc1234.\n" in self.said()
+        assert "\nSince it began, unit/a holds no commit; crew could not read its head.\n" in self.said(head=None)
+
+    def test_commits_from_before_it_began_are_left_out(self):
+        got = self.said(commits=[commit("def5678", "10:05", "fix(a): the finding"), commit("abc1234", "09:59", "feat(a): from before")])
+        assert "Since it began, unit/a holds 1 commit, newest first:\n  def5678 10:05Z fix(a): the finding\n" in got
+        assert "abc1234" not in got
+
+    def test_nothing_written_since_it_began(self):
+        assert self.said().endswith("\nIt has written nothing since the stage began.")
+
+    def test_what_crew_could_not_read_is_said_and_the_rest_still_reported(self):
+        got = self.said(words="no transcript for its session s1", commits="git could not read unit/a in /kit/main")
+        assert got.split("\n")[1:] == ["crew could not read what unit/a holds since it began: git could not read unit/a in /kit/main.",
+                                        "crew could not read its last words: no transcript for its session s1."]
+        assert self.said(words="herdr names no session for it").endswith("crew could not read its last words: herdr names no session for it.")
+
+    def test_at_most_ten_commits_are_listed_and_the_rest_counted(self):
+        got = self.said(commits=[commit(f"c{n:06d}", f"10:{50 - n:02d}", f"feat(a): {n}") for n in range(13)]).split("\n")
+        assert got[1] == "Since it began, unit/a holds 13 commits, newest first:"
+        assert got[2] == "  c000000 10:50Z feat(a): 0" and got[11] == "  c000009 10:41Z feat(a): 9" and got[12] == "  and 3 more"
+
+    def test_a_long_message_is_cut_on_a_lines_end_with_how_much_more_and_where(self):
+        lines = [f"{n:03d} " + "x" * 95 for n in range(30)]  # 30 lines of 99 characters, 100 with their line break
+        text = "\n".join(lines)
+        got = self.said(words=(text, at("11:06"))).split("\n")
+        quoted = [l for l in got if l.startswith("  > ")]
+        assert quoted == [f"  > {l}" for l in lines[:20]]
+        assert got[-1] == f"  ({len(text) - 1999} more characters in /home/.claude/projects/-w/s1.jsonl)"
+
+    def test_a_time_on_another_day_than_its_start_is_said_in_full(self):
+        assert "Its last words, at 2026-10-13T00:10Z:" in self.said(words=("Still here.", at("00:10", datetime.date(2026, 10, 13))))
+        assert "  d1 2026-10-13T00:05Z fix(a): late" in self.said(commits=[commit("d1", "00:05", "fix(a): late", day="2026-10-13")])
+
+    def test_a_blank_line_of_its_words_is_quoted_bare(self):
+        assert "  > First.\n  >\n  > Second." in self.said(words=("First.\n\nSecond.", at("11:06")))
 
 
 class TestPhrase:

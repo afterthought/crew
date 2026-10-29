@@ -74,15 +74,19 @@
 #                                      lifting an order of crew's whose settle found nothing to change, saying so;
 #                                      rebase dependents whose unit merged, and count the partition's changes due for
 #                                      a batch; then wait for the unit's stage to end at what it delivers (construct's
-#                                      change, code's ticked tasks, verify's report, settle's commit, merge's commit
+#                                      change, code's ticked tasks, or its commit where its head holds no task list,
+#                                      verify's report, settle's commit, merge's commit
 #                                      on the bolt, a unit's change archived in it), or at its agent saying what it needs; the stage's end is
 #                                      recorded. It returns sooner when
 #                                      the agent has been quiet past --stuck (15 minutes) with nothing of its own
 #                                      running, or is gone, or a verify's agent has ended its turn with nothing of
 #                                      its own running and no report saved, which has not ended, said then and never
-#                                      stuck, or the timeout (an hour) passes, and says which
+#                                      stuck, or the timeout (an hour) passes, and says which,
 #                                      first saying, in sluice's words, each conflict or failed check sluice's
-#                                      overview shows for a submission from the stage's place
+#                                      overview shows for a submission from the stage's place. A stuck answer lists
+#                                      the branch's commits since the stage began and quotes the agent's last words
+#                                      since then, or says what crew could not read, for the conductor to read
+#                                      before it asks anyone
 #   crew fix     <team> <name> "<what is wrong>" [--bolt <bolt>]
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
 #                                      built by a fresh code agent; a name already in use on the bolt is refused.

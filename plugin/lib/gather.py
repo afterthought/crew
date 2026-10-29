@@ -261,6 +261,16 @@ def own_head(cwd, branch, bolt):
     return (out[0], out[1]) if len(out) == 2 else (None, None)
 
 
+def since(cwd, ref, base=None):
+    """The commits along a branch's first parent from its head, beyond base when given, newest first, as (short sha,
+    committer time in ISO 8601, subject), at most 200; None when git refuses. Which of them a stage made is the
+    caller's to judge by their times."""
+    out = run(["git", "log", "--first-parent", "--format=%h%x09%cI%x09%s", "-n", "200", f"{base}..{ref}" if base else ref], cwd)
+    if out is None:
+        return None
+    return [tuple(line.split("\t", 2)) for line in out.splitlines() if line.count("\t") >= 2]
+
+
 def head_at(cwd, ref):
     """The committer time of a ref, as ISO 8601, or None."""
     return (run(["git", "log", "-1", "--format=%cI", ref], cwd) or "").strip() or None
