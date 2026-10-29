@@ -169,13 +169,17 @@ expect_ok crew rail --label wldn; rail=$out
 eq "$(head -n "$(wc -l <<<"$rail")" <<<"$views" | tail -n +2 | mask)" "$(tail -n +2 <<<"$rail" | mask)"
 expect_ok crew _rail wldn --once
 eq "$(head -n "$(wc -l <<<"$rail")" <<<"$out" | tail -n +2 | mask)" "$(tail -n +2 <<<"$rail" | mask)"
-eq "$(jq -S 'del(.read_at)' "$frame")" "$(crew board --label wldn --json | jq -S 'del(.read_at)')"
+# aged: the board's JSON with each held bolt's age, shares and words left out, and unaged, its text with each head
+# line's age and shares left out, since a minute can turn between two reads, as mask leaves out a rail row's age
+aged() { jq -S 'del(.read_at, (.partitions[].construction[].time | .age, .shares, .said))'; }
+unaged() { sed -E 's/  (<1m|[0-9]+m|[0-9]+h [0-9]{2}m|[0-9]+d [0-9]{2}h)(: [^;]*)?; /  AGE; /'; }
+eq "$(aged < "$frame")" "$(crew board --label wldn --json | aged)"
 agents=$(home_of mac-studio)/.cache/crew/board/wldn.agents.json
 eq "$(jq -r '.read_at' "$agents") $(jq -r '.views | has("swb-1-conductor") and has("wldn-planner")' "$agents")" "$(jq -r '.read_at' "$frame") true"
 has "$(jq -r '.cards["swb-1-conductor"][0] | map(.[0]) | join("")' "$agents")" "  your card  verify/c/$stamp  req_ver-1  open "
 has "$rail" "verify/c/$stamp (wldn), asked by swb-1-conductor on $box"$'\n'"    left:   a rail read on $box closes it, under that host's sign-in"
 expect_ok crew _board wldn --once
-eq "$(tail -n +2 <<<"$out")" "$(crew board --label wldn | tail -n +2)"
+eq "$(tail -n +2 <<<"$out" | unaged)" "$(crew board --label wldn | tail -n +2 | unaged)"
 ok "the host's follower, with no tab open, writes each partition's frames there from one read, one fetch of the state branch and one read of each host's kits, the rail the rail tab draws as crew rail prints it, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view and open cards beside it"
 
 # The follower running: its clock set past the test's length, so only a signal ticks it (tests.8), and each kit's queue
