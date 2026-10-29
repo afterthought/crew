@@ -7,7 +7,7 @@
 
 ## 2. The follower keeps each submission from its submit to its decision
 
-- [ ] 2.1 The follower keeps each held bolt's submissions per kit across lines and gathers, deciding one at its recent event's time or at the line's time, in place of `kept_gone` and the gather's history (design, Decision 2; Task notes 2.1). Passes `tests/py/test_board.py` in the logic tier (`tests/suite logic`).
+- [x] 2.1 The follower keeps each held bolt's submissions per kit across lines and gathers, deciding one at its recent event's time or at the line's time, in place of `kept_gone` and the gather's history (design, Decision 2; Task notes 2.1). Passes `tests/py/test_board.py` in the logic tier (`tests/suite logic`).
 
 ## 3. A decided merge's stay is split only where crew holds its checks' start
 

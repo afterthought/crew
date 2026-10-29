@@ -558,8 +558,9 @@ class Kept:
         # cards (askers_listed), {name: (listed, why)}; None while no tick has read it
         self.listed = None
         # queued: each kit's queue as the follower's overview watch last read it, [submissions, why] by (host, main),
-        # handed to the kit's gather in place of its own run of sluice
-        self.queued = {}
+        # handed to the kit's gather in place of its own run of sluice; decided, beside it, what the follower kept of
+        # each submission it saw decided there (board.kept_submissions), which the gather gives back
+        self.queued, self.decided = {}, {}
 
     def served(self, host, main, req):
         return kit_served(self.kits.get(host, {}).get(main), self.stamps.get((host, main)), req)
@@ -1089,9 +1090,11 @@ def survey(fleet, held, sites=False, board=False, fetch=False):
                 kept.use(host, m, kits[m], have[m])
         ask = [k for m, k in kits.items() if m not in have]
         if ask:
-            # the follower hands each kit's queue as its overview watch last read it, so the gather runs no sluice
+            # the follower hands each kit's queue as its overview watch last read it, and what it kept of the decided,
+            # so the gather runs no sluice
             queued = {m: q for m in kits if (q := (kept.queued.get((host, m)) if kept is not None else None))}
-            req = {"kits": [dict(k, queued=queued[k["main"]]) if k["main"] in queued else k for k in ask], "sites": sites,
+            req = {"kits": [dict(k, queued=queued[k["main"]], decided=kept.decided.get((host, k["main"]), [[], None])) if k["main"] in queued else k
+                            for k in ask], "sites": sites,
                    **({"board": True} if board else {}), **({"fetch": True} if fetch else {}), **({"stamped": True} if kept is not None else {})}
             got, error = gathered(fleet, host, req)
             for k in ask if kept is not None else ():

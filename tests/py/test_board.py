@@ -598,32 +598,54 @@ class TestRefresh:
         assert len(self.reads) == 2 and self.handed[-1] == {(BOX, "/kit/main"): [answer["submissions"], None]}
         assert w.opened == [(BOX, "/kit/main")] and w.closed == [], "a watch was opened twice"
 
-    def test_a_submission_that_left_the_queue_counts_as_it_last_stood_until_the_lines_time(self, follower):
-        """The crew-board spec, The follower follows each kit's queue (between gathers, a submission that has left the
-        queue counts as it last stood until the line that no longer holds it): #41 under test leaves the queue, and the
-        refresh, gathering nothing, keeps it in the last gather's record of sluice's, told at that line's time, once."""
+    def test_a_merge_decided_between_gathers_is_kept_at_its_recent_events_time_and_after_the_next_gather(self, follower):
+        """The crew-board spec, A merge decided between gathers: b's merge #41, kept since it was submitted at 16:00 and
+        tested from 16:05, leaves the queue on a line whose recent events say it landed at 16:17; the follower keeps it
+        decided at 16:17, starts no process to learn it, and still holds it after the next gather of the kit, which it
+        hands what it kept."""
         self.req = {"main": "/kit/main", "bolts": ["te"]}
         follower.watches = w = self.Watching()
         follower.refresh()
         answer = follower.kept.kits[BOX]["/kit/main"][1]
-        landed = {"id": 40, "branch": "bolt/te", "head": None, "state": "landed", "submitted": "2026-10-28T15:00:00Z", "told": "2026-10-28T15:10:00Z",
-                  "worktree": "unit/b", "pull_head": None}
-        answer["history"] = [landed, dict(landed, id=41, state="queued", told=None, worktree="unit/a")]
         testing = dict(self.QUEUED, branches=[dict(self.QUEUED["branches"][0], candidates=[
-            {"id": "c1", "state": "testing", "started": "2026-10-28T16:20:00Z", "submissions": [41]}], submissions=[
+            {"id": "c1", "state": "testing", "started": "2026-10-28T16:05:00Z", "submissions": [41]}], submissions=[
             dict(self.QUEUED["branches"][0]["submissions"][0], submitted="2026-10-28T16:00:00Z")])])
         w.states[(BOX, "/kit/main")] = {"doc": testing}
         follower.refresh()
-        assert answer["history"][-1]["told"] is None and [s["started"] for s in answer["submissions"]] == ["2026-10-28T16:20:00Z"]
-        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:40:00Z", branches=[])}
+        assert answer["decided"] == [] and [s["started"] for s in answer["submissions"]] == ["2026-10-28T16:05:00Z"]
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:18:00Z", branches=[dict(self.QUEUED["branches"][0], submissions=[],
+            recent=[{"at": "2026-10-28T16:17:00Z", "event": "landed", "ids": [41]}], recent_from={"41": "unit/a"})])}
         follower.refresh()
-        assert len(self.reads) == 1 and answer["submissions"] == [], "the queue's move gathered the kit"
-        assert answer["history"] == [landed, {"id": 41, "branch": "bolt/te", "head": None, "state": "testing", "worktree": "unit/a", "pull_head": None,
-                                              "submitted": "2026-10-28T16:00:00Z", "started": "2026-10-28T16:20:00Z", "told": "2026-10-28T16:40:00Z"}]
-        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:50:00Z", branches=[dict(self.QUEUED["branches"][0], submissions=[
-            {"id": 42, "branch": "bolt/te", "state": "queued", "from": {"worktree": "unit/b"}}])])}
+        landed = {"id": 41, "bolt": "te", "branch": "bolt/te", "worktree": "unit/a", "pull_head": None, "submitted": "2026-10-28T16:00:00Z",
+                  "started": "2026-10-28T16:05:00Z", "decided": "2026-10-28T16:17:00Z", "event": "landed"}
+        assert len(self.reads) == 1 and answer["submissions"] == [] and answer["decided"] == [landed], "the queue's move gathered the kit"
+        self.stamps[(BOX, "/kit/main")] = "s2"
         follower.refresh()
-        assert [x["told"] for x in answer["history"]] == ["2026-10-28T15:10:00Z", "2026-10-28T16:40:00Z"], "a gone submission was told again"
+        assert len(self.reads) == 2 and plan.READ.follower is None
+        assert follower.kept.kits[BOX]["/kit/main"][1]["decided"] == [landed], "a gather threw away what the follower kept"
+
+    def test_a_kits_gather_is_handed_what_the_follower_kept_beside_its_queue(self, follower):
+        self.req = {"main": "/kit/main", "bolts": ["te"]}
+        follower.watches = w = self.Watching()
+        follower.refresh()
+        w.states[(BOX, "/kit/main")] = {"doc": self.QUEUED}
+        follower.refresh()
+        w.states[(BOX, "/kit/main")] = {"doc": dict(self.QUEUED, at="2026-10-28T16:30:00Z", branches=[])}
+        follower.refresh()
+        self.stamps[(BOX, "/kit/main")] = "s2"
+        decided = []
+        gathered = board.flow_read
+
+        def kept_too(fleet, labels, sweep=False):
+            decided.append(dict(plan.READ.follower.decided))
+            return gathered(fleet, labels, sweep)
+        board.flow_read = kept_too
+        try:
+            follower.refresh()
+        finally:
+            board.flow_read = gathered
+        assert decided == [{(BOX, "/kit/main"): [[{"id": 41, "bolt": "te", "branch": "bolt/te", "worktree": "unit/a", "pull_head": None,
+                                                    "submitted": None, "started": None, "decided": "2026-10-28T16:30:00Z", "event": "gone"}], None]}]
 
     def test_a_new_watch_starts_from_the_overview_its_kits_gather_read_so_its_first_line_moves_nothing(self, follower, monkeypatch):
         """A kit's queue is read once: the gather's own overview is the kept line the watch's first is compared with."""
@@ -903,19 +925,75 @@ class TestWatches:
         assert [s["id"] for s in board.queue_of({"doc": queued})[0]] == [41, 42]
         assert board.queue_of({"why": "its overview watch ended"}) == (None, "its overview watch ended")
 
-    def test_a_submission_gone_from_the_queue_is_kept_told_at_the_lines_time_until_sluices_record_tells_it(self):
-        """Decision 7 of a-bolts-row-shows-its-age-and-who-holds-it: between gathers, one that left the queue counts as
-        it last stood until the line that no longer holds it."""
-        a = {"id": 41, "branch": "bolt/te", "state": "testing", "submitted": "2026-10-28T16:00:00Z", "started": "2026-10-28T16:05:00Z"}
-        b = {"id": 42, "branch": "bolt/te", "state": "queued", "submitted": "2026-10-28T16:10:00Z", "started": None}
-        told = {"id": 40, "state": "landed", "told": "2026-10-28T15:00:00Z"}
-        at = "2026-10-28T16:30:00Z"
-        assert board.kept_gone([a, b], [b], [told, dict(a, told=None)], at) == [told, dict(a, told=at)]
-        assert board.kept_gone([a, b], [b], [told, dict(a, told="2026-10-28T16:20:00Z")], at) == [told, dict(a, told="2026-10-28T16:20:00Z")]
-        assert board.kept_gone([a], [a, b], [told], at) == [told]
-        assert board.kept_gone([a], [], None, at) is None, "a record that could not be read was made"
-        assert board.kept_gone([a], None, [told], at) == [told], "a queue that can't be read was taken as empty"
-        assert board.kept_gone([a], [], [told], None) == [told], "a line with no time told one at a guess"
+    @staticmethod
+    def line(at, standing=(), testing=None, recent=(), recent_from=None, main=()):
+        """An overview's document at a time (at): b's branch, bolt/te, holding its standing submissions, the one testing
+        from testing's time, and its recent events; main holding its own standing."""
+        branches = [{"branch": "bolt/te", "submissions": list(standing), "recent": list(recent), "recent_from": recent_from or {},
+                     "candidates": [{"state": "testing", "started": testing, "submissions": [standing[0]["id"]]}] if testing else []},
+                    {"branch": "main", "submissions": list(main), "recent": [], "recent_from": {}}]
+        return {"schema": "sluice/overview@1", **({"at": at} if at else {}), "branches": branches}
+
+    A = {"id": 41, "branch": "bolt/te", "state": "queued", "submitted": "2026-10-28T14:00:00Z", "from": {"worktree": "unit/a"}}
+
+    def kept41(self, **fields):
+        return dict({"id": 41, "bolt": "te", "branch": "bolt/te", "worktree": "unit/a", "pull_head": None, "submitted": "2026-10-28T14:00:00Z",
+                     "started": None, "decided": None, "event": None}, **fields)
+
+    def test_a_merge_kept_from_its_submit_takes_its_checks_start_once_seen_and_never_clears_it(self):
+        """Decision 2 of a-rows-age-and-holder-come-from-the-followers-overview: started from the candidate testing it."""
+        kept = board.kept_submissions({}, self.line("2026-10-28T14:01:00Z", [self.A]), ["te"])
+        assert kept == {41: self.kept41()}
+        kept = board.kept_submissions(kept, self.line("2026-10-28T14:06:00Z", [dict(self.A, state="testing")], testing="2026-10-28T14:05:00Z"), ["te"])
+        assert kept[41]["started"] == "2026-10-28T14:05:00Z"
+        kept = board.kept_submissions(kept, self.line("2026-10-28T14:10:00Z", [dict(self.A, state="passed")]), ["te"])
+        assert kept == {41: self.kept41(started="2026-10-28T14:05:00Z")}, "a start of checks once seen was cleared"
+
+    def test_a_merge_that_leaves_the_queue_is_decided_at_its_recent_events_time(self):
+        """The crew-board spec, A merge decided between gathers."""
+        kept = {41: self.kept41(started="2026-10-28T14:05:00Z")}
+        got = board.kept_submissions(kept, self.line("2026-10-28T14:18:00Z", recent=[{"at": "2026-10-28T14:17:00Z", "event": "landed", "ids": [41]}],
+                                                     recent_from={"41": "unit/a"}), ["te"])
+        assert got == {41: self.kept41(started="2026-10-28T14:05:00Z", decided="2026-10-28T14:17:00Z", event="landed")}
+        assert board.kept_submissions(got, self.line("2026-10-28T15:00:00Z"), ["te"]) == got, "a decided merge was decided again"
+
+    def test_a_withdrawn_merge_is_decided_at_the_lines_time(self):
+        """The crew-board spec, A withdrawn merge: a line printed at 14:20 whose recent events do not name it."""
+        got = board.kept_submissions({41: self.kept41()}, self.line("2026-10-28T14:20:00Z"), ["te"])
+        assert got == {41: self.kept41(decided="2026-10-28T14:20:00Z", event="gone")}
+
+    def test_a_merge_decided_before_the_follower_saw_it_is_kept_with_its_decision_alone(self):
+        recent = [{"at": "2026-10-28T13:58:00Z", "event": "landed", "id": 40}]
+        got = board.kept_submissions({}, self.line("2026-10-28T14:20:00Z", recent=recent, recent_from={"40": "unit/b"}), ["te"])
+        assert got == {40: {"id": 40, "bolt": "te", "branch": "bolt/te", "worktree": "unit/b", "pull_head": None, "submitted": None,
+                            "started": None, "decided": "2026-10-28T13:58:00Z", "event": "landed"}}
+        assert board.decided_kept(got) == [got[40]]
+
+    def test_a_submission_of_a_bolt_no_longer_asked_is_dropped(self):
+        other = dict(self.A, id=50, branch="bolt/zz", **{"from": {"worktree": "unit/z"}})
+        got = board.kept_submissions({41: self.kept41()}, self.line("2026-10-28T14:20:00Z", [self.A]), [])
+        assert got == {}, "a bolt no longer asked was kept"
+        assert board.kept_submissions({}, dict(self.line("2026-10-28T14:20:00Z"), branches=[{"branch": "bolt/zz", "submissions": [other]}]), ["te"]) == {}
+
+    def test_a_line_with_no_time_decides_nothing_and_one_crew_cant_read_changes_nothing(self):
+        """read.1: a document with no time decides a kept merge at no guess."""
+        kept = {41: self.kept41()}
+        assert board.kept_submissions(kept, self.line(None), ["te"]) == kept
+        assert board.kept_submissions(kept, {"schema": "sluice/overview@2"}, ["te"]) == kept
+        got = board.kept_submissions(kept, self.line(None, recent=[{"at": "2026-10-28T14:17:00Z", "event": "blamed", "ids": [41]}]), ["te"])
+        assert got[41]["decided"] == "2026-10-28T14:17:00Z", "sluice's own time for a decision was not taken from a line with none of its own"
+
+    def test_a_landing_on_main_is_kept_by_the_bolt_it_came_from_and_one_by_pull_request_alone_while_the_line_names_it(self):
+        """crew-board "A landing by pull request": the follower can't tell a pull/<n> landing's bolt from its events, so
+        it keeps it while the line names it, for plan.bolt_facts to take by the run record's number."""
+        landing = {"id": 52, "branch": "main", "state": "queued", "submitted": "2026-10-28T15:00:00Z", "from": {"worktree": "pull/9", "head": "bolt/te"}}
+        got = board.kept_submissions({}, self.line("2026-10-28T15:01:00Z", main=[landing]), ["te"])
+        assert (got[52]["bolt"], got[52]["pull_head"]) == ("te", "bolt/te")
+        doc = self.line("2026-10-28T15:30:00Z")
+        doc["branches"][1].update(recent=[{"at": "2026-10-28T15:20:00Z", "event": "landed", "ids": [53]}], recent_from={"53": "pull/10"})
+        got = board.kept_submissions(got, doc, ["te"])
+        assert (got[52]["decided"], got[52]["event"]) == ("2026-10-28T15:30:00Z", "gone") and (got[53]["bolt"], got[53]["worktree"]) == (None, "pull/10")
+        assert 53 not in board.kept_submissions(got, self.line("2026-10-28T16:00:00Z"), ["te"]), "a landing no line names any more was kept"
 
     def test_a_watch_opens_for_each_kit_shown_and_closes_for_one_no_longer_shown(self):
         assert board.watch_plan({self.KIT, self.OTHER}, set(), set(), set(), False) == {"open": [self.KIT, self.OTHER], "close": [], "ask": []}
