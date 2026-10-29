@@ -464,7 +464,7 @@ killed() {
   until_ok bash -c '! pgrep -f "lib/plan.py bolt submit $1\$" >/dev/null' _ "$1" || fail "crew bolt submit $1 was not stopped"
 }
 # A test that stops before it lets sluice decide leaves no waiter of its own calling sluice wait.
-trap 'rm -f "$T/sluice-wait-holds"; pkill -f "lib/plan.py bolt submit (far|near)-reach\$" || true' EXIT
+trap 'rm -f "$T/sluice-wait-holds"; pkill -f "lib/plan.py bolt submit ((far|near)-reach|north south east)\$" || true' EXIT
 crew bolt new far-reach "The zones reach far." --repo switchboard-kit >/dev/null
 crew bolt give swb-1 far-reach >/dev/null 2>&1
 crew unit add far-one "Unit far-one." --bolt far-reach >/dev/null
@@ -658,7 +658,16 @@ out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 
 has "$out" "lands them: crew bolt submit north south east --label wldn"
 south=$(git -C "$k" rev-parse bolt/south)
 : > "$CREW_TEST_LOG"
-expect_fail "south did not land, as said above; north and east landed" crew bolt submit north south east
+# sluice decides none of them until all three are queued, as it decides a chain each queued behind the one before, so
+# each outcome is read once east has landed, whether the landing's waiter or the command reads it first
+touch "$T/sluice-wait-holds"
+(crew bolt submit north south east > "$T/group.out" 2>&1) &
+submitter=$!
+until_ok queued east || fail "east's landing was not recorded queued:"$'\n'"$(cat "$T/group.out")"
+rm "$T/sluice-wait-holds"
+wait "$submitter" && fail "expected failure: crew bolt submit north south east"$'\n'"$(cat "$T/group.out")"
+out=$(cat "$T/group.out")
+has "$out" "south did not land, as said above; north and east landed"
 eq "$(calls | grep "^$box wt submit " | sed 's/.* from //; s/ as .*//; s/.*land-//')" $'north\nsouth\neast'
 has "$out" "bolt/north landed on switchboard-kit's main at"
 has "$out" "bolt/south did not land: sluice refused it or found a conflict; switchboard-kit's main moved to"
