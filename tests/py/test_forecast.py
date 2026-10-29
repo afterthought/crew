@@ -8,7 +8,8 @@ amendment_words for what it is told; and a bolt against its kit's main (teams.21
 answer, plan.bolt_forecast for what it tells the conductor once and plan.unread_said for a forecast sluice can't give,
 plan.main_conflict for the conflict with main the record holds at the bolt's head, plan.bolt_said for what the wait does
 with sluice's forecast, the kit's landings card raised for a conflict with what main landed,
-with plan.forecast_way for a legacy bolt forecast from a place on it (plan.19) and plan.place_checked for what that came to.
+with plan.forecast_way for a legacy bolt forecast from a place on it (plan.19) and plan.place_checked for what that came to,
+and plan.bolt_check's bound on sluice's forecast, plan.FORECAST_BOUND.
 That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
 rebase replays its commits, are contract cases (tests/contract/test_git.py); the wait that tells, starts a settle or
 carries, and the rebase at a merge, the journey's."""
@@ -638,3 +639,55 @@ class TestLegacyBolt:
         assert self.placed("NOSLUICE=yes\n") == ((None, "", "this host has no sluice on its path"), None)
         assert self.placed("PLACE=/k/places/forecast-t\n") == (
             (None, "", "crew can't read what the forecast from a place on bolt/t came to: PLACE=/k/places/forecast-t"), None)
+
+
+class TestForecastBound:
+    """The time a conductor's wait gives sluice's forecast of a bolt against main follows what the call does, a fetch
+    from the remote, so a minute and not a wait's POLL (plan.FORECAST_BOUND; swancloud-design, 2026-10-29, on deneb's
+    slow bursts of 2026-10-28, when the check ran 10 to 24 seconds): one as slow as those is read, by the bolt's branch
+    name or from a place on it, and one that runs out is said and recorded as unread, never as no conflict (read.1).
+    plan.bolt_check with sluice, and the script that runs it from a place, standing for processes that answer after
+    so many seconds, the read of the bolt's tip answering at once."""
+    H, M, LANDED = TestBoltAgainstMain.H, TestBoltAgainstMain.M, TestBoltAgainstMain.LANDED
+
+    def checked(self, monkeypatch, took, policy=None):
+        import base64
+        import subprocess
+
+        def run(args, timeout=None, **kw):
+            if (args[0] == "sluice" or plan.FORECAST_PLACE in args) and took > timeout:
+                raise subprocess.TimeoutExpired(args, timeout)
+            if args[0] == "sluice":
+                return subprocess.CompletedProcess(args, 2, self.LANDED, "")
+            if plan.FORECAST_PLACE in args:
+                said = base64.b64encode(self.LANDED.encode()).decode()
+                return subprocess.CompletedProcess(args, 0, f"PLACE=/k/places/forecast-t\nRC=2\nSAID={said}\n", "")
+            tip, at = ("-", "-") if policy is None else ("9" * 40, base64.b64encode(policy.encode()).decode())
+            return subprocess.CompletedProcess(args, 0, f"TIP={tip}\nAT_TIP={at}\nTRACKED=\n", "")
+        monkeypatch.setattr(plan.subprocess, "run", run)
+        checked, kept = plan.bolt_check({"main": "/k/main", "dir": "/k"}, "t")
+        assert kept is None
+        return plan.bolt_forecast_read(*checked)
+
+    def test_a_check_that_outruns_a_waits_poll_is_read_by_the_bolts_branch_name(self, monkeypatch):
+        doc, why = self.checked(monkeypatch, took=24)
+        assert why is None and doc["conflict"]["paths"] == ["docs/builds.md"]
+
+    def test_and_from_a_place_on_a_legacy_bolt(self, monkeypatch):
+        doc, why = self.checked(monkeypatch, took=24, policy=TestLegacyBolt.ORIGIN)
+        assert why is None and doc["conflict"]["paths"] == ["docs/builds.md"]
+
+    @pytest.mark.parametrize("policy", [None, TestLegacyBolt.ORIGIN], ids=["by-name", "from-a-place"])
+    def test_one_that_runs_out_is_recorded_unread_never_as_no_conflict(self, monkeypatch, policy):
+        doc, why = self.checked(monkeypatch, took=plan.FORECAST_BOUND + 1, policy=policy)
+        assert (doc, why) == (None, "it did not answer within 60 seconds")
+        heads, words = plan.unread_said("t", self.H, why, set())
+        assert words == "no forecast of bolt/t against main: it did not answer within 60 seconds"
+        # Recorded as the wait records it (reach), it names no paths: a conflict recorded at the bolt's head stands,
+        # and the next forecast sluice gives at that head is still told.
+        unread = dict(Act="forecast", On=["bolt/t"], Heads=heads, Reached="wait")
+        found = dict(Act="forecast", On=["bolt/t"], Heads=f"bolt/t@{self.H[:7]} main@{self.M[:7]}", Paths="docs/builds.md",
+                     Reached="wait")
+        assert plan.main_conflict([found, unread], "t", self.H) == (self.M[:7], ["docs/builds.md"])
+        later, _ = plan.bolt_forecast_read(2, self.LANDED, "")
+        assert plan.bolt_forecast("swb-1", "wldn", "t", later, plan.said_heads([unread]))[1] == ["docs/builds.md"]
