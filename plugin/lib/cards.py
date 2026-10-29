@@ -591,20 +591,34 @@ def high(action):
 # ---------------------------------------------------------------------------------------- the six builders
 
 def preview_said(p):
-    """What a landing card says of a preview of the bolt's head (rail-cards, record 0031 §3): the paragraph its details
-    hold after the reading's, and the addresses it lists, [(label, address)] in the order sluice gives them. p is a
-    preview sluice named, {head, name, addresses, state}, its output with it when it failed, or one that is not there,
-    {head, why}; None says nothing. One that waits or starts lists its addresses for once it is up, one up lists them as
-    up, each saying it lands nothing; one that failed or is not there says why, the end of a failure's output cut to a
-    detail's budget by whole lines, and lists none."""
+    """What a landing card says of a preview of the bolt's head (rail-cards, record 0043): the paragraph its details
+    hold after the reading's, and the addresses it lists, [(label, address)] in the order sluice gives them. p is what
+    brings one up, {branch, head, state: "ask"}, which says to write on the card to bring it up, and that it is not held
+    while the card waits; {head, none}, "No preview."; {head, why, policy} when whether the head has one can't be told;
+    either with released, the revision of one brought up before and released, as the head moved or not; a preview
+    sluice named, {head, name, addresses, state}, its output with it when it failed, or one that is not there, {head,
+    why}; None says nothing. One that waits or starts lists its addresses for once it is up, one up lists them as up,
+    each saying it lands nothing and how to put it away; one that failed or is not there says why, the end of a
+    failure's output cut to a detail's budget by whole lines, and lists none."""
     if not p:
         return "", []
     h = p["head"][:7]
+    was = p.get("released")
+    gone = (f" Its preview of {was[:7]} was released as the head moved." if was and was != p["head"] else
+            f" Its preview of {h} was put away." if was else "")
+    if p.get("none"):
+        return f"No preview.{gone}\n\n", []
+    if p.get("state") == "ask":
+        return (f"Try it running from {p['branch']} at {h}: write on this card to bring it up, and that you are done to "
+                f"put it away. It is not held while the card waits.{gone}\n\n"), []
+    if p.get("policy"):
+        return f"Whether {h} has a preview to try can't be told: {p['why'].rstrip('.')}.\n\n", []
     if p.get("state") in ("waiting", "starting", "up"):
         shown = list(p["addresses"].items())
         where = f"a preview of {h}, up at these addresses" if p["state"] == "up" else (
             f"a preview of {h} sluice brings up, at these addresses once it is up")
-        return (f"Try it running: {where}. It lands nothing; approving this card is the word to land.\n"
+        return (f"Try it running: {where}. It lands nothing; approving this card is the word to land. Write on this card "
+                "that you are done with it to put it away.\n"
                 + "".join(f"{label}: {url}\n" for label, url in shown) + "\n"), shown
     why = (last_lines(p.get("output"), DETAIL) or "its command failed, printing nothing") if p.get("state") == "failed" else p["why"]
     return f"A preview of {h} was asked for and is not there: {why.rstrip('.')}. Nothing waits on it.\n\n", []
@@ -1001,13 +1015,81 @@ def record_card(f):
                  recommendedIds=[alt.get("recommended") or "accept"])
 
 
+# What a card carrying a thing that must run says of bringing it up (rail-cards "The user asks for a preview by writing
+# on the card"): the user's own words on the card, never a command (briefs.13).
+TRY = ("To try it running, write on this card naming it; it is put away when you write that you are done, or when this "
+       "card closes.")
+MADE = ("name", "kind", "address", "branch", "revision")  # a made line's fields, as flume record 0007 names them
+
+
+def made_line(text):
+    """One line a stage's run recorded as made (made.jsonl; flume record 0007), read as written (rail-cards "A batch's
+    card carries what each unit's stages recorded as made"): {name, kind}, with address for a durable thing and branch
+    and revision for a thing that must run, each as the run wrote it, a field absent or null left out (read.2); or
+    {text, unread: True} for a line that is no JSON object holding its name and kind as text, or holding a field of its
+    as anything but text. crew checks nothing of what an address says."""
+    try:
+        d = json.loads(text)
+    except ValueError:
+        d = None
+    if not (isinstance(d, dict) and isinstance(d.get("name"), str) and isinstance(d.get("kind"), str)
+            and all(d.get(k) is None or isinstance(d[k], str) for k in MADE)):
+        return {"text": text, "unread": True}
+    return {k: d[k] for k in MADE if d.get(k) is not None}
+
+
+def made_said(unit, stages, up=None):
+    """The Markdown lines a card carries under a unit for what its stages recorded as made (made_line), each named by
+    the stage that recorded it, its fields as the run wrote them: a durable thing "`<stage>`: <name>, <kind>, at
+    <address>", a branch and revision it also holds beside it; a thing that must run brought up from its branch at its
+    revision, by the user's words on the card naming <unit>/<name>, or, while up holds a preview of it ({name: a preview
+    as preview_said takes it}), its addresses, or why it is not there; a line crew could not read carried as its text,
+    saying so. stages: [(stage, [line])]; none recorded, no line."""
+    out = []
+    for stage, lines in stages:
+        for text in lines:
+            m = made_line(text)
+            if m.get("unread"):
+                out.append(f"- `{stage}`: crew could not read this line as a made thing: {m['text']}")
+                continue
+            said = f"- `{stage}`: {m['name']}, {m['kind']}"
+            where = (f"{m['branch']} at {m['revision']}" if "branch" in m and "revision" in m else
+                     m.get("branch") or (f"revision {m['revision']}" if "revision" in m else None))
+            if "address" in m:
+                out.append(said + f", at {m['address']}" + (f" (from {where})" if where else ""))
+                continue
+            if not ("branch" in m and "revision" in m):
+                out.append(said + (f", from {where}" if where else ""))
+                continue
+            p = (up or {}).get(m["name"])
+            said += f", brought up from {where}"
+            if p and p.get("state") in ("waiting", "starting", "up"):
+                said += ("; up at " if p["state"] == "up" else "; coming up at ") + ", ".join(
+                    f"{label} {url}" for label, url in p["addresses"].items()) + "; it lands nothing"
+            elif p:
+                why = (last_lines(p.get("output"), DETAIL) or "its command failed, printing nothing") if p.get("state") == "failed" else p["why"]
+                said += f"; it could not be brought up: {why.rstrip('.')}"
+            else:
+                said += f"; write on this card naming {unit}/{m['name']} to bring it up"
+            out.append(said)
+    return out
+
+
+def made_running(units):
+    """Whether any unit's made lines name a thing that must run (made_line), so its card says how to bring one up."""
+    return any("address" not in m and "branch" in m and "revision" in m
+               for u in units for _, lines in u.get("made") or [] for m in map(made_line, lines))
+
+
 def batch_card(f):
     """A batch's card (record 0031 §5, briefs.9): a one-tap notice titled by what the batch is about, from its units'
     subjects; its summary opening "N changes to read, nothing to approve" with each unit's paragraph after it, cut at
-    whole sentences; the reviewer's summary on its face as inline Markdown, a paragraph per unit with its team; its
-    details opening with the one link to the batch's reading session, then where notes go and every unit with its
-    team and paragraph. f: n, previous (the batch before) or None, units ([{unit, team, subject, paragraph}]), link
-    (the reading session's) or None."""
+    whole sentences; the reviewer's summary on its face as inline Markdown, a paragraph per unit with its team, and
+    under it what the unit's stages recorded as made (made_said); its details opening with the one link to the batch's
+    reading session, then where notes go and every unit with its team, paragraph and made lines, and how to bring a
+    thing that must run up (TRY) when one is carried. f: n, previous (the batch before) or None, units ([{unit, team,
+    subject, paragraph, made, up}], made [(stage, [line])] and up {name: preview} as made_said takes them, either
+    absent for none), link (the reading session's) or None."""
     n, units = f["n"], list(f["units"])
     subjects = list(dict.fromkeys(u["subject"] for u in units if u.get("subject"))) or [u["unit"] for u in units]
     tail = f" (batch {n})"
@@ -1018,9 +1100,13 @@ def batch_card(f):
     paragraphs = [f"{u['team']} · {u['unit']}: {u['paragraph']}" for u in units]
     notes = ("Notes go in the reading or in this card's note, naming the unit; each reaches its team as your words, and the "
              "units go on building whatever you do with this card.")
+    made = {u["unit"]: made_said(u["unit"], u.get("made") or [], u.get("up")) for u in units}
+    tried = f"\n\n{TRY}" if made_running(units) else ""
     background = ((f"Read it all in one session: {f['link']}\n\n" if f.get("link") else "") + notes + "\n\n"
-                  + "\n\n".join(f"{u['unit']} ({u['team']})\n{prose(u['paragraph'], 10 ** 6)}" for u in units))
-    summary = "\n\n".join(f"**{u['team']} · {u['unit']}**\n\n{u['paragraph'].strip()}" for u in units)
+                  + "\n\n".join(f"{u['unit']} ({u['team']})\n{prose(u['paragraph'], 10 ** 6)}"
+                                + "".join(f"\n{m}" for m in made[u["unit"]]) for u in units) + tried)
+    summary = "\n\n".join(f"**{u['team']} · {u['unit']}**\n\n{u['paragraph'].strip()}"
+                          + ("\n\n" + "\n".join(made[u["unit"]]) if made[u["unit"]] else "") for u in units) + tried
     shown = [markdown("The reviewer's summary", f"batch-{n}.md", summary)] + ([link(f"Read batch {n}", f["link"])] if f.get("link") else [])
     return built(f"batch/{n}", about[0].upper() + about[1:] + tail, "\n\n".join([first] + paragraphs), background,
                  [(f"Read batch {n}", f["link"])] if f.get("link") else (), shown, urgency="whenever", kind="fyi", intent="tell")

@@ -1000,9 +1000,9 @@ MAIN = "e4f5a6b" + "0" * 33
 
 
 def row(bolt, head=H1, **more):
-    return dict(bolt=bolt, box=True, facts=dict(bolt=bolt, kit="crew", units=["a"], chores=[], batches={}, head=head, at=None,
-                                                moved=0, pr=None, team="crw-1", conductor="crw-1-conductor", preview=None,
-                                                link=f"http://mac-studio:19432/{bolt}", **more))
+    return dict(bolt=bolt, box=True, facts=dict(dict(bolt=bolt, kit="crew", units=["a"], chores=[], batches={}, head=head, at=None,
+                                                     moved=0, pr=None, team="crw-1", conductor="crw-1-conductor", preview=None,
+                                                     link=f"http://mac-studio:19432/{bolt}"), **more))
 
 
 class LandActs:
@@ -1114,6 +1114,22 @@ def test_a_rows_head_moved_changes_the_waiting_card_in_place_naming_it(monkeypat
     change = next(a for t, a in acts.calls if t == "update_request")
     assert (change["requestId"], change["changeNote"], change["expectedVersion"]) == ("req_k1", "z's head is now def5678", 2)
     assert acts.emitted[-1]["Heads"] == "y@abc1234 z@def5678"
+
+
+def test_a_moved_heads_row_names_the_new_head_as_what_brings_its_preview_up_and_says_the_old_one_went(monkeypatch):
+    """rail-cards "A row's head moves while the card waits" and "The head moves with a preview up" (record 0043): the
+    row as its team's host read it, nothing asked of sluice for the new head."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    moved = {"branch": "bolt/z", "head": H2, "state": "ask", "released": H1}
+    acts = LandActs({"y": row("y", preview={"head": H1, "none": True}), "z": row("z", H2, preview=moved)}, held,
+                    answers={"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)})
+    assert raised(monkeypatch, acts) == "req_k1"
+    change = next(a for t, a in acts.calls if t == "update_request")
+    face = "\n".join(change["artifacts"][0]["lines"])
+    assert change["changeNote"] == "z's head is now def5678"
+    assert ("Try it running from bolt/z at def5678: write on this card to bring it up, and that you are done to put it "
+            "away. It is not held while the card waits. Its preview of abc1234 was released as the head moved.") in face
+    assert "No preview." in face.split("**2. z**")[0]
 
 
 def test_a_host_that_does_not_answer_is_named_and_the_rest_raised(monkeypatch, capsys):

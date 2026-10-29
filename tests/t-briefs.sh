@@ -87,7 +87,8 @@ for want in "Your bolt's row links its reading, keyed \`land/<bolt>\`" \
   "crew card session land/<bolt>\` next, which starts the reading anew and changes the card to carry its new link" \
   "crew card session land/<bolt>\` prints its link, or starts the reading again" \
   "Notes the user sends from the reading are notes on your bolt's row" "An approval in the reading lands nothing" \
-  "the row also lists the addresses of a preview of that head, which crew asks sluice for, replaces when a merge moves the head and releases when the row is held or leaves the card" \
+  "the row carries what brings it up, the bolt branch and its head, and the preview comes up only on the user's ask on the card, which is \`wldn-ops\`'s to act on, never yours" \
+  "a merge that moves the head releases one up at the old head and asks none at the new" \
   "the preview lands nothing, and one that failed is said on the card and holds nothing" \
   "a row raised without its reading says so and why, and names" "crew card session land/<bolt>\` as your act, never the user's" \
   "and crew's rail read on the main level's host tries it again too, ten minutes after the last try, while the card waits on the user" \
@@ -97,8 +98,8 @@ for want in "Your bolt's row links its reading, keyed \`land/<bolt>\`" \
   "read from sluice's own queue, so a restart loses none of them" "\`#41 under test\`" "\`landing #355 queued\`"; do
   has "$out" "$want"
 done
-for gone in "answeredHere" "plannotator" "card wait land/" "the wait starts one first" "what the wait named"; do lacks "$out" "$gone"; done
-ok "a conductor opens nothing, raises and passes no landing card, tells main-level ops its bolt is proven, starts no batch's session, and starts no wait on its bolt's reading, reading it with crew card read once crew tells it the user sent it, whose notes are its row's and whose approval lands nothing, and whose preview crew asks for, replaces and releases; it reads each merge's and the landing's number from the rows, and a merge's agent waits on its own"
+for gone in "answeredHere" "plannotator" "card wait land/" "the wait starts one first" "what the wait named" "which crew asks sluice for"; do lacks "$out" "$gone"; done
+ok "a conductor opens nothing, raises and passes no landing card, tells main-level ops its bolt is proven, starts no batch's session, and starts no wait on its bolt's reading, reading it with crew card read once crew tells it the user sent it, whose notes are its row's and whose approval lands nothing, and whose preview comes up only on the user's ask, main-level ops's to act on; it reads each merge's and the landing's number from the rows, and a merge's agent waits on its own"
 # The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
 # You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
 # row's card as crew's.
@@ -189,6 +190,10 @@ for want in "crew card session" "crew card read" \
   "you close no proposal card" \
   "add \`--clear <unit>\` for each of them" "An approval applies the commands the user read and kept" \
   "when a command they kept names a unit they left out"; do has "$out" "$want"; done
+for want in "A batch's card carries, under each unit, what its stages recorded as made, as the run wrote it" \
+  "reply in the card's thread first, as Pending You asks, then run \`$CREW/plugin/bin/crew card preview batch/<n> <unit>/<name> --label wldn\`" \
+  "card preview batch/<n> <unit>/<name> --done --label wldn\`, which puts it away; the card's close puts it away too" \
+  "A word about a preview answers nothing on the card"; do has "$out" "$want"; done
 for gone in "Post its \`card\` as it is" "crew refuses a proposal's card in any other form" "close the old proposal's card" \
   "\`units-<k>\` and the units left ticked" "update its card to say"; do lacks "$out" "$gone"; done
 lacks "$out" "offers approval"; lacks "$out" "exactly as the user read them"; lacks "$out" "not the page as a file"
@@ -265,6 +270,10 @@ for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bol
   "each landing's number stands on its bolt's head line in \`$CREW/plugin/bin/crew bolts\`, on the board and in your band, \`landing #355 queued\`, read from sluice's own queue" \
   "run the same \`$CREW/plugin/bin/crew bolt submit <bolt> --label wldn\` again: crew finds the landing standing at the bolt's head, submits nothing, and waits on it again, saying its number" \
   "a landing standing at an older head it names, and submits the bolt at its head as before"; do has "$out" "$want"; done
+for want in "no preview is held while the card sits" \
+  "reply in the card's thread first, as Pending You asks, then run \`$CREW/plugin/bin/crew card preview land/<kit> <bolt> --label wldn\`" \
+  "card preview land/<kit> <bolt> --done --label wldn\`, which puts it away" \
+  "A word about a preview answers nothing on the card and is no word to land"; do has "$out" "$want"; done
 lacks "$out" "wt merge"; lacks "$out" "push origin main"; lacks "$out" "/workspace/crew/main"; lacks "$out" "Land one bolt at a time"
 for want in "crew raises its card in your name, with those notes and steps on its face" "you post, change and close no deploy card" \
   "\`call get_request (requestId <id>, name wldn-ops)\`: run it" "crew closes the card at the deploy's end with its outcome" \

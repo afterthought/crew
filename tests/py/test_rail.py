@@ -930,6 +930,9 @@ class Acts:
     def release_preview(self, label, key):
         return None
 
+    def release_previews(self, label, key):  # nothing was brought up from the batch's card
+        return None
+
 
 def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), handed=None, herdr=None, **kw):
     """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards, its
