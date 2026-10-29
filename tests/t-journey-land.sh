@@ -83,6 +83,8 @@ unset CREW_AGENT
 git -C "$k" worktree remove "$land"
 ok "no unit starts on a bolt while its landing is in flight, and one starts once the outcome is in though the landing's worktree stands"
 crew bolt give swb-2 console-pages >/dev/null 2>&1; place "$k" console-pages c >/dev/null
+# its construct started on this host, so its place is crew's to remove (plan.9)
+as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act stage.start --on stage/c/construct --on unit/c >/dev/null
 echo "# switchboard-kit, main's" > "$k/README.md"
 # From here main takes pull requests, as crew's own does: a landing opens one from the bolt's branch (bolt-teams).
 rewrite "$k/.config/sluice.toml" '/^\[branches.main\]$/,/^remote/ s/^remote = "origin"$/&\n\n[branches.main.pull_requests]\nreviews = 0/'
