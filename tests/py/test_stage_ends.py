@@ -42,8 +42,13 @@ class TestCode:
     def test_code_run_again_on_a_ticked_change_ends_only_at_a_commit_since_it_began(self):
         assert plan.delivered(owed("code"), {"head": "abc1234", "at": BEFORE, "ticks": (2, 2)}) == (None, "no commit since it began")
 
-    def test_no_task_list_at_its_head(self):
-        assert plan.delivered(owed("code"), {"head": "abc1234", "at": AFTER, "ticks": (0, 0)}) == (None, "no task list at its head")
+    def test_with_no_task_list_at_its_head_a_commit_since_it_began_delivers(self):
+        assert plan.delivered(owed("code"), {"head": "abc1234", "at": AFTER, "ticks": (0, 0)}) == (
+            "unit/a@abc1234", "its branch is at abc1234, with no task list at its head")
+
+    def test_with_no_task_list_and_nothing_committed_since_it_began_it_lacks_a_commit_never_tasks(self):
+        assert plan.delivered(owed("code"), {"head": "abc1234", "at": BEFORE, "ticks": (0, 0)}) == (None, "no commit since it began")
+        assert plan.delivered(owed("code"), {"head": "", "at": None, "ticks": (0, 0)}) == (None, "no commit since it began")
 
 
 class TestVerify:

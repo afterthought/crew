@@ -7595,7 +7595,8 @@ def deliverable_facts(fleet, t, o, place=None):
 def delivered(o, f):
     """What an owed stage has delivered, judged from deliverable_facts (teams.4): (its object, what the wait says of
     it), or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning
-    complete; code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since
+    complete; code: a commit since the start, every task ticked at the head, or the commit alone where the head has no
+    task list; verify: a report for the unit saved since
     the start, its lack named with the folder crew reads; settle: a commit on the unit's branch since the start
     (teams.14); merge: the bolt holding the unit's change archived, which its merge does first (teams.17), the chore's
     trailer or the fix's commits; a fix, and a chore's code: a commit on its branch since the start (record 0007). A
@@ -7628,8 +7629,9 @@ def delivered(o, f):
         done, total = f.get("ticks") or (0, 0)
         if fresh and total and done == total:
             return f"unit/{o.name}@{head}", f"every task is ticked ({done}/{total}) at {head}"
-        return None, (f"{done} of {total} tasks ticked at its head" if total and done < total else
-                      "no commit since it began" if total else "no task list at its head")
+        if fresh and not total:  # no task list: its commits deliver it, as a fix round's do (teams.4)
+            return f"unit/{o.name}@{head}", f"its branch is at {head}, with no task list at its head"
+        return None, f"{done} of {total} tasks ticked at its head" if total and done < total else "no commit since it began"
     if not fresh:
         return None, "nothing committed"
     return (f"unit/{o.name}@{head}", f"its change is committed at {head}") if f.get("planned") else (None, "its planning not complete")
