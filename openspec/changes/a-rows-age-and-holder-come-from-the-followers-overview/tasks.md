@@ -3,7 +3,7 @@
 ## 1. The gather reads sluice only through the overview
 
 - [x] 1.1 A kit's gather runs no `sluice status`, and its answer's `decided` comes from the follower's hand or from the overview's recent events, read by a guarded `decided_in` over both of their forms (design, Decision 1; Task notes 1.1). Passes `tests/py/test_bolt_submissions.py` in the logic tier (`tests/suite logic`).
-- [ ] 1.2 A gather with the follower's queue handed in starts no sluice process, one without it runs one overview and no status, and the follower's read of a kit on the box starts no `sluice status` (design, Decision 1; Task notes 1.2). Passes `tests/contract/test_gather.py` (`tests/suite contract`), and `tests/suite t-journey-board` ends with "0 failed".
+- [x] 1.2 A gather with the follower's queue handed in starts no sluice process, one without it runs one overview and no status, and the follower's read of a kit on the box starts no `sluice status` (design, Decision 1; Task notes 1.2). Passes `tests/contract/test_gather.py` (`tests/suite contract`), and `tests/suite t-journey-board` ends with "0 failed".
 
 ## 2. The follower keeps each submission from its submit to its decision
 

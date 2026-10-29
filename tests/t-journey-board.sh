@@ -180,7 +180,7 @@ ok "the host's follower, with no tab open, writes each partition's frames there 
 
 # The follower running: its clock set past the test's length, so only a signal ticks it (tests.8), and each kit's queue
 # followed through the stub sluice's overview watch. Its first refresh reads and opens a watch on each kit holding a
-# bolt, the box's over ssh; a tick with nothing moved fetches and then starts no git and no gather on mac-studio and
+# bolt, the box's over ssh, its gathers running no sluice status; a tick with nothing moved fetches and then starts no git and no gather on mac-studio and
 # asks the box for its stamps alone; a plan write on mac-studio is shown at the next look, with nothing fetched and no
 # kit gathered; a reading's result written on mac-studio, as plannotator writes the one the user sends back, has
 # mac-studio's card sessions swept at the next look, the box's not, and nothing gathered; a write to sluice's folder in
@@ -200,6 +200,7 @@ until_ok rewritten "$was" || fail "the running follower never refreshed: $(cat "
 eq "$(reads $box gather)" "1"
 watching() { grep -q "^$box sluice overview --json --watch in " "$CREW_TEST_LOG" && grep -q "^mac-studio sluice overview --json --watch in " "$CREW_TEST_LOG"; }
 until_ok watching || fail "the follower opened no overview watch on each kit: $(cat "$CREW_TEST_LOG")"
+! grep -q " sluice status " "$CREW_TEST_LOG" || fail "the follower's read of the kits ran sluice status: $(grep ' sluice status ' "$CREW_TEST_LOG")"
 was=$(written); : > "$T/reads.log"; : > "$CREW_TEST_LOG"
 kill -USR1 "$fol"
 until_ok rewritten "$was" || fail "the follower's tick wrote no frame: $(cat "$T/follower")"
@@ -245,7 +246,7 @@ until_ok served || fail "the dev server started on the box is not on b's line: $
 eq "$(reads mac-studio gather) $(reads $box gather)" "0 0"
 proposed || fail "the rail lost its words at the tick: $(railtext)"
 kill "$fol"; wait "$fol" 2>/dev/null || true
-ok "the running follower's tick with nothing moved starts no git and no gather on mac-studio and asks the box for its stamps alone, a plan write on mac-studio is shown at its next look with nothing fetched and no kit gathered, a reading sent back there has mac-studio's card sessions swept and nothing gathered, a write to sluice's folder moves nothing, a merge queued in sluice is on its row from the kit's overview watch with nothing gathered, and a dev server started on the box shows after the next tick with nothing gathered"
+ok "the running follower's first read runs no sluice status, its tick with nothing moved starts no git and no gather on mac-studio and asks the box for its stamps alone, a plan write on mac-studio is shown at its next look with nothing fetched and no kit gathered, a reading sent back there has mac-studio's card sessions swept and nothing gathered, a write to sluice's folder moves nothing, a merge queued in sluice is on its row from the kit's overview watch with nothing gathered, and a dev server started on the box shows after the next tick with nothing gathered"
 
 # crew page: the page written whole under the partition's state folder, its path and header printed, nothing
 # appended; a node's history on it, and its dock's, is what crew trace prints.
