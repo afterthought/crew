@@ -20,7 +20,7 @@
 
 ## 5. The views
 
-- [ ] 5.1 The board's JSON `time` carries the team-or-kit share, and a band draws a head line holding one (design, Decision 6; Task notes 5.1). Passes `tests/py/test_board.py` (`tests/suite logic`), and `tests/suite mod` ends with "0 failed".
+- [x] 5.1 The board's JSON `time` carries the team-or-kit share, and a band draws a head line holding one (design, Decision 6; Task notes 5.1). Passes `tests/py/test_board.py` (`tests/suite logic`), and `tests/suite mod` ends with "0 failed".
 
 ## 6. Docs and the run
 

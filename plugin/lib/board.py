@@ -202,8 +202,8 @@ def board_data(fleet, labels, read, now):
     every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind,
     and each of them its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
     the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22). Each ledger has its
-    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, user, hold, nobody}, now: {holder, what,
-    since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
+    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, team_or_kit, user, hold, nobody}, now:
+    {holder, what, since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
     the design agent's band shows (records_proposed)."""

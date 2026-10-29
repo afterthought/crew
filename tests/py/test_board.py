@@ -1614,6 +1614,18 @@ class TestTime:
                 dict(Act="stage.end", On=["stage/a/code", "unit/a", "agent/swb-1-unit-1"], At=ago(2))]
         assert self.head(logs=logs).endswith(f"3h 20m: team 48m, nobody 2h 32m; nobody since {hm(2)}")
 
+    def test_minutes_that_cant_be_split_show_as_team_or_kit_with_why_in_the_lane_the_json_and_the_bands(self):
+        """crew-board "Minutes that can't be split": twelve minutes of the bolt's age were a decided merge's stay in sluice,
+        kept by the follower with no start of its checks."""
+        sv = kits()
+        sv[BOX]["kits"]["/kit/main"]["decided"] = [{"id": 41, "bolt": "tenant-environments", "branch": "bolt/tenant-environments", "worktree": "unit/a",
+                                                    "pull_head": None, "submitted": ago(30), "started": None, "decided": ago(18), "event": "landed"}]
+        said = f"3h 20m: team or kit 12m, nobody 3h 08m; stalled since {hm(18)}; team or kit: sluice keeps no start of its checks"
+        assert self.head(sv=sv).endswith(f"swb-1 on {BOX}  {said}")
+        assert data(sv=sv)["partitions"][0]["construction"][0]["time"]["shares"]["team_or_kit"] == 12
+        assert view("swb-1-conductor", sv=sv)[0] == f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {said}"
+        assert f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {said}" in view("wldn-planner", sv=sv)
+
     def test_an_age_that_cant_be_told_says_why_and_shows_no_share(self):
         unread = {"wldn": {"wldn/main of WilldanGroup/crew-state": "fetch failed"}}
         said = "its age can't be told: wldn/main of WilldanGroup/crew-state could not be read (fetch failed)"
