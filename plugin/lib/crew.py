@@ -2656,11 +2656,12 @@ class Team(Agents):
             self.drop("lent", slot)
         return back[2] if back else None
 
-    def free(self, slot, ending=None, bolt=""):
+    def free(self, slot, ending=None, bolt="", held=None):
         """End a slot's agent, close its pane and give the slot back, recorded (teams.1), to the work it was lent from
         when it was lent to a fix (give_back); the units workspace goes with the last slot. None once it is free, else
         what crew says of the agent it could not end (stop). bolt is the bolt a fix given as fix/<name> is of, read from
-        its branch when not given."""
+        its branch when not given. With held, a list, the slot.free entry is put there as (label, on, why, place) for
+        the command to write once its tidy has run, naming the place it removed (plan.9)."""
         why = self.stop(slot, ending)
         if why:
             return why
@@ -2670,9 +2671,13 @@ class Team(Agents):
             if line[1] == "fix" and not bolt and not (line[2].startswith("fix/") and "/" in line[2][4:]):
                 bolt = subprocess.run(["git", "-C", self.t["kit"]["main"], "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{line[2]}"],
                                       capture_output=True, text=True).stdout.strip()
-            import record as rec  # record imports this module
-            rec.emit(self.label, "slot.free", [f"agent/{self.agent_of(slot)}", held_object(line[1], line[2], bolt)],
-                     why=f"team({self.name}): free {self.agent_of(slot)}")
+            entry = (self.label, [f"agent/{self.agent_of(slot)}", held_object(line[1], line[2], bolt)],
+                     f"team({self.name}): free {self.agent_of(slot)}", line[3] if len(line) > 3 else "")
+            if held is not None:
+                held.append(entry)
+            else:
+                import record as rec  # record imports this module
+                rec.emit(entry[0], "slot.free", entry[1], why=entry[2])
         if self.lines("slots"):
             self.close_pane(slot)
             return None

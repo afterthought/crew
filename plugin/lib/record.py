@@ -66,7 +66,8 @@ DESCRIPTOR = """\
 # its unit amended, the After units' heads a construct's place Took and a dependent's rebase left out (a forecast's Took), a
 # forecast's Heads (the later unit's and the other's, <name>@<sha>; a bolt's against main, bolt/<bolt>@<sha> main@<sha>
 # and #<id> for each submission queued on main it meets, or bolt/<bolt>@<sha> alone when sluice gave none), its
-# conflicting Paths and how it Reached the later unit (told, prompt or settle) or the conductor (wait), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
+# conflicting Paths and how it Reached the later unit (told, prompt or settle) or the conductor (wait), a slot.free's Paths (the
+# place of its slot's work the tidy in its command removed, plan.9), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
 # Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's Count, a
 # card act's Card (the Pending You card's id), Key (the rail row's card key) and Unread (why its reading could not open,
 # crew's own message, on a card's post or change raised without it), a card's close's Answer (what the user answered
@@ -410,8 +411,10 @@ def line(e, zoe=False):
         s += f" ({e['Chars']} characters)"
     if e.get("Amended"):
         s += " (amended)"
-    if e.get("Paths"):
+    if e.get("Paths") and e.get("Act") == "forecast":
         s += f" (conflict on {e['Paths']}" + (f", {e['Reached']}" if e.get("Reached") else "") + ")"
+    elif e.get("Paths"):
+        s += f" (removed {e['Paths']})"
     if e.get("Forecast"):
         s += f" (carrying {e['Forecast']})"
     if e.get("Count"):

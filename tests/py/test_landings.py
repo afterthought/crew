@@ -5,6 +5,8 @@ and each row above it; and the one decision of what the raise does with the kit'
 the raise's act on a stand-in for what it reaches beyond them. Its wiring is t-journey-land's and t-cards'."""
 import argparse
 import base64
+import contextlib
+import fcntl
 import json
 
 import pytest
@@ -1015,6 +1017,17 @@ class LandActs:
         self.calls, self.emitted, self.told, self.asked, self.works, self.worked = [], [], [], [], dict(works or {}), []
         # The forecast: each bolt's conflicts with main ({bolt: [("main", paths)]}) at the revision main (None, unread).
         self.against_main, self.main, self.forecasts, self.kept = dict(against_main or {}), main, [], {}
+        # The kit's card's lock: each taking of it, and the kit it is held for while the raise is inside it.
+        self.locked, self.holding = [], None
+
+    @contextlib.contextmanager
+    def raising(self, label, kit):
+        self.locked.append((label, kit))
+        self.holding = kit
+        try:
+            yield
+        finally:
+            self.holding = None
 
     def land_row(self, label, bolt, host):
         self.asked.append((bolt, host))
@@ -1104,6 +1117,43 @@ def test_two_proven_bolts_post_one_card_in_ops_name_with_two_boxes(monkeypatch, 
                                  Heads="y@abc1234 z@abc1234")]
     assert acts.told == [("swancloud-ops", "Your card land/crew is up for the user: call get_request (requestId req_k1, "
                                            "name swancloud-ops), to hear their answer.")]
+
+
+def test_a_kits_card_is_raised_under_its_lock_every_read_and_act_inside_it(monkeypatch):
+    """Two bolts landing at once each raise their kit's card as they close (t-journey-land, sluice's #402 on deneb,
+    2026-10-30: both read the card open and closed it, the second recording "ended in Pending You already"): the raise
+    holds the kit's lock over the plan, the rows, the record and Pending You, so the second reads the first's close."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED)
+    seen = []
+    for name in ("land_row", "entries", "partition", "forecast", "bridge", "emit", "tell"):
+        monkeypatch.setattr(acts, name, lambda *a, f=getattr(acts, name), n=name, **k: seen.append((n, acts.holding)) or f(*a, **k))
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: seen.append(("plan", acts.holding)) or plan.Plan(PLAN))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    assert acts.locked == [("swancloud", "crew")]
+    assert {n for n, _ in seen} >= {"plan", "land_row", "entries", "partition", "bridge", "emit"}
+    assert [(n, h) for n, h in seen if h != "crew"] == []
+
+
+def test_the_kits_card_lock_is_held_by_one_raise_and_fetches_the_plan_afresh_under_it(monkeypatch, tmp_path):
+    monkeypatch.setattr(plan, "CARDS", tmp_path)
+    monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("/state", f"{label}/main"))
+    lock = plan.landings_lock("swancloud", "crew")
+    fetched = []
+
+    def fetch(repo, ref, fresh=False):
+        with open(lock, "w") as other, pytest.raises(BlockingIOError):  # fetched with the lock held
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fetched.append((ref, fresh))
+    monkeypatch.setattr(plan, "fetch", fetch)
+    with plan.CardActs(FLEET).raising("swancloud", "crew"):
+        with open(lock, "w") as other, pytest.raises(BlockingIOError):  # a second raise of the kit's card waits
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with open(plan.landings_lock("swancloud", "swancloud"), "w") as other:  # another kit's card's does not
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with open(lock, "w") as other:  # and the kit's is free once the raise is done
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    assert fetched == [("swancloud/main", True)]
+    assert lock.parent == tmp_path / "swancloud" / "land" and not (tmp_path / "swancloud" / "land" / "crew").exists()
 
 
 def test_a_rows_head_moved_changes_the_waiting_card_in_place_naming_it(monkeypatch):
