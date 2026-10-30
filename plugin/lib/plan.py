@@ -644,10 +644,72 @@ def paths_at(repo, tip, prefix):
 
 
 def fetch(repo, ref, fresh=False):
+    """A branch of the repo as a decision reads it (tip_of, fresh as there): at its tip, or, while any of its newest
+    commits names a run-record entry it does not hold yet, below the oldest such commit (read_point), so no decision
+    reads an act whose write has reached the branch and whose entry has not (read.5, plan.2); None when the repo has
+    no such branch."""
+    return read_point(repo, tip_of(repo, ref, fresh))
+
+
+# How many of a branch's newest commits a decision's read looks through for one whose entry is still in flight.
+ARRIVAL = 20
+# An entry's id (record.entry_id): its UTC day, then, past the microsecond older ids lack, the host that wrote it.
+ENTRY_ID = re.compile(r"^(\d{4})(\d{2})(\d{2})T\d{6}Z-(?:\d{6}-)?([a-z0-9][a-z0-9-]*)-\d+-\d+$")
+
+
+def entry_paths(eid):
+    """The run-record files an entry's id says it is in, its host's file of the id's day and of the next, since a
+    write makes the id before its act and records it after (record.new_id); none for an id of no form crew reads."""
+    m = ENTRY_ID.match(eid)
+    if not m:
+        return []
+    day = datetime.date(*map(int, m.group(1, 2, 3)))
+    return [f"runs/{m.group(4)}/{d.isoformat()}.rec" for d in (day, day + datetime.timedelta(days=1))]
+
+
+def decision_at(commits, texts):
+    """The commit a decision reads a flywheel's branch at (read.5, plan.2), from facts alone (code.7): commits, the
+    branch's newest first, each (sha, its first parent, the entries its Crew-Entry trailer names); texts, {path: text}
+    of the run-record files at the tip those entries' ids name (entry_paths), None for one the tip lacks. A commit
+    whose entry the tip lacks is in flight, its write on the branch and its entry not yet; the branch is read at the
+    parent of the oldest commit in flight, so an act is read whole or not at all, whatever commits of other writers
+    landed between its write and its entry. The tip, the first given, when none is in flight; a branch whose first
+    commit is in flight has nothing below it and is read at the tip; None when none is given. An entry kept by a
+    refused push (record.2) holds the read below its write until the host's next entry carries it, or the write
+    passes out of the commits given."""
+    def held(eid):
+        return any(re.search(rf"^Id: {re.escape(eid)}$", texts.get(p) or "", re.M) for p in entry_paths(eid))
+    if not commits:
+        return None
+    flight = [parent for _, parent, eids in commits if not all(held(e) for e in eids)]
+    return (flight[-1] if flight else None) or commits[0][0]
+
+
+def read_point(repo, tip):
+    """The commit of the branch at tip a decision reads (decision_at), from its newest ARRIVAL commits, with their
+    trailers in one git log and the run-record files their entries name at the tip in one cat-file (the follower's
+    kept blobs when it reads); kept for the command by tip, which fixes it."""
+    if not tip:
+        return tip
+    name = f"read-point-{repo}-{tip}"
+    if READ.held(name):
+        return READ.held(name)
+    log = git(repo, "log", "--first-parent", f"-n{ARRIVAL}", "--format=%H%x09%P%x09%(trailers:key=Crew-Entry,valueonly,separator=%x20)", tip)
+    rows = [(l.split("\t") + ["", ""])[:3] for l in log.splitlines() if l.strip()]  # git's output comes stripped
+    commits = [(sha, (parents.split() or [None])[0], eids.split()) for sha, parents, eids in rows]
+    paths = sorted({p for _, _, eids in commits for e in eids for p in entry_paths(e)})
+    texts = dict(zip(paths, [show(repo, tip, p) for p in paths] if kept_listing(repo, tip) is not None else
+                     cat_file(repo, [f"{tip}:{p}" for p in paths])))
+    at = decision_at(commits, texts) or tip
+    READ.keep(name, at)
+    return at
+
+
+def tip_of(repo, ref, fresh=False):
     """The tip of a branch of the repo: the one this command already holds, else fetched now over https and kept; or
     None when the repo has no such branch, which is not kept, so a later step looks again, unless the follower handed
     in its cache's word that there is none (""). fresh fetches even when a tip is held: after a refused push, and
-    after any push that is not a write's own."""
+    after any push that is not a write's own. A write lands on it (land); a decision reads the branch by fetch."""
     held = None if fresh else READ.tip(repo, ref)
     if held is not None:
         return held or None
@@ -714,8 +776,8 @@ def land(repo, ref, path, make):
     file a commit holds is checked first. The first attempt starts from the tip the command holds; the last commit is
     pushed without force, and when the push is refused because the branch moved, the branch is fetched afresh and make
     runs again on the new tip, the whole chain made again, up to five times (plan.1, state.1). The command then holds
-    the commit it pushed, so its later steps see its own write."""
-    tip = fetch(repo, ref)
+    the commit it pushed, so its later steps read its own write once its entry is on the branch (fetch)."""
+    tip = tip_of(repo, ref)
     for _ in range(1 + REPLAYS):
         made = make(tip)
         sha = tip
@@ -730,7 +792,7 @@ def land(repo, ref, path, make):
             git(repo, "update-ref", f"refs/crew/{ref}", sha, check=False)
             READ.keep_tip(repo, ref, sha)
             return sha
-        moved = fetch(repo, ref, fresh=True)
+        moved = tip_of(repo, ref, fresh=True)
         if moved == tip:
             fail(f"the push of {ref} to {repo} failed: {r.stderr.strip()}")
         tip = moved
