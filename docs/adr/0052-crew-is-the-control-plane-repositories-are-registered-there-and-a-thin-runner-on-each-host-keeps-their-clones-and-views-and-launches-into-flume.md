@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-30
 decision-makers: the user, flume-sluice-build (the record)
 consulted: swancloud (through its operator, once proposed)
@@ -7,7 +7,7 @@ consulted: swancloud (through its operator, once proposed)
 
 # 0052. crew is the control plane: repositories are registered there, and a thin runner on each host keeps their clones and views and launches the plan's work into Flume
 
-Status: proposed to the user on 2026-10-30; accepted only on their yes. Nothing is built from it until the user has used Flume on real work and starts the crew refactor (record 0050 part 4), and each piece then has a plan the user approves first.
+Status: accepted by the user on 2026-10-30, on flume-sluice-build's card (req_5042200602cf4511a0a3, "Approved", no note). Nothing is built from it until the user has used Flume on real work and starts the crew refactor (record 0050 part 4), and each piece then has a plan the user approves first.
 
 Deciders: the user, in flume-sluice-build's session on 2026-10-30. On where repositories are kept: "You're showing the repo config in the host config but is that going to need to be in the repo? I'm thinking that ultimately crew or the flywheel will be where you add and maintain repos." On the shape: "I was thinking that if we start to design around the idea of a flywheel control plane and then a local thin flywheel runner per host, we could start to think about crew as our proxy control plane. We could maybe build that thin runner. I'm wondering if you would be in the control plane, connecting your GitHub repo, and then that would get communicated down to the thin runner." On the repositories themselves: "currently SwanCloud manages partitions and teams, sets up the repos in those partitions, clones them, and sets up a clock that syncs them. It would be nice if there was a clean consistent way to do this. It sounds like Flume wouldn't be responsible. It might be the flywheel or a thin adapter that sets up all the bare repos in its local data directory so they are hidden from the user. There would then be a config somewhere where you could set a location on your host for the projected views of their repos." Then on flume-sluice-build's card (req_ee4687bc6fe249dda876): "Yes, write the record now, for your approval". Their words settle the control plane, the runner and who owns the repositories; the rest is flume-sluice-build's, asked on this record's card.
 
@@ -51,6 +51,6 @@ Each of these is answered in the plan the user approves before the runner is bui
 
 ### Consequences
 
-- On the yes, `core.md` gains a rule drawn from parts 1 to 5, and `_open.md` lists the runner and the registry under the refactor, before move 5.
+- `core.md` gains `roles.9`, drawn from parts 1 to 5, accepted with the record, and `_open.md` lists the runner and the registry under the refactor, before move 5.
 - swancloud is asked, through its operator, to record that `herdr.13`, `herdr.14` and `names.3` move to the runner when the runner is deployed, and that the spaces' repository lists and the views timer leave its configuration then; until then nothing on any host changes.
 - Nothing is queued from this record.
