@@ -1875,19 +1875,28 @@ def start_of(name):
     return starts().get(name)
 
 
+# What the update check says of a start that recorded its launch but no crew commit, as one on a host that loads crew
+# from its release, where there is no git to read the commit from (record 0050 as amended 2026-10-30).
+NO_COMMIT_SAID = ("crew can't tell whether its plugin changed since it started, its start having recorded no crew commit: "
+                  "a bump of crew's pin restarts it only by crew rebuild, until crew reads its release where it runs")
+
+
 def update_due(started, commit, launch, loaded):
     """Whether a standing agent is due a restart for crew's update (teams.19), and why, from facts: what its last start
     recorded (start_of), this checkout's commit, the digest of the launch it would be started with now, and whether
     what a session loads of crew's plugin changed between its start's commit and this one (loaded_changed, None when
     git can't tell). Returns (due, why): due when it started before crew kept what it loaded, when its brief, model,
     effort or folders changed, or when what it loaded of crew's plugin did; never for a change to crew's code alone,
-    which is live at once; and not when crew can't tell, which it says (read.1)."""
+    which is live at once; and not when crew can't tell, which it says (read.1). A start that recorded its launch and no
+    crew commit is read by its launch alone, since the digest covers no part of crew's plugin (NO_COMMIT_SAID)."""
     if started is None:
         return False, None
-    if not started["commit"] or not started["launch"]:
+    if not started["launch"]:
         return True, "it started before crew kept what an agent loads"
     if started["launch"] != launch:
         return True, "its brief, model, effort or folders changed"
+    if not started["commit"]:
+        return False, NO_COMMIT_SAID
     if started["commit"] == commit:
         return False, None
     if loaded is None:

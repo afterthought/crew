@@ -37,8 +37,21 @@ class TestDue:
         assert crew.update_due(STARTED, C1, "abc", None) == (False, None)
 
     def test_one_started_before_crew_kept_what_it_loaded_is_due(self):
-        assert crew.update_due(dict(STARTED, commit=None, version=None), C1, "abc", None) == (True, "it started before crew kept what an agent loads")
+        assert crew.update_due(dict(STARTED, commit=None, version=None, launch=None), C1, "abc", None) == (True, "it started before crew kept what an agent loads")
         assert crew.update_due(dict(STARTED, launch=None), C1, "abc", None)[0]
+
+    def test_one_that_recorded_its_launch_and_no_commit_is_due_when_its_launch_changed(self):
+        released = dict(STARTED, commit=None, version=None)
+        assert crew.update_due(released, None, "def", None) == (True, "its brief, model, effort or folders changed")
+        assert crew.update_due(released, C1, "def", None) == (True, "its brief, model, effort or folders changed")
+
+    def test_one_that_recorded_its_launch_and_no_commit_is_not_due_and_says_a_pin_bump_needs_a_rebuild(self):
+        released = dict(STARTED, commit=None, version=None)
+        for commit in (None, C1):
+            due, why = crew.update_due(released, commit, "abc", None)
+            assert not due and why == crew.NO_COMMIT_SAID
+        assert "can't tell whether its plugin changed since it started" in why and "crew rebuild" in why
+        assert "until crew reads its release where it runs" in why
 
     def test_crew_that_cannot_tell_whether_the_plugin_changed_restarts_nothing_and_says_so(self):
         assert crew.update_due(STARTED, C2, "abc", None) == (False, f"crew can't tell whether its plugin changed since {C1[:7]}")
