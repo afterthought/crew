@@ -644,14 +644,14 @@ def paths_at(repo, tip, prefix):
 
 
 def fetch(repo, ref, fresh=False):
-    """A branch of the repo as a decision reads it (tip_of, fresh as there): at its tip, or, while its newest commits
-    name run-record entries it does not hold yet, at the newest commit whose entry it holds (read_point), so no decision
+    """A branch of the repo as a decision reads it (tip_of, fresh as there): at its tip, or, while any of its newest
+    commits names a run-record entry it does not hold yet, below the oldest such commit (read_point), so no decision
     reads an act whose write has reached the branch and whose entry has not (read.5, plan.2); None when the repo has
     no such branch."""
     return read_point(repo, tip_of(repo, ref, fresh))
 
 
-# How many of a branch's newest commits a decision's read looks through for one whose entry the branch holds.
+# How many of a branch's newest commits a decision's read looks through for one whose entry is still in flight.
 ARRIVAL = 20
 # An entry's id (record.entry_id): its UTC day, then, past the microsecond older ids lack, the host that wrote it.
 ENTRY_ID = re.compile(r"^(\d{4})(\d{2})(\d{2})T\d{6}Z-(?:\d{6}-)?([a-z0-9][a-z0-9-]*)-\d+-\d+$")
@@ -669,15 +669,20 @@ def entry_paths(eid):
 
 def decision_at(commits, texts):
     """The commit a decision reads a flywheel's branch at (read.5, plan.2), from facts alone (code.7): commits, the
-    branch's newest first, each (sha, the entries its Crew-Entry trailer names); texts, {path: text} of the
-    run-record files at the tip those entries' ids name (entry_paths), None for one the tip lacks. The newest commit
-    that names no entry or whose every entry the tip holds; a commit whose entry is still in flight, its write on the
-    branch and its entry not yet, is read past, so an act is read whole or not at all. The tip, the first given, when
-    none is: no entry of theirs is on its way, a record that could not be written having written none (record.2), so
-    the branch is read as it stands; None when none is given."""
+    branch's newest first, each (sha, its first parent, the entries its Crew-Entry trailer names); texts, {path: text}
+    of the run-record files at the tip those entries' ids name (entry_paths), None for one the tip lacks. A commit
+    whose entry the tip lacks is in flight, its write on the branch and its entry not yet; the branch is read at the
+    parent of the oldest commit in flight, so an act is read whole or not at all, whatever commits of other writers
+    landed between its write and its entry. The tip, the first given, when none is in flight; a branch whose first
+    commit is in flight has nothing below it and is read at the tip; None when none is given. An entry kept by a
+    refused push (record.2) holds the read below its write until the host's next entry carries it, or the write
+    passes out of the commits given."""
     def held(eid):
         return any(re.search(rf"^Id: {re.escape(eid)}$", texts.get(p) or "", re.M) for p in entry_paths(eid))
-    return next((sha for sha, eids in commits if all(held(e) for e in eids)), commits[0][0] if commits else None)
+    if not commits:
+        return None
+    flight = [parent for _, parent, eids in commits if not all(held(e) for e in eids)]
+    return (flight[-1] if flight else None) or commits[0][0]
 
 
 def read_point(repo, tip):
@@ -689,9 +694,10 @@ def read_point(repo, tip):
     name = f"read-point-{repo}-{tip}"
     if READ.held(name):
         return READ.held(name)
-    log = git(repo, "log", "--first-parent", f"-n{ARRIVAL}", "--format=%H %(trailers:key=Crew-Entry,valueonly,separator=%x20)", tip)
-    commits = [(sha, eids.split()) for sha, _, eids in (l.partition(" ") for l in log.splitlines() if l.strip())]
-    paths = sorted({p for _, eids in commits for e in eids for p in entry_paths(e)})
+    log = git(repo, "log", "--first-parent", f"-n{ARRIVAL}", "--format=%H%x09%P%x09%(trailers:key=Crew-Entry,valueonly,separator=%x20)", tip)
+    rows = [(l.split("\t") + ["", ""])[:3] for l in log.splitlines() if l.strip()]  # git's output comes stripped
+    commits = [(sha, (parents.split() or [None])[0], eids.split()) for sha, parents, eids in rows]
+    paths = sorted({p for _, _, eids in commits for e in eids for p in entry_paths(e)})
     texts = dict(zip(paths, [show(repo, tip, p) for p in paths] if kept_listing(repo, tip) is not None else
                      cat_file(repo, [f"{tip}:{p}" for p in paths])))
     at = decision_at(commits, texts) or tip
