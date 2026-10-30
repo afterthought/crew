@@ -1,12 +1,12 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-30
 deciders: swancloud-design, on madswan-design's ruling of sluice's side the same day; the user on their card
 ---
 
 # 0051. A landing ops stops is withdrawn in its own name, a lost wait is left to land, and crew drafts no pull request
 
-Status: proposed to the user on 2026-10-30, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-30, on their card (req_04725900c35e4a5193c9, "Approved").
 
 ## Context and problem statement
 
@@ -34,6 +34,6 @@ Option 1 is ruled out by sluice's design, which reads the draft as a withdrawal 
 
 ## Consequences
 
-- `plan.16` is amended with the three acts, marked proposed.
+- `plan.16` is amended with the three acts.
 - The bolt-teams spec's requirement "A landing's pull request is a draft whenever the user's word does not stand" is replaced, by one crew unit on the yes, `a-landing-ops-stops-is-withdrawn-and-crew-drafts-nothing`, queued only once the user says the Flume refactor has started (their word of 2026-10-29); under move 5 the same acts are Flume's launch hold and ops's retry (record 0047, flume record 0023).
 - Sources: wldn's run record (`WilldanGroup/crew-state`, `wldn/main`, `runs/chuck-herdr-alpha/2026-10-30.rec`, entries 01:40:23, 01:43:00, 01:44:18, 01:48:12Z); PR 96's timeline; madswan-design's ruling of 2026-10-30, relayed by swancloud-operator; sluice's `using-sluice` verdicts reference, ready; the archived change `2026-10-23-a-landings-pull-request-is-live-only-on-the-users-word` and its design's "Withdraw only" paragraph, written when sluice drafted nothing itself.
