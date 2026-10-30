@@ -2979,10 +2979,18 @@ def raise_landings(fleet, label, kit, acts=None, note=None, dead=False, pane=Non
     left, the outcome, and that each bolt they left waits on it; or, posted after the kit's last card, what changed of
     each bolt asked again and the bolts that joined, moved or still wait since (landings_since). With
     dead, an older copy this host's sign-in can't reach standing, as the rail's sweep hands it, the card is posted
-    saying first that it was lost (built_again). The card's id, or None."""
+    saying first that it was lost (built_again). One raise of a kit's card at a time, under its lock (CardActs.raising),
+    every read made in it, so two bolts closing at once close their card once, the second reading the first's close.
+    The card's id, or None."""
     acts = acts or CardActs(fleet)
     machine = crew.partition_of(fleet, label)["machine"]
     machine == acts.host() or fail(f"{kit}'s landings card is raised on {machine}, where {label}-ops's cards are")
+    with acts.raising(label, kit):
+        return landings_raised(fleet, label, kit, acts, note, dead, pane)
+
+
+def landings_raised(fleet, label, kit, acts, note, dead, pane):
+    """raise_landings' reads and acts, made under the kit's card's lock."""
     plan = plan_of(fleet, label) or fail(f"{label}/main could not be read, so {kit}'s landings card is not raised")
     owner, key = f"{label}-ops", f"land/{kit}"
     got, unread = {}, set()
@@ -13764,6 +13772,13 @@ def landings_main(label, kit):
     """Where the main level's host keeps the revision of main a kit's landings card's rows were last forecast against
     (CardActs.keep_main), beside the card's state: no session's, so no card's close or sweep removes it."""
     return CARDS / label / "land" / kit / "main"
+
+
+def landings_lock(label, kit):
+    """The lock a raise of a kit's landings card holds on the main level's host (CardActs.raising): beside the card
+    folders of land/<kit> and land/<bolt>, not in one, so ending a card's session, which empties its folder, never
+    removes it from under a raise that holds it."""
+    return CARDS / label / "land" / f".{kit}.lock"
 # The rail rows' card keys, the thing's and not its version's (record 0031): a card crew keys them by, which its
 # commands name. A card under an older form, land/<bolt>/<head> or a verify report's verify/<unit>/<stamp>, is still
 # crew's (crews_key), closed by the rail's read as one whose row is gone, and none is posted.
@@ -16152,6 +16167,19 @@ class CardActs:
             return landings_main(label, kit).read_text().strip() or None
         except OSError:
             return None
+
+    @contextlib.contextmanager
+    def raising(self, label, kit):
+        """A kit's landings card held for one raise at a time on this host, the main level's, under a lock beside the
+        kits' card folders (landings_lock), and the plan fetched afresh under it, as a landing's read is (landing_read):
+        two bolts landing at once each raise the card as they close, and the second reads the first's close of it
+        rather than closing it again."""
+        f = landings_lock(label, kit)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        with open(f, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            fetch(*state_of(self.fleet, label), fresh=True)  # what a raise before this one wrote, which it waited on
+            yield
 
     def work(self, label, kit, moves):
         """Each moved bolt's own work between the head the user sent and its head now (bolt_work)."""
