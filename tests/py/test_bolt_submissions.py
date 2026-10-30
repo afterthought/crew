@@ -1,7 +1,10 @@
 """Every submission's number on its bolt's row (bolt-teams "A submission's number is on its bolt's row from the
 submit", teams.22, record 0046 part 2): the gather's read of sluice's queue, gather.submissions_of, on sluice 0.51.3's
 own overview (tests/py/sluice-0.51.3/), every field guarded and a document of another schema said; gather.queue's
-failures, each said, on a stand-in for the process; whose line each submission is, plan.submission_rows; and what
+failures, each said, on a stand-in for the process; the submissions an overview's recent events name decided,
+gather.decided_in, on sluice 0.56.0's and 0.51.3's own overviews (tests/py/sluice-0.56.0/); sluice's record of every
+submission a branch has had, gather.decided_of, as the landing reads it once, on its own `status --all` documents;
+whose line each submission is, plan.submission_rows; and what
 crew bolts shows of them, plan.bolts_data and plan.bolts_text, beside the rest of crew bolts in test_rail.py and
 test_chores.py."""
 import json
@@ -17,6 +20,7 @@ import gather
 import plan
 
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.51.3"
+RECENT = pathlib.Path(__file__).parent / "sluice-0.56.0" / "overview-recent.json"
 
 
 def overview():
@@ -28,11 +32,25 @@ def overview():
 def test_the_overview_gives_each_standing_submission_with_its_branch_state_and_where_it_came_from():
     assert gather.submissions_of(overview()) == ([
         {"id": 317, "branch": "bolt/crews-chores-of-the-24th-night", "head": "aa1a9c7fa2f7a64d505f4c6a99e0f76b5f948d2b",
-         "state": "testing", "worktree": "chore/a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives", "pull_head": None},
+         "state": "testing", "worktree": "chore/a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives", "pull_head": None,
+         "submitted": "2026-10-28T00:01:43Z", "started": "2026-10-28T01:03:27Z"},
         {"id": 318, "branch": "bolt/crews-chores-of-the-24th-night", "head": "ed8e7a92d5f8385895c2cf99d277a4c147738e6f",
-         "state": "queued", "worktree": "chore/a-stage-drives-a-browser-only-the-kits-way", "pull_head": None},
+         "state": "queued", "worktree": "chore/a-stage-drives-a-browser-only-the-kits-way", "pull_head": None,
+         "submitted": "2026-10-28T00:23:06Z", "started": None},
         {"id": 355, "branch": "main", "head": "b49230ce242d7a965174cc0f52589739ed97f375", "state": "queued",
-         "worktree": "pull/198", "pull_head": "bolt/crew-opens-no-tab-the-user-does-not-use"}], None)
+         "worktree": "pull/198", "pull_head": "bolt/crew-opens-no-tab-the-user-does-not-use",
+         "submitted": "2026-10-28T15:30:29Z", "started": None}], None)
+
+
+def test_a_submission_under_test_takes_the_start_of_its_candidates_checks_and_a_candidate_only_formed_gives_none():
+    """The design's Decision 2: a standing submission under test is the kit's from the start of its checks."""
+    doc = overview()
+    doc["branches"][0]["candidates"][0]["started"] = 7
+    doc["branches"][0]["candidates"][1]["state"] = "testing"
+    got, _ = gather.submissions_of(doc)
+    assert [(s["id"], s["started"]) for s in got] == [(317, None), (318, None), (355, None)]
+    del doc["branches"][0]["candidates"]
+    assert gather.submissions_of(doc)[0][0]["started"] is None
 
 
 def test_an_empty_queue_is_none_standing_and_not_a_failure():
@@ -94,6 +112,112 @@ def test_a_queue_that_cant_be_read_says_why(monkeypatch, run, why):
 def test_a_queue_read_is_the_documents_submissions(monkeypatch):
     monkeypatch.setattr(gather.subprocess, "run", lambda args, **kw: Ran(0, (RECORDED / "overview-standing.json").read_text()))
     assert [s["id"] for s in gather.queue("/k/main")[0]] == [317, 318, 355]
+
+
+# ------------------------------------------------------------------------- sluice's record of every submission had
+
+def recorded(name):
+    return json.loads((RECORDED / name).read_text())
+
+
+def test_a_branchs_record_gives_every_submission_it_had_with_when_it_was_submitted_and_told():
+    """crew-board "A held bolt's decided merges": sluice 0.51.3's record of a bolt's branch, landed and withdrawn."""
+    got, why = gather.decided_of(recorded("status-bolt-all.json"))
+    assert why is None and [(s["id"], s["state"], s["worktree"], s["submitted"], s["told"]) for s in got] == [
+        (356, "landed", "fix/crew-costs-an-idle-host-nothing/take-main-448c543", "2026-10-28T15:47:07Z", "2026-10-28T15:48:24Z"),
+        (357, "landed", "chore/a-wait-ends-with-the-session-that-started-it", "2026-10-28T16:10:48Z", "2026-10-28T16:21:02Z"),
+        (358, "withdrawn", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T17:47:07Z", "2026-10-28T17:47:13Z"),
+        (359, "withdrawn", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T17:56:48Z", "2026-10-28T18:23:56Z"),
+        (361, "landed", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T18:36:05Z", "2026-10-28T18:55:42Z"),
+        (362, "landed", "unit/a-rail-refresh-after-no-change-reads-nothing", "2026-10-28T18:57:11Z", "2026-10-28T19:09:03Z")]
+    assert (got[0]["branch"], got[0]["head"], got[0]["pull_head"]) == (
+        "bolt/crew-costs-an-idle-host-nothing", "e79d32a4061c5a028dbd765d6c397458f249719b", None)
+
+
+def test_mains_record_names_a_landing_by_its_pull_request_and_a_withdrawal_never_told_by_its_time():
+    got, _ = gather.decided_of(recorded("status-main-all.json"))
+    assert [(s["id"], s["state"], s["worktree"], s["pull_head"], s["told"]) for s in got] == [
+        (305, "withdrawn", "pull/171", "design/bolt-cycle-time", "2026-10-27T18:34:17Z"),
+        (363, "landed", "pull/200", "bolt/crew-costs-an-idle-host-nothing", "2026-10-28T19:13:46Z"),
+        (364, "landed", "pull/201", "design/the-words", "2026-10-28T19:23:54Z")]
+
+
+def test_a_record_field_missing_or_mistyped_is_none_and_one_with_no_number_is_left_out():
+    """read.2."""
+    doc = recorded("status-bolt-all.json")
+    del doc["submissions"][0]["told"], doc["submissions"][0]["from"]
+    doc["submissions"][1]["submitted"] = 1730000000
+    doc["submissions"][2]["id"] = "358"
+    del doc["submissions"][3]["branch"]
+    doc["submissions"].append("#400")
+    got, why = gather.decided_of(doc)
+    assert why is None and [(s["id"], s["told"], s["worktree"], s["submitted"]) for s in got][:3] == [
+        (356, None, None, "2026-10-28T15:47:07Z"), (357, "2026-10-28T16:21:02Z", "chore/a-wait-ends-with-the-session-that-started-it", None),
+        (359, "2026-10-28T18:23:56Z", "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number", "2026-10-28T17:56:48Z")]
+    assert got[2]["branch"] == "bolt/crew-costs-an-idle-host-nothing"
+
+
+@pytest.mark.parametrize("doc, why", [
+    ({"branch": "main"}, "sluice status printed no list of submissions"),
+    ([], "sluice status printed no list of submissions"),
+    ({"submissions": [{"schema": "sluice/submission@2", "id": 1, "branch": "main"}]},
+     "sluice status printed a record of sluice/submission@2, not the sluice/submission@1 crew reads")])
+def test_a_record_of_another_shape_is_said(doc, why):
+    assert gather.decided_of(doc) == (None, why)
+
+
+# ------------------------------------------------------------------- the decided an overview's recent events name
+
+def recent():
+    return json.loads(RECENT.read_text())
+
+
+def test_each_number_a_branchs_recent_events_name_is_decided_at_its_events_time_from_the_place_it_came_from():
+    """crew-board "A row drawn from the overview": sluice 0.56.0's events name their submissions as a list, ids."""
+    got, why = gather.decided_in(recent())
+    assert why is None and [(s["id"], s["branch"], s["worktree"], s["event"], s["decided"]) for s in got][:3] == [
+        (365, "bolt/crew-reads-a-bolts-time-and-its-landing", "fix/crew-reads-a-bolts-time-and-its-landing/take-main", "landed", "2026-10-28T19:30:45Z"),
+        (366, "bolt/crew-reads-a-bolts-time-and-its-landing", "unit/a-bolts-row-shows-its-age-and-who-holds-it", "landed", "2026-10-28T20:40:09Z"),
+        (367, "bolt/crew-reads-a-bolts-time-and-its-landing", "unit/a-landing-is-read-from-sluices-record", "landed", "2026-10-28T21:56:08Z")]
+    assert all((s["pull_head"], s["submitted"], s["started"]) == (None, None, None) for s in got), "an event was read for what it does not give"
+    main = [(s["id"], s["worktree"]) for s in got if s["branch"] == "main"]
+    assert len(main) == 10 and main[4] == (355, "pull/198"), "a landing by pull request is named by its pull request alone"
+
+
+def test_an_event_naming_its_one_submission_as_id_is_read_as_sluice_0_51_3_printed_it():
+    blamed = [(s["id"], s["event"], s["worktree"]) for s in gather.decided_in(recent())[0] if s["branch"] == "bolt/crews-chores-of-the-24th-night"]
+    assert blamed == [(313, "blamed", "chore/a-stage-drives-a-browser-only-the-kits-way"),
+                      (315, "blamed", "chore/crew-needs-help-prints-its-usage-and-records-nothing"),
+                      (316, "blamed", "chore/a-failed-taking-with-no-conflict-is-said-in-gits-words")]
+    assert [s["id"] for s in gather.decided_in(overview())[0]] == [313, 315, 316]
+
+
+def test_a_standing_submission_is_none_decided():
+    assert {s["id"] for s in gather.decided_in(recent())[0]}.isdisjoint({317, 318})
+
+
+def test_a_recent_field_missing_or_mistyped_is_none_and_a_number_that_is_none_is_left_out():
+    """read.2: a missing value never becomes text."""
+    doc = recent()
+    landed = doc["branches"][0]
+    landed["recent"][0]["at"] = 1730000000
+    del landed["recent"][1]["event"]
+    landed["recent"][2]["ids"] = [367, "368", True]
+    landed["recent"].append("landed #369")
+    landed["recent_from"] = ["unit/a"]
+    doc["branches"][1]["recent"] = None
+    doc["branches"][2] = dict(doc["branches"][2], branch=None)
+    got, why = gather.decided_in(doc)
+    assert why is None and [(s["id"], s["worktree"], s["event"], s["decided"]) for s in got] == [
+        (365, None, "landed", None), (366, None, None, "2026-10-28T20:40:09Z"), (367, None, "landed", "2026-10-28T21:56:08Z")]
+
+
+@pytest.mark.parametrize("doc, why", [
+    (dict(recent(), schema="sluice/overview@2"), "sluice overview printed sluice/overview@2, not the sluice/overview@1 crew reads"),
+    ([], "sluice overview printed no schema, where crew reads sluice/overview@1"),
+    (dict(recent(), branches={}), "sluice overview's sluice/overview@1 holds no list of branches")])
+def test_an_overview_of_another_schema_names_no_decided_and_says_why(doc, why):
+    assert gather.decided_in(doc) == (None, why)
 
 
 # --------------------------------------------------------------------------------------- whose line each one is

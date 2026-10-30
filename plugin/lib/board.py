@@ -201,7 +201,9 @@ def board_data(fleet, labels, read, now):
     and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
     every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind,
     and each of them its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
-    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22).
+    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22). Each ledger has its
+    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, team_or_kit, user, hold, nobody}, now:
+    {holder, what, since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
     the design agent's band shows (records_proposed)."""
@@ -297,10 +299,12 @@ def board_data(fleet, labels, read, now):
                 unread = k.get("submissions_error")
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
                                                      [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
+                recorded = landing_of(logs, b.name())
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
-                          "landing": landing, "submissions_error": unread}
+                          "landing": landing, "submissions_error": unread, "record": recorded,
+                          "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
@@ -309,8 +313,9 @@ def board_data(fleet, labels, read, now):
                 ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "submission": subs.get(f["fix"]),
                                     "worktree": f["path"], "url": url(f["path"])} for f in fixes]
                 construction.append(ledger)
-                if state == "landed":
-                    attention.append({"what": "landed", "name": b.name(), "why": "every unit has landed on main, and the bolt is still in the plan"})
+                if state == "landed" or (recorded or {}).get("unclosed"):
+                    attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {recorded['unclosed']}"
+                                      if (recorded or {}).get("unclosed") else "every unit has landed on main, and the bolt is still in the plan"})
             queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))}
                      for u in pl.queue()]
         operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
@@ -473,7 +478,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Construction")
         for b in p["construction"]:
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
-                        state_said(b["state"]), landing_said(b), queue_said(b, True)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                        head_said(b), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
             for u in b["units"]:
                 line(fields(u["unit"], stage_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
@@ -553,13 +558,58 @@ def queue_said(b, why=False):
     return (f"submissions can't be read: {b['submissions_error']}" if why else ("submissions can't be read", "dim")) if b.get("submissions_error") else ""
 
 
+def time_of(b):
+    """A held bolt's age and who held its time, as its head line ends with them (plan.time_said, plan.20); nothing for
+    a ledger made without it."""
+    return (b.get("time") or {}).get("said") or ""
+
+
+def landing_of(entries, bolt):
+    """What the run record holds of a held bolt's landing for its head line, its ledger's record (plan.21, Decision 5), from the partition's
+    entries the rail read, oldest first: {"queued": n} while its last bolt.submit has its landing queued as sluice's #n
+    (plan.submit_queued); {"unclosed": words} once its last bolt.submit landed and its last bolt.land since is refused,
+    in that refusal's words; else None. A decision of facts alone (code.7)."""
+    last, refused = None, None
+    for e in entries:
+        if f"bolt/{bolt}" not in (e.get("On") or []):
+            continue
+        if e.get("Act") == "bolt.submit":
+            last, refused = e, None
+        elif e.get("Act") == "bolt.land":
+            refused = e.get("Refused")  # None once a close went through
+    if last and last.get("Outcome") == "queued":
+        return {"queued": last.get("Submission")}
+    if last and last.get("Outcome") == "landed" and refused:
+        return {"unclosed": refused}
+    return None
+
+
+def head_said(b):
+    """A held bolt's state as its head line says it, from what the run record holds of its landing (its record,
+    landing_of): landed on main and not closed, in its last refused close's words; its landing queued, with sluice's
+    number, only while sluice's queue was read and shows no landing of it standing, which landing_said says in its
+    stead, a queue that can't be read showing no number (queue_said, read.1); else its state (state_said)."""
+    record = b.get("record") or {}
+    if record.get("unclosed"):
+        return f"landed on main, not closed: {record['unclosed']}"
+    if record.get("queued") and not b.get("landing") and not b.get("submissions_error"):
+        return f"landing queued as #{record['queued']}"
+    return state_said(b["state"])
+
+
+def needs_eye(b):
+    """Whether a held bolt's head line has the attention gutter: every unit of it landed, or its close refused."""
+    return b["state"] == "landed" or bool((b.get("record") or {}).get("unclosed"))
+
+
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
-    dim; then its pips, its name, its state unless active (state_said), its landing standing in sluice (landing_said),
-    that its submissions can't be read when they can't (queue_said), and how many of its units have merged; its
-    landing's marker in the gutter, or attention once every unit has landed."""
-    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], state_said(b["state"]),
-                      landing_said(b), queue_said(b), merged(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+    dim; then its pips, its name, its state unless active, or what its landing is (head_said), its landing standing in
+    sluice (landing_said), that its submissions can't be read when they can't (queue_said), how many of its units have
+    merged, and its age and who held its time (time_of); its landing's marker in the gutter, or attention once every
+    unit has landed or its close was refused (needs_eye)."""
+    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], head_said(b),
+                      landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
 
 
 def ledger_rows(b):
@@ -694,8 +744,9 @@ def ops_view(p):
     (landing_said), with its card, and each held bolt whose landing stands on no such row; then, environment by
     environment, each deploy
     waiting on the user's word with its card, each approved and not yet deployed, each running, and each operation step
-    waiting, handed or failed, with the deploy it comes after, or whose gate it is, and its doer; and what keeps a host
-    or the plan from being read."""
+    waiting, handed or failed, with the deploy it comes after, or whose gate it is, and its doer; the head line of each
+    bolt that landed on main and whose close was refused, with its words (plan.21); and what keeps a host or the plan
+    from being read."""
     pending = [(e["env"], d) for e in p.get("environments", []) for d in e["deploys"] if not d["ended"] and d["answer"] != "replaced"]
     steps = [(e["env"], w) for e in p.get("environments", []) for w in e["waiting"]]
     word = sum(d["answer"] == "waiting" for _, d in pending)
@@ -715,6 +766,7 @@ def ops_view(p):
     rowed = {x for _, bolts in lands.values() for x in bolts}
     out += [row(fields(b["repo"] or "", b["bolt"], landing_said(b)), " ") for b in p.get("construction", [])
             if b.get("landing") and b["bolt"] not in rowed]
+    out += [bolt_row(b, b["team"]) for b in p.get("construction", []) if (b.get("record") or {}).get("unclosed")]
     for e in p.get("environments", []):
         for d in (d for env, d in pending if env == e["env"]):
             out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))
@@ -1027,6 +1079,64 @@ def queue_of(state):
     return gather.submissions_of(state["doc"]) if "doc" in state else (None, state["why"])
 
 
+def kept_submissions(kept, doc, bolts):
+    """What the follower keeps of a kit's submissions (Decision 2 of a-rows-age-and-holder-come-from-the-followers-overview),
+    {number: {id, bolt, branch, worktree, pull_head, submitted, started, decided, event}}, taken from what it kept
+    (kept) and an overview's document its watch printed or the clock or a gather asked (doc), for the bolts its read
+    asks of the kit (bolts), reading nothing else: each submission standing on a bolt's branch, or on main from bolt/<b>
+    or a pull request opened from it, with when it was submitted and, once a candidate testing it gives it, when its
+    checks began, never cleared after; each kept one the document no longer holds standing decided at the time its
+    branch's recent events give for it, its event kept, or at the document's own time, `gone`, a withdrawal or a
+    decision the events' window missed, and one a document with no time decides nothing (read.1); each the recent
+    events name decided that it lacks, decided before the follower saw it, added with its decision alone; and one of a
+    bolt no longer asked dropped. A submission on main whose bolt it can't tell, from a pull request alone, is kept with
+    bolt None while the document holds it, standing or in its events, so plan.bolt_facts takes it by the number the run
+    record's queued bolt.submit names. A document crew can't read changes nothing. A decision on plain facts (code.7)."""
+    standing, why = gather.submissions_of(doc)
+    if why:
+        return dict(kept)
+    recent = {x["id"]: x for x in gather.decided_in(doc)[0]}
+    asked, at = {f"bolt/{b}": b for b in bolts}, gather.text(doc.get("at"))
+
+    def bolt_of(x):
+        """The bolt a submission is of and whether it is kept: a bolt's branch's, or main's from one, else None on main."""
+        if x["branch"] in asked:
+            return asked[x["branch"]], True
+        if x["branch"] == "main":
+            return next((asked[w] for w in (x.get("worktree"), x.get("pull_head")) if w in asked), None), True
+        return None, False
+    out = {n: x for n, x in kept.items() if x["bolt"] is None or x["bolt"] in bolts}
+    stands = set()
+    for x in standing:
+        b, ours = bolt_of(x)
+        if ours:
+            was = out.get(x["id"], {})
+            stands.add(x["id"])
+            out[x["id"]] = {"id": x["id"], "bolt": b, "branch": x["branch"], "worktree": x["worktree"], "pull_head": x["pull_head"],
+                            "submitted": x["submitted"] or was.get("submitted"), "started": was.get("started") or x["started"],
+                            "decided": None, "event": None}
+    for n, x in list(out.items()):
+        if n in stands or x["decided"]:
+            continue
+        ev = recent.get(n)
+        if ev is not None and ev["decided"]:
+            out[n] = dict(x, decided=ev["decided"], event=ev["event"])
+        elif at:
+            out[n] = dict(x, decided=at, event="gone")
+    for n, x in recent.items():
+        b, ours = bolt_of(x)
+        if ours and n not in out and x["decided"]:
+            out[n] = {"id": n, "bolt": b, "branch": x["branch"], "worktree": x["worktree"], "pull_head": None,
+                      "submitted": None, "started": None, "decided": x["decided"], "event": x["event"]}
+    return {n: x for n, x in out.items() if x["bolt"] is not None or n in stands or n in recent}
+
+
+def decided_kept(kept):
+    """The submissions the follower kept of a kit that are decided (kept_submissions), by number, as a kit's answer
+    carries them (decided)."""
+    return [x for _, x in sorted(kept.items()) if x["decided"]]
+
+
 def queue_kits(kits):
     """The kits whose queue the follower's read shows, by (host, main): each the read asked bolts of and read (gather.kit
     reads sluice's queue for those alone), of the kept answers, {host: {main: (request, answer)}}."""
@@ -1315,7 +1425,8 @@ class Follower:
     written from it. On each tick, and only then, it asks Pending You after the cards its card sweep would act on, in one
     bridge, none when there are none, and every sweep judges with those answers until the next tick. It follows each
     kit's queue through sluice's overview watch (Watches), with watch, and a new line is the queue's move, taken into
-    the kept read with nothing gathered; a kit no watch follows has its overview asked once at each tick. SIGUSR1 makes
+    the kept read with nothing gathered, each submission of a held bolt kept from its submit to its decision
+    (kept_submissions); a kit no watch follows has its overview asked once at each tick. SIGUSR1 makes
     the next tick now."""
 
     def __init__(self, lock, period=PERIOD, watch=True):
@@ -1323,6 +1434,8 @@ class Follower:
         self.labels, self.fleet_, self.tick_at, self.seen, self.unfetched, self.here = [], None, 0.0, None, {}, {}
         # the overview watches, None for a follower that keeps none (crew _follow --once), whose gathers read the queues
         self.watches = Watches() if watch else None
+        # what it kept of each kit's submissions from what its watches printed, by (host, main) (kept_submissions)
+        self.subs = {}
         # the partitions a refresh found a batch due for, by the state tip its read held and whether the tell went
         # through (plan.batch_told)
         self.told = {}
@@ -1436,6 +1549,7 @@ class Follower:
         if self.watches is not None and self.last["read"] is not None:
             seeded = self.watches.seed(self.kept.kits)  # the overviews the read's gathers made, each new watch's first line
             self.requeue(m.get("queues", ()))
+            self.rekeep()
             self.watches.sync(fleet, queue_kits(self.kept.kits), tick=False)
             if seeded:
                 self.last["stamps"] = dict(self.last["stamps"], queues=self.watches.stamp())
@@ -1462,6 +1576,21 @@ class Follower:
             if why:
                 answer["submissions_error"] = why
 
+    def rekeep(self):
+        """What the follower keeps of each shown kit's submissions (kept_submissions), taken from the document its watch,
+        the clock's ask or a gather last read of the kit, and the kit's kept answer given the decided among them
+        (decided_kept), so neither a line nor a gather throws away what was kept; a kit no longer shown let go."""
+        shown = queue_kits(self.kept.kits)
+        self.subs = {k: v for k, v in self.subs.items() if k in shown}
+        for host, main in sorted(shown):
+            req, answer = self.kept.kits[host][main]
+            doc = self.watches.states.get((host, main), {}).get("doc")
+            if isinstance(doc, dict):
+                self.subs[(host, main)] = kept_submissions(self.subs.get((host, main), {}), doc, req["bolts"])
+            if (host, main) in self.subs:
+                answer["decided"] = decided_kept(self.subs[(host, main)])
+                answer.pop("decided_error", None)
+
     def read(self, fleet, looked, stamps):
         """A read of what moved: the tips this host's caches hold handed in (no fetch), each unmoved kit served from what
         was kept, and every sweep run; what the read said on standard error kept for the rail's frames."""
@@ -1473,6 +1602,7 @@ class Follower:
                     plan.READ.keep_tip(repo, ref, tip)
         self.kept.stamps, plan.READ.follower, said, asked = stamps["kits"], self.kept, io.StringIO(), self.kept.cards is None
         self.kept.queued = {k: list(queue_of(s)) for k, s in (self.watches.states if self.watches is not None else {}).items() if "doc" in s}
+        self.kept.decided = {k: [decided_kept(self.subs.get(k, {})), None] for k in self.kept.queued}
         try:
             with contextlib.redirect_stderr(said):
                 read = flow_read(fleet, self.labels, sweep=True)

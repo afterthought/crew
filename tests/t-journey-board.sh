@@ -169,26 +169,38 @@ expect_ok crew rail --label wldn; rail=$out
 eq "$(head -n "$(wc -l <<<"$rail")" <<<"$views" | tail -n +2 | mask)" "$(tail -n +2 <<<"$rail" | mask)"
 expect_ok crew _rail wldn --once
 eq "$(head -n "$(wc -l <<<"$rail")" <<<"$out" | tail -n +2 | mask)" "$(tail -n +2 <<<"$rail" | mask)"
-eq "$(jq -S 'del(.read_at)' "$frame")" "$(crew board --label wldn --json | jq -S 'del(.read_at)')"
+# aged: the board's JSON with each held bolt's age, shares and words left out, and unaged, its text with each head
+# line's age and shares left out, since a minute can turn between two reads, as mask leaves out a rail row's age
+aged() { jq -S 'del(.read_at, (.partitions[].construction[].time | .age, .shares, .said))'; }
+unaged() { sed -E 's/  (<1m|[0-9]+m|[0-9]+h [0-9]{2}m|[0-9]+d [0-9]{2}h)(: [^;]*)?; /  AGE; /'; }
+eq "$(aged < "$frame")" "$(crew board --label wldn --json | aged)"
 agents=$(home_of mac-studio)/.cache/crew/board/wldn.agents.json
 eq "$(jq -r '.read_at' "$agents") $(jq -r '.views | has("swb-1-conductor") and has("wldn-planner")' "$agents")" "$(jq -r '.read_at' "$frame") true"
 has "$(jq -r '.cards["swb-1-conductor"][0] | map(.[0]) | join("")' "$agents")" "  your card  verify/c/$stamp  req_ver-1  open "
 has "$rail" "verify/c/$stamp (wldn), asked by swb-1-conductor on $box"$'\n'"    left:   a rail read on $box closes it, under that host's sign-in"
 expect_ok crew _board wldn --once
-eq "$(tail -n +2 <<<"$out")" "$(crew board --label wldn | tail -n +2)"
+eq "$(tail -n +2 <<<"$out" | unaged)" "$(crew board --label wldn | tail -n +2 | unaged)"
 ok "the host's follower, with no tab open, writes each partition's frames there from one read, one fetch of the state branch and one read of each host's kits, the rail the rail tab draws as crew rail prints it, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view and open cards beside it"
 
 # The follower running: its clock set past the test's length, so only a signal ticks it (tests.8), and each kit's queue
 # followed through the stub sluice's overview watch. Its first refresh reads and opens a watch on each kit holding a
-# bolt, the box's over ssh; a tick with nothing moved fetches and then starts no git and no gather on mac-studio and
+# bolt, the box's over ssh, its gathers running no sluice status; a tick with nothing moved fetches and then starts no git and no gather on mac-studio and
 # asks the box for its stamps alone; a plan write on mac-studio is shown at the next look, with nothing fetched and no
 # kit gathered; a reading's result written on mac-studio, as plannotator writes the one the user sends back, has
 # mac-studio's card sessions swept at the next look, the box's not, and nothing gathered; a write to sluice's folder in
 # the box's kit moves nothing at the next tick; a merge of unit a queued in sluice, its watch printing a new line, puts
 # the submission's number on a's row at the next look, with nothing gathered and no sluice run but the watches; and a
 # dev server started on the box shows on b's line after the next tick, with nothing gathered.
-written() { python3 -c 'import os, sys; print(os.stat(sys.argv[1]).st_ino)' "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json"; }
-rewritten() { [[ $(written) != "$1" ]] && grep -q "^$box \(stamp\|gather\)\$" "$T/reads.log"; }
+# written: each partition's rail, board and agents' frames by their files, and rewritten, a round whose every frame is
+# new, so its reads are over before the next are counted: a round goes on past wldn's rail, to swancloud's frames and,
+# at its first write of each partition, a read of crew's version (board.here_read)
+written() { python3 -c 'import os, sys; print(" ".join(str(os.stat(p).st_ino) for p in sys.argv[1:]))' "$(home_of mac-studio)"/.cache/crew/board/{wldn,swancloud}{.rail,,.agents}.json; }
+rewritten() {
+  local was=($1) now=($(written)) i
+  (( ${#was[@]} == 6 && ${#now[@]} == 6 )) || return 1
+  for i in "${!was[@]}"; do [[ ${now[i]} != "${was[i]}" ]] || return 1; done
+  grep -q "^$box \(stamp\|gather\)\$" "$T/reads.log"
+}
 railtext() { jq -r .text "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json"; }
 unit_of() { jq -c --arg u "$1" '.partitions[0].construction[] | select(.bolt == "tenant-environments") | .units[] | select(.unit == $u)' "$frame"; }
 only_stamps() { eq "$(grep -c "^$box " "$T/reads.log") $(grep -v ' overview --json --watch' "$CREW_TEST_LOG" | grep -c " ssh $box ")" "$(reads $box stamp) $(reads $box stamp)"; }
@@ -200,6 +212,7 @@ until_ok rewritten "$was" || fail "the running follower never refreshed: $(cat "
 eq "$(reads $box gather)" "1"
 watching() { grep -q "^$box sluice overview --json --watch in " "$CREW_TEST_LOG" && grep -q "^mac-studio sluice overview --json --watch in " "$CREW_TEST_LOG"; }
 until_ok watching || fail "the follower opened no overview watch on each kit: $(cat "$CREW_TEST_LOG")"
+! grep -q " sluice status " "$CREW_TEST_LOG" || fail "the follower's read of the kits ran sluice status: $(grep ' sluice status ' "$CREW_TEST_LOG")"
 was=$(written); : > "$T/reads.log"; : > "$CREW_TEST_LOG"
 kill -USR1 "$fol"
 until_ok rewritten "$was" || fail "the follower's tick wrote no frame: $(cat "$T/follower")"
@@ -245,7 +258,7 @@ until_ok served || fail "the dev server started on the box is not on b's line: $
 eq "$(reads mac-studio gather) $(reads $box gather)" "0 0"
 proposed || fail "the rail lost its words at the tick: $(railtext)"
 kill "$fol"; wait "$fol" 2>/dev/null || true
-ok "the running follower's tick with nothing moved starts no git and no gather on mac-studio and asks the box for its stamps alone, a plan write on mac-studio is shown at its next look with nothing fetched and no kit gathered, a reading sent back there has mac-studio's card sessions swept and nothing gathered, a write to sluice's folder moves nothing, a merge queued in sluice is on its row from the kit's overview watch with nothing gathered, and a dev server started on the box shows after the next tick with nothing gathered"
+ok "the running follower's first read runs no sluice status, its tick with nothing moved starts no git and no gather on mac-studio and asks the box for its stamps alone, a plan write on mac-studio is shown at its next look with nothing fetched and no kit gathered, a reading sent back there has mac-studio's card sessions swept and nothing gathered, a write to sluice's folder moves nothing, a merge queued in sluice is on its row from the kit's overview watch with nothing gathered, and a dev server started on the box shows after the next tick with nothing gathered"
 
 # crew page: the page written whole under the partition's state folder, its path and header printed, nothing
 # appended; a node's history on it, and its dock's, is what crew trace prints.

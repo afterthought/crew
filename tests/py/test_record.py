@@ -50,6 +50,13 @@ class TestEmit:
             "wldn-planner", "chuck-herdr-alpha:sid-1", "mac-studio", "unit.add", ["unit/a", "queue/switchboard-kit"], ["signals/x/01-y"], ["r@abc"],
             "plan(queue): add a")
 
+    def test_a_landings_submission_number_is_kept_on_its_entry_and_read_back(self, here):
+        record.emit("wldn", "bolt.submit", ["bolt/z"], Outcome="queued", Submission="412", Head="a" * 40, Base="b" * 40)
+        text = next(here.glob("*.rec")).read_text()
+        e, = record.parse(text)
+        assert (e["Outcome"], e["Submission"], e["Head"], e["Base"]) == ("queued", "412", "a" * 40, "b" * 40)
+        assert "Submission" in text.split("%allowed:", 1)[1].splitlines()[0].split()
+
     def test_the_users_entry_names_them_at_this_host_with_no_session(self, here):
         import getpass
         record.emit("wldn", "test.user")
