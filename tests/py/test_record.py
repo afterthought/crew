@@ -84,7 +84,7 @@ class TestEmit:
 
         def unreachable(repo, ref, fresh=False):
             raise crew.Refusal(f"could not fetch {ref} of {repo} over https: fatal: unable to access\n'https://github.com/': timed out")
-        monkeypatch.setattr(plan, "fetch", unreachable)
+        monkeypatch.setattr(plan, "tip_of", unreachable)
         eid = record.emit("wldn", "stage.start", ["stage/a/construct"])
         assert eid and [e["Id"] for e in record.parse(next(here.glob("*.rec")).read_text())] == [eid]
         assert capsys.readouterr().err.splitlines() == [
@@ -112,7 +112,7 @@ class TestEmit:
         monkeypatch.setattr(plan, "git", lambda repo, *args, input=None, env=None, check=True: calls.append(args[0]) or types.SimpleNamespace(
             returncode=0, stdout="", stderr=""))
         monkeypatch.setattr(plan, "READ", plan.Reading())
-        assert plan.fetch("WilldanGroup/crew-state", "wldn/main") == "d" * 40 and calls == ["fetch"]
+        assert plan.tip_of("WilldanGroup/crew-state", "wldn/main") == "d" * 40 and calls == ["fetch"]
 
     def test_a_fetch_that_lost_the_caches_ref_to_another_command_on_this_host_is_made_again(self, monkeypatch, tmp_path):
         """Every act pushes its entry, so two commands on one host fetch the branch into crew's cache side by side, and
@@ -131,7 +131,7 @@ class TestEmit:
         monkeypatch.setattr(plan, "git", git)
         monkeypatch.setattr(plan, "READ", plan.Reading())
         monkeypatch.setattr(plan.time, "sleep", lambda s: None)
-        assert plan.fetch("WilldanGroup/crew-state", "wldn/main") == "c" * 40 and calls == ["fetch", "fetch", "fetch", "rev-parse"]
+        assert plan.tip_of("WilldanGroup/crew-state", "wldn/main") == "c" * 40 and calls == ["fetch", "fetch", "fetch", "rev-parse"]
 
         def refused(repo, *args, input=None, env=None, check=True):
             calls.append(args[0])
@@ -139,7 +139,7 @@ class TestEmit:
         calls.clear()
         monkeypatch.setattr(plan, "git", refused)
         with pytest.raises(crew.Refusal, match="^could not fetch wldn/main of WilldanGroup/crew-state over https: fatal: unable"):
-            plan.fetch("WilldanGroup/crew-state", "wldn/main", fresh=True)
+            plan.tip_of("WilldanGroup/crew-state", "wldn/main", fresh=True)
         assert calls == ["fetch"]
 
     def test_the_entries_of_one_second_sort_as_they_were_made_whichever_process_made_each(self):
@@ -286,7 +286,7 @@ class TestEvents:
         monkeypatch.setattr(board, "labels_here", lambda fleet, host: ["wldn"])
         monkeypatch.setattr(board, "follower_here", lambda: follower)
         monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("madswan/swancloud-state", f"{label}/main"))
-        monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: got.append(ref))
+        monkeypatch.setattr(plan, "tip_of", lambda repo, ref, fresh=False: got.append(ref))
         monkeypatch.setattr(plan, "tip_here", lambda repo, ref: "")
 
         def stop(_):

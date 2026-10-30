@@ -282,7 +282,7 @@ def reach(label, eid=None):
     try:
         repo, ref = plan.state_of(crew.load(), label)
         where = f"{ref} of {repo}"
-        tip = plan.fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+        tip = plan.tip_of(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
 
         def make(tip):
             chain, seen["newest"] = unpushed(label, lambda path: plan.show(repo, tip, path))
@@ -533,7 +533,7 @@ def follow(fleet, labels, about):
                         follower = follower or board.follower_here()
                     if follow_fetches(l, followed, follower, None if again else last.get(l), time.monotonic(), period):
                         last[l] = time.monotonic()
-                        plan.fetch(repo, ref, fresh=True)
+                        plan.tip_of(repo, ref, fresh=True)
                     tip = plan.tip_here(repo, ref)
                     tip is not None or fail(f"its tip in crew's cache of {repo} can't be read")
                     if l in seen and tip == tips.get(l):

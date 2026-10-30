@@ -1466,7 +1466,7 @@ class Follower:
             for repo, ref in (plan.state_of(fleet, l), (crew.partition_of(fleet, l)["blueprints"][0], "main")):
                 if (repo, ref) not in done:
                     try:
-                        plan.fetch(repo, ref, fresh=True)
+                        plan.tip_of(repo, ref, fresh=True)
                         done[(repo, ref)] = None
                     except Refusal as e:
                         done[(repo, ref)] = " ".join(str(e).split())
