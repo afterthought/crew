@@ -488,13 +488,42 @@ queued() { [[ $(field mac-studio bolt.submit Outcome "bolt/$1") == queued ]] &&
   grep -q "^runs(mac-studio): bolt.submit bolt/$1 " <<<"$(git --git-dir "$ws" log --format=%s wldn/main)"; }
 # closed <bolt>: the plan holds the bolt no more
 closed() { [[ $(plan -t Bolt -e "Bolt = '$1'" -c) == 0 ]]; }
+# submitters <pid> <bolts>: the python of each crew bolt submit <bolts> among the processes <pid> started, this run's
+# alone: a pattern matched across the host ends another run's of this test, as sluice runs it side by side (tests.9)
+submitters() {
+  local c re="lib/plan\.py bolt submit $2\$"
+  for c in $(pgrep -P "$1"); do
+    [[ $(ps -ww -o command= -p "$c") =~ $re ]] && echo "$c"
+    submitters "$c" "$2"
+  done
+}
 # killed <bolt> <pid>: crew bolt submit of the bolt, run in the background as <pid>, killed with the python it runs
 killed() {
-  pkill -f "lib/plan.py bolt submit $1\$" || true; wait "$2" 2>/dev/null || true
-  until_ok bash -c '! pgrep -f "lib/plan.py bolt submit $1\$" >/dev/null' _ "$1" || fail "crew bolt submit $1 was not stopped"
+  local p; p=$(submitters "$2" "$1"); [[ -n $p ]] || fail "crew bolt submit $1 was not running under $2"
+  kill $p 2>/dev/null || true; wait "$2" 2>/dev/null || true
+  until_ok bash -c 'for p; do ! kill -0 "$p" 2>/dev/null || exit 1; done' _ $p || fail "crew bolt submit $1 was not stopped"
 }
-# A test that stops before it lets sluice decide leaves no waiter of its own calling sluice wait.
-trap 'rm -f "$T/sluice-wait-holds"; pkill -f "lib/plan.py bolt submit ((far|near)-reach|north south east)\$" || true' EXIT
+# decoy: another run's landing on the host, started outside this run's processes, its command line crew bolt submit
+# far-reach's, its pid in $decoy; it ends with this run's scratch folder, or in thirty minutes. spared <what>: the decoy
+# outlived what this run just ended, and is ended. Each lives only around one of this run's ends, since a copy of this
+# test from before its kills were its own ends it from anywhere on the host.
+mkdir -p "$T/decoy/lib"
+printf '%s\n' 'import pathlib, time' 'end = time.time() + 1800' \
+  'while pathlib.Path(__file__).exists() and time.time() < end:' '    time.sleep(1)' > "$T/decoy/lib/plan.py"
+decoy=
+decoy() {
+  (python3 "$T/decoy/lib/plan.py" bolt submit far-reach </dev/null >/dev/null 2>&1 & echo $! > "$T/decoy.pid")
+  decoy=$(cat "$T/decoy.pid")
+  until_ok bash -c '[[ $(ps -ww -o command= -p "$1") == *"/decoy/lib/plan.py bolt submit far-reach" ]]' _ "$decoy" ||
+    fail "the decoy did not start"
+}
+spared() {
+  kill -0 "$decoy" 2>/dev/null || fail "$1 ended another run's crew bolt submit far-reach on the host"
+  kill "$decoy" 2>/dev/null || true; decoy=
+}
+# A test that stops before it lets sluice decide leaves no waiter of its own calling sluice wait, nor a submitter.
+leave() { rm -f "$T/sluice-wait-holds"; kill $(submitters $$ "((far|near)-reach|north south east)") 2>/dev/null || true; }
+trap 'leave; [[ -z $decoy ]] || kill "$decoy" 2>/dev/null || true' EXIT
 crew bolt new far-reach "The zones reach far." --repo switchboard-kit >/dev/null
 crew bolt give swb-1 far-reach >/dev/null 2>&1
 crew unit add far-one "Unit far-one." --bolt far-reach >/dev/null
@@ -503,7 +532,9 @@ touch "$T/sluice-wait-holds"  # sluice has not decided
 (export CREW_AGENT=wldn-ops; crew bolt submit far-reach > "$T/far-reach.out" 2>&1) &
 submitter=$!
 until_ok queued far-reach || fail "the landing was not recorded queued:"$'\n'"$(cat "$T/far-reach.out")"
+decoy
 killed far-reach "$submitter"
+spared "ending this run's crew bolt submit far-reach"
 n=$(field mac-studio bolt.submit Submission bolt/far-reach)
 far=$kd/places/land-far-reach
 waiter=$(cat "$(git -C "$far" rev-parse --absolute-git-dir)/crew-landing")
@@ -839,3 +870,9 @@ has "$(told swb-1-conductor)" "take-main-$(short origin/main)"
 eq "$(field $box forecast Reached bolt/west)" "told"
 eq "$(field $box landing.left Heads kit/switchboard-kit)" "near@$(short bolt/near)"
 ok "a bolt the user left keeps its box when main moves under it, the card saying it would take main first and its conductor told nothing; a send ticking it, read by ops, tells the take-main fix and submits nothing of it"
+
+# This run's end stops its own landings' submitters and nothing of another run's on the host.
+decoy
+leave
+spared "this run's end"
+ok "the test's end stops its own landings' submitters and none of another run's beside it on the host"
