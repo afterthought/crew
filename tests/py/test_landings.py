@@ -558,6 +558,38 @@ def test_one_left_out_is_closed_saying_so_and_a_new_card_follows_with_it_unticke
     assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z.", ["z"], [])
 
 
+def test_a_landing_whose_entry_is_still_in_flight_is_read_as_still_landing_and_its_card_left():
+    """read.5, plan.2: bolt.land's plan write reaches the branch a commit before its entry, and a close read between
+    the two read the bolt gone with no landing recorded, saying 'Landed or left the plan' of a bolt that landed. The
+    branch is read at the parent of the oldest commit whose entry it lacks, so that close reads y still landing and
+    leaves the card, even when another host's entry lands between the write and its own, as a push refused under load
+    leaves it; once the entry arrives it says where y landed; and a bolt that left by an act whose entry is there and
+    is no landing is the one said to have landed or left the plan."""
+    before, land, other, drop = ("20261030T140025Z-933437-deneb-8163-114", "20261030T140103Z-263678-deneb-74395-2",
+                                 "20261030T140104Z-101010-mac-studio-512-1", "20261030T235959Z-000001-mac-studio-9-1")
+    deneb, studio = "runs/deneb/2026-10-30.rec", "runs/mac-studio/2026-10-30.rec"
+    record, theirs = f"Id: {before}\nAct: x\n\n", f"Id: {other}\nAct: stage.start\n\n"
+    o, a, b, c, d, x = "0" * 40, "a" * 40, "b" * 40, "c" * 40, "d" * 40, "e" * 40
+    half = [(b, a, [land]), (a, o, [before])]  # the plan's commit pushed, its entry not yet
+    assert plan.decision_at(half, {deneb: record}) == a
+    assert plan.landings_step([], answered("y@abc1234"), ["y"], {"y"}) == ("leave",)  # y in the plan at a
+    between = [(x, b, [other])] + half  # another host's entry, its own commit holding it, lands first
+    assert plan.decision_at(between, {deneb: record, studio: theirs}) == a
+    assert plan.decision_at([(d, b, [drop])] + half, {deneb: record, "runs/mac-studio/2026-10-31.rec":
+                                                     f"Id: {drop}\nAct: plan.drop\n\n"}) == a
+    whole = [(c, x, [land])] + between  # the entry's own commit follows
+    assert plan.decision_at(whole, {deneb: record + f"Id: {land}\nAct: bolt.land\n\n", studio: theirs}) == c
+    assert plan.landings_step([], answered("y@abc1234"), ["y"], set(), landed={"y": "1" * 40}) == (
+        "close", f"Landed on GitHub's main: y at 1111111;{TIMER}", None, [])
+    # a write recorded past midnight is found in its host's file of the next day; a commit naming none is read
+    assert plan.decision_at([(d, a, [drop]), (a, o, [before])], {"runs/mac-studio/2026-10-31.rec":
+                                                                f"Id: {drop}\nAct: plan.drop\n\n", deneb: record}) == d
+    assert plan.landings_step([], answered("y@abc1234"), ["y"], set()) == ("close", "Landed or left the plan: y.", None, [])
+    assert plan.decision_at([(d, a, []), (a, o, [before])], {deneb: record}) == d
+    assert plan.decision_at(half, {}) == o  # none of them holds its entry: the branch is read below them all
+    assert plan.decision_at([(a, None, [before])], {}) == a and plan.decision_at([], {}) is None
+
+
 STANDS = ("your send stands for it: it lands once its team's fix has only taken main in and sluice has proven it, with "
           "nothing asked.")
 REFUSED = "held: sluice refused its landing at abc1234, and it waits for its team's fix: x"
