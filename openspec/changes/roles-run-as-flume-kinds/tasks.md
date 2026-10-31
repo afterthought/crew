@@ -35,7 +35,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 7. The reviewer
 
-- [ ] 7.1 `crew review` asks a reviewer that runs as its kind its batch and `--wait` refuses for it, and `crew review delivered` records each written batch, starts its session, raises its card in the planner's name and asks the planner (design Decision 11; Task notes 7.1); passes `tests/py/test_review.py`, and the moon task `tests:t-journey-review` ends with "0 failed".
+- [x] 7.1 `crew review` asks a reviewer that runs as its kind its batch and `--wait` refuses for it, and `crew review delivered` records each written batch, starts its session, raises its card in the planner's name and asks the planner (design Decision 11; Task notes 7.1); passes `tests/py/test_review.py`, and the moon task `tests:t-journey-review` ends with "0 failed".
 
 ## 8. Main-level ops's landing from a run
 

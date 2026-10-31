@@ -12037,9 +12037,12 @@ def review_cmd(fleet, a):
     """crew review <label> [--wait [--timeout <ms>]], on the main level's host: the partition's reviewer started fresh
     for the batch of changes due, in a review tab of the main level's workspace beside the planner, and sent its batch as
     its prompt, the start recorded; with --wait, the wait for its summary, which records the batch, and then its agent
-    ended and its tab closed. Refused while a reviewer still reviews, or the main level is not up."""
+    ended and its tab closed. Refused while a reviewer still reviews, or the main level is not up. A partition that
+    runs its reviewer as its kind is asked the batch instead (review_asked)."""
     p = crew.partition_of(fleet, a.label)
     arrived(fleet, p["machine"])
+    if crew.role_stream(fleet, p["label"], "reviewer") is not False:
+        return review_asked(fleet, p["label"], a)
     m = crew.main_holding(fleet, a.label, "reviewer")
     m.ensure()
     label, agent = p["label"], m.agent_of("reviewer")
@@ -13034,6 +13037,93 @@ def review_wait(fleet, a):
             print(f"batch {n}'s review is still running after the wait's {a.timeout} ms: nothing is recorded yet", file=sys.stderr)
             raise Stopped(3)
         time.sleep(POLL)
+
+
+def review_asked(fleet, label, a):
+    """crew review <label> for a partition that runs its reviewer as its kind (design Decision 11, review-batches "The
+    planner starts the partition's reviewer"), on the main level's host, where the reviewer's run writes the summary:
+    the batch of changes due asked of the reviewer, a `batch` ask naming batch/<n>, keyed by it, its words what a
+    standing reviewer is sent first (review_start), and the batch's start recorded as today, with no tab opened and no
+    agent started; the reviewer's run hands it back with crew review delivered, which asks the planner. --wait refuses,
+    since nothing waits on the batch: its delivery reaches the planner as an ask."""
+    not a.wait or fail(f"{label} runs its reviewer as its kind, so crew review --wait waits on nothing: the batch's "
+                       f"delivery reaches {label}-planner as an ask")
+    b = review_start(fleet, argparse.Namespace(label=label))
+    ask_write(fleet, label, "reviewer", "batch", agent(), names=f"batch/{b['N']}", key=f"batch/{b['N']}", words=b["PROMPT"])
+    record.emit(label, "review.start", [f"batch/{b['N']}", f"agent/{label}-reviewer"] + [f"unit/{u}" for u in b["NAMES"].split()],
+                why=f"batch({b['N']}): start review", Batch=b["N"], Units=b["UNITS"])
+    print(f"{label}-reviewer is asked batch {b['N']} of {label}, into {b['FILE']}: its run hands it back with crew review "
+          f"delivered, which asks {label}-planner")
+
+
+def batches_taken(turn, held):
+    """The batches a reviewer's turn took (design Decision 11), from the turn and the asks on the branch (asks.parse):
+    the number of each `batch` ask it took that names batch/<n>, in the order taken. A decision of facts alone (code.7)."""
+    by = {asks.took_of(x): x for x in held}
+    out = []
+    for took in turn["Took"]:
+        x = by.get(took)
+        m = re.fullmatch(r"batch/(\d+)", (x or {}).get("Names") or "") if x and x.get("What") == "batch" else None
+        if m and int(m.group(1)) not in out:
+            out.append(int(m.group(1)))
+    return out
+
+
+def batch_written(start, mtime):
+    """Whether a batch's summary is written for its start (review_wait's reading): its file's time, mtime, None when
+    there is none, at or after the batch's start, its review.start entry, None when this host recorded none."""
+    return bool(start) and mtime is not None and mtime >= utc(start["At"]).timestamp()
+
+
+def review_delivered(fleet, a):
+    """crew review delivered [--label L], in a run of a partition's reviewer on its main level's host (design Decision
+    11, review-batches "A reviewer's run hands its batch back"): each batch the run's open turn took (batches_taken)
+    whose summary is written since its start, delivered as the planner's wait delivered it (review_wait): recorded
+    (review.batch) unless it is already, and its card raised with its reading session in the planner's name
+    (raise_batch) unless the planner holds it on this host already; then, for a planner that runs as its kind, a
+    `delivered` ask of the planner naming batch/<n>, keyed delivered/<n>, with the line that adopts its card, which a
+    planner that stands is told as today. A batch whose summary is not written is refused by name once the others are
+    delivered. Refused anywhere but the reviewer's run, with no open turn, or a turn that took no batch."""
+    run = crew.run_here(fleet)
+    run and run[1] == "reviewer" or fail("crew review delivered runs in a run of a partition's reviewer, in its place "
+                                         "crew-reviewer--<label>, which hands back the batches its turn took")
+    label = run[0]
+    a.label in (None, label) or fail(f"{label}-reviewer hands back {label}'s batches, not {a.label}'s")
+    CONTEXT["label"] = label
+    machine = crew.partition_of(fleet, label)["machine"]
+    machine == crew.this_host() or fail(f"{label}'s batches are written on {machine}, where its main level runs, not {crew.this_host()}")
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    held, turns = asks.parse(show(repo, tip, "asks.rec"))
+    turn = asks.open_turn(turns, f"{label}-reviewer") or fail(
+        f"{label}-reviewer has no open turn: crew role start takes the batches asked of it first")
+    taken = batches_taken(turn, held) or fail(f"{label}-reviewer's turn {turn['Turn']} took no batch, so it has none to hand back")
+    planner = f"{label}-planner"
+    kind = crew.role_stream(fleet, label, "planner") is not False
+    entries, unwritten = local_entries(label, BATCH_DAYS), []
+    for n in taken:
+        start = next((e for e in reversed(entries) if e.get("Act") == "review.start" and not e.get("Refused") and e.get("Batch") == str(n)), None)
+        f = batch_file(label, n)
+        try:
+            mtime = f.stat().st_mtime
+        except OSError:
+            mtime = None
+        if not batch_written(start, mtime):
+            unwritten.append((n, f))
+            continue
+        recorded = any(e.get("Act") == "review.batch" and e.get("Batch") == str(n) for e in entries)
+        if not recorded:
+            record.emit(label, "review.batch", [f"batch/{n}"] + [f"unit/{u}" for u, *_ in units_of_batch(start)],
+                        why=f"batch({n}): reviewed", Batch=n, Units=start.get("Units"))
+        acts = Heard(fleet, planner if kind else None)
+        if not (recorded and cards.card_under(cards.host_entries(record, label, crew.this_host()), f"batch/{n}", planner)):
+            raise_batch(fleet, {"label": label, "key": f"batch/{n}"}, acts=acts)
+        if kind:
+            line = acts.heard or f"Its card is not raised here; crew rail --label {label} raises it."
+            ask_write(fleet, label, "planner", "delivered", f"{label}-reviewer", names=f"batch/{n}", key=f"delivered/{n}",
+                      words=f"Batch {n} of {label} is reviewed, its summary {f}. {line}")
+        print(f"batch {n} of {label} is delivered: {f}")
+    not unwritten or fail("; ".join(f"batch {n}'s summary {f} is not written since its start, so it is not delivered" for n, f in unwritten))
 
 
 # A heading in a batch's summary: a Markdown heading, or a line that opens in bold and says little after it.
@@ -16457,6 +16547,21 @@ class CardActs:
         return (row, None) if ok else (None, f"crew _land-row printed no row crew reads: {cut(r.stdout.strip(), 200)}")
 
 
+class Heard(CardActs):
+    """A card's acts with the adopting line told to the planner kept rather than told, when the planner runs as its
+    kind: a reviewer's delivery asks it instead (review_delivered)."""
+
+    def __init__(self, fleet, planner):
+        super().__init__(fleet)
+        self.planner, self.heard = planner, None
+
+    def tell(self, name, text):
+        if name != self.planner:
+            return super().tell(name, text)
+        self.heard = text
+        return True
+
+
 CARD_LATER = "The event stands, and its card is not posted."
 # A card the user answered before its thing changed, as its close is recorded: its note, the user's to read, is on the
 # card, and the run record holds crew's words alone (record.3).
@@ -17998,6 +18103,8 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("--wait", action="store_true")
     x.add_argument("--timeout", type=int, default=3600000)
+    x = sub.add_parser("review-delivered")
+    x.add_argument("--label")
     x = sub.add_parser("_console")
     x.add_argument("act", choices=("up", "down"))
     x.add_argument("label")
@@ -18025,7 +18132,7 @@ COMMANDS = {
     ("_made", None): made_cmd, ("_batch-card", None): batch_card_cmd,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
-    ("_review", None): review_cmd, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
+    ("_review", None): review_cmd, ("review-delivered", None): review_delivered, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
     ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show, ("signal-land", None): signal_land,
     ("_needs", None): needs_cmd, ("_end-short", None): end_short,
@@ -18087,8 +18194,8 @@ def refused(fleet, a, key, e):
 
 def main(argv):
     need_recutils()
-    if argv[:2] in (["signal", "move"], ["signal", "show"], ["signal", "land"]):  # beside crew signal <slug> "<asserts>"
-        argv = [f"signal-{argv[1]}"] + argv[2:]
+    if argv[:2] in (["signal", "move"], ["signal", "show"], ["signal", "land"], ["review", "delivered"]):  # beside crew signal <slug> "<asserts>"
+        argv = [f"{argv[0]}-{argv[1]}"] + argv[2:]
     ap = parser(only=argv[0]) if argv and not argv[0].startswith("-") else None
     args = (ap if ap is not None and argv[0] in ap.built else parser()).parse_args(argv)
     fleet = crew.load()

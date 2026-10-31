@@ -534,7 +534,10 @@ case $cmd in
     need_label "${3:-}"
     case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;
   review)  # crew review <label> [--wait [--timeout <ms>]]: the partition's reviewer, fresh for one batch, in a review tab
-    # of the main level's workspace beside the planner; --wait waits for its summary, records the batch and closes its tab
+    # of the main level's workspace beside the planner; --wait waits for its summary, records the batch and closes its tab.
+    # A partition that runs its reviewer as its kind is asked the batch, and its run hands it back with crew review
+    # delivered, run where the run is, on the main level's host.
+    [[ ${2:-} == delivered ]] && exec python3 "$here/../lib/plan.py" "${args[@]}"
     need_label "${2:-}"
     if [[ ${3:-} == --wait ]]; then
       limit=(); [[ ${4:-} == --timeout ]] && { [[ ${5:-} =~ ^[0-9]+$ ]] || { echo "--timeout takes a number of milliseconds" >&2; exit 2; }; limit=(--timeout "$5"); }
