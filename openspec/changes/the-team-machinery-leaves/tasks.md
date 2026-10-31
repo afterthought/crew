@@ -1,0 +1,58 @@
+# Tasks
+
+Each check is a moon task of the `tests` project run through `tests/suite`: `logic` is `tests:logic`, `contract` is `tests:contract`, `mod` is `tests:mod`, and an end-to-end test `t-<name>` is `tests:t-<name>`. Build the groups in order; each leaves the suite green.
+
+## 1. One path
+
+- [ ] 1.1 No decision of crew's reads the per-team setting: every branch on it keeps the crossed path's side, the off side's code is unreachable, the tests that proved the off side are deleted, and each test of a staying feature that set its work up through the old path sets it up as the crossed path does (design Decision 1; Task notes 1.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite` naming each end-to-end test `teams-cross-to-flume-as-their-bolts-land` added ends with "0 failed".
+
+## 2. Stage driving, the fix slot and crew's places leave
+
+- [ ] 2.1 `crew unit run|wait|free`, `crew chore run|wait|free`, `crew needs` and the internal `_unit-run`, `_unit-wait`, `_unit-free`, `_needs`, `_end-short` and `_construct-again` are gone with the stage prompts, the stage-end ledger, the stage wait and the construct handed to a team's host, crew writes no `stage.*` entry, and `crew trace` still prints the ones on the branch as written (design Decisions 1, 8 and 10; Task notes 2.1); verify `tests/suite logic` ends with "0 failed".
+- [ ] 2.2 Touches and overlap notes, the forecasts, orders and settles of a conductor's wait, carried units and the rebase of dependents are gone, and the landings card's forecast of a bolt against main still holds its row (design Decision 6; Task notes 2.2); verify `tests/suite logic contract` ends with "0 failed".
+- [ ] 2.3 `crew fix`'s today's forms (the slot's fix, `--merge`, `--drop`, `--wait`) and `_fix-run` are gone with the fix's place, prompt, slot and branch facts, `crew fix <bolt> <name> "<words>"` launches a fix place on the bolt, and `crew main fix` takes no team (design Decision 15, record 0049 part 4; Task notes 2.3); verify `tests/suite logic contract` ends with "0 failed".
+- [ ] 2.4 crew removes only its landing worktrees and the bolt branches it marked, leaves every place of Flume's alone, keeps no stages file, and readies no place (bolt-teams "crew removes only its own worktrees", kit-toolchain; Task notes 2.4); verify `tests/suite logic contract` ends with "0 failed", and `tests/suite t-journey-land` ends with "0 failed".
+- [ ] 2.5 The usage header of `plugin/bin/crew`, README and `plugin/skills/crew/SKILL.md` name none of the commands this group removes, together (`docs.2`; Task notes 2.5); verify `tests/suite t-docs` ends with "0 failed".
+
+## 3. The give, the dispatcher and the conductor's part of the plan leave
+
+- [ ] 3.1 `crew bolt give` is gone and `crew bolt start <bolt>`, which a proposal may hold and the user runs, starts a bolt's work as a crossed team's give did, with no team; no bolt's `Team` is written or read, a new state branch's schema allows no `Team` or `Agreed`, and no landing line or card says what a yes frees (design Decisions 9 and 14; Task notes 3.1); verify `tests/suite logic contract` ends with "0 failed", and `tests/suite t-journey-state` ends with "0 failed".
+- [ ] 3.2 A proposal waits on the user alone: `crew plan agree` and the `Agreed` write are gone, no write tells a conductor, and only the planner by proposal, the design agent into a queue, main-level ops's `crew bolt land` and the user write the plan (design Decision 6; Task notes 3.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-plan` ends with "0 failed".
+- [ ] 3.3 No dispatcher is started, placed, told or named: `crew main up` starts the main level's four alone, `_dispatch` is gone, and an operation's step names no dispatcher as its doer (main-level delta; Task notes 3.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-main t-journey-ops` ends with "0 failed".
+- [ ] 3.4 The usage header, README and the skill name `crew bolt start` and no give, agreement or dispatcher, together (`docs.2`; Task notes 3.4); verify `tests/suite t-docs` ends with "0 failed".
+
+## 4. A team's agents, tells and branch hint leave
+
+- [ ] 4.1 `crew list`, `crew status|up|rebuild|close|restart|resume|clear|down <team>`, `_status`, `_team` and `_tidy` are gone, with the team's standing agents, their slots, slots file and panes, their greetings, `crew-role`'s team forms and `crew revive`'s team branch (design Decision 10; Task notes 4.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-roles t-journey-main` ends with "0 failed".
+- [ ] 4.2 `crew hold`, `crew go` and `crew update` reach the main-level roles alone, and the branch hint is gone whole (design Decision 12; Task notes 4.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-hold t-session-hook` ends with "0 failed".
+- [ ] 4.3 `crew send` takes a partition's label alone, `crew tell` and the board's word reach no team agent, and a word on a bolt, unit or fix goes to the planner (operator-agent and board-page deltas; Task notes 4.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-main` ends with "0 failed".
+- [ ] 4.4 The usage header, README and the skill name no team command, team agent or team as a send's target, together (`docs.2`; Task notes 4.4); verify `tests/suite t-docs` ends with "0 failed".
+
+## 5. Reads that went through a team
+
+- [ ] 5.1 A partition's kits are the repositories its plan and its landings name, decided over plain facts, and the landings card's key, a bolt's name check, the card hook's kits and the board's Inception lane read them so (design Decision 3; Task notes 5.1); passes a new `tests/py/test_kits.py`, verify `tests/suite logic` ends with "0 failed".
+- [ ] 5.2 A kit's work is launched, and the kit read and landed, on the host and stream its runner's record gives, a partition's hosts are its main level's and its kits', and no read, landing, preview, reading, made-read or site row goes through a team's host (design Decisions 4 and 5; Task notes 5.2); passes `tests/py/test_kits.py`, verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-land t-journey-board` ends with "0 failed".
+- [ ] 5.3 A batch is reckoned at the rail's sweep on the partition's main-level host, and a landing, or a refused close, is read again by the rail's sweep on the kit's host in place of a team's read (review-batches and bolt-teams deltas; Task notes 5.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-review t-journey-land` ends with "0 failed".
+- [ ] 5.4 A bolt's reading and preview are main-level ops's, a question card is asked by the planner, main-level ops or the design agent alone, and the card hook refuses by those three (design Decision 6; Task notes 5.4); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-cards` ends with "0 failed".
+
+## 6. The views
+
+- [ ] 6.1 `board.agent_views` gives the planner, the design agent, main-level ops and the operator their views and no other; `crew board --json` lists no teams and no object's `teams`; a ledger shows no slot; a bolt's age runs from the entry that made its branch (design Decision 11; Task notes 6.1); verify `tests/suite logic` ends with "0 failed".
+- [ ] 6.2 The cards, the page and the fleet page name no team, slot, conductor or dispatcher, and no line says what a yes frees (crew-board, board-page and fleet-page deltas; Task notes 6.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-board` ends with "0 failed".
+- [ ] 6.3 `plugin/hooks/status.js` draws the views' new shape, and the mod's cases draw main-level ops's and the planner's bands (`code.8`; Task notes 6.3); verify `tests/suite mod` ends with "0 failed".
+
+## 7. The teams file holds partitions only
+
+- [ ] 7.1 crew reads `teams.json` version 4, partitions only, refuses version 2, 3 or any other naming swancloud's `lib/crew-teams.nix`, and refuses a partition role it has no definition for, `dispatcher` among them (design Decision 2; Task notes 7.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams` ends with "0 failed".
+- [ ] 7.2 The end-to-end world and the logic facts write and read the new file and plans with no team (Task notes 7.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams t-roles t-docs t-briefs t-journey-state` ends with "0 failed".
+
+## 8. The briefs
+
+- [ ] 8.1 `conductor.md`, `ops.md`, `dispatcher.md`, `construct.md`, `coder.md` and `verify.md` are gone, with the builder's tokens only they took, and every staying brief's roster and cards section names three askers and no team (design Decision 7; Task notes 8.1); verify `tests/suite t-briefs t-roles` ends with "0 failed".
+- [ ] 8.2 The design agent's, the planner's, main-level ops's, the operator's and the reviewer's briefs name no conductor, team ops, dispatcher, slot, give, `crew fix <team>`, `crew unit run`, `crew unit wait`, `crew needs` or `crew status <team>`, and say what each now hands to whom (design Decision 6; Task notes 8.2); verify `tests/suite t-briefs` ends with "0 failed".
+- [ ] 8.3 README and the skill keep no team section, roles row, run-record act or needs section of the old path, together with the usage header (`docs.2`; Task notes 8.3); verify `tests/suite t-docs` ends with "0 failed".
+
+## 9. The suite
+
+- [ ] 9.1 `tests/moon.yml` matches the tests after `tests/moon-tasks`, with no task for a deleted test and no read of a deleted path (`tests.10`; Task notes 9.1); verify `tests/suite t-suite` ends with "0 failed".
+- [ ] 9.2 The tests the change affects pass (Task notes 9.2); verify `tests/suite --affected` ends with "0 failed".
