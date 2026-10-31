@@ -53,4 +53,4 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 
 ## 9. The tests' tasks
 
-- [ ] 9.1 `tests/moon.yml` matches the tests after `tests/moon-tasks`, and the tests the change affects pass (Task notes 9.1); verify `tests/suite --affected` ends with "0 failed".
+- [x] 9.1 `tests/moon.yml` matches the tests after `tests/moon-tasks`, and the tests the change affects pass (Task notes 9.1); verify `tests/suite --affected` ends with "0 failed".
