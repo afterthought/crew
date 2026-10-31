@@ -1,0 +1,252 @@
+# Design
+
+## Context
+
+See proposal.md for why. This change is record 0047's move 6 (as amended 2026-10-28, accepted), read with record 0048's patterns 2, 4 and 5, record 0049 parts 1 to 3, record 0050 parts 2 and 3, and record 0052 as the user settled it on 2026-10-31: a runner per host in its own repository, no registry of repositories in crew, crew reading Flume only through the runner, and each role a kind crew's release carries, launched through the runner when a record names it.
+
+What stands at `227870c3`, where the change was cut from `bolt/crew-runs-its-work-through-flume`:
+
+- **The standing roles.** `crew main up <label>` (`plan.py` `main_cmd`) opens a `<label>` workspace in each session the main level's roles run in and starts `design`, `planner`, `ops` and `operator` there (`crew.py` `MAIN_STANDING`), each through `crew-role <label> <role>`, which `crew.py` `launch` resolves to a folder (the first blueprints repo's main checkout), the kits as added folders, the definition's model and effort after the teams file's override, and `CREW_AGENT`, `CREW_LABEL`, `SLUICE_AGENT`, `CREW_ROLE` and `CREW_LAUNCH` in its environment, with the brief `crew.brief` builds appended to the system prompt (`teams.6`). Each is greeted once it is up (`teams.7`), brought back by `crew revive`, restarted at its next stop when due (`teams.19`, `hold.py`), and drawn a band by crew's mod from `board.agent_views` (`code.8`).
+- **The reviewer.** `crew review <label>` (`review_cmd`), run by the planner when told a batch is due, starts `<label>-reviewer` fresh in a tab beside the planner with the batch as its first message; `crew review --wait` waits for its summary, then records the batch, starts its reading session and raises its card in the planner's name.
+- **Handoffs.** Every message to a role goes through `crew.tell` (`roles.4`): an agent's `crew tell <label>-<role>`, crew's own notices (`plan.py` `tell_planner`, the batch due, a card raised outside its owner's turn), and `crew send <partition>` to `<label>-operator` (`crew.send`). A tell is typed into the agent's pane or refused when the agent is not up (`teams.11`).
+- **Cards.** A role adopts a card crew raises in its name with `get_request`, and Pending You's wake mod wakes the adopting session when the user answers (rail-cards "An answer wakes the owner"); the host's follower sweeps the cards on its clock (crew-board "The follower asks Pending You about cards on its clock").
+- **Identity.** `plan.py` `agent()` and `may_write` read `CREW_AGENT`; `plugin/bin/crew` forwards a main level's command to its host carrying it (`code.3`).
+- **Flume.** crew calls no Flume today. crew's own repository binds Flume's place, change and merge-queue profiles in `.config/flume.toml` (03157fed) and declares no kinds.
+
+Flume as read on 2026-10-31 at agentplot/flume `3a126d4`, its site and records: a launch's own declaration, `flume launch --kinds <file>`, is the source `launch`, trusted with its caller and needing no lock (record 0022); a kind is TOML under `[kinds.<name>]`, its stages in order, each with one prompt beside the declaration, one deliverable and one agent (`guides/kinds.mdx`); a `report:{{state}}/<file>` deliverable lies in the place's own folder outside the worktree; a kind that does not land waits, once its last stage delivers, for `flume done`; a launch names its place `places/<kind>--<name>` and is refused while that place stands; an agent's settings are `program`, `model`, `instructions` and `beside`, never an environment, which is the pool account's (`guides/agent-settings.md`); an agent Flume starts carries `FLUME_PLACE`, `FLUME_AGENT` and `FLUME_STAGE`; `{{needs}}` is added to every prompt that does not place it; Flume's own role run is the place `places/<kind>--<role>` named by the address's second word, launched from the host's `[roles]` table with a kind from the repository's declaration, Flume's own, or a locked package (`guides/roles-and-wake.md`, `crates/flume-core/src/wake.rs`).
+
+Area pages this change touches: `core.md` (`roles.4`, `roles.7`, `roles.8`, `roles.9`, `code.3`, `code.5`, `code.7`, `code.8`), `teams.md` (`plugin/bin/crew`, `plugin/bin/crew-role`, `plugin/lib/crew.py`: `teams.6`, `teams.7`, `teams.11`, `teams.19`), `plan.md` (`plugin/lib/plan.py`: `plan.2`, `plan.16`), `record.md` (`plugin/lib/record.py`: `record.1`, `record.3`), `signals.md` (the capture commands in `plan.py`: `signals.7`), `briefs.md` (`plugin/roles/`, `plugin/skills/`: `briefs.1`, `briefs.6`, `briefs.16`, `briefs.17`), `tests.md` (`tests/`: `tests.6`, `tests.10`, `tests.11`), `docs.md` (README, the specs: `docs.2`, `docs.4`, `docs.7`).
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- Each of the five main-level roles can run as a Flume kind crew's release carries, per partition and per role, on the user's word, with today's path unchanged for every role that has not moved (`roles.8`).
+- Whatever names a role, a tell, crew's notice, a send, a capture, a landing, a card's answer, the user opening it, a place that waits on it, is a record, and the role's next run takes every such record at its start, so a burst of them is one run (record 0047 move 6, record 0048 pattern 4).
+- At most one run of a role at a time per partition; what comes during a run waits as a record for the next.
+- A run is the role: its name, its rights over the plan, its cards and its entries are the standing agent's (`roles.1`).
+- No role run submits or waits in its session on a submission, a stage, a card or a tell (record 0048 pattern 5, `roles.7`).
+- crew reads nothing of Flume's but what the runner carries back (the user, 2026-10-31).
+
+**Non-Goals:**
+
+- The runner, its repository, its configuration and its pull; this change names what it needs of the runner (*What this change rests on*, 2).
+- The exchange with the runner, `requests.rec` and the runner's `<label>/runner/<host>` branch, crew's write and read of them, and a team's work through it: `teams-cross-to-flume-as-their-bolts-land`'s.
+- Removing the team machinery or the dispatcher: `the-team-machinery-leaves`'s.
+- A bolt's landing moved into Flume: ops still lands by `crew bolt submit` (`plan.16`).
+- Removing the standing path: it leaves in a landing of its own once no partition runs a role standing (`roles.8`).
+- A hold of a host's role runs: `crew hold` reaches standing agents; a role's run is a place the runner and Flume keep (*Open Questions*).
+- Amending `docs/architecture/` or `docs/adr/`: the design agent's (`docs.7`); this change names each rule it departs from.
+
+## What this change rests on
+
+1. **`teams-cross-to-flume-as-their-bolts-land`, built into the bolt first.** This change is placed `After` it and needs, built there and proven by that change's own tests:
+   - its exchange with the runner (its Decision 4): `requests.rec` on `<label>/main`, whose `launch` request `crew role land` appends for a role's work that lands (Decision 10), and the runner's own branch `<label>/runner/<host>`, its `answers.rec` and `places.rec`, fetched in crew's one fetch and read by `runner.read_runners`, from which this change reads the places that wait on a role (Decision 5) and whether a role's run stands and what it waits on (Decisions 13 and 15);
+   - `crew answer <work> "<words>"` (its Decision 9), the retry by which a role's run answers a place that waits on it;
+   - the due end of a standing agent at its next stop (its Decision 3, `update_due`, `due_of`, `hold.py` `renew`), which this change gives a standing agent whose role now runs as its kind (Decision 14);
+   - the teams file at version 3 with each team's `flume`, read beside version 2: this change moves the file to version 4 and reads all three (Decision 3).
+   
+   Where one of these is missing when this change is built, the coder stops short and names it (`flume needs --found`), rather than building it here.
+2. **The runner**, `flywheel` from agentplot/flywheel-runner, its crew implementation, on each host that runs a partition's main level:
+   - **R1.** For each role record of its host (`roles.rec`, Decision 6) it launches the role's run in its clone of the record's repository as `flume launch --kinds <crew's kinds> --kind <Kind> --name <Name> --stream <Stream> --priority <Priority> --intent <Intent> --agent model=<Model>`, no brief and no recipient, where `<crew's kinds>` is `plugin/flume/kinds.toml` of the crew release its host pins, named by its own configuration.
+   - **R2.** It makes that launch while anything is pending for the role and no place of it stands on the host, and otherwise makes nothing: pending is an ask in `asks.rec`, or a place of its `places.rec` waiting on its caller whose launch request names the role's address as `Recipient`, that no ended turn took (Decision 6 gives the reading, from the same files).
+   - **R3.** Once the run's one stage, `turn`, has delivered, it declares the place done (`flume done`), so the place is tidied and the role's next run can be made.
+   - **R4.** It records each role's run in `places.rec` as it records any place it launched, keyed by the role's address where a place it launched for a request is keyed by the request, with its status carried as written.
+   - **R5.** It passes the role record's `Effort` once Flume carries an effort setting (*What this change rests on*, 3).
+3. **Flume.** Its agent settings carry no effort (read 2026-10-31). Until they do, a role's run starts at its pool account's effort, not its definition's (*Open Questions*).
+4. **swancloud.** `lib/crew-teams.nix` writes `teams.json` version 4, every partition's `flume` naming each of its five roles `false` until the user moves one, after or with the bump to the release that carries this change; Flume's host configuration declares each stream a role's `flume` names, with a priority above the streams of the partition's work, so a turn never waits behind a stage (Flume record 0020); the runner's configuration names crew's kinds file in the pinned release; each pool account's settings load crew's plugin from the pinned release, so a run carries crew's hooks and its band, as every session the fleet starts does today. Each is a swancloud unit the planner proposes.
+5. **The design agent.** The user's settlement of 2026-10-31 departs from `roles.7` and `roles.9` (and records 0049 part 1 and 0052 part 1) as *Rules relied on and departed from* says; recording it is the design agent's (`docs.7`). Where the pages still say otherwise when a coder starts, the coder builds as this design says and names the departure in its commits (`docs.5`).
+
+`the-team-machinery-leaves` touches the same launcher, greetings, briefs and hooks. Neither builds on the other's code; whichever merges second takes the other's words where they meet. It moves the teams file "to the version after the one `teams-cross-to-flume-as-their-bolts-land` gave it"; once this change has landed, that is the version after 4, and it keeps every partition's `flume`.
+
+## Decisions
+
+### 1. Five kinds in crew's release, launched with `--kinds`
+
+`plugin/flume/kinds.toml` declares `crew-design`, `crew-planner`, `crew-reviewer`, `crew-ops` and `crew-operator`, and `plugin/flume/turn.md`, beside it, is the one prompt they share. The release carries the folder whole, so a host runs the kinds of the crew it pins, and a bump of the pin is a new kind for the next run and never for a run in flight (Flume clause 21).
+
+Why `--kinds`: the user's words; a launch's own declaration needs no lock, being trusted with its caller (record 0022); and the kinds belong to crew's release, not to any repository a run's place is cut in. Alternatives: the kinds in a repository's `.config/flume.toml`, rejected since the run's repository is a partition's blueprints repo, which is the partition's, and its declaration would move with that repository's main rather than with the crew a host pins (`plan.19`); the kinds as packages in the host's Flume data with a host lock, named by Flume's own `[roles]` table (record 0022, Flume core.28), rejected since Flume names a role's run `places/<kind>--<role>` by the address's second word alone, so madswan's and swancloud's planners, whose first blueprints repo is the same `afterthought/blueprints`, would be one place, and since the user chose the runner as the launcher.
+
+### 2. A kind is one stage, `turn`, that lands nothing and ends at its report
+
+Each kind: `lands = false`, `branch = "crew-<role>"`, one stage `turn` with `prompt = "turn.md"`, `deliverables = ["report:{{state}}/turn.md"]`, `quiet = "4h"` and `agents = [{}]`. Nothing of the model, the instructions or an environment is in the file: the model comes with the launch from the role's definition (Decision 16), the brief from the run's start (Decision 9), and the environment from the pool's account (Flume record 0017).
+
+The report lies in the place's own folder, so a turn commits nothing and its branch holds no commit, and Flume's tidy removes it. A stage ends once its deliverable exists and its agent is quiet (Flume record 0003), so a run's turn ends when it has written its report and stops. `quiet` is long because a turn the user opened lasts as long as their conversation (Decision 13). `turn.md` places `{{needs}}` in a sentence that says a role's run never stops short to ask the user, it asks on a card and ends its turn; it stops short only when `crew role start` refuses, with crew's words.
+
+Alternative: a conversation stage ended by `flume finish`. Rejected: nothing would finish it but the run itself, which cannot end its own agent while it is not quiet.
+
+### 3. The teams file names, for each role, whether it runs as its kind and in which stream
+
+Version 4 is version 3 with one field more on every partition, `flume`, as a team's is in version 3 (`teams-cross-to-flume-as-their-bolts-land` Decision 1): an object naming each of the five roles, `design`, `planner`, `reviewer`, `ops` and `operator`, as `false` while it stands, or the Flume stream its runs run in on the main level's host, a name `code.4` allows, which the host's Flume configuration declares. Every role is named and nothing else is (`code.5`): a missing role, another key, `true`, `null`, `""` or another type is refused, naming the partition and the role and swancloud's `lib/crew-teams.nix` as the fix. crew reads versions 2, 3 and 4: in a file at 2 or 3 every role stands, as it did before this change, so the fleet's deploy and crew's bump need no lockstep, as `teams-cross-to-flume-as-their-bolts-land` has it for the team's setting. "A role that runs as its kind" is, throughout, a role its partition's `flume` names a stream for. A role moves by the user's word, as a change to the teams is (`roles.2`), one at a time (`roles.8`).
+
+Per role, not per partition: the reviewer already runs fresh for each batch and can move first, and the design agent and the planner, whose effort Flume does not yet carry, can move last. The stream is the one fact of a role's run only the host's configuration knows, as for a team. A role's `roles.<role>.session` names where its standing agent ran and has no effect on its run: a run's account is its stream's pool's, kept by its intent (Flume record 0020).
+
+### 4. An ask is a record on the flywheel's branch
+
+`asks.rec`, beside `plan.rec`, holds two record types, written through crew as every write there is (`state.1`):
+
+- **Ask**: `Id` (the next whole number on the branch), `Role`, `From` (an agent's name, `<user>@<host>`, or `crew` for crew's own notice), `What` (`tell`, `send`, `capture`, `landed`, `card`, `open`, `batch`, `delivered`), `Names` (the record it names, a `proposal/<n>`, `batch/<n>`, `signals/<id>`, `bolt/<bolt>` or card key, where it names one), `Key` (where an ask must be written once, below), `Words` (the text it carries, where it carries one) and `At`.
+- **Turn**: `Turn` (the next whole number), `Role`, `Run` (`<label>-<role>`), `Place` (`crew-<role>--<label>`), `Host`, a `Took` for each ask or waiting place it took (`ask/<id>`, `place/<request>@<when its wait began>`, `landed/<request>`), `Began`, and, once over, `Ended` and `Said`, or `Superseded` naming the turn that took its asks again.
+
+An ask's words live here, in the state, as a proposal's `Case` lives in `proposals.rec`; the run record's entry for it holds its length and never its text (`record.3`). An ask with a `Key` the file already holds writes nothing and says so, so a refused push replayed on the new tip, or two hosts' followers seeing one answer, write one ask (`state.1`, record 0048 pattern 4). An ask is written in the same commit as the act that makes it, where that act writes, and its commit's `Crew-Entry` names its `ask` entry (`plan.2`).
+
+### 5. What writes an ask
+
+An ask is written only for a role that runs as its kind; for any other role each of these is what it is today.
+
+| What names the role | The ask | Where |
+|---|---|---|
+| `crew tell <label>-<role> "<text>"`, by an agent or the user, and every notice crew sends a role through `crew.tell` (`tell_planner`, the batch due, a card raised outside its owner's turn) | `tell`, from the sender or `crew`, the text as its words | `crew.tell` |
+| `crew send <partition> "<text>"` | `send`, of the operator, the text and whom it was for | `crew.send` |
+| a capture landed through crew, `crew signal` and `crew signal land` | `capture`, of the design agent, keyed `signal/<id>`, one per signal | the capture's commit |
+| a bolt's landing, as crew's read of it records it | `landed`, of the planner and of the design agent, keyed `landed/<bolt>`; and a landing that did not land, `landed` of ops with sluice's words, keyed by the submission | the landing's write |
+| the user's answer on a card whose owner is the role | `card`, keyed `card/<request>/<answered at>`, naming the card's key | the follower's card sweep |
+| `crew role open <role>` | `open`, from the user | `crew role open` |
+| `crew review <label>` | `batch`, of the reviewer, the batch's words as today's first message has them | `review_cmd` |
+| `crew review delivered` | `delivered`, of the planner, naming `batch/<n>` and the line that adopts its card | Decision 11 |
+
+A tell to a role that runs as its kind is written as an ask only once crew has read that no standing agent of it is up: one still up, not yet ended at its stop (Decision 14), is typed as today, and where herdr cannot be read the tell refuses naming it (`read.1`).
+
+And a **place that waits on the role** is pending for it as an ask is, with no ask written, the runner's record being its truth (record 0048 pattern 1): a place of `places.rec` on a runner's branch whose launch request names `<label>/<role>` as its `Recipient`, read by `runner.read_runners`, whose status says it waits on its caller, stopped short asking or having found work, past its send-back bound, lost, stalled, or holding its submission for a word, keyed by its request and when that wait began; and a place `crew role land` launched for the role, once its status says it landed, keyed by its request. This is how agents doing work ask a role: a stage in a place crew launched stops short with `flume needs`, its request names the planner's address (`teams-cross-to-flume-as-their-bolts-land` Decision 4), and its question reaches the planner's next run, which answers it with `crew answer`. A stage that delivers while its kind runs through waits on nobody and makes no role wanted.
+
+The follower's card sweep writing an ask reads `state.4` as the sweep has been read since it posts a lost card again and tells a sent reading's owner (crew-board "The follower asks Pending You about cards on its clock"; card-sessions): it records the user's own act on a card, never its view, and it launches nothing; the runner launches (R2). A live run woken by the card it adopted acts on the answer at once; the ask then names a card already acted on, and the next run finds it so, which costs nothing (record 0048 pattern 2).
+
+### 6. A role record names its run, and a role is wanted while anything is pending
+
+`roles.rec`, beside `asks.rec`, holds one **Role** record for each role that runs as its kind: `Role`, `Address` (`<label>/<role>`), `Run` (`<label>-<role>`), `Host` (the main level's machine), `Repository` (the partition's first blueprints repo, as the teams file names it, `<owner>/<name>`), `Kinds` (`crew`), `Kind` (`crew-<role>`), `Name` (`<label>`), `Stream` (the one the partition's `flume` names for the role), `Priority` (`0`: a turn starts ahead of the partition's work by its stream's priority, which the host's configuration gives it, *What this change rests on* 4), `Intent` (`<label>-<role>`, so a role's runs keep to one account while it is usable and its cache with it), `Model` and `Effort` (Decision 16). A record for a role the teams file no longer names leaves. crew writes the file to match the teams file at `crew main up` and in the commit of any ask whose role's record is missing or differs, so the record stands before the runner can want it.
+
+What is pending for a role is a decision of plain facts (`code.7`), `asks.pending(asks, waits, turns, role)`: each ask of the role, and each place that waits on it (Decision 5), that no turn ended by `crew role end` took. A superseded turn answers nothing. The role is wanted while that is not empty. The runner reads the same, from the same files (R2), and launches only where no place of the role stands, so Flume's own refusal of a second place of one name keeps one run at a time.
+
+Why the runner keeps the run rather than crew writing a launch request per ask: a place's wait the runner records has no crew command to launch from, crew runs no service to notice it (`state.4`), and a launch per ask would make the runner coalesce a queue of launches into one, where reading a want from the records keeps it one rule. Alternative: Flume's `[roles]` wake, rejected in Decision 1.
+
+### 7. A run's start takes everything pending, and its end answers it
+
+`crew role start` is the run's first act and the one collector of what is pending for it (`roles.7`, record 0049 part 2). It fetches the branch, takes `asks.pending` for the role, and in one commit writes the turn that took it, ending as `Superseded` any turn of the role still open, whose run was lost or retried and whose asks it takes again. It writes the role's brief to a file (Decision 9) and prints that file's path to read whole first, then each ask in order, oldest first, with who asked, what, the record it names and its words, then each place that waits on the role, with the work it serves, its place and its words, and last that Pending You's `list_pending` gives the run's own cards. When nothing is pending, it records no turn and says so, and the run ends its turn at once.
+
+`crew role end --report <path> "<what was done>"` writes `Ended` and `Said` on the run's open turn, in one commit, and writes the report at the path, `{{report}}` of the prompt, naming the turn, what it took and what was done: the stage's deliverable. With no open turn, a run that found nothing pending, it writes the report saying no turn was taken and records nothing, since a run that never delivered would stand and hold its role (R2, R3); it refuses only outside a role's run. What came after the start is not the turn's, stays pending, and makes the role wanted again once the place is gone (R3).
+
+### 8. A run is its role, named from the place crew's launch named
+
+A run's name is its role's agent name, `<label>-<role>` (`<label>-ops` for main-level ops), read from `FLUME_PLACE`, whose last part is `crew-<role>--<label>`, the place the role record named: a role of the five that its partition runs as its kind. That is the run's own environment, no state of Flume's. `plan.py` `agent()` and `may_write` take it where `CREW_AGENT` is unset, and the run's commands take `<label>` where they read `CREW_LABEL`, so the plan's role table, the cards' owners, the briefs' `{{SELF}}` and the run record's `agent/<name>` treat the run as the role (`roles.1`, rail-cards "A crew agent's Pending You call names only the agent itself"). `plugin/bin/crew` resolves it before it forwards a command to the main level's host and carries it there as `CREW_AGENT` and `CREW_LABEL` (`code.3`). A place whose name is no role's is no run of crew's, and `crew role start` and `crew role end` refuse in it.
+
+Departure from `teams.6`: a run is started by Flume with no environment of crew's and no brief in its system prompt, since a declaration gives no environment and Flume's `instructions` setting would carry the same text for every partition. Its identity is read from its place and its brief at its start.
+
+### 9. The brief is read at the start, whole, from a file
+
+`crew role start` writes the brief `crew.brief` builds for the role's definition and partition, as `crew-role` appends it today, to `~/.local/state/crew/<label>/turns/<role>.md` on the host, and prints its path: the brief is longer than a command's printed output keeps whole, so the run reads the file. The brief gains one token, `{{TURN}}`, filled by the builder for both ways a role runs (`teams.10`): for a role that runs as its kind, how a turn goes (start, act on what it took, end, and nothing waited on in the session: where the brief says to wait for an answer, a submission, a review or a tell, the run ends its turn and the thing reaches its next run as an ask); for a standing role, that its work reaches it as tells and cards in its pane. Each of the five briefs places it once, and `tests/t-briefs.sh` pins its phrases (`tests.6`).
+
+### 10. A role's work that lands is a place it launches
+
+`crew role land <repo> <name> --brief-file <file>`, from a run, appends a `launch` request to `requests.rec` (`teams-cross-to-flume-as-their-bolts-land` Decision 4) in a commit of its own: `Host` the main level's, `Work` `role/<role>/<name>`, `Repo` the repository, `Kind` `chore`, Flume's own, `Name` `<name>`, `Base` the repository's default branch, `Stream` the role's, `Priority` `0`, `Intent` `<label>-<role>`, `Recipient` the run's address, `Brief` the file's text whole (`roles.7` part 3, record 0049 part 3). The request's `Work` takes `role/<role>/<name>` beside the plan's objects, and that change's rule of who writes a request (its Decision 16) gains a role's run's `crew role land`. The repository is named as the teams file or the plan names it, `<owner>/<name>`, which the runner resolves to its clone (no registry in crew). Flume builds it, submits it through sluice and tidies the place; its landing, or a wait on its caller, reaches the role's next run (Decision 5), so the design agent's next run records the landed record's status with `crew record`. The design agent's records under a kit's `docs/` reach main this way (`state.3`), the brief giving each file's path and text whole, since the stage's agent is fresh (Flume record 0003). No run commits on a branch for a landing, submits, or leaves a worktree (record 0048 pattern 5).
+
+### 11. The reviewer is asked a batch and hands it back
+
+With the reviewer running as its kind, `crew review <label>` writes a `batch` ask of the reviewer, its words the batch's first message as `review_cmd` composes it today (the changes, how to read each, the file to write), and opens no tab; `crew review --wait` refuses, saying the summary reaches the planner as an ask. The reviewer's run writes the summary to the file the ask names and runs `crew review delivered`, which does what the wait did once the summary was written, records the batch, starts its reading session and raises its card in the planner's name, and writes a `delivered` ask of the planner naming `batch/<n>` with the line that adopts the card. One batch per turn: the reviewer's start takes every batch ask pending, and a run that took two delivers each.
+
+### 12. Main-level ops lands in a run and is told the outcome as an ask
+
+Ops lands by the one procedure (`plan.16`). In a run, `crew bolt submit` returns once each bolt is queued, leaving the landing's waiter on the host as it does today (`_open.md`, the stopgap under `roles.5`); the run's turn ends, and no run waits on a submission (record 0048 pattern 5). crew's read of each landing, whichever act makes it, writes the `landed` asks of Decision 5, so a bolt that did not land reaches ops's next run with sluice's words, as today's procedure would have read them in its session.
+
+### 13. The user opens a role to talk
+
+`crew role open <role> [--label L]` writes an `open` ask from the user, and prints that the run opens as the place `crew-<role>--<label>` in herdr on the main level's host once the runner makes it. Where `places.rec` on the role's host shows a run of the role live, it writes nothing and names that run's place to talk to now; where that branch cannot be read, it refuses naming what it could not read (`read.1`). A turn that took an `open` ask greets the user in its pane and keeps the conversation until the user says they are done, then ends: the user talks a design or a plan through with the role's run (record 0047 move 6).
+
+### 14. A standing agent of a role that runs as its kind stops
+
+For a role that runs as its kind: `crew main up` opens no tab for it, starts and greets nothing, and ends a standing agent of it still running once it is not working, leaving one working and saying so, as the console's up ends the old operator agent (operator-agent "The console's old name opens it and retires the host's operator agent"); a standing agent of it is due an end, never a restart, given at its next stop once herdr reads it idle with no question open and no background work but crew's waits, told why and started again by nothing, by the due end `teams-cross-to-flume-as-their-bolts-land` gives a crossed team's standing agents (its Decision 3; `teams.19`); `crew revive` and `crew update` pass it over; and `crew-role <label> <role>` refuses, naming `crew role open`. `crew main status` says the role runs as its kind, whether a run stands and how many asks wait.
+
+### 15. The views follow
+
+`board.agent_views` gives each role that runs as its kind its view under its run's name: what the turn took and how many asks wait since when, drawn in the run's band by `plugin/hooks/status.js` where crew's plugin loads (`code.8`; *What this change rests on*, 4). The board's attention line names a role's run that stopped short, with its words, or was lost, with its place, read from the runner's records; it prints no command (crew-board "The board answers nothing"), and the operator, or the user at a shell, starts it again with `flume retry`. The rail does not change: an ask waits on a role, not on the user.
+
+### 16. A run's model and effort are its definition's
+
+The role record's `Model` and `Effort` are the definition's frontmatter after the teams file's `roles.<role>` override, as `crew.py` `launch` resolves them today (agent-models). The runner passes the model with `--agent model=`, and the effort once Flume carries one (R5). The kinds file names neither, so a model stays named in the definitions alone.
+
+### Rules relied on and departed from
+
+Relied on: `state.1` (every write to `asks.rec` and `roles.rec`), `state.2` (the plan holds intent; an ask is not a stage), `state.4` (no service; the sweep's reading in Decision 5), `roles.1` (a run's rights are its role's), `roles.2` and `roles.8` (a role moves on the user's word, one at a time, behind a setting), `roles.4` (every message through `crew tell`), `roles.5` (crew builds no mechanism Flume holds: the launch, the place, the stage, the deliverable, the tidy and one place per name are Flume's), `roles.6` (records are the truth; an ask is a record a run pulls), `read.1`, `read.2` (the runner's records read field by field, an absent one guarded), `code.2`, `code.4` (every name crew mints), `code.5`, `code.7` (the asks' decisions in `asks.py`), `code.8`, `code.9` (a run's start and end answer within one command's time), `record.1`, `record.3`, `plan.2`, `plan.16`, `signals.7` (a design run's start is curation's start), `briefs.1`, `briefs.16` and `briefs.17` (a run names itself as its role), `docs.2`, `tests.11`.
+
+Departed from, each by the user's settlement of 2026-10-31:
+
+- **`roles.7`**, "a role with no live run is woken by Flume, never by a process of crew's": a role's run is launched by the runner from crew's records (R1, R2), and Flume's own `[roles]` wake is unused for crew's roles (Decision 1). Every place crew launches still names its recipient by a role's address, a run's start is still the one collector, and a role's work that lands is still a place. Record 0049 part 1's `[roles]` table and Pending You's `flume wake` are replaced by the role record and the follower's card ask.
+- **`roles.9`**, a repository registered in crew: there is no registry; a role's run is cut in the partition's first blueprints repo as the teams file names it, and the runner resolves the name to its clone.
+- **`teams.6`**: a run gets no environment from crew and no brief in its system prompt (Decision 8).
+- **`teams.7`**: a run gets no greeting; its first message is its kind's prompt.
+- **`teams.11`**: a tell to a role that runs as its kind with no standing agent up is an ask, not a prompt, and does not fail for the agent not being up.
+- **`code.5`**: crew reads `teams.json` versions 2, 3 and 4, a file below 4 reading every role standing (Decision 3), as `teams-cross-to-flume-as-their-bolts-land` reads 2 and 3; the lower readings leave with the standing path.
+
+## Risks / Trade-offs
+
+- **A standing agent and a run of one role at once** while the role moves: from the deploy that names a stream for it until the standing agent's next stop or `crew main up`, an ask from any source but a tell can launch a run beside it. Both act on the same records, the plan through proposals by number, so a doubled act is refused or does nothing; the window is a turn long.
+- **Effort**: until Flume carries one, a run starts at its account's effort, below the design agent's and the planner's xhigh. Moving those two waits on it (*Open Questions*).
+- **Latency**: a run starts at the runner's next pull after its ask, not at once. Nothing a role does is urgent within a pull; a landing waits on the user anyway.
+- **A lost run holds its role** until the user or the operator retries it with `flume retry`: its place stands, so the runner makes no other (R2). The board's attention line names it.
+- **Every capture starts a design run.** A burst is one run, and a run's start is curation's (`signals.7`); a quiet partition starts none.
+- **No follower on the host**: a card answered while no run is live waits for the next ask of its role, whose run's `list_pending` finds it.
+- **crew's plugin not loaded in a run** until swancloud's pool settings load it: no band, and no hook checking the run's Pending You calls (`briefs.16`, `briefs.17`); crew raises its own six cards, so only a question card goes unchecked. The run's identity and brief need no hook.
+- **Two kinds of record for one wake**, an ask and a place the runner records: kept apart so the runner never writes crew's files and crew never rewrites the runner's, at the cost of one read joining them.
+
+## Migration Plan
+
+Nothing on any branch is rewritten: `asks.rec` and `roles.rec` are created by their first write, and a branch without them holds no ask and no role. crew reads versions 2, 3 and 4, so the bump and swancloud's version 4, every partition's roles all `false`, may come in either order, and neither changes what a host runs (record 0050 part 2). A role moves when the user names a stream for it in swancloud's teams list; the reviewer first, then the operator and ops, the planner and the design agent once Flume carries effort. The standing path leaves crew in a landing of its own once every partition names a stream for all five (`roles.8`).
+
+## Open Questions
+
+- **Effort.** Does the user move the planner and the design agent before Flume carries an effort setting, at their account's effort, or wait for it? Recommended: wait; move the reviewer, the operator and ops first.
+- **A held host's runs.** `crew hold` ends standing agents for a herdr upgrade; a role's run on a held host is the runner's and Flume's. Recommended: the runner makes no role's run on a host crew's hold file names held, a runner unit beside R2.
+- **The card's carrier.** Recommended as built: the follower's sweep (Decision 5). The alternative, Pending You's wake writing the ask with `crew tell`, needs a session on the host and is swancloud's.
+
+## After deploy
+
+None: every behaviour this change adds is code proven in crew's tiers, and moving a role is the user's word through swancloud's teams list, not a step of this change.
+
+## Task notes
+
+**1.1** `crew.py` `load()`: the versions crew reads become 2, 3 and 4, and the refusal of any other names all three. For version 4, read every partition's `flume` before any partition is used: an object whose keys are exactly `KIND_ROLES = ("design", "planner", "reviewer", "ops", "operator")`, each value `False` or a string `NAME` matches; refuse a missing `flume`, a missing or extra key, `True`, `None`, `""` or another type, naming the partition, the role and swancloud's `lib/crew-teams.nix` as the fix (`code.5`). For versions 2 and 3, every role reads `False`. `parts[label]["flume"]` keeps the map. `tests/lib.sh`'s `world` writes version 4 with every role `false` for every partition, and a helper `role_stream <label> <role> <stream>` rewrites one in (`rewrite`, `tests.3`). Cases in `tests/py/test_teams.py`: the field read, each refusal, versions 2 and 3 read with every role standing, version 5 refused.
+
+**1.2** `crew.py`: `role_stream(fleet, label, role)`, the stream or `False`; `kind_role_of(fleet, name)` from an agent name `<label>-<role>` to `(label, role)` where its partition names a stream for it, else None. Cases in `tests/py/test_teams.py`.
+
+**2.1** New `plugin/lib/asks.py`, standard library alone (`code.1`), holding the decisions, each a function of plain facts (`code.7`): `parse(text)` of `asks.rec` into asks and turns, every field guarded (`read.2`); `pending(asks, waits, turns, role)`; `wanted(...)`; `open_turn(turns, run)`; `superseded(turns, run)`; `keyed(asks, key)`; `next_id(asks)`, `next_turn(turns)`; `role_record(partition, role)` building a Role's fields from the partition entry, its `flume` and the definition (Decision 16); `roles_due(records, partition)`, the records to write and to remove; `waits_on(role_address, requests, places)`, the places that wait on a role (Decision 5), each a plain tuple `(key, request, work, place, words)` from the requests and the places `runner.read_runners` gives, every `Status` field read guarded (`read.2`). Cases in a new `tests/py/test_asks.py`, one per scenario of `role-runs`' pending, burst, superseded and keyed requirements.
+
+**2.2** `plan.py`: the write of `asks.rec` and `roles.rec` through `land()` (`state.1`), with a `%rec` header for each type, `%key` and `%mandatory`, so `recfix --check` refuses a malformed record (`plan.1`); `ask_write(fleet, label, ask, extra=None)` for a write of its own, and `ask_lines(...)` for an act that writes the ask in its own commit. Contract case in `tests/contract/test_recfix.py`: the headers accept the written records and refuse one missing `Role`.
+
+**2.3** `record.py`: entry kinds `ask` (`agent/<run>` and the record it names, `Chars`, never `Words`), `turn.begin` (`Took` count) and `turn.end`; `crew trace agent/<label>-<role>` lists them. Cases in `tests/py/test_record.py`.
+
+**3.1** `plugin/flume/kinds.toml` as Decision 2, and `plugin/flume/turn.md`: who the run is (`{{kind}}`, `{{name}}`, `{{place}}`), its first act `crew role start`, its last `crew role end --report {{report}} "<what was done>"`, the card and stop-short sentence placing `{{needs}}`, no `{{brief}}`. A new `tests/py/test_role_kinds.py` reads the file with `tomllib` and checks each kind against Flume's format as read 2026-10-31: the five names, one stage each, `lands` false, the deliverable, the prompt's file beside it, every `{{part}}` in `turn.md` one Flume fills for such a stage, `{{needs}}` placed, and no `model`, `instructions` or `env` anywhere.
+
+**4.1** `plan.py` `agent()`: `CREW_AGENT`, else the run named by `FLUME_PLACE` (`crew.kind_role_of` on `crew-<role>--<label>`), else `<user>@<host>`; `may_write` and every `os.environ.get("CREW_AGENT")` and `CREW_LABEL` read in `plan.py`, `cards.py` and `ops.py` go through it. `plugin/bin/crew` exports `CREW_AGENT` and `CREW_LABEL` from one `crew.py run-name` call before forwarding (`code.3`). Cases in `tests/py/test_plan_roles.py`: a run's write rights are its role's; a place of another kind names nobody.
+
+**4.2** `crew role start` and `crew role end` in `plan.py` (`role_start`, `role_end`), the parser and the usage: as Decision 7, the brief written by `crew.brief(fleet, label, defn, self_name)` to `~/.local/state/crew/<label>/turns/<role>.md`, what it prints, the superseded turn, nothing pending, the report's text. Logic cases in `tests/py/test_asks.py` for what start prints and end writes; a new `tests/t-journey-roles.sh` (`# Reads: plugin/flume/ plugin/roles/`) sets `FLUME_PLACE` to a stub place, writes two asks, starts, writes a third, ends, and reads the turn, the third still pending and the report written.
+
+**5.1** `crew.tell`: for `kind_role_of(name)`, read herdr for a standing agent as today; not up, write a `tell` ask from the sender (`crew` for a notice) with the text, print `asked <name>`, and return true, so `tell_planner` and every caller go on; up, type as today; herdr unreadable, refuse naming it. `crew.send` to an operator that runs as its kind writes a `send` ask carrying whom it was for. Cases in `tests/py/test_send.py` and a new case file `tests/py/test_tell_asks.py`; `t-journey-roles` sends one of each.
+
+**5.2** `plan.py` `signal_land` and `crew signal`'s capture write: a `capture` ask of the design agent per signal, keyed `signal/<id>`, in the capture's commit, when the partition runs design as its kind. Cases in `tests/py/test_signals.py`; `t-journey-signals` asserts the ask for a partition running design as its kind and none otherwise.
+
+**5.3** `plan.py` `bolt_land` and the landing's read of a bolt that did not land: `landed` asks as Decision 5, in the write the read makes. Cases in `tests/py/test_landing.py`.
+
+**5.4** `crew role open <role> [--label L]` (`role_open`): the ask; a live run read from `places.rec` on the role's host, keyed by its address (R4), through `runner.read_runners`; the refusal when that branch can't be read. Cases in `tests/py/test_asks.py`; `t-journey-roles` opens a role with none live and one with a run live.
+
+**6.1** `crew role land <repo> <name> --brief-file <file>` (`role_land`): refuse outside a run (Decision 8) and for a repository neither the teams file nor the plan names; append the `launch` request of Decision 10 through `teams-cross-to-flume-as-their-bolts-land`'s request write (`runner.py`), its `Work` descriptor allowing `role/<role>/<name>` and its writer check allowing a role's run. Cases in `tests/py/test_asks.py` and `tests/contract/test_recfix.py` (the request with that `Work` passes); `t-journey-roles` lands one and reads the request.
+
+**7.1** `plan.py` `review_cmd`: with the reviewer running as its kind, write the `batch` ask with today's first message as its words and open no tab; `--wait` refuses as Decision 11. `crew review delivered [--label L]` (`review_delivered`): from the run's open turn's batch asks, each summary file written, do the wait's delivery acts (the batch's record, its session, its card) and write the `delivered` ask of the planner; refuse a batch whose file is not written. Cases in `tests/py/test_review.py`; `t-journey-review` runs a batch through a reviewer that runs as its kind.
+
+**8.1** `plan.py` `bolt_submit`: from a run (Decision 8), return once each bolt is queued, leaving the landing's waiter, and say so. Cases in `tests/py/test_landing.py`; `t-journey-land` lands a bolt submitted from a run of ops, reads the ask of the planner, then fails one and reads the ask of ops with sluice's words.
+
+**9.1** The follower's card sweep (`plan.py`'s sweep under `crew _follow` and the rail tab's loop): for each card whose owner `kind_role_of` names, answered since its last ask, write a `card` ask keyed `card/<request>/<answered at>`; the cards asked about are the ones Pending You's tick already answers (crew-board "The follower asks Pending You about cards on its clock"). Cases in `tests/py/test_card_commands.py`; `t-cards` answers a proposal's card of a planner that runs as its kind and reads one ask after two refreshes.
+
+**10.1** `plan.py` `main_cmd` (`up`, `down`, `status`) and `revive_cmd`, `crew.py` `Agents`, `MAIN_STANDING` read with the partition's `flume`: as Decision 14, and `main up` writes `roles.rec` to match (`asks.roles_due`). Cases in `tests/py/test_teams.py`; `t-journey-main` brings up a main level with its reviewer and planner running as kinds: no tab for either, the role records written, a standing planner from before ended once idle.
+
+**10.2** `crew.py` `update_due` and `due_of`, `hold.py` `renew` and the stop hook (`plugin/hooks/stop`): a standing agent `kind_role_of` names is due an end, the reason `teams-cross-to-flume-as-their-bolts-land` gives a crossed team's (its Task notes 2.4), ended at its stop, told its role now runs as its kind, never restarted; `crew update` passes it over. Cases in `tests/py/test_hold.py`; `t-hold` and `t-session-hook` cover the stop.
+
+**10.3** `plugin/bin/crew-role` and `crew.py` `launch`: refuse a role its partition runs as its kind, naming `crew role open <role> --label <label>`, starting no Claude. `t-roles` asserts the refusal.
+
+**11.1** `board.py`: `agent_views` gives each run its view (Decision 15) and `board_data` the attention items for a run that stopped short or was lost, from the role's place in `places.rec` (R4) through `runner.read_runners`. Cases in `tests/py/test_board.py`, including the case pinning every key the mod reads (`code.8`).
+
+**11.2** `plugin/hooks/status.js`: draw a run's view in its band; `plugin/tests/status.test.ts` cases for a run with asks waiting and with none.
+
+**12.1** The five briefs place `{{TURN}}`; `crew.py` `main_tokens` fills it for both ways (Decision 9); `tests/t-briefs.sh` pins the phrases for a role that runs as its kind and one that stands, and prints every brief for a partition naming a stream for all five with no token unfilled (`teams.10`).
+
+**13.1** README (*The main level and the console*, *Roles*, *State*), `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage header: `crew role start|end|open|land`, `crew review delivered`, a partition's `flume`, `asks.rec`, `roles.rec`; `tests/t-docs.sh` checks every command README names is in the usage (`docs.2`).
+
+**13.2** `tests/moon-tasks` regenerates `tests/moon.yml` for `t-journey-roles` and every test whose `# Reads:` changed (`tests.10`).
