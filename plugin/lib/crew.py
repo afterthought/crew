@@ -2148,24 +2148,32 @@ def branch_due(started, branch):
 UNREAD = object()
 # Why a crossed team's conductor or ops is due, an end and never a restart (end_due).
 CROSSED_SAID = "its team has crossed to Flume, whose places run its work"
+# Why a main level's standing agent is due an end and never a restart once its partition runs its role as its kind
+# (end_due; design Decision 14 of roles-run-as-flume-kinds).
+KIND_SAID = "its role now runs as its kind, in Flume runs of its own"
 
 
 def end_due(fleet, name):
-    """Whether a standing agent is due an end rather than a restart (Decision 3 of
-    teams-cross-to-flume-as-their-bolts-land): a team's conductor or ops once its team has crossed to Flume
-    (plan.crossing_path, runner.cross_due), its plan read only when its setting names a stream; never another agent,
-    nor one whose team's plan can't be read, which is said and ends nothing (read.1)."""
+    """Why a standing agent is due an end rather than a restart, or None: a team's conductor or ops once its team has
+    crossed to Flume (Decision 3 of teams-cross-to-flume-as-their-bolts-land; plan.crossing_path, runner.cross_due),
+    its plan read only when its setting names a stream, CROSSED_SAID; and a main level's design agent, planner, ops or
+    operator once its partition runs its role as its kind (kind_role_of; design Decision 14 of
+    roles-run-as-flume-kinds), read from the teams file alone, KIND_SAID. Never another agent, nor one whose team's plan
+    can't be read, which is said and ends nothing (read.1)."""
     t = team_of_agent(fleet, name)
-    role = name[len(t["name"]) + 1:] if t else ""
+    if not t:
+        kind = kind_role_of(fleet, name)
+        return KIND_SAID if kind and kind[1] in MAIN_STANDING else None
+    role = name[len(t["name"]) + 1:]
     if role not in ("conductor", "ops") or t["flume"] is False:
-        return False
+        return None
     import crew as this, plan, runner  # read in this process; plan imports this module by name, which crew.py run as a script is not
     try:
         path = plan.crossing_path(this.load(), t)
     except this.Refusal as e:
         print(f"whether {name} is due an end can't be told: {e}", file=sys.stderr)
-        return False
-    return role in runner.cross_due(path, [role])
+        return None
+    return CROSSED_SAID if role in runner.cross_due(path, [role]) else None
 
 
 def branch_now(fleet, name):
@@ -2178,15 +2186,16 @@ def branch_now(fleet, name):
 
 def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
     """Whether a standing agent of this host is due a restart for crew's update, read: (due, why, what its start
-    recorded). A name that is no standing agent's is never due. A crossed team's conductor or ops is due an end, its
-    why CROSSED_SAID (end_due). With the branch it would carry now (branch_now), one whose team's bolt changed under it
-    is due too (branch_due)."""
+    recorded). A name that is no standing agent's is never due. A crossed team's conductor or ops, and a main level's
+    agent whose role now runs as its kind, is due an end, its why CROSSED_SAID or KIND_SAID (end_due). With the branch
+    it would carry now (branch_now), one whose team's bolt changed under it is due too (branch_due)."""
     started = started or start_of(name)
     role = standing_role(fleet, name)
     if started is None or role is None:
         return False, None, started
-    if end_due(fleet, name):
-        return True, CROSSED_SAID, started
+    ends = end_due(fleet, name)
+    if ends:
+        return True, ends, started
     if branch is not UNREAD:
         due, why = branch_due(started, branch)
         if due:
