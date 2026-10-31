@@ -1,0 +1,306 @@
+{
+  "status": {
+    "places": [
+      {
+        "place": "/Users/chuck/Code/github_afterthought/crew/places/change--the-team-machinery-leaves",
+        "repository": "/Users/chuck/Code/github_afterthought/crew",
+        "kind": "change",
+        "version": 2,
+        "declared": "flume",
+        "name": "the-team-machinery-leaves",
+        "branch": "change/the-team-machinery-leaves",
+        "base": "bolt/crew-runs-its-work-through-flume",
+        "mark": null,
+        "lands": true,
+        "phase": "live",
+        "readiness": {
+          "steps": [
+            {
+              "step": "toolchain",
+              "passed": true,
+              "words": ""
+            },
+            {
+              "step": "moon setup",
+              "passed": true,
+              "words": ""
+            }
+          ]
+        },
+        "stages": [
+          {
+            "name": "construct",
+            "state": "delivered",
+            "starts": 1,
+            "end": {
+              "head": "2817134c34820a98dc9ebe574ee5631b659dece7",
+              "report": null,
+              "words": null,
+              "needs": null,
+              "last_words": null,
+              "commits": [],
+              "screen": null,
+              "made": []
+            },
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          },
+          {
+            "name": "code",
+            "state": "on_hold",
+            "starts": 0,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false,
+            "group": {
+              "place": 1,
+              "of": 9,
+              "number": "1",
+              "title": "One path"
+            }
+          },
+          {
+            "name": "verify",
+            "state": "not_reached",
+            "starts": 0,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          }
+        ],
+        "current": "construct",
+        "agent": null,
+        "head": "2817134c34820a98dc9ebe574ee5631b659dece7",
+        "delivered": true,
+        "tasks": [
+          {
+            "text": "1.1 No decision of crew's reads the per-team setting: every ",
+            "ticked": false,
+            "group": 0
+          },
+          {
+            "text": "2.1 `crew unit run|wait|free`, `crew chore run|wait|free`, `",
+            "ticked": false,
+            "group": 1
+          },
+          {
+            "text": "2.2 Touches and overlap notes, the forecasts, orders and set",
+            "ticked": false,
+            "group": 1
+          },
+          {
+            "text": "2.3 `crew fix`'s today's forms (the slot's fix, `--merge`, `",
+            "ticked": false,
+            "group": 1
+          },
+          {
+            "text": "2.4 crew removes only its landing worktrees and the bolt bra",
+            "ticked": false,
+            "group": 1
+          },
+          {
+            "text": "2.5 The usage header of `plugin/bin/crew`, README and `plugi",
+            "ticked": false,
+            "group": 1
+          },
+          {
+            "text": "3.1 `crew bolt give` is gone and `crew bolt start <bolt>`, w",
+            "ticked": false,
+            "group": 2
+          },
+          {
+            "text": "3.2 A proposal waits on the user alone: `crew plan agree` an",
+            "ticked": false,
+            "group": 2
+          },
+          {
+            "text": "3.3 No dispatcher is started, placed, told or named: `crew m",
+            "ticked": false,
+            "group": 2
+          },
+          {
+            "text": "3.4 The usage header, README and the skill name `crew bolt s",
+            "ticked": false,
+            "group": 2
+          },
+          {
+            "text": "4.1 `crew list`, `crew status|up|rebuild|close|restart|resum",
+            "ticked": false,
+            "group": 3
+          },
+          {
+            "text": "4.2 `crew hold`, `crew go` and `crew update` reach the main-",
+            "ticked": false,
+            "group": 3
+          },
+          {
+            "text": "4.3 `crew send` takes a partition's label alone, `crew tell`",
+            "ticked": false,
+            "group": 3
+          },
+          {
+            "text": "4.4 The usage header, README and the skill name no team comm",
+            "ticked": false,
+            "group": 3
+          },
+          {
+            "text": "5.1 A partition's kits are the repositories its plan and its",
+            "ticked": false,
+            "group": 4
+          },
+          {
+            "text": "5.2 A kit's work is launched, and the kit read and landed, o",
+            "ticked": false,
+            "group": 4
+          },
+          {
+            "text": "5.3 A batch is reckoned at the rail's sweep on the partition",
+            "ticked": false,
+            "group": 4
+          },
+          {
+            "text": "5.4 A bolt's reading and preview are main-level ops's, a que",
+            "ticked": false,
+            "group": 4
+          },
+          {
+            "text": "6.1 `board.agent_views` gives the planner, the design agent,",
+            "ticked": false,
+            "group": 5
+          },
+          {
+            "text": "6.2 The cards, the page and the fleet page name no team, slo",
+            "ticked": false,
+            "group": 5
+          },
+          {
+            "text": "6.3 `plugin/hooks/status.js` draws the views' new shape, and",
+            "ticked": false,
+            "group": 5
+          },
+          {
+            "text": "7.1 crew reads `teams.json` version 4, partitions only, refu",
+            "ticked": false,
+            "group": 6
+          },
+          {
+            "text": "7.2 The end-to-end world and the logic facts write and read ",
+            "ticked": false,
+            "group": 6
+          },
+          {
+            "text": "8.1 `conductor.md`, `ops.md`, `dispatcher.md`, `construct.md",
+            "ticked": false,
+            "group": 7
+          },
+          {
+            "text": "8.2 The design agent's, the planner's, main-level ops's, the",
+            "ticked": false,
+            "group": 7
+          },
+          {
+            "text": "8.3 README and the skill keep no team section, roles row, ru",
+            "ticked": false,
+            "group": 7
+          },
+          {
+            "text": "9.1 `tests/moon.yml` matches the tests after `tests/moon-tas",
+            "ticked": false,
+            "group": 8
+          },
+          {
+            "text": "9.2 The tests the change affects pass (Task notes 9.2); veri",
+            "ticked": false,
+            "group": 8
+          }
+        ],
+        "submission": {
+          "read": "none",
+          "submits": 0,
+          "send_backs": 0,
+          "verdict": null,
+          "waiting": null,
+          "held": false
+        },
+        "refused_acts": [],
+        "cannot_read": [],
+        "failures": [],
+        "recipients": [
+          "herdr:w1:p0@/Users/chuck/.config/herdr/sessions/madswan/herdr.sock"
+        ],
+        "hold_words": {
+          "code": "Wait for the user's approval of the proposal on its Pending You card."
+        },
+        "waiting_on": {
+          "act": "retry",
+          "stage": "code",
+          "why": "on_hold",
+          "since": 1793469048,
+          "words": "Wait for the user's approval of the proposal on its Pending You card."
+        },
+        "stalled": false,
+        "holds": [
+          {
+            "on": "stage",
+            "stage": "code",
+            "words": "Wait for the user's approval of the proposal on its Pending You card.",
+            "since": 1793466541
+          }
+        ],
+        "priority": 0,
+        "stream": {
+          "name": "default",
+          "from": "intent"
+        },
+        "intent": {
+          "from": "base",
+          "repository": "/Users/chuck/Code/github_afterthought/crew",
+          "base": "bolt/crew-runs-its-work-through-flume",
+          "digest": "1a2b55a1d0ae0ac658e22bdf1e9c35b6bb00d2a600f8a47a5ef8f18c5194c4ed"
+        },
+        "moves": [],
+        "unsettled": [],
+        "ends": [],
+        "clues": {
+          "stage": "construct",
+          "state": "delivered",
+          "title": "construct · delivered",
+          "display_agent": "change--the-team-machinery-leaves",
+          "shown_at": {
+            "place": "herdr:w2:t3@/Users/chuck/.config/herdr/sessions/flume/herdr.sock",
+            "agent": null,
+            "base": null
+          }
+        }
+      }
+    ],
+    "host": {
+      "running": 9,
+      "bound": null,
+      "room": null,
+      "queue": [],
+      "streams": [
+        {
+          "name": "default",
+          "priority": 0,
+          "running": 9,
+          "bound": null,
+          "room": null,
+          "queue": []
+        }
+      ],
+      "pools": [],
+      "terminal_kept": [],
+      "addresses": [],
+      "watch": {
+        "bound": {
+          "seconds": 30
+        }
+      },
+      "bases": []
+    }
+  }
+}

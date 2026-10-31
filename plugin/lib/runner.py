@@ -11,7 +11,8 @@ command of it is refused (crossed_refusal).
 crew asks a host's runner for work by requests on the flywheel's branch, requests.rec (REQUESTS), each appended in the
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
 recfix; each runner answers on a branch of its own, <label>/runner/<host>, which crew fetches with <label>/main and
-reads (host_read) and never writes (state.5).
+reads (host_read) and never writes (state.5). A crossed piece's stage is read from its launch, the runner's answer and
+Flume's status of its place as the runner carried it (stage_of, flume_facts).
 
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
@@ -279,3 +280,151 @@ def of_host(reads, label, host):
     """A host's reading among a partition's (host_read's, by host), or why none is: no runner branch for it exists."""
     return reads.get(host) or host_read(label, host, None, {}, {})
 
+
+# ------------------------------------------------------------------------------------------- a crossed piece's stage
+
+def launch_of(requests, work):
+    """The launch a piece's stage is read from (Decision 8): the newest launch request of the work that no drop request
+    names, None when it has none; requests in requests.rec's order."""
+    dropped = {r.get("Of") for r in requests if r.get("Act") == "drop"}
+    return next((r for r in reversed(requests)
+                 if r.get("Act") == "launch" and r.get("Work") == work and r.get("Request") not in dropped), None)
+
+
+def after_work(requests, launch):
+    """The work each launch a launch comes after serves, as its waiting stage names it (Decision 5)."""
+    by = {r.get("Request"): r for r in requests}
+    return [by[a].get("Work") if a in by else f"request {a}" for a in launch.all("After")]
+
+
+def at(d, *path):
+    """The value at a path of keys in a JSON value, None where any step is absent or not an object (read.2)."""
+    for k in path:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+    return d
+
+
+def tagged(v):
+    """A Rust enum as Flume's JSON gives it (serde's external tag): its variant's name and its fields, ("name", {}) for
+    a unit variant given as its name and ("name", fields) for one given as {name: fields}; (None, {}) for neither."""
+    if isinstance(v, str):
+        return v, {}
+    if isinstance(v, dict) and len(v) == 1:
+        (k, f), = v.items()
+        return k, f if isinstance(f, dict) else {}
+    return None, {}
+
+
+def text(v):
+    """A JSON string as text, None for anything else (read.2)."""
+    return v if isinstance(v, str) else None
+
+
+def flume_facts(status, place):
+    """What crew reads of Flume's status of a place (Decision 8), as flume 0.3.6's `flume status --json <place>` gives it
+    and the runner carried it (tests/py/flume-0.3.6/), each field guarded so one absent or of another shape reads None
+    and never becomes text (read.2): the place's entry, the one at its path or, tidied, at <path>@<when>; its phase
+    (live, making, over, gone or tidied) and, once its work is over, how (landed, dropped or done) and the commit it
+    landed; its current stage, that stage's state and end; its tasks, ticked and in all; its submission: the merge
+    queue's entry's number and state, why Flume could not read it, the pull request its last submit opened, how often
+    it was submitted and sent back, the last verdict and its words, and whether it is held; what it waits on its caller
+    for, the stage named, why and Flume's words, and whether it is stalled. None when status holds no entry for it."""
+    places = at(status, "status", "places")
+    mine = [p for p in places if isinstance(p, dict) and isinstance(p.get("place"), str)
+            and (p["place"] == place or p["place"].startswith(f"{place}@"))] if isinstance(places, list) and place else []
+    if not mine:
+        return None
+    p = mine[-1]
+    phase, pf = tagged(p.get("phase"))
+    over, of = tagged(pf.get("over")) if phase in ("over", "gone", "tidied") else (None, {})
+    current = text(p.get("current"))
+    stage = next((s for s in p.get("stages") or [] if isinstance(s, dict) and s.get("name") == current), None) \
+        if isinstance(p.get("stages"), list) else None
+    tasks = p.get("tasks")
+    tasks = (sum(1 for t in tasks if t["ticked"]), len(tasks)) if isinstance(tasks, list) and all(
+        isinstance(t, dict) and isinstance(t.get("ticked"), bool) for t in tasks) else None
+    sub = p.get("submission") if isinstance(p.get("submission"), dict) else {}
+    read, rf = tagged(sub.get("read"))
+    entry = at(rf, "submission") if read == "found" else None
+    verdict, vf = tagged(sub.get("verdict"))
+    count = lambda v: v if isinstance(v, int) and not isinstance(v, bool) else None
+    waiting = p.get("waiting_on") if isinstance(p.get("waiting_on"), dict) else {}
+    return {
+        "phase": phase, "over": over, "commit": text(of.get("commit")) if over == "landed" else None,
+        "current": current, "state": text(at(stage, "state")), "end": at(stage, "end") if isinstance(at(stage, "end"), dict) else {},
+        "tasks": tasks,
+        "entry": text(at(entry, "id")), "entry_state": tagged(at(entry, "state"))[0],
+        "unread": text(rf.get("reason")) if read == "could_not_read" else None,
+        "request": text(sub.get("request")), "submits": count(sub.get("submits")), "send_backs": count(sub.get("send_backs")),
+        "verdict": verdict, "verdict_words": text(vf.get("words")) or text(vf.get("reason")), "held": sub.get("held") is True,
+        "waiting": text(waiting.get("why")), "waiting_stage": text(waiting.get("stage")), "waiting_words": text(waiting.get("words")),
+        "stalled": p.get("stalled") is True,
+    }
+
+
+def stage_of(work, launch, answer, place, read, after=()):
+    """A crossed piece's stage (Decision 8), from plain facts: work, as requests name it (unit/<u>, chore/<c>,
+    fix/<bolt>/<name>, fix/main/<kit>/<name>); launch, its newest launch not dropped (launch_of), None for none;
+    answer, the runner's answer to that launch, None while it has none; place, the runner's record of the place it
+    launched (host_read's), None while it has none; read, True when its host's runner branch was read, else why not;
+    after, the work its launch's After names (after_work). Returns {"stage", and what goes with it}: unknown, with why,
+    for an unread host, no launch, or a fact crew can't read; launching while unanswered or unplaced; waiting, on the
+    work after names, while the runner holds it; refused, with the runner's words; then from Flume's status: merged on
+    a bolt and landed on main once its place landed, with the commit; dropped; queued for room; needs, with the agent's
+    words, once its stage stopped short asking or found work; stalled, or else waits, with Flume's words and why, while
+    it waits on its caller, the submission held among them; submitted, with sluice's number; its stage, with sluice's
+    words, once sent back after a failed or conflicting submission; else its current stage. Each names its place, and
+    a stage of a change its tasks, ticked and in all."""
+    if read is not True:
+        return {"stage": "unknown", "why": read}
+    if launch is None:
+        return {"stage": "unknown", "why": f"{work} has no launch in requests.rec"}
+    n, outcome = launch.get("Request"), answer.get("Outcome") if answer is not None else None
+    if answer is None:
+        return {"stage": "launching"}
+    if outcome == "held":
+        return {"stage": "waiting", "after": list(after)}
+    if outcome == "refused":
+        return {"stage": "refused", "words": answer.get("Words")}
+    if outcome != "launched":
+        return {"stage": "unknown", "why": f"the runner answered launch {n} of {work} {outcome}, and a launch is answered held, launched or refused"}
+    if place is None:
+        return {"stage": "launching", "place": answer.get("Place")}
+    res = {"place": place["place"]}
+    if place.get("why"):
+        return dict(res, stage="unknown", why=place["why"])
+    f = flume_facts(place["status"], place["place"])
+    if f is None:
+        return dict(res, stage="unknown", why=f"Flume's status of {work}'s place, as the runner carried it, holds no place {place['place']}")
+    if f["tasks"] is not None:
+        res["tasks"] = f["tasks"]
+    if f["over"] == "landed":
+        return dict(res, stage="landed" if launch.get("Base") == "main" else "merged", commit=f["commit"])
+    if f["over"] == "dropped":
+        return dict(res, stage="dropped")
+    if f["phase"] == "making":
+        return dict(res, stage="launching")
+    if f["phase"] != "live":
+        said = f"Flume's status of {work}'s place {place['place']}"
+        return dict(res, stage="unknown", why=(
+            f"{said} says its work is {f['over']}, and a place of a kind that lands ends landed or dropped" if f["over"] else
+            f"{said} gives phase {f['phase']}, which crew does not read" if f["phase"] else f"{said} gives no phase crew reads"))
+    if f["state"] == "waiting_for_room":
+        return dict(res, stage="queued", of=f["current"])
+    if f["waiting"] == "answer":
+        return dict(res, stage="needs", of=f["waiting_stage"] or f["current"], words=text(f["end"].get("words")) or f["waiting_words"],
+                    found=f["end"].get("needs") == "found_work", stalled=f["stalled"])
+    if f["waiting"]:
+        return dict(res, stage="stalled" if f["stalled"] else "waits", of=f["waiting_stage"], why=f["waiting"], words=f["waiting_words"],
+                    held=f["held"] and not f["waiting_stage"])
+    if f["entry_state"] in ("waiting", "under_test", "landed") or (f["request"] and f["entry"] is None and f["submits"]):
+        return dict(res, stage="submitted", submission=f["entry"] or f["request"])
+    if f["unread"] and f["submits"]:
+        return dict(res, stage="unknown", why=f"Flume could not read {work}'s submission: {f['unread']}")
+    if f["current"] is None:
+        return dict(res, stage="unknown", why=f"Flume's status of {work}'s place {place['place']} names no current stage")
+    if f["send_backs"] and f["verdict"] in ("failed", "conflict"):
+        return dict(res, stage=f["current"], words=f["verdict_words"], sent_back=f["send_backs"], verdict=f["verdict"])
+    return dict(res, stage=f["current"])

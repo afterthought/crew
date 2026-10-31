@@ -1,0 +1,186 @@
+{
+  "status": {
+    "places": [
+      {
+        "place": "/Users/chuck/Code/github_agentplot/flywheel-runner/places/change--the-runner-keeps-its-repositories",
+        "repository": "/Users/chuck/Code/github_agentplot/flywheel-runner",
+        "kind": "change",
+        "version": 2,
+        "declared": "flume",
+        "name": "the-runner-keeps-its-repositories",
+        "branch": "change/the-runner-keeps-its-repositories",
+        "base": "main",
+        "mark": null,
+        "lands": true,
+        "phase": "live",
+        "readiness": {
+          "steps": [
+            {
+              "step": "toolchain",
+              "passed": true,
+              "words": ""
+            },
+            {
+              "step": "moon setup",
+              "passed": true,
+              "words": ""
+            }
+          ]
+        },
+        "stages": [
+          {
+            "name": "construct",
+            "state": "begun",
+            "starts": 1,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          },
+          {
+            "name": "code",
+            "state": "not_reached",
+            "starts": 0,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          },
+          {
+            "name": "verify",
+            "state": "not_reached",
+            "starts": 0,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          }
+        ],
+        "current": "construct",
+        "agent": {
+          "identity": "flume:a4061d73ce52:change--the-runner-keeps-its-repositories:construct:1",
+          "stage": "construct",
+          "program": "claude",
+          "settings": {
+            "program": "claude",
+            "model": null,
+            "instructions": null,
+            "beside": null,
+            "env": {
+              "CLAUDE_CONFIG_DIR": "<set>",
+              "PATH": "<set>"
+            },
+            "from": {
+              "env.CLAUDE_CONFIG_DIR": {
+                "layer": "account",
+                "value": "<set>"
+              },
+              "env.PATH": {
+                "layer": "account",
+                "value": "<set>"
+              },
+              "program": {
+                "layer": "default",
+                "value": "claude"
+              }
+            }
+          },
+          "account": {
+            "pool": "madswan",
+            "name": "madswan",
+            "from": "affinity"
+          },
+          "state": "working",
+          "started": "yes",
+          "asking": "no",
+          "own_work": "no",
+          "past_limit": false,
+          "screen": null,
+          "printed": null,
+          "last_words": null,
+          "notes": []
+        },
+        "head": "2b8b9ec3326ef2f027ebfe9f246eed4943f1e938",
+        "delivered": false,
+        "tasks": [],
+        "submission": {
+          "read": "none",
+          "submits": 0,
+          "send_backs": 0,
+          "verdict": null,
+          "waiting": null,
+          "held": false
+        },
+        "refused_acts": [],
+        "cannot_read": [],
+        "failures": [],
+        "recipients": [
+          "herdr:w1:p0@/Users/chuck/.config/herdr/sessions/madswan/herdr.sock"
+        ],
+        "hold_words": {
+          "code": "Wait for the user's approval of the proposal on its Pending You card."
+        },
+        "waiting_on": null,
+        "stalled": false,
+        "holds": [
+          {
+            "on": "stage",
+            "stage": "code",
+            "words": "Wait for the user's approval of the proposal on its Pending You card.",
+            "since": 1793470069
+          }
+        ],
+        "priority": 0,
+        "stream": {
+          "name": "default",
+          "from": "intent"
+        },
+        "intent": {
+          "from": "base",
+          "repository": "/Users/chuck/Code/github_agentplot/flywheel-runner",
+          "base": "main",
+          "digest": "46b43d0cd1e710ec757d2781179a2d95e95be310458870d43e358019316e400b"
+        },
+        "moves": [],
+        "unsettled": [],
+        "ends": [],
+        "clues": {
+          "stage": "construct",
+          "state": "working",
+          "title": "construct · working",
+          "display_agent": "change--the-runner-keeps-its-repositories",
+          "shown_at": {
+            "place": "herdr:w5:t2@/Users/chuck/.config/herdr/sessions/flume/herdr.sock",
+            "agent": "herdr:w5:p2@/Users/chuck/.config/herdr/sessions/flume/herdr.sock",
+            "base": null
+          }
+        }
+      }
+    ],
+    "host": {
+      "running": 9,
+      "bound": null,
+      "room": null,
+      "queue": [],
+      "streams": [
+        {
+          "name": "default",
+          "priority": 0,
+          "running": 9,
+          "bound": null,
+          "room": null,
+          "queue": []
+        }
+      ],
+      "pools": [],
+      "terminal_kept": [],
+      "addresses": [],
+      "watch": {
+        "bound": {
+          "seconds": 30
+        }
+      },
+      "bases": []
+    }
+  }
+}
