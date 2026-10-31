@@ -15282,20 +15282,28 @@ def batch_folder(label, n):
 
 # A change's Markdown files at a commit in a kit, run on the team's host: each file's path under the change, then its
 # content as git holds it, each ended by NUL, which no Markdown file holds.
+# A unit's change at a commit, open, else archived (as change_held finds it): a unit given through Flume is batched once
+# its change is archived on its bolt (crossed_changes), at the commit that holds it so.
 CHANGE_AT = r"""set -eo pipefail
 main=$1 sha=$2 unit=$3
 cd "$main"
 git cat-file -e "$sha^{commit}" 2>/dev/null || { echo "$sha is not a commit of $main" >&2; exit 1; }
-git ls-tree -r -z --name-only "$sha" -- "openspec/changes/$unit/" | while IFS= read -r -d '' p; do
-  case $p in *.md) printf '%s\0' "${p#"openspec/changes/$unit/"}"; git cat-file blob "$sha:$p"; printf '\0' ;; esac
+folder=openspec/changes/$unit
+if [ -z "$(git ls-tree -d --name-only "$sha" "$folder")" ]; then
+  folder=$(git ls-tree -d --name-only "$sha" openspec/changes/archive/ | grep -E "^openspec/changes/archive/[0-9]{4}-[0-9]{2}-[0-9]{2}-$unit\$" | sort | tail -n 1 || true)
+fi
+[ -n "$folder" ] || exit 0
+git ls-tree -r -z --name-only "$sha" -- "$folder/" | while IFS= read -r -d '' p; do
+  case $p in *.md) printf '%s\0' "${p#"$folder/"}"; git cat-file blob "$sha:$p"; printf '\0' ;; esac
 done
 """
 
 
 def change_at(fleet, t, unit, sha):
     """A unit's change as read at a commit in its kit's main checkout on its team's host, over ssh when that host is
-    another (code.3), as the reviewer reads it (reading_command): its Markdown files, [(path under the change,
-    content)], in the order of its reading. Refused naming the unit, the host and what failed (read.1)."""
+    another (code.3), as the reviewer reads it (reading_command), open, else archived (CHANGE_AT): its Markdown files,
+    [(path under the change, content)], in the order of its reading. Refused naming the unit, the host and what failed
+    (read.1)."""
     r = crew.on_machine(fleet, t["machine"], ["bash", "-c", CHANGE_AT, "crew", t["kit"]["main"], sha, unit])
     why = unread_change(t, unit, sha, r.returncode, r.stderr)
     not why or fail(why)

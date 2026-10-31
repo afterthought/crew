@@ -1520,3 +1520,27 @@ def test_main_holds_reads_gits_exit_for_each_commit_a_crossed_bolts_places_lande
     assert r.returncode == 0
     said = dict(l.split() for l in r.stdout.splitlines())
     assert (said[landed], said[waiting]) == ("0", "1") and said[gone] not in ("0", "1")
+
+
+def change_files(out):
+    """CHANGE_AT's output as plan.change_at reads it: [(path under the change, content)], in the order printed."""
+    parts = out.split("\0")
+    return list(zip(parts[0:-1:2], parts[1::2]))
+
+
+def test_a_change_is_read_at_its_commit_open_or_archived_and_markdown_alone(repo):
+    """plan.CHANGE_AT, which a batch's reading reads each unit's change with (batch_folder_write, change_at): a unit
+    given through Flume is batched once its change is archived on its bolt, at the commit holding it so, and its change
+    is read there from the archive's dated folder, as an open change is read from its own; a file not Markdown is left
+    out, and a commit holding no change by the name prints nothing."""
+    open_at = repo.commit("docs(a): the change", {"openspec/changes/a/proposal.md": "# a\n", "openspec/changes/a/tasks.md": "- [ ] 1.1 x\n",
+                                                  "openspec/changes/a/.openspec.yaml": "schema: spec-driven\n"})
+    r = script("CHANGE_AT", str(repo.path), open_at, "a")
+    assert r.returncode == 0 and change_files(r.stdout) == [("proposal.md", "# a\n"), ("tasks.md", "- [ ] 1.1 x\n")]
+    (repo.path / "openspec/changes/archive").mkdir()
+    repo.git("mv", "openspec/changes/a", "openspec/changes/archive/2026-10-31-a")
+    archived = repo.commit("docs(a): archive the change")
+    r = script("CHANGE_AT", str(repo.path), archived, "a")
+    assert r.returncode == 0 and change_files(r.stdout) == [("proposal.md", "# a\n"), ("tasks.md", "- [ ] 1.1 x\n")]
+    r = script("CHANGE_AT", str(repo.path), archived, "b")
+    assert (r.returncode, r.stdout) == (0, "")
