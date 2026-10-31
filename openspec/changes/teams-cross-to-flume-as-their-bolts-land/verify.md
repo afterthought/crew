@@ -1,36 +1,36 @@
 # Verify: teams-cross-to-flume-as-their-bolts-land
 
-Read 2026-10-31 on mac-studio, at `b9adb66e` on `change/teams-cross-to-flume-as-their-bolts-land`, cut from `bolt/crew-runs-its-work-through-flume` at `227870c3`.
+Read 2026-10-31 on mac-studio, at `c15a432d` on `change/teams-cross-to-flume-as-their-bolts-land`, cut from `bolt/crew-runs-its-work-through-flume` at `227870c3`.
 
-**Outcome: not archived.** The work holds everywhere but one scenario, which no check proves and which the code does not meet in the host hold's own flow. It goes back to code for that (Finding 1).
+**Outcome: archived.** Every requirement and scenario of the change's eight spec deltas is met and proved by a check in crew's tiers, every task is ticked, and every check the tasks name passes. Two findings below are not blocking.
 
 ## Checks
 
 | Check the tasks name | Result |
 |---|---|
-| `tests/suite logic contract mod t-journey-cross t-journey-main-fix t-briefs t-roles t-docs` | 8 passed (8 replayed), 0 failed |
-| `tests/suite --force logic contract mod t-journey-cross t-journey-main-fix` | 5 passed (0 replayed), 0 failed |
+| `tests/suite --force logic contract mod t-journey-cross t-journey-main-fix t-briefs t-roles t-docs t-hold` | 9 passed (0 replayed), 0 failed |
 | `tests/suite --affected` (task 9.1) | 34 passed (34 replayed), 0 failed: every task of the suite, the command core having changed |
 | `openspec validate teams-cross-to-flume-as-their-bolts-land --strict` | valid |
 
-`tests/moon.yml` holds 34 `check-full` tasks, the 31 suite tests and the logic, contract and mod tiers, so `--affected` ran the whole suite.
+`tests/moon.yml` is in step with the tests: `tests/suite` refuses to run when it is not.
 
 ## Tasks
 
-All 26 tasks, 1.1 to 9.1, are ticked, and the check each names passes. Task 2.4's "never on a held host" is not proved by any of the checks it names (Finding 1).
+All 28 tasks, 1.1 to 9.1, are ticked, and the check each names passes.
 
 ## Requirements and scenarios
 
-The two MODIFIED requirements of `bolt-teams` keep every scenario the main spec holds. Each scenario below is matched to the check that proves it.
+Each scenario is matched to the check that proves it. The two MODIFIED requirements of `bolt-teams` keep every scenario the main spec holds.
 
 **bolt-teams**
-- Teams are fixed in the teams file: *The first version of the file* is `test_teams.py` `test_another_version_is_refused_naming_2_and_3` (1, 4, "3", true and null); *Version 3 names each team's setting*, *A team in version 3 without its setting* and *Version 2 still loads* are `test_teams.py`'s version-3 cases; the other two are unchanged and pass.
-- A team builds one bolt and may hold one more: *A crossed team takes a third bolt* is `test_cross.py` `test_a_crossed_team_takes_a_third_bolt_and_its_launches_follow_the_requests_already_written`; the other four are unchanged and pass.
-- A team's path is today's, due or crossed: `test_cross.py` `TestPath`, its three scenarios each a case; `t-journey-cross` shows the due team's conductor and ops running on.
+- Teams are fixed in the teams file: *The first version of the file* is `test_teams.py` `test_another_version_is_refused_naming_2_and_3`; *Version 3 names each team's setting*, *A team in version 3 without its setting* and *Version 2 still loads* are `test_teams.py`'s version-3 cases; the other two are unchanged and pass.
+- A team builds one bolt and may hold one more: *A crossed team takes a third bolt* is `test_cross.py` `test_a_crossed_team_takes_a_third_bolt_and_its_launches_follow_the_requests_already_written`, and through the command `t-journey-cross`, crossed swb-1, holding `next` with none of its work merged, given `more` and then `last` (task 4.5); the other four are unchanged and pass.
+- A team's path is today's, due or crossed: `test_cross.py` `TestPath`, one case per scenario; `t-journey-cross` shows the due team's conductor and ops running on.
 - A team due to cross is given no new bolt: `test_cross.py` `TestDue`, and `t-journey-cross`, the plan unchanged and no `bolt/next` made.
-- A team crosses once its last bolt of today's path has gone: *A due team's bolt lands* is `t-journey-cross` with `test_hold.py` `TestCrossing`. *A held host* has no check (Finding 1).
+- A team crosses once its last bolt of today's path has gone: *A due team's bolt lands* is `t-journey-cross` with `test_hold.py` `TestCrossing`. *A held host* is `test_hold.py` `test_a_held_host_ends_neither_role_until_it_goes`, and `t-journey-cross`'s swb-2, whose landing on the held host hands both roles back to `crew go`.
+- A crossed team is closed once neither of its roles is up: *Its roles ended by the host's hold* is `t-journey-cross`'s swb-2: `crew hold` and `crew hold wait` end its roles with its workspaces kept, its bolt lands with nothing closed or recorded, and `crew go` closes its workspaces, brings neither role back and records `team.cross` naming `wldn`, once; `test_hold.py` `TestCrossingClosed` proves the close's parts, the team marked down, its slots freed and the dispatchers told, and that a held host closes nothing until it goes. *A crossing already recorded* is `TestCrossingClosed` `test_neither_role_up_closes_the_team_records_its_crossing_and_tells_the_dispatchers_once` and `test_the_record_is_read_from_this_hosts_day_files_newest_first`, with `test_cross.py` `TestCrossing`'s cases of `cross_close` and `cross_recorded`; `t-journey-cross`'s second `_renew` at `crew go` says the crossing is recorded already.
 - A crossed team runs no standing agent: `test_cross.py` `TestNoStandingAgent`, and `t-journey-cross` for `crew up`, with no ssh to the host and no pane.
-- A crossed team's give launches its bolt whole: `test_cross.py` `test_a_bolt_of_three` and `test_a_give_with_no_runner_on_the_host_is_refused_naming_it`, and `t-journey-cross`'s two gives.
+- A crossed team's give launches its bolt whole: `test_cross.py` `test_a_bolt_of_three` and `test_a_give_with_no_runner_on_the_host_is_refused_naming_it`, and `t-journey-cross`'s gives.
 - A crossed team's launch carries its stream, priority, intent and recipient: `test_runner.py` `test_two_bolts_given_in_order` and `test_a_reorder_sends_only_what_changed`.
 - A crossed team's dependent launches once its After work has landed: `test_cross.py` `test_a_bolt_of_three` (b's `After` names a's launch) and `test_stages.py` `test_a_dependent_waits_on_the_work_it_comes_after`.
 - Plan writes reach a crossed team's places: `test_amend.py` `test_a_unit_in_code_is_a_retry_of_its_construct_with_the_amendments_words`; `test_cross.py` `test_a_unit_dropped_drops_its_launch_and_a_dependent_held_for_it_is_launched_again_without_it`.
@@ -41,34 +41,28 @@ The two MODIFIED requirements of `bolt-teams` keep every scenario the main spec 
 
 **flywheel-state**: `test_runner.py` `test_never_renumbered`, `test_a_launch_with_no_stream_is_refused`, `test_a_retry_of_nothing_is_refused_naming_the_request` and `test_two_hosts_one_silent`; `tests/contract/test_git.py` `test_the_runners_branches_come_with_the_flywheels_branch_in_one_fetch_and_each_hosts_is_read_at_its_tip`.
 
-**bolt-plan**: `test_stages.py`, a case for each of the six scenarios, read against flume 0.3.6's `status --json` fixtures in `tests/py/flume-0.3.6/`.
+**bolt-plan**: `test_stages.py`, one case per scenario, read against flume 0.3.6's `status --json` fixtures in `tests/py/flume-0.3.6/`.
 
-**main-level**: `test_main_fix.py`, a case for each of the three scenarios, and `t-journey-main-fix`.
+**main-level**: `test_main_fix.py`, one case per scenario, and `t-journey-main-fix`.
 
 **crew-rail**: `test_rail.py` `test_a_crossed_bolt_proven` and `test_a_fix_of_main_waits_beside_a_bolt_ahead_of_it_naming_ops_command_for_its_send`.
 
-**crew-board**: `test_board.py` `test_a_crossed_teams_ledger`, `test_a_due_team`, `test_a_question_in_the_planners_band` and `test_a_fix_of_main_in_ops_band`; the mod's two new cases in `plugin/tests/status.test.ts`.
+**crew-board**: `test_board.py` `test_a_crossed_teams_ledger`, `test_a_due_team`, `test_a_question_in_the_planners_band` and `test_a_fix_of_main_in_ops_band`; the mod's cases in `plugin/tests/status.test.ts`, "the planner's band draws a crossed place's question and its team's Flume stream" and "main-level ops's band draws a fix of main in flight with its stage" (`code.8`).
 
 **review-batches**: `test_batches.py` `test_merged_then_batched` and `test_constructed_but_not_landed_is_not_yet_due`.
 
-**run-record**: `test_record.py` `test_a_teams_crossing_names_its_stream_and_its_trace_reads_it_after_the_landing_that_crossed_it`, and `t-journey-cross`'s `team.cross` entry.
+**run-record**: `test_record.py` `test_a_teams_crossing_names_its_stream_and_its_trace_reads_it_after_the_landing_that_crossed_it`, and `t-journey-cross`'s `team.cross` entries.
+
+## Rules
+
+The design names each rule it departs from, with its reason, for the design agent to amend at the landing (`docs.5`, `docs.7`): `code.5`, `state.2`, `plan.13` and `plan.11`, `teams.16`, `teams.21`, `teams.23`, `roles.9`, `record.md`'s acts, and `read.5`, whose departure is that whether a team's crossing is recorded is read from the team's host's own run record. That read holds: `record.emit` appends to the host's day file before it pushes, and nothing removes a day file, so a crossing recorded there stays readable.
 
 ## Findings
 
-### 1. A crossing on a held host is not proved, and the hold's own flow leaves it unfinished
+### 1. Not blocking: a crossing already closed is still said to be due an end at every update
 
-The bolt-teams requirement *A team crosses once its last bolt of today's path has gone*, scenario *A held host*: "WHEN crw-4 has crossed and its host is held THEN its conductor and ops are not ended until the host goes".
+Once a team's crossing is closed, its conductor's and ops's start files stay in `~/.local/state/crew/sessions`. So `crew.due_of` keeps reading each due an end (`end_due`, `plugin/lib/crew.py` 1967–1982). Every later `crew update` and `crew go` on the host prints "<agent> is due (its team has crossed to Flume, whose places run its work): it is ended once it is idle, never restarted" for each (`hold.update_here`, `plugin/lib/hold.py` 356–361) and hands each to `crew _renew`. That run finds the role down and says the crossing is recorded already. Nothing is closed or recorded again, so *A crossing already recorded* holds, but the update's words promise an end that never comes. A chore could leave out of `end_due` a crossed team whose crossing `crossing_recorded` already holds.
 
-- **No check proves it.** None of the checks task 2.4 names holds a held host: `test_hold.py` `TestCrossing` tests `crew.end_due` and `crew.due_of`; `test_cross.py` tests `runner.cross_due`; `t-journey-cross` crosses an unheld host. No test reaches `hold.renew` or `hold.cross_end` on a held host. `openspec/config.yaml` has it that every scenario is one a check proves, and a scenario no existing check proves is a check the change adds (`docs.6`).
-- **The code does not meet it in the hold's flow.** A host is held for a restart as `crew hold`, then `crew hold wait`, whose `take_down` ends every crew agent there, keeping its pane, and then `crew go`. A crossed team whose conductor and ops were up when the host was held loses both to `take_down`, not to its crossing. After `crew go`:
-  - `revive_cmd` refuses the team (`not_crossed`, `plugin/lib/plan.py` 12742), so neither role comes back. That part is right.
-  - `update_here` finds each due an end (`crew.end_due`) and hands it to `crew _renew`. `hold.renew` reads it not up and returns: "is not up, so its team's crossing to Flume has nothing of it to end" (`plugin/lib/hold.py` 412–414). It never reaches `cross_end`.
-  - `cross_end` is the only writer of `team.cross` (`plugin/lib/hold.py` 513). So the team's workspaces stay open, the team is not marked down, its slots are not freed (`plan.reap`), `team.cross` is never recorded, and the dispatchers are never told the team takes bolts of its kits. Every later `crew go` or `crew revive` on the host prints the team's refusal again.
+### 2. Not blocking: the journey's held-host case was not run against the code before its fix
 
-  The requirement's "Once neither is up, crew SHALL record `team.cross` … and tell the partition's dispatchers" is not met on this path. The same holds for a crossed team whose conductor and ops are down for any other reason when its crossing comes due.
-
-**For the code stage:** finish a crossing whose roles are already down, whether a hold's `take_down` ended them or anything else did. Once the team reads crossed and neither role is up, close its workspaces, mark it down, free its slots, record `team.cross` once and tell the dispatchers, never on a held host. Then add a check for the scenario. A decision over facts is the logic tier's: whether the crossing is due its close, given the path, the roles up and whether `team.cross` is already recorded. `t-journey-cross` can hold one case of its wiring, a hold and `crew hold wait` before the landing and `crew go` after it.
-
-### 2. Not blocking: the give's skip of a crossed team's bound is shown only through a test helper
-
-*A crossed team takes a third bolt* is proved by `test_cross.py`'s `give()` helper, which sets `Team` and `Path` and calls `plan.reach_places` as the give's change function does. Skipping `give_refusal` and the change function's two-bolt check for a crossed team happens in `plan.bolt_give` (`plugin/lib/plan.py` 1903–1912, 1946–1951), and no test reaches it with a team already holding a bolt. The code reads right. A case where the team holds a bolt when it is given another would pin it, and it can ride with Finding 1's fix.
+`c15a432d` says `t-journey-cross`'s swb-2 case fails at `crew go` on the code before it. I did not run it there. Reading the code bears it out: before that commit, `hold.renew` returned at "is not up" without closing anything. The case waits for "swb-2 has crossed to Flume: its workspaces are closed…", which only `close_crossing` prints.
