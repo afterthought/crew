@@ -14,6 +14,8 @@ Read 2026-10-31 on mac-studio, at `c15a432d` on `change/teams-cross-to-flume-as-
 
 `tests/moon.yml` is in step with the tests: `tests/suite` refuses to run when it is not.
 
+The archive merges the deltas into `openspec/specs/`: 28 requirements added and 2 modified, none removed. `openspec validate --specs --strict` fails the same 15 specs before and after the merge, every one on warnings alone (a requirement's text over 500 characters), none on an error.
+
 ## Tasks
 
 All 28 tasks, 1.1 to 9.1, are ticked, and the check each names passes.
