@@ -1296,6 +1296,26 @@ def label_errors(errors, label):
     return {k: v for k, v in errors.items() if k.startswith(f"{label}/main of ") or k == f"the plan of {label}"}
 
 
+# Pending You's notice for an always-on script, `pendingyou watch -- <command>` (pendingyou 0.39.0, read 2026-10-31):
+# the command run once for each change on a card of the host's sign-in. What it and each crew _answered say, the
+# follower's child's words, are appended here.
+HEARD = FRAMES.parent / "heard.log"
+
+
+def answers_watched(fleet, host):
+    """Whether the host's follower runs Pending You's notice (design Decision 5 of roles-run-as-flume-kinds, role-runs
+    "The follower hears Pending You's notice while a role here runs as its kind"): while a partition whose main level
+    runs on the host names a stream for a role, and only then, since the notice marks each change it hands in the
+    host's Pending You state, which a session's pickup at its start reads."""
+    return any(p["machine"] == host and any(s is not False for s in p["flume"].values()) for p in fleet["partitions"].values())
+
+
+def notice_argv():
+    """The notice the follower runs: Pending You's watch, running crew _answered for each change on a card, which asks
+    a role whose run the card's asker is and reads nothing else of the card (plan.card_answered)."""
+    return ["pendingyou", "watch", "--", "bash", str(crew.HOME / "plugin/bin/crew"), "_answered"]
+
+
 class Watches:
     """The follower's overview watches (Decision 7 of a-rail-refresh-after-no-change-reads-nothing): one `sluice overview
     --json --watch` for each kit whose queue its read shows, in the kit's main checkout, a child on this host and one ssh
@@ -1443,6 +1463,8 @@ class Follower:
         self.ticks, self.left, self.cards = 0, False, None
         # what handing out the restarts said before the follower started again as the new crew (again)
         self.updated = json.loads(os.environ.pop("CREW_FOLLOWER_UPDATED", "") or "{}")
+        # Pending You's notice while a role here runs as its kind (hear), None while it runs none
+        self.notice = None
 
     def fleet(self):
         """The teams file and the hosts file read afresh, not as this process first read them, and the partitions
@@ -1495,6 +1517,8 @@ class Follower:
         fleet = self.fleet()
         self.fetch(fleet)
         self.ask(fleet)
+        if self.watches is not None and fleet is not None:
+            self.hear(fleet)
         self.refresh(tick=True)
         if self.kept.cards is None:
             self.kept.cards = ({}, None)
@@ -1502,6 +1526,35 @@ class Follower:
     def once(self):
         """One tick, waiting for nothing: crew _follow --once, for the tiers."""
         self.tick()
+
+    def hear(self, fleet):
+        """Pending You's notice (notice_argv) run as a child of the follower's own while a role whose main level is
+        here runs as its kind (answers_watched), started again at a tick when it ended, and let go when none does; its
+        words and crew _answered's appended to HEARD. One a host, as the follower is (design Decision 5)."""
+        if self.notice is not None and self.notice.poll() is not None:
+            self.notice = None
+        if not answers_watched(fleet, crew.this_host()):
+            self.unhear()
+            return
+        if self.notice is not None:
+            return
+        try:
+            HEARD.parent.mkdir(parents=True, exist_ok=True)
+            with open(HEARD, "a") as log:
+                self.notice = subprocess.Popen(notice_argv(), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+        except OSError as e:
+            print(f"crew's follower could not run Pending You's notice, `{shlex.join(notice_argv()[:2])}`: {e.strerror or e}", file=sys.stderr)
+
+    def unhear(self):
+        if self.notice is None:
+            return
+        self.notice.terminate()
+        try:
+            self.notice.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.notice.kill()
+            self.notice.wait()
+        self.notice = None
 
     def look(self, fleet):
         """What the look reads (look), with each kit's queue as its watch last read it, read now without blocking."""
@@ -1657,6 +1710,7 @@ class Follower:
                    for l in self.labels}
         if self.watches is not None:
             self.watches.close_all()
+        self.unhear()
         try:
             os.set_inheritable(self.lock.fileno(), True)
             sys.stdout.flush()
@@ -1700,6 +1754,7 @@ class Follower:
     def close(self):
         if self.watches is not None:
             self.watches.close_all()
+        self.unhear()
         self.lock.close()
 
 

@@ -513,6 +513,11 @@ case $cmd in
     # of sluice and waited on to its end in a process of its own on the team's host, which crew card preview hands it
     # to (code.9)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _answered)  # crew _answered: run by Pending You's notice, `pendingyou watch -- crew _answered`, which the host's
+    # follower runs while a role here runs as its kind, for each change on a card of this host's sign-in: a change on
+    # a card in a role's run's name is an ask of the role, reading nothing of the card but its ids and asker; never
+    # forwarded, the notice being this host's
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   _card-preview | _preview-release)  # crew _card-preview <label> <key> <thing> <team> [--done], on the team's host:
     # a card's thing brought up or put away there, which crew card preview hands it to; crew _preview-release <label>
     # <key>: every preview brought up from a card released on this host, which the card's close hands it to (code.3)

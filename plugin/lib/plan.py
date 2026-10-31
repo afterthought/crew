@@ -5793,6 +5793,55 @@ def unlanded_ask(fleet, label, bolt, kit_name, n, words):
         print(f"could not ask {label}-ops that bolt/{bolt} did not land: {e}", file=sys.stderr)
 
 
+# A card's request id and version as Pending You's notice gives them, `pendingyou watch`'s PENDINGYOU_REQUEST_ID and
+# PENDINGYOU_VERSION (pendingyou 0.39.0, dist/watch.js, read 2026-10-31), and what each of its events says of the card,
+# PENDINGYOU_EVENT (watch.js eventOf), as a card ask's words.
+REQUEST = re.compile(r"req_[A-Za-z0-9-]+")
+CARD_EVENTS = {"answer_ready": "the user answered it", "message_ready": "a message came on it",
+               "fallback_due": "its fallback came due", "delegated_ready": "another of the user's assistants handed it on"}
+
+
+def card_ask(fleet, name, request, version, event):
+    """The ask a change on a card makes, as Pending You's notice names it to the host's follower (design Decision 5,
+    role-runs "A card's answer, an opening and a batch are asks"): a `card` ask of the role whose run the card's asker,
+    name, is, naming card/<request>, keyed card/<request>/<version> so the change is asked once and a later one again,
+    its words what the notice's event says; None for a card in any other name, a standing agent's, a unit's or the
+    user's own, which stays the wake mod's. Nothing else of the card is read: the run reads it in its own name at its
+    start (Decision 7). A request id or version not of Pending You's form is refused (read.2). A decision of plain
+    facts (code.7)."""
+    REQUEST.fullmatch(request or "") or fail(f"Pending You's notice named no card crew can read: request {request!r}")
+    (version or "").isdigit() or fail(f"Pending You's notice named card {request} at no version crew can read: {version!r}")
+    run = crew.kind_role_of(fleet, name) if isinstance(name, str) else None
+    if run is None:
+        return None
+    label, role = run
+    return dict(label=label, role=role, names=f"card/{request}", key=f"card/{request}/{version}",
+                words=CARD_EVENTS.get(event) or f"Pending You's notice named it {event or 'with no event'}")
+
+
+def card_answered(fleet, a):
+    """crew _answered: what Pending You's notice, `pendingyou watch -- crew _answered`, which the host's follower runs
+    while a role here runs as its kind (board.answers_watched), runs for each change on a card of the host's sign-in:
+    the card's request id, version and event from its environment and its asker's name, sessionLabel, from the card on
+    standard input, and nothing else of it; a change on a card in a run's name is a `card` ask of the role, written
+    alone from crew (card_ask, ask_write), and any other writes nothing. A notice crew can't read is refused, so the
+    watch hands it again; one naming no asker writes nothing, said."""
+    request, version = os.environ.get("PENDINGYOU_REQUEST_ID"), os.environ.get("PENDINGYOU_VERSION")
+    request or fail("crew _answered runs from Pending You's notice, `pendingyou watch -- crew _answered`, which names the card "
+                    "in PENDINGYOU_REQUEST_ID and PENDINGYOU_VERSION; neither is set")
+    try:
+        card = json.loads(sys.stdin.read() or "null")
+    except ValueError:
+        card = None
+    name = card.get("sessionLabel") if isinstance(card, dict) else None
+    if not isinstance(name, str) or not name:
+        print(f"card {request}: Pending You's notice names no asker, so no role is asked")
+        return
+    ask = card_ask(fleet, name, request, version, os.environ.get("PENDINGYOU_EVENT"))
+    if ask is not None:
+        ask_write(fleet, ask["label"], ask["role"], "card", "crew", names=ask["names"], key=ask["key"], words=ask["words"])
+
+
 def asked(label, commit, made, held):
     """Once a write that made asks in its commit is pushed (write): each ask's entry, by the id the commit names, and
     each key found held said."""
@@ -18189,6 +18238,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("tabs", nargs="*")
     sub.add_parser("_revive")
+    sub.add_parser("_answered")
     return ap
 
 
@@ -18212,6 +18262,7 @@ COMMANDS = {
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
     ("_review", None): review_cmd, ("review-delivered", None): review_delivered, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
+    ("_answered", None): card_answered,
     ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show, ("signal-land", None): signal_land,
     ("_needs", None): needs_cmd, ("_end-short", None): end_short,

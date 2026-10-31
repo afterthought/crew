@@ -29,7 +29,9 @@
 # its asker and age, crew board acting on none; a deploy's card, raised by crew ops offer, read not found, recorded
 # lost and raised again through its kind's raise; a row whose post was refused showing the refusal, left while the
 # refusal is under ten minutes old and raised through its kind's raise after, a proposal's and a step's that crew ops
-# step raised. Which card a key names, what crew sets on a card, the area, how a reply, a refusal and an answer read,
+# step raised. Then Pending You's notice of a change on a card, crew _answered as `pendingyou watch` runs it: one ask of
+# a role that runs as its kind, keyed by the card's request and version, and none for a card of a role that stands.
+# Which card a key names, what crew sets on a card, the area, how a reply, a refusal and an answer read,
 # and what the act sends and records for each are logic cases (tests/py/test_card_commands.py); who may post under
 # which key, what the hook records, each card's builder, a record's facts, and the session's start and end in the act
 # and what a batch's read returns, test_cards.py; a batch card's facts, test_batches.py; what the sweep judges and
@@ -683,3 +685,33 @@ eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempote
 has "$r" "  $op (wldn), wldn-ops's $sc: posted: its row had none open"
 has "$r" "    card:   $op, open, asked by wldn-ops ($sc)"
 ok "a step waiting on the user has its card raised by crew ops step, and one whose post was refused raised through the step's raise by the first read after ten minutes"
+
+# Pending You's notice of a change on a card (design Decision 5 of roles-run-as-flume-kinds): with wldn's planner run as
+# its kind, crew _answered, as `pendingyou watch` runs it on the box for each change on a card there, writes one card
+# ask of the planner keyed by the card's request and version, from the notice's ids and asker alone, calling no Pending
+# You tool; the same change handed again asks nothing more, and a later change on the card is asked again; a card of
+# wldn-ops, which stands, asks nothing.
+role_stream wldn planner wldn-main
+# notice <asker> <request> <version>: crew _answered on the box as Pending You's watch runs it, the card on its input
+notice() {
+  jq -cn --arg n "$1" --arg r "$2" --argjson v "$3" '{requestId: $r, sessionLabel: $n, status: "answered", version: $v, title: "Approve 12?"}' |
+    (export CREW_TEST_HOST=$box HOME PENDINGYOU_REQUEST_ID=$2 PENDINGYOU_VERSION=$3 PENDINGYOU_EVENT=answer_ready; HOME=$(home_of $box)
+     unset CREW_AGENT CREW_LABEL; cd "$HOME" && "$CREW/plugin/bin/crew" _answered)
+}
+cask() { git --git-dir "$ws" show wldn/main:asks.rec | recsel -t Ask "$@"; }
+: > "$CREW_TEST_LOG"
+t0=$(act_tip)
+expect_ok notice wldn-planner req_stub-77 3
+eq "$(cask -p Role,From,What,Names,Key,Words | tr '\n' ' ')" \
+  "Role: planner From: crew What: card Names: card/req_stub-77 Key: card/req_stub-77/3 Words: the user answered it "
+eq "$(acts_since "$t0")" "1"
+eq "$(py_calls)" ""
+expect_ok notice wldn-planner req_stub-77 3
+has "$out" "wldn-planner is already asked by card/req_stub-77/3; nothing written"
+eq "$(cask -c)" "1"
+expect_ok notice wldn-planner req_stub-77 4
+eq "$(cask -P Key | grep . | tr '\n' ' ')" "card/req_stub-77/3 card/req_stub-77/4 "
+expect_ok notice wldn-ops req_stub-78 2
+eq "$(cask -c)" "2"
+eq "$(py_calls)" ""
+ok "a change on a card of a role that runs as its kind is one ask of the role, keyed by the card's request and version and read from the notice alone, and a card of a role that stands asks nothing"

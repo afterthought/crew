@@ -43,7 +43,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 9. A card's answer
 
-- [ ] 9.1 The host's follower runs Pending You's notice, `pendingyou watch -- crew _answered`, while a partition whose main level is on its host runs a role as its kind, and `crew _answered` writes one ask, keyed by the card's request and version, for each change on a card in the name of a role that runs as its kind, reading nothing of the card (design Decision 5; Task notes 9.1); passes `tests/py/test_card_commands.py`, and the moon task `tests:t-cards` ends with "0 failed".
+- [x] 9.1 The host's follower runs Pending You's notice, `pendingyou watch -- crew _answered`, while a partition whose main level is on its host runs a role as its kind, and `crew _answered` writes one ask, keyed by the card's request and version, for each change on a card in the name of a role that runs as its kind, reading nothing of the card (design Decision 5; Task notes 9.1); passes `tests/py/test_card_commands.py`, and the moon task `tests:t-cards` ends with "0 failed".
 
 ## 10. Standing agents stop
 

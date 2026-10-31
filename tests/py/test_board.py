@@ -383,9 +383,9 @@ class TestRefresh:
     the views and the stamps, so what is asked is what the case shows."""
 
     FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan", "state": "o/state", "blueprints": ["o/bp"],
-                                     "machine": "mac-studio", "teams": ["swb-1"]},
+                                     "machine": "mac-studio", "teams": ["swb-1"], "flume": {r: False for r in crew.KIND_ROLES}},
                             "swancloud": {"label": "swancloud", "partition": "personal", "state": "o/state", "blueprints": ["o/bp"],
-                                          "machine": "mac-studio", "teams": []}},
+                                          "machine": "mac-studio", "teams": [], "flume": {r: False for r in crew.KIND_ROLES}}},
              "teams": {"swb-1": {"machine": BOX}},
              "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
 
@@ -439,6 +439,42 @@ class TestRefresh:
             def again(self, fleet):
                 test.again.append(list(self.labels))
         return Here(None)
+
+    def test_the_follower_runs_pending_yous_notice_while_a_role_here_runs_as_its_kind(self, tmp_path, monkeypatch):
+        """role-runs "The follower hears Pending You's notice while a role here runs as its kind": started at a tick
+        while a partition whose main level is here names a stream for a role, once, started again when it ended, and
+        ended once none does (design Decision 5 of roles-run-as-flume-kinds)."""
+        started = []
+
+        class Proc:
+            def __init__(self, argv, **kw):
+                self.argv, self.code, self.ended = argv, None, False
+                started.append(self)
+
+            def poll(self):
+                return self.code
+
+            def terminate(self):
+                self.ended, self.code = True, -15
+
+            def wait(self, timeout=None):
+                return self.code
+        monkeypatch.setattr(board.subprocess, "Popen", Proc)
+        monkeypatch.setattr(board, "HEARD", tmp_path / "heard.log")
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        stands = {r: False for r in crew.KIND_ROLES}
+        runs = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "flume": dict(stands, planner="madswan-main")}}}
+        f = board.Follower(None)
+        f.hear(runs)
+        f.hear(runs)
+        assert [x.argv for x in started] == [board.notice_argv()]
+        started[0].code = 1
+        f.hear(runs)
+        assert len(started) == 2, "a notice that ended was not started again"
+        f.hear({"partitions": {"madswan": dict(runs["partitions"]["madswan"], flume=stands)}})
+        assert started[1].ended and f.notice is None
+        f.hear({"partitions": {"madswan": dict(runs["partitions"]["madswan"], machine="mac-studio")}})
+        assert len(started) == 2, "a notice was run for a role whose main level is on another host"
 
     def frame(self, label, kind="rail"):
         return json.loads((board.FRAMES / f"{label}{'.' + kind if kind != 'board' else ''}.json").read_text())
