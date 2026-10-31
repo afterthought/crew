@@ -129,10 +129,12 @@ def superseded(turns, run):
     return open_turns(turns, run)
 
 
-def keyed(asks, key):
-    """The ask already written with this key, or None: an ask with a key the file holds is written once (role-runs "An
-    ask with a key is written once"). An ask with no key is never held."""
-    return next((a for a in asks if key and a.get("Key") == key), None)
+def keyed(asks, key, role=None):
+    """The ask of the role already written with this key, or None: an ask with a key the file holds is written once
+    (role-runs "An ask with a key is written once"). A key is the role's own, so one event asking two roles, a bolt's
+    landing asking the planner and the design agent by landed/<bolt>, writes each its ask; with no role, an ask of any
+    role holds the key. An ask with no key is never held."""
+    return next((a for a in asks if key and a.get("Key") == key and role in (None, a["Role"])), None)
 
 
 def next_id(asks):

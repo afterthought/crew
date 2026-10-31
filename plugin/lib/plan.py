@@ -3452,6 +3452,7 @@ def bolt_land(fleet, a, by=None, close_why=None):
             w.plan.remove(u)
             w.on.append(f"{kind_of(u)}/{u.name()}")
         w.plan.remove(w.plan.bolt(a.bolt))
+        landed_asks(w, fleet, label, a.bolt, f"bolt {a.bolt} landed on {t['kit']['name']}'s main at {head[:7]}")
         return [a.bolt]
     # A bolt a team held records its age and who held its time, or neither when that can't be read (plan.20).
     spent = landing_time(fleet, t, plan, b, entries, datetime.datetime.now(datetime.timezone.utc)) if held else {}
@@ -4617,6 +4618,7 @@ def landing_not_landed(fleet, label, t, bolt, p, words, refused, stopped):
     else:
         record.emit(label, "bolt.submit", [f"bolt/{bolt}"], refused=refused, Submission=p.get("ID"), Head=p["TIP"])
     print(words, file=sys.stderr)
+    unlanded_ask(fleet, label, bolt, t["kit"]["name"], p.get("ID"), words)
     land_hand(fleet, label, t["kit"]["name"])  # its row held on its kit's landings card at the head submitted, or not
     return False
 
@@ -5694,7 +5696,7 @@ def ask_rec(w, fleet, label, role, what, frm, names=None, key=None, words=None):
     applied again to (plan.1, state.1). frm, an agent's name, <user>@<host> or crew; names, the record it names."""
     pl = rec_file(w, "asks.rec", ASKS)
     held, _ = asks.parse(pl.text())
-    if asks.keyed(held, key):
+    if asks.keyed(held, key, role):
         return None
     at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     rec = Rec("Ask", [("Id", str(asks.next_id(held))), ("Role", role), ("From", frm), ("What", what)]
@@ -5743,6 +5745,30 @@ def capture_asks(w, fleet, label, ids):
         return
     for sig in ids:
         ask_lines(w, fleet, label, "design", "capture", agent(), names=f"signals/{sig}", key=f"signal/{sig}")
+
+
+def landed_asks(w, fleet, label, bolt, words):
+    """A bolt's landing, as crew's read of it records it (bolt_land, whichever act closes it), asks the partition's
+    planner and design agent where each runs as its kind (design Decisions 5 and 12, role-runs "A capture and a landing
+    are asks"): a `landed` ask from crew naming the bolt, keyed landed/<bolt>, the landing in words, in the landing's
+    own commit, the write w. A role that stands is asked nothing."""
+    for role in ("planner", "design"):
+        if crew.role_stream(fleet, label, role) is not False:
+            ask_lines(w, fleet, label, role, "landed", "crew", names=f"bolt/{bolt}", key=f"landed/{bolt}", words=words)
+
+
+def unlanded_ask(fleet, label, bolt, kit_name, n, words):
+    """A landing that did not land (landing_not_landed), which writes nothing to the flywheel's branch, asks the
+    partition's main-level ops where it runs as its kind, in a commit of its own (design Decisions 5 and 12, role-runs
+    "Main-level ops's landing from a run does not wait"): a `landed` ask from crew naming the bolt with sluice's words,
+    keyed by the submission, submission/<kit>/<n>, so its outcome read twice asks once; a landing stopped with no
+    submission crew can name is keyed by nothing. An ask crew could not write is said, the read going on (read.1)."""
+    if crew.role_stream(fleet, label, "ops") is False:
+        return
+    try:
+        ask_write(fleet, label, "ops", "landed", "crew", names=f"bolt/{bolt}", key=f"submission/{kit_name}/{n}" if n else None, words=words)
+    except Refusal as e:
+        print(f"could not ask {label}-ops that bolt/{bolt} did not land: {e}", file=sys.stderr)
 
 
 def asked(label, commit, made, held):

@@ -154,6 +154,13 @@ class TestKeyed:
         assert asks.keyed(written, key)["Id"] == "2"
         assert asks.keyed(written, "card/req_1/2026-10-31T11:00:00Z") is None
 
+    def test_a_key_is_its_roles_own_so_one_landing_asks_the_planner_and_the_design_agent(self):
+        """role-runs, A landing: one ask of the planner and one of the design agent, each keyed by the bolt."""
+        written = [ask(1, key="landed/b")]
+        assert asks.keyed(written, "landed/b", "planner")["Id"] == "1"
+        assert asks.keyed(written, "landed/b", "design") is None
+        assert asks.keyed(written, "landed/b")["Id"] == "1"
+
     def test_an_ask_with_no_key_is_never_held(self):
         assert asks.keyed([ask(1)], None) is None and asks.keyed([dict(ask(1), Key="")], "") is None
 

@@ -656,8 +656,9 @@ class TestTheSubmission:
         monkeypatch.setattr(plan.record, "who", lambda: "wldn-ops")
         monkeypatch.setattr(plan, "may_write", lambda fleet, key, a: None)
         monkeypatch.setattr(plan, "bolt_land", close or (lambda fleet, a, **k: closed.append(a.bolt)))
-        self.handed = []
+        self.handed, self.unlanded = [], []
         monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: self.handed.append(kit))
+        monkeypatch.setattr(plan, "unlanded_ask", lambda fleet, label, bolt, kit, n, words: self.unlanded.append((bolt, kit, n)))
         try:
             plan.bolt_submit({}, argparse.Namespace(bolt=list(bolts), label=None))
         finally:
@@ -1002,6 +1003,7 @@ class TestTheSubmission:
         (_, _, f), = self.emitted
         assert f["refused"].startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was.")
         assert self.scripts()[-2:] == ["PULL", "PULL_MARK"]
+        assert self.unlanded == [("b", "k", f["Submission"])]
 
     def test_a_pull_request_whose_submission_sluice_records_none_of_is_left_standing(self, monkeypatch, capsys):
         """Said by name, its pull request left as sluice has it, nothing drafted or waited on, and recorded with no
@@ -1299,6 +1301,8 @@ class TestTheLandingsRead:
         monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: self.emitted.append((act, on, f)) or self.entries.append(
             dict({k: v for k, v in f.items() if v not in (None, "")}, Act=act, On=on, **({"Refused": f["refused"]} if f.get("refused") else {}))))
         monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: None)
+        self.unlanded = []
+        monkeypatch.setattr(plan, "unlanded_ask", lambda fleet, label, bolt, kit, n, words: self.unlanded.append((bolt, kit, n, words)))
         monkeypatch.setattr(plan, "bolt_land", lambda fleet, a, **k: self.closed.append((a.bolt, k)) or self.plan.bolts_.discard(a.bolt))
         monkeypatch.setattr(plan.record, "who", lambda: "swb-1-conductor")
 
@@ -1377,6 +1381,8 @@ class TestTheLandingsRead:
         assert handed == [verdict]  # sluice's verdict, from its record, handed to the landing's end
         (act, on, f), = self.emitted
         assert (f["refused"], f["Submission"], f["Head"]) == (verdict, "412", TIP)
+        (bolt, kit, n, words), = self.unlanded  # main-level ops is asked with sluice's words, keyed by the submission
+        assert (bolt, kit, n) == ("b", "k", "412") and verdict in words
         assert "bolt/b did not land: sluice refused it or found a conflict" in capsys.readouterr().err
 
     def test_a_record_that_cant_be_read_records_nothing_naming_the_host(self, capsys):
@@ -2394,3 +2400,68 @@ class TestAgeAndSplit:
         assert plan.landing_split(self.ENTRIES, self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit",
                                   (None, "sluice status main exited 1: sluice is not running here"), later) == {}
         assert plan.landing_split(self.ENTRIES[1:], self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit", (self.LANDED, None), later) == {}
+
+
+class TestTheLandingsAsks:
+    """A bolt's landing asks the planner and the design agent that run as their kinds in the landing's commit, and one
+    that did not land asks main-level ops with sluice's words, keyed by the submission (design Decisions 5 and 12;
+    role-runs "A capture and a landing are asks" and "Main-level ops's landing from a run does not wait"); a role that
+    stands is asked nothing."""
+
+    def fleet(self, **flume):
+        import crew
+        return {"partitions": {"swancloud": {"label": "swancloud", "machine": "deneb", "blueprints": ["afterthought/blueprints"], "roles": {},
+                                             "flume": dict(dict.fromkeys(crew.KIND_ROLES, False), **flume)}}, "teams": {}, "hosts": {}}
+
+    @pytest.fixture
+    def w(self, monkeypatch):
+        from facts import FactsWrite
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+        w = FactsWrite("", None)
+        w.label = "swancloud"
+        return w
+
+    def test_a_landing_asks_the_planner_and_the_design_agent_each_naming_the_bolt(self, w):
+        """role-runs, A landing: the landing's write holds an ask of the planner and one of the design agent."""
+        import asks
+        plan.landed_asks(w, self.fleet(planner="s", design="s"), "swancloud", "b", "bolt b landed on k's main at bbbbbbb")
+        got, _ = asks.parse(w.files["asks.rec"])
+        assert [(a["Role"], a["From"], a["What"], a["Names"], a["Key"], a["Words"]) for a in got] == [
+            ("planner", "crew", "landed", "bolt/b", "landed/b", "bolt b landed on k's main at bbbbbbb"),
+            ("design", "crew", "landed", "bolt/b", "landed/b", "bolt b landed on k's main at bbbbbbb")]
+        assert len(w.asked) == 2
+
+    def test_a_landing_asks_only_the_roles_that_run_as_their_kinds(self, w):
+        import asks
+        plan.landed_asks(w, self.fleet(design="s"), "swancloud", "b", "landed")
+        assert [a["Role"] for a in asks.parse(w.files["asks.rec"])[0]] == ["design"]
+        from facts import FactsWrite
+        none = FactsWrite("", None)
+        none.label = "swancloud"
+        plan.landed_asks(none, self.fleet(), "swancloud", "b", "landed")
+        assert none.files == {} and none.asked == []
+
+    @pytest.fixture
+    def asked(self, monkeypatch):
+        got = []
+        monkeypatch.setattr(plan, "ask_write", lambda fleet, label, role, what, frm, names=None, key=None, words=None:
+                            got.append((label, role, what, frm, names, key, words)))
+        return got
+
+    def test_a_landing_that_did_not_land_asks_ops_with_sluices_words_keyed_by_the_submission(self, asked):
+        """role-runs, A landing that conflicts: crew's read writes an ask of ops with sluice's words."""
+        plan.unlanded_ask(self.fleet(ops="s"), "swancloud", "y", "k", "412", "bolt/y did not land: #412 conflict: README.md")
+        assert asked == [("swancloud", "ops", "landed", "crew", "bolt/y", "submission/k/412", "bolt/y did not land: #412 conflict: README.md")]
+
+    def test_one_stopped_with_no_submission_is_keyed_by_nothing(self, asked):
+        plan.unlanded_ask(self.fleet(ops="s"), "swancloud", "y", "k", None, "stopped")
+        assert asked[0][5] is None
+
+    def test_ops_that_stands_is_asked_nothing(self, asked):
+        plan.unlanded_ask(self.fleet(planner="s"), "swancloud", "y", "k", "412", "words")
+        assert asked == []
+
+    def test_an_ask_crew_could_not_write_is_said_and_the_read_goes_on(self, monkeypatch, capsys):
+        monkeypatch.setattr(plan, "ask_write", lambda *a, **k: plan.fail("could not fetch swancloud/main"))
+        plan.unlanded_ask(self.fleet(ops="s"), "swancloud", "y", "k", "412", "words")
+        assert capsys.readouterr().err == "could not ask swancloud-ops that bolt/y did not land: could not fetch swancloud/main\n"
