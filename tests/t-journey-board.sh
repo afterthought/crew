@@ -1,23 +1,22 @@
-# The flow as the user reads it, through the crew command on the stubs (tests.11, record 0022): crew bolts lists every
-# bolt and unit with each unit's stage read from its kit, one ssh per host holding a bolt and none for planned work;
-# crew sites gives each dev server's URL as it opens from where it is asked; crew board draws the four lanes, an
-# environment's deploy among the Operation lane's, and the attention line from one read, writes nothing and ends no
-# card session; the host's follower, crew _follow --once with no tab open, in one fetch and one read of each host's kits
-# for both partitions on the host, writes the rail's frame, which the rail tab draws as crew rail prints it, sweeps a
-# dead card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards;
-# running, a tick of its clock with nothing moved reads nothing but the box's stamps, a plan write on its host is
-# shown at its next look, with nothing fetched or gathered, a reading sent back on its host has that host's card
-# sessions swept at its next look, with nothing gathered, a write to sluice's folder in the box's kit moves nothing, a
-# merge queued in sluice is on its unit's row at the next look from the kit's overview watch, with nothing gathered,
-# and a dev server started on the box shows after the next tick, with nothing gathered; crew page writes the page
-# whole, with the
-# deploys, a dock for each item with its history as crew trace walks it, and its partition links in the layout of its
-# file, saying so when that names no partition, and nothing when the branch can't be read; crew page --fleet writes
-# every partition on one page beside the partitions' folders, its links in the layout of its file, and a partition's
-# page served as <label>.html links back to it; every view names a host that does not answer, for its kits alone, and
-# shows the rest; and a plan a hand edit broke is refused, named by its commit. What each lane, line, URL and node says
-# are logic cases (tests/py/test_board.py, test_page.py, test_fleet.py, test_rail.py), and what the kit reader takes
-# from git, contract cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
+# The flow as the user reads it, through the crew command on the stubs (tests.11, record 0022), every bolt given
+# through Flume: crew bolts lists every bolt and unit, each unit's and fix's stage read from the runner's records, one ssh
+# per host holding a bolt and none for planned work; crew sites lists each held bolt under the host that builds it;
+# crew board draws the four lanes, an environment's deploy among the Operation lane's, and the attention line from one
+# read, writes nothing and ends no card session; the host's follower, crew _follow --once with no tab open, in one fetch
+# and one read of each host's kits for both partitions on the host, writes the rail's frame, which the rail tab draws as
+# crew rail prints it, sweeps a dead card session and writes the board's frame, which the board tab draws, and each
+# agent's view with its open cards; running, a tick of its clock with nothing moved reads nothing but the box's stamps,
+# a plan write on its host is shown at its next look, with nothing fetched or gathered, a reading sent back on its host
+# has that host's card sessions swept at its next look, with nothing gathered, a write to sluice's folder in the box's
+# kit moves nothing, and a merge queued in sluice is on its unit's row at the next look from the kit's overview watch,
+# with nothing gathered; crew page writes the page whole, with the deploys, a dock for each item with its history as
+# crew trace walks it, and its partition links in the layout of its file, saying so when that names no partition, and
+# nothing when the branch can't be read; crew page --fleet writes every partition on one page beside the partitions'
+# folders, its links in the layout of its file, and a partition's page served as <label>.html links back to it; every
+# view names a host that does not answer, for its kits alone, and shows the rest, a unit's stage from the runner's
+# records among it; and a plan a hand edit broke is refused, named by its commit. What each lane, line, URL and node
+# says are logic cases (tests/py/test_board.py, test_page.py, test_fleet.py, test_rail.py), and what the kit reader
+# takes from git, contract cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
 # Reads: tests/stubs-sites/ plugin/lib/board.py plugin/lib/sites.py plugin/lib/page.py plugin/lib/page.html plugin/lib/fleet.html
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 export PATH="$TESTS/stubs-sites:$PATH"
@@ -26,9 +25,6 @@ box=chuck-herdr-alpha
 ak=$(kit mac-studio willdan atlas-kit)
 export CREW_LABEL=wldn PLANNOTATOR_URL_HOST=auto PLANNOTATOR_PORT=19432-19451
 unset PLANNOTATOR_SKIP_BROWSER_OPEN PLANNOTATOR_REMOTE
-now=$(date +%s)
-shown() { python3 -c 'import sys, time; print(time.strftime(sys.argv[2], time.localtime(int(sys.argv[1]))))' "$((now - $1 * 60))" "$2"; }
-commit_at() { git -C "$2" add -A && GIT_COMMITTER_DATE="@$((now - $1 * 60)) +0000" git -C "$2" commit -qm "$3"; }
 tip() { git --git-dir "$ws" rev-parse wldn/main; }
 j() { jq -r "$1" <<<"$json"; }
 # lane <board> <heading>: the lines of one lane, up to the next heading; line_of <text> <words>: the lines holding them
@@ -38,9 +34,11 @@ st() { jq -r --arg u "$1" '[.partitions[].plans[].bolts[].units[] | select(.unit
 records() { cat "$(home_of mac-studio)"/.local/state/crew/wldn/runs/*/*.rec "$(home_of $box)"/.local/state/crew/wldn/runs/*/*.rec 2>/dev/null | wc -l; }
 
 # The flow: a signal captured from a meeting and an exploration on the kit's main; apex-zones planned and a unit
-# queued; swb-1 holding tenant-environments on the box, with a in code in a slot and its dev server running, b at
-# construct, c in verify with its report and a verify card posted before that row went (teams.17), and a fix; atl-1 holding atlas-maps on mac-studio, its unit's
-# server running there.
+# queued; swb-1 given tenant-environments through Flume on the box, where the runner's records show a's place in code,
+# b's at construct and c's in verify, and a fix launched on the bolt in code; atl-1 given atlas-maps through Flume on
+# mac-studio, its unit's place at construct there; and main-level ops's landings card for atlas-kit, raised on the box,
+# whose row has gone.
+flume_world
 w=$T/bp; clone WilldanGroup/willdan-blueprints "$w"; cap=2026-10-01-planning; mkdir -p "$w/signals/$cap"
 printf -- '---\ncapture: %s\nsource: meeting\ncaptured_by: wldn-planner\nevent_date: 2026-10-01\nsignals: 1\n---\n' "$cap" > "$w/signals/$cap/capture.md"
 printf -- '---\nsignal: %s/01-zones\nkind: ask\n---\n\nEvery apex should be a zone of its own.\n' "$cap" > "$w/signals/$cap/01-zones.md"
@@ -54,45 +52,44 @@ crew bolt new tenant-environments "Tenants hold environments." --repo switchboar
 for u in a b c; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
 crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
 crew unit add map-one "Map one." --bolt atlas-maps >/dev/null
-crew bolt give swb-1 tenant-environments >/dev/null 2>&1; crew bolt give atl-1 atlas-maps >/dev/null 2>&1
-pa=$(place "$k" tenant-environments a); change "$pa" a 1 2; commit_at 90 "$pa" "feat(a): task 1"
-pb=$(place "$k" tenant-environments b)
-pc=$(place "$k" tenant-environments c); change "$pc" c 2 2; commit_at 70 "$pc" "feat(c): done"
-reports=$(home_of $box)/.local/state/swb-1-team/reports; mkdir -p "$reports"
-rc=$reports/verify-c-$(shown 60 %Y%m%d-%H%M).md; touch -t "$(shown 60 %Y%m%d%H%M.%S)" "$rc"
-stamp=$(basename "$rc" .md); stamp=${stamp#verify-c-}
-CREW_AGENT=swb-1-conductor as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act card.post --on unit/c \
-  --field Card=req_ver-1 --field "Key=verify/c/$stamp" >/dev/null
-fix=$kd/places/fix-tenant-environments--edge; git -C "$k" worktree add -q --track -b fix/tenant-environments/edge "$fix" bolt/tenant-environments
-printf 'unit-1 unit a %s\nunit-2 unit b %s\nunit-3 unit c %s\nunit-4 fix fix/tenant-environments/edge %s\n' "$pa" "$pb" "$pc" "$fix" \
-  > "$(home_of $box)/.local/state/swb-1-team/slots"
-place "$ak" atlas-maps map-one >/dev/null
-echo $box > "$(home_of $box)/.devurl-label"; echo studio > "$(home_of mac-studio)/.devurl-label"
-printf 'unit-a--switchboard-kit\nbolt-tenant-environments--switchboard-kit\n' > "$(home_of $box)/.portless-routes"
-printf 'unit-map-one--atlas-kit\n' > "$(home_of mac-studio)/.portless-routes"
+crew bolt give swb-1 tenant-environments >/dev/null; crew bolt give atl-1 atlas-maps >/dev/null
+crew fix swb-1 edge "The edge answers an object." >/dev/null
+# live <place> <stage> [<ticked> <total>]: Flume's status of a live place at that stage, begun, with its tasks, as the
+# runner carries it (tests/py/flume-0.3.6/code.json, trimmed to what crew reads)
+live() {
+  python3 -c 'import json, sys
+place, at = sys.argv[1:3]; n = [int(x) for x in sys.argv[3:5]]
+p = {"place": place, "phase": "live", "current": at, "stages": [{"name": at, "state": "begun"}]}
+if n:
+    p["tasks"] = [{"text": f"1.{i + 1} task {i + 1}", "ticked": i < n[0], "group": 0} for i in range(n[1])]
+print(json.dumps({"status": {"places": [p]}}))' "$@"
+}
+pa=$kd/places/change--a pb=$kd/places/change--b pc=$kd/places/change--c pf=$kd/places/fix--tenant-environments--edge
+runner_writes $box "$(request_of unit/a)" "$pa" "$(live "$pa" code 1 2)" "$(request_of unit/b)" "$pb" "$(live "$pb" construct)" \
+  "$(request_of unit/c)" "$pc" "$(live "$pc" verify 2 2)" "$(request_of fix/tenant-environments/edge)" "$pf" "$(live "$pf" code)"
+pm=$(dirname "$ak")/places/change--map-one
+runner_writes mac-studio "$(request_of unit/map-one)" "$pm" "$(live "$pm" construct)"
+CREW_AGENT=wldn-ops as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act card.post --on kit/atlas-kit \
+  --field Card=req_lnd-1 --field Key=land/atlas-kit >/dev/null
 
 : > "$CREW_TEST_LOG"
 expect_ok crew bolts --json; json=$out
 eq "$(grep -c ' ssh chuck-herdr-alpha ' "$CREW_TEST_LOG")" "1"
 eq "$(st a) $(st b) $(st c) $(st map-one) $(st zone-one)" "code construct verify construct ready"
-eq "$(j '.partitions[0].plans[0].bolts[] | select(.bolt == "tenant-environments") | "\(.team) \(.host) \(.state) \(.fixes[0].fix)"')" \
-  "swb-1 $box active fix/tenant-environments/edge"
+eq "$(j '.partitions[0].plans[0].bolts[] | select(.bolt == "tenant-environments") | "\(.team) \(.host) \(.state) \(.stream) \(.fixes[0].fix) \(.fixes[0].flume.stage)"')" \
+  "swb-1 $box active wldn fix/tenant-environments/edge code"
 eq "$(j '.partitions[0].plans[0].queue[0] | "\(.unit) \(.stage)"')" "later queued"
 expect_ok crew bolts
-has "$out" "  a                                        code 1/2     places/a"
+has "$out" "  a                                        code 1/2     flume/change--a"
 : > "$CREW_TEST_LOG"; expect_ok crew bolts apex-zones
 has "$out" "apex-zones  switchboard-kit  no team  planned"; lacks "$out" "tenant-environments"
 eq "$(grep -c ' ssh ' "$CREW_TEST_LOG" || true)" "0"
-ok "crew bolts reads each unit's stage from its kit, one ssh for the host holding a bolt, and none for a planned bolt alone"
+ok "crew bolts reads each unit's and fix's stage from the runner's records, one ssh for the host holding a bolt, and none for a planned bolt alone"
 
 expect_ok crew sites wldn --json; json=$out
-te='.partitions[0].hosts[] | select(.host == "chuck-herdr-alpha") | .bolts[0]'
-eq "$(j "$te | .units[] | select(.unit == \"a\") | .url")" "https://unit-a--switchboard-kit--$box.dev.swancloud.net"
-eq "$(j "$te | .units[] | select(.unit == \"b\") | .url")" "null"
-eq "$(j '.partitions[0].hosts[] | select(.host == "mac-studio") | .bolts[0].units[0].url')" "https://unit-map-one--atlas-kit.local"
-expect_ok crew sites wldn; has "$out" "places/b"; has "$out" "no server running"
-HOST=$box expect_ok crew sites wldn; has "$out" "unit-map-one--atlas-kit--studio.dev.swancloud.net  (open from a Mac)"
-ok "crew sites gives each running dev server's URL as it opens from where it is asked, and none where none runs"
+eq "$(j '[.partitions[0].hosts[] | "\(.host) \([.bolts[] | "\(.bolt) \(.team)"] | join(", "))"] | join("; ")')" \
+  "$box tenant-environments swb-1; mac-studio atlas-maps atl-1"
+ok "crew sites lists each held bolt under the host that builds it"
 
 s1=$(printf 'a%.0s' $(seq 40))
 expect_ok crew ops offer mac-studio --label wldn --from none --to "$s1"
@@ -104,8 +101,9 @@ has "$(lane "$b" Inception)" "Every apex should be a zone of its own."
 has "$(lane "$b" Inception)" "exploration  switchboard-kit command-cost"
 eq "$(line_of "$(lane "$b" "Bolt plan")" "zone-one")" "    zone-one  ready"
 con=$(lane "$b" Construction)
-eq "$(line_of "$con" "  a  ")" "    a  code 1/2  unit-1  https://unit-a--switchboard-kit--$box.dev.swancloud.net"
-eq "$(line_of "$con" "  c  ")" "    c  verify 2/2  unit-3"
+has "$(line_of "$con" "tenant-environments")" "swb-1 on $box  in Flume stream wldn"
+eq "$(line_of "$con" "  a  ")" "    a  code 1/2"
+eq "$(line_of "$con" "  c  ")" "    c  verify 2/2"
 lacks "$b" $'\033'
 CREW_LABEL= expect_ok crew board
 eq "$(grep -oE '^[a-z]+ board, as of' <<<"$out" | tr '\n' '|')" "wldn board, as of|madswan board, as of|swancloud board, as of|"
@@ -113,7 +111,7 @@ expect_ok crew board --label wldn --json; json=$out
 eq "$(j 'keys | join(" ")')" "from partitions read_at unread"
 eq "$(j '.partitions[0].plan')" "$before"
 eq "$(tip) $(records)" "$before $n"; eq "$(git -C "$k" status --porcelain)" ""
-ok "crew board draws the lanes from the plan, the signals, the kits, their servers and the cards, one board per partition outside any agent, and writes nothing"
+ok "crew board draws the lanes from the plan, the signals, the kits, the runners' records and the cards, one board per partition outside any agent, and writes nothing"
 
 # The host's follower and the rail and board tabs: the card session of a proposal of more than fifteen new units,
 # started ten minutes ago, whose row went when the proposal was dropped. crew board leaves it; the follower's round,
@@ -175,9 +173,9 @@ aged() { jq -S 'del(.read_at, (.partitions[].construction[].time | .age, .shares
 unaged() { sed -E 's/  (<1m|[0-9]+m|[0-9]+h [0-9]{2}m|[0-9]+d [0-9]{2}h)(: [^;]*)?; /  AGE; /'; }
 eq "$(aged < "$frame")" "$(crew board --label wldn --json | aged)"
 agents=$(home_of mac-studio)/.cache/crew/board/wldn.agents.json
-eq "$(jq -r '.read_at' "$agents") $(jq -r '.views | has("swb-1-conductor") and has("wldn-planner")' "$agents")" "$(jq -r '.read_at' "$frame") true"
-has "$(jq -r '.cards["swb-1-conductor"][0] | map(.[0]) | join("")' "$agents")" "  your card  verify/c/$stamp  req_ver-1  open "
-has "$rail" "verify/c/$stamp (wldn), asked by swb-1-conductor on $box"$'\n'"    left:   a rail read on $box closes it, under that host's sign-in"
+eq "$(jq -r '.read_at' "$agents") $(jq -r '.views | has("wldn-ops") and has("wldn-planner")' "$agents")" "$(jq -r '.read_at' "$frame") true"
+has "$(jq -r '.cards["wldn-ops"][0] | map(.[0]) | join("")' "$agents")" "  your card  land/atlas-kit  req_lnd-1  open "
+has "$rail" "land/atlas-kit (wldn), asked by wldn-ops on $box"$'\n'"    left:   a rail read on $box closes it, under that host's sign-in"
 expect_ok crew _board wldn --once
 eq "$(tail -n +2 <<<"$out" | unaged)" "$(crew board --label wldn | tail -n +2 | unaged)"
 ok "the host's follower, with no tab open, writes each partition's frames there from one read, one fetch of the state branch and one read of each host's kits, the rail the rail tab draws as crew rail prints it, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view and open cards beside it"
@@ -188,9 +186,8 @@ ok "the host's follower, with no tab open, writes each partition's frames there 
 # asks the box for its stamps alone; a plan write on mac-studio is shown at the next look, with nothing fetched and no
 # kit gathered; a reading's result written on mac-studio, as plannotator writes the one the user sends back, has
 # mac-studio's card sessions swept at the next look, the box's not, and nothing gathered; a write to sluice's folder in
-# the box's kit moves nothing at the next tick; a merge of unit a queued in sluice, its watch printing a new line, puts
-# the submission's number on a's row at the next look, with nothing gathered and no sluice run but the watches; and a
-# dev server started on the box shows on b's line after the next tick, with nothing gathered.
+# the box's kit moves nothing at the next tick; and a merge of unit a queued in sluice, its watch printing a new line,
+# puts the submission's number on a's row at the next look, with nothing gathered and no sluice run but the watches.
 # written: each partition's rail, board and agents' frames by their files, and rewritten, a round whose every frame is
 # new, so its reads are over before the next are counted: a round goes on past wldn's rail, to swancloud's frames and,
 # at its first write of each partition, a read of crew's version (board.here_read)
@@ -248,17 +245,8 @@ until_ok queued || fail "the watch's new line did not put the submission on a's 
 eq "$(reads mac-studio gather) $(reads $box gather) $(reads mac-studio fetch)" "0 0 0"
 eq "$(grep ' sluice ' "$CREW_TEST_LOG" | grep -vc ' overview --json --watch' || true)" "0"
 expect_ok crew _board wldn --once; has "$(line_of "$out" "  a  ")" "#41 under test"
-was=$(written); : > "$T/reads.log"
-eq "$(unit_of b | jq -r .url)" "null"
-echo unit-b--switchboard-kit >> "$(home_of $box)/.portless-routes"
-kill -USR1 "$fol"
-until_ok rewritten "$was" || fail "the follower's tick after the dev server started wrote no frame: $(cat "$T/follower")"
-served() { [[ $(unit_of b | jq -r .url) == "https://unit-b--switchboard-kit--$box.dev.swancloud.net" ]]; }
-until_ok served || fail "the dev server started on the box is not on b's line: $(unit_of b)"
-eq "$(reads mac-studio gather) $(reads $box gather)" "0 0"
-proposed || fail "the rail lost its words at the tick: $(railtext)"
 kill "$fol"; wait "$fol" 2>/dev/null || true
-ok "the running follower's first read runs no sluice status, its tick with nothing moved starts no git and no gather on mac-studio and asks the box for its stamps alone, a plan write on mac-studio is shown at its next look with nothing fetched and no kit gathered, a reading sent back there has mac-studio's card sessions swept and nothing gathered, a write to sluice's folder moves nothing, a merge queued in sluice is on its row from the kit's overview watch with nothing gathered, and a dev server started on the box shows after the next tick with nothing gathered"
+ok "the running follower's first read runs no sluice status, its tick with nothing moved starts no git and no gather on mac-studio and asks the box for its stamps alone, a plan write on mac-studio is shown at its next look with nothing fetched and no kit gathered, a reading sent back there has mac-studio's card sessions swept and nothing gathered, a write to sluice's folder moves nothing, and a merge queued in sluice is on its row from the kit's overview watch with nothing gathered"
 
 # crew page: the page written whole under the partition's state folder, its path and header printed, nothing
 # appended; a node's history on it, and its dock's, is what crew trace prints.
@@ -339,13 +327,14 @@ eq "$(j '.unread_usage[0].file')" "$usage/$box.json"
 eq "$(records)" "$n"
 ok "crew page --fleet shows the use each host published by subscription, and names a published file it cannot read"
 
-# The box asleep: every view names it and shows the rest.
+# The box asleep: every view names it and shows the rest, a's stage among it, read from the runner's records on the
+# state branch and not from the box.
 echo $box > "$T/down"
 expect_ok crew bolts; has "$out" "$box did not answer"; has "$out" "  map-one"
 expect_ok crew board --label wldn
 has "$(lane "$out" attention)" "! $box did not answer (its kits: "; lacks "$(lane "$out" attention)" "run record"
-eq "$(line_of "$(lane "$out" Construction)" "  a  ")" "    a  unknown"
-expect_ok crew sites wldn; has "$out" "$box  did not answer"; has "$out" "unit-map-one--atlas-kit.local"
+eq "$(line_of "$(lane "$out" Construction)" "  a  ")" "    a  code 1/2"
+expect_ok crew sites wldn; has "$out" "$box  did not answer"; has "$out" $'  mac-studio\n    atlas-maps'
 expect_ok crew page wldn; has "$(sed -n 3p <<<"$out")" "$box did not answer"
 expect_ok crew page --fleet; has "$out" "wldn: $box did not answer (its kits: "
 eq "$(block "$fleet" | jq -r --arg h $box '.partitions[0].hosts[] | select(.host == $h) | .answered')" "false"
