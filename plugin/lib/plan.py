@@ -5403,9 +5403,13 @@ def may_write(fleet, key, a):
     conductor narrows, orders and sets dependencies within the bolt its team holds (checked once its unit is found),
     and marks a unit of it amended by running construct again (run_check); the design agent queues; a dispatcher
     gives bolts; the main level's ops lands them. A chore's commands are written by the same hands as the unit's of the
-    same name (plan.11). Any other plan write by an agent crew started is refused, naming the planner."""
+    same name (plan.11). Any other plan write by an agent crew started is refused, naming the planner. A command that
+    writes a request for a runner, crew answer and crew main fix, is its own row of the table (may_request), as crew
+    fix is once it finds its bolt given through Flume (flume_fix)."""
     name = os.environ.get("CREW_AGENT")
     kind, of = role(fleet, name)
+    if " ".join(k for k in key if k) in REQUESTERS:
+        return may_request(fleet, " ".join(k for k in key if k))
     if key not in PLAN_WRITES or kind == "user":
         return
     cmd, as_unit = " ".join(key), ("unit", key[1]) if key[0] == "chore" else key
@@ -5417,6 +5421,28 @@ def may_write(fleet, key, a):
         return
     fail(f"{name} does not write the plan with crew {cmd}" + (" --bolt" if as_unit == ("unit", "add") and a.bolt else "")
          + f": tell {planner_of(fleet, kind, of)}, who proposes it")
+
+
+# The commands that write a request for a runner beyond the plan writes the role table already lets their callers run
+# (Decision 16 of teams-cross-to-flume-as-their-bolts-land, roles.1), each with the roles besides the user who may run
+# it, the first the one to tell: crew answer, crew fix of a bolt given through Flume, and crew main fix, its --send
+# among it, which ops runs only on the user's word (roles.2).
+REQUESTERS = {"answer": ("planner", "design", "main-ops"), "fix": ("planner", "main-ops"), "main fix": ("main-ops",)}
+ROLE_SAID = {"planner": "the planner", "design": "the design agent", "main-ops": "main-level ops"}
+
+
+def may_request(fleet, what):
+    """Who writes a request crew <what> appends (REQUESTERS; Decision 16 of teams-cross-to-flume-as-their-bolts-land):
+    the user, and the roles the table names for it; any other agent crew started is refused, naming who runs it and
+    the one of them to tell. A request's By names who ran it (plan.request)."""
+    name = os.environ.get("CREW_AGENT")
+    kind, of = role(fleet, name)
+    if kind == "user" or kind in REQUESTERS[what]:
+        return
+    label = fleet["teams"][of]["label"] if kind in ("conductor", "team") else of
+    first = REQUESTERS[what][0]
+    to = f"{label}-{'ops' if first == 'main-ops' else first}" if label in fleet["partitions"] else f"the partition's {ROLE_SAID[first].removeprefix('the ')}"
+    fail(f"{name} does not run crew {what}: " + ", ".join(ROLE_SAID[r] for r in REQUESTERS[what]) + f" and the user do; tell {to}")
 
 
 # ----------------------------------------------------------------------------------- plan commands, as ops
@@ -11793,6 +11819,7 @@ def flume_fix(fleet, t, a):
     t = crew.with_kit(t, plan.bolt(bolt).get("Repo"))
     on, act, seen = [f"fix/{bolt}/{a.name}", f"bolt/{bolt}"], {"start": "fix.start", "merge": "fix.merge", "drop": "fix.drop"}.get(a.mode), {}
     try:
+        may_request(fleet, "fix")
         a.mode not in ("merge", "wait") or fail(runner.fix_flume_refusal(a.mode, t["name"], bolt, a.name))
 
         def change(w):

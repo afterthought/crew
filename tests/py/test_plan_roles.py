@@ -55,3 +55,38 @@ def test_a_conductor_writes_only_units_of_its_own_bolt(monkeypatch):
     assert [u.name() for u in w.plan.units_of("tenant-environments")] == ["b", "a"]
     with pytest.raises(plan.Refusal, match="swb-1-conductor writes only units and chores of the bolt swb-1 holds, and c is in bolt console-pages: tell wldn-planner"):
         apply(w, "unit order c --first", ctx=known(w))
+
+
+@pytest.mark.parametrize("agent, key", [
+    ("wldn-planner", ("answer", None)), ("wldn-design", ("answer", None)), ("wldn-ops", ("answer", None)), ("chuck@mac-studio", ("answer", None)),
+    ("wldn-ops", ("main", "fix")), ("chuck@mac-studio", ("main", "fix"))])
+def test_the_planner_design_and_ops_answer_a_crossed_place_and_ops_fixes_main(monkeypatch, agent, key):
+    """Decision 16 of teams-cross-to-flume-as-their-bolts-land: crew answer is the planner's, the design agent's,
+    main-level ops's and the user's; crew main fix, its --send among it, main-level ops's and the user's."""
+    assert may(monkeypatch, agent, key) is None
+
+
+@pytest.mark.parametrize("agent, key, said", [
+    ("swb-1-conductor", ("answer", None), "swb-1-conductor does not run crew answer: the planner, the design agent, main-level ops and the user do; tell wldn-planner"),
+    ("wldn-dispatch-chuck-herdr-alpha", ("answer", None), "wldn-dispatch-chuck-herdr-alpha does not run crew answer: the planner, the design agent, main-level ops and the user do; tell wldn-planner"),
+    ("wldn-operator", ("answer", None), "wldn-operator does not run crew answer: the planner, the design agent, main-level ops and the user do; tell wldn-planner"),
+    ("wldn-planner", ("main", "fix"), "wldn-planner does not run crew main fix: main-level ops and the user do; tell wldn-ops"),
+    ("swb-1-ops", ("main", "fix"), "swb-1-ops does not run crew main fix: main-level ops and the user do; tell wldn-ops"),
+    ("stranger", ("answer", None), "stranger does not run crew answer: the planner, the design agent, main-level ops and the user do; tell the partition's planner")])
+def test_any_other_caller_of_a_request_is_refused_naming_who_runs_it(monkeypatch, agent, key, said):
+    assert may(monkeypatch, agent, key) == said
+
+
+@pytest.mark.parametrize("agent, said", [
+    ("wldn-planner", None), ("wldn-ops", None), ("chuck@mac-studio", None),
+    ("wldn-design", "wldn-design does not run crew fix: the planner, main-level ops and the user do; tell wldn-planner"),
+    ("swb-1-conductor", "swb-1-conductor does not run crew fix: the planner, main-level ops and the user do; tell wldn-planner")])
+def test_a_fix_on_a_crossed_teams_bolt_is_the_planners_ops_or_the_users(monkeypatch, agent, said):
+    """crew fix of a bolt given through Flume is checked once its bolt is found (plan.flume_fix)."""
+    monkeypatch.setenv("CREW_AGENT", agent)
+    try:
+        plan.may_request(FLEET, "fix")
+        got = None
+    except plan.Refusal as e:
+        got = str(e)
+    assert got == said
