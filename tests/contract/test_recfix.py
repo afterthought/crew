@@ -141,16 +141,20 @@ def test_requests_of_every_act_pass_and_the_descriptor_refuses_what_it_does_not_
 
 
 def test_a_runners_branch_files_pass_by_their_descriptors_and_an_outcome_they_do_not_allow_is_refused():
-    """What a runner writes on <label>/runner/<host>, as crew reads it (runner.RUNNER, ANSWERS, PLACES; plan.runners
-    checks each by recfix before host_read reads it): the runner's record, an answer per request and a place whose
-    Status is Flume's answer on one line pass; an Outcome the enum does not hold is refused."""
+    """What a runner writes on <label>/runner/<host>, as crew reads it (runner.RUNNER, ANSWERS, PLACES, RUNS; plan.runners
+    checks each by recfix before host_read reads it): the runner's record, an answer per request, a place whose Status
+    is Flume's answer on one line and, after the places, a role's run keyed by its address, one holding only the
+    runner's words, pass; an Outcome the enum does not hold is refused."""
     status = json.dumps({"status": {"places": [{"place": "/kit/places/change--a", "phase": "live"}], "host": {}}})
     files = {"runner.rec": runner.RUNNER + "\nHost: deneb\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n",
              "answers.rec": runner.ANSWERS + "\nRequest: 1\nOutcome: launched\nPlace: /kit/places/change--a\nAt: 2026-10-31T12:01:00Z\n"
                             "\nRequest: 2\nOutcome: held\nAt: 2026-10-31T12:01:00Z\n",
-             "places.rec": runner.PLACES + f"\nRequest: 1\nPlace: /kit/places/change--a\nAt: 2026-10-31T12:02:00Z\nStatus: {status}\n"}
+             "places.rec": runner.PLACES + f"\nRequest: 1\nPlace: /kit/places/change--a\nAt: 2026-10-31T12:02:00Z\nStatus: {status}\n"
+                           "\n" + runner.RUNS + "\nAddress: madswan/design\nAt: 2026-10-31T12:03:00Z\nWords: no stream madswan-main\n"
+                           f"\nAddress: madswan/planner\nPlace: /flume/places/crew-planner--madswan\nAt: 2026-10-31T12:03:00Z\nStatus: {status}\n"}
     plan.checked(files)
     assert json.loads(plan.Plan(files["places.rec"]).recs("Place")[0].get("Status")) == json.loads(status)
+    assert [r.get("Address") for r in plan.Plan(files["places.rec"]).recs("Run")] == ["madswan/design", "madswan/planner"]
     with pytest.raises(Refusal, match="^answers.rec fails recfix --check"):
         plan.checked({"answers.rec": files["answers.rec"].replace("Outcome: held", "Outcome: queued")})
 

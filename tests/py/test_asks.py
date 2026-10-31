@@ -420,28 +420,23 @@ Began: 2026-10-31T10:01:00Z
 
 
 class Branch:
-    """madswan's flywheel branch as a run's start and end see it: its files, each write applied to them, and the entries
-    each write emitted."""
+    """madswan's flywheel branch as a role command sees it: its files, each write applied to them, and the entries each
+    write emitted."""
 
     def __init__(self, files):
         self.files, self.writes, self.entries = dict(files), [], []
 
 
-@pytest.fixture
-def in_run(monkeypatch, tmp_path):
-    """A command run in madswan's planner's run on deneb (FLUME_PLACE crew-planner--madswan), its writes applied to a
-    branch in memory, its brief kept under tmp_path and its cards read through run_cards_said, which a case steers."""
+def on_branch(monkeypatch, fleet, files):
+    """madswan's flywheel branch in memory holding files, each write of a command on deneb applied to it and each
+    entry it emitted kept (Branch)."""
     import crew
     import plan
     import record
-    fleet = {"partitions": {"madswan": madswan(planner="madswan-main")}, "teams": {}, "hosts": {}}
-    monkeypatch.setenv("FLUME_PLACE", "/home/u/.local/state/flume/places/crew-planner--madswan")
     monkeypatch.delenv("CREW_AGENT", raising=False)
     monkeypatch.setattr(crew, "load", lambda: fleet)
     monkeypatch.setattr(crew, "this_host", lambda: "deneb")
-    monkeypatch.setattr(crew, "brief", lambda fleet, scope, role, self_name="": f"the {role} brief of {scope} for {self_name}")
-    monkeypatch.setattr(record, "ROOT", tmp_path / "state")
-    b = Branch({"asks.rec": TAKEN})
+    b = Branch(files)
     monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("afterthought/madswan-state", f"{label}/main"))
     monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(""))
     monkeypatch.setattr(plan, "show", lambda repo, tip, path: b.files.get(path))
@@ -456,8 +451,23 @@ def in_run(monkeypatch, tmp_path):
     monkeypatch.setattr(record, "emit", lambda label, act, on=(), frm=(), commit=(), why=None, eid=None, by=None, **f:
                         b.entries.append((act, list(on), why, f)))
     monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
-    monkeypatch.setattr(plan, "run_cards_said", lambda fleet, label, run: [f"cards read as {run}"])
     b.fleet = fleet
+    return b
+
+
+@pytest.fixture
+def in_run(monkeypatch, tmp_path):
+    """A command run in madswan's planner's run on deneb (FLUME_PLACE crew-planner--madswan), its writes applied to a
+    branch in memory, its brief kept under tmp_path and its cards read through run_cards_said, which a case steers."""
+    import crew
+    import plan
+    import record
+    fleet = {"partitions": {"madswan": madswan(planner="madswan-main")}, "teams": {}, "hosts": {}}
+    monkeypatch.setenv("FLUME_PLACE", "/home/u/.local/state/flume/places/crew-planner--madswan")
+    b = on_branch(monkeypatch, fleet, {"asks.rec": TAKEN})
+    monkeypatch.setattr(crew, "brief", lambda fleet, scope, role, self_name="": f"the {role} brief of {scope} for {self_name}")
+    monkeypatch.setattr(record, "ROOT", tmp_path / "state")
+    monkeypatch.setattr(plan, "run_cards_said", lambda fleet, label, run: [f"cards read as {run}"])
     return b
 
 
@@ -665,3 +675,119 @@ class TestRunCards:
         assert plan.run_cards_said(None, "madswan", "madswan-planner") == [
             "Your cards could not be read in Pending You as madswan-planner: Pending You refused list_pending: signed out. Call "
             "list_pending as madswan-planner yourself, and act on what the user answered."]
+
+
+RUN_PLACE = "/home/u/.local/state/flume/places/crew-design--madswan"
+
+
+def ran(address="madswan/design", phase="live", place=RUN_PLACE, words=None, raw=None):
+    """A role's run as places.rec holds it (runner.RUNS): its place and Flume's status of it, a phase of None for a run
+    the runner could launch none of, which holds its words and no place."""
+    at = f"\nAddress: {address}\n" + (f"Place: {place}\n" if phase else "") + "At: 2026-10-31T12:02:00Z\n"
+    told = raw if raw is not None else status(place=place, phase=phase) if phase else None
+    return at + (f"Status: {told}\n" if told else "") + (f"Words: {words}\n" if words else "")
+
+
+def runner_on(runs="", host="deneb"):
+    """A host's runner as plan.runners reads it, its places.rec holding no place launched for a request and the runs."""
+    import plan
+    import runner
+    files = {"runner.rec": plan.Plan(runner.RUNNER + f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n"),
+             "answers.rec": plan.Plan(runner.ANSWERS), "places.rec": plan.Plan(runner.PLACES + "\n" + runner.RUNS + runs)}
+    return {host: runner.host_read("madswan", host, "5e1f0c2a" + "0" * 32, files, {})}
+
+
+class TestRoleRun:
+    """A role's run as the runner's records on its host show it (R4; runner.role_run): live while its place reads live
+    or making, and crew can't tell where the runner or the run's status can't be read (read.1)."""
+
+    def test_a_run_whose_place_reads_live_or_making_is_live_and_one_tidied_or_never_launched_is_not(self):
+        import runner
+        tidied = {"tidied": {"over": "done", "at": 1793474400, "pending_for": []}}
+        live, making = (runner.role_run(runner_on(ran(phase=p))["deneb"], "madswan/design") for p in ("live", "making"))
+        assert (live["live"], live["place"], making["live"]) == (True, RUN_PLACE, True)
+        gone = runner_on(ran(phase=tidied, raw=status(place=f"{RUN_PLACE}@1793474400", phase=tidied)))["deneb"]
+        assert runner.role_run(gone, "madswan/design") == {"live": False, "place": RUN_PLACE, "words": None, "why": None}
+        refused = runner_on(ran(phase=None, words="flume refused the launch: no stream madswan-main"))["deneb"]
+        assert runner.role_run(refused, "madswan/design") == {"live": False, "place": None, "words": "flume refused the launch: no stream madswan-main", "why": None}
+        assert runner.role_run(runner_on(ran())["deneb"], "madswan/planner")["live"] is False
+
+    def test_a_runner_or_a_status_crew_cant_read_cant_tell(self):
+        import runner
+        assert runner.role_run(runner.of_host({}, "madswan", "deneb"), "madswan/design")["why"] == "no runner answers on deneb: madswan/runner/deneb does not exist"
+        bad = runner.role_run(runner_on(ran(raw="{not json"))["deneb"], "madswan/design")
+        assert bad["live"] is None and bad["why"].startswith("madswan/runner/deneb at 5e1f0c2: places.rec's status of the run of madswan/design is no JSON (")
+        assert runner_on(ran() + ran())["deneb"]["why"] == "deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: places.rec holds the run of madswan/design twice"
+
+
+@pytest.fixture
+def opening(monkeypatch):
+    """The user at deneb running crew role open, madswan's design agent and planner running as their kinds and its ops
+    standing: madswan's branch in memory and deneb's runner as a case sets it (reads)."""
+    import getpass
+    import plan
+    fleet = {"partitions": {"madswan": madswan(design="madswan-main", planner="madswan-main")}, "teams": {}, "hosts": {}}
+    b = on_branch(monkeypatch, fleet, {})
+    monkeypatch.delenv("CREW_LABEL", raising=False)
+    monkeypatch.setattr(getpass, "getuser", lambda: "chuck")
+    b.reads = runner_on()
+    monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], b.reads))
+    return b
+
+
+def open_role(b, role="design", label="madswan"):
+    import argparse
+    import plan
+    plan.role_open(b.fleet, argparse.Namespace(role=role, label=label))
+
+
+class TestOpen:
+    """crew role open (design Decision 13; role-runs "The user opens a role to talk")."""
+
+    def test_with_no_run_live_an_open_ask_from_the_user_is_written_naming_the_place_it_opens_as(self, opening, capsys):
+        """role-runs, No run live."""
+        open_role(opening)
+        (got,), turns = asks.parse(opening.files["asks.rec"])
+        assert (got["Role"], got["From"], got["What"], turns) == ("design", "chuck@deneb", "open", [])
+        assert "Words" not in got and "Key" not in got
+        assert [r["Role"] for r in asks.parse_roles(opening.files["roles.rec"])] == ["design"]
+        assert len(opening.writes) == 1 and opening.writes[0].startswith("ask(madswan-design): open from chuck@deneb")
+        assert opening.entries == [("ask", ["agent/madswan-design"], "ask madswan-design: open", {"Chars": None})]
+        assert capsys.readouterr().out.endswith("\nasked madswan-design to open: its run opens as the place crew-design--madswan in herdr "
+                                                "on deneb once the runner there makes it, and greets you in its pane\n")
+
+    def test_a_run_live_writes_nothing_and_names_its_place(self, opening, capsys):
+        """role-runs, A run live."""
+        opening.reads = runner_on(ran())
+        open_role(opening)
+        assert opening.files == {} and opening.writes == [] and opening.entries == []
+        assert capsys.readouterr().out == (f"madswan-design's run is live on deneb, the place {RUN_PLACE}: talk to it there now, as "
+                                           "crew-design--madswan in herdr; nothing is written\n")
+
+    def test_a_run_over_is_asked_again_and_a_launch_the_runner_could_not_make_is_said(self, opening, capsys):
+        opening.reads = runner_on(ran(phase=None, words="flume refused the launch: no stream madswan-main"))
+        open_role(opening)
+        assert [a["What"] for a in asks.parse(opening.files["asks.rec"])[0]] == ["open"]
+        assert capsys.readouterr().out.endswith("the runner on deneb could not launch madswan-design's last run: flume refused the launch: no stream madswan-main\n")
+
+    @pytest.mark.parametrize("reads, why", [
+        ({}, "no runner answers on deneb: madswan/runner/deneb does not exist"),
+        (runner_on(host="alpha"), "no runner answers on deneb: madswan/runner/deneb does not exist"),
+        (runner_on(ran(raw="{not json")), "madswan/runner/deneb at 5e1f0c2: places.rec's status of the run of madswan/design is no JSON (")])
+    def test_a_runner_crew_cant_read_on_the_roles_host_refuses_and_writes_nothing(self, opening, reads, why):
+        """role-runs, The user opens a role to talk: "Where those records cannot be read, it SHALL refuse"."""
+        import crew
+        opening.reads = reads
+        with pytest.raises(crew.Refusal) as e:
+            open_role(opening)
+        assert str(e.value).startswith(f"crew can't tell whether a run of madswan-design is live: {why}") and str(e.value).endswith("; nothing is written")
+        assert opening.files == {} and opening.writes == []
+
+    def test_a_role_that_stands_or_no_partition_named_is_refused(self, opening):
+        import crew
+        with pytest.raises(crew.Refusal, match="^madswan runs its ops as a standing agent, madswan-ops, in its tab of crew main up madswan: "
+                                               "crew role open opens only a role its partition runs as its kind; nothing is written$"):
+            open_role(opening, role="ops")
+        with pytest.raises(crew.Refusal, match="^which partition's design\\? add --label madswan$"):
+            open_role(opening, label=None)
+        assert opening.files == {}

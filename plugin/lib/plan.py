@@ -6571,6 +6571,33 @@ def role_end(fleet, a):
     print(f"turn {ended['turn']['Turn']} of {run} is ended, and its report is {report}.")
 
 
+def role_open(fleet, a):
+    """crew role open <role> [--label L], the user opening a role that runs as its kind to talk with its run (design
+    Decision 13; role-runs "The user opens a role to talk"): an `open` ask of the role from whoever runs it, in a commit
+    of its own (ask_write), saying its run opens as the place crew-<role>--<label> on the main level's host once the
+    runner there makes it, with the runner's words where its last launch of the run was refused. Where the runner's
+    records on that host show a run of the role live (runner.role_run), nothing is written and that run's place is named
+    to talk to now; where they can't be read, it refuses naming what it could not read, writing nothing (read.1), as it
+    does for a role the partition runs as a standing agent."""
+    label = default_label(fleet, a) or fail(f"which partition's {a.role}? add --label " + "|".join(fleet["partitions"]))
+    run, host, place = f"{label}-{a.role}", crew.partition_of(fleet, label)["machine"], f"crew-{a.role}--{label}"
+    if crew.role_stream(fleet, label, a.role) is False:
+        fail(f"{label} runs its {a.role} as a standing agent, {run}, in its tab of crew main up {label}: crew role open opens "
+             "only a role its partition runs as its kind; nothing is written")
+    _, reads = runner_facts(fleet, label)
+    r = runner.role_run(runner.of_host(reads, label, host), f"{label}/{a.role}")
+    if r["why"]:
+        fail(f"crew can't tell whether a run of {run} is live: {r['why']}; nothing is written")
+    if r["live"]:
+        print(f"{run}'s run is live on {host}, the place {r['place']}: talk to it there now, as {place} in herdr; nothing is written")
+        return
+    ask_write(fleet, label, a.role, "open", record.who())
+    print(f"asked {run} to open: its run opens as the place {place} in herdr on {host} once the runner there makes it, "
+          "and greets you in its pane")
+    if r["words"]:
+        print(f"the runner on {host} could not launch {run}'s last run: {r['words']}")
+
+
 # --------------------------------------------------------------------------------------------- proposals
 
 PROPOSALS = """\
@@ -18970,6 +18997,9 @@ def parser(cls=argparse.ArgumentParser, only=None):
     v = ro.add_parser("end")
     v.add_argument("words")
     v.add_argument("--report", required=True)
+    v = ro.add_parser("open")
+    v.add_argument("role", choices=crew.KIND_ROLES)
+    v.add_argument("--label")
     v = sub.add_parser("main").add_subparsers(dest="sub", required=True).add_parser("fix")  # up, down and status are _main's
     v.add_argument("kit")
     v.add_argument("name")
@@ -19294,7 +19324,7 @@ COMMANDS = {
     ("card", "preview"): card_preview, ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
     ("card", "read"): card_read, ("card", "answer"): batch_answer,
     ("record", None): record_status, ("answer", None): answer, ("main", "fix"): main_fix,
-    ("role", "start"): role_start, ("role", "end"): role_end,
+    ("role", "start"): role_start, ("role", "end"): role_end, ("role", "open"): role_open,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit, ("bolt", "leave"): bolt_leave,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),

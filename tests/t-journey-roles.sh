@@ -7,8 +7,10 @@
 # takes both asks of it in one turn, writes its brief to the host's file and prints it, each ask and the card the user
 # answered in its name, read from Pending You as madswan-planner; an ask written after the start is not the turn's; crew
 # role end, as the turn's prompt names it, answers the turn and writes the report; and outside a run each is refused.
-# What a tell decides, the ask's fields and what a start takes and prints are logic cases (tests/py/test_tell_asks.py,
-# test_asks.py); each step here checks a command's wiring once.
+# The user opens madswan's design agent: with no run of it in mac-studio's runner's records, an open ask from the user
+# naming the place its run opens as; with one live there, nothing written and the run's place named.
+# What a tell decides, the ask's fields, what a start takes and prints and what an open reads of the runner are logic
+# cases (tests/py/test_tell_asks.py, test_asks.py); each step here checks a command's wiring once.
 # Reads: plugin/flume/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -85,3 +87,34 @@ CREW_AGENT=madswan-planner expect_fail "crew role start runs only in a run of a 
 expect_fail "crew role end runs only in a run of a crew role" crew role end --report "$T/elsewhere.md" "done"
 eq "$(git --git-dir "$ms" rev-parse madswan/main)" "$t0"; [[ -e $T/elsewhere.md ]] && fail "an end outside a run wrote a report"
 ok "a start and an end outside a role's run are refused and write nothing"
+
+# The user opens madswan's design agent, which runs as its kind, while mac-studio's runner shows no run of it: an open
+# ask from the user, naming the place its run opens as. The runner's branch is its own, written here as a runner would.
+role_stream madswan design madswan-main
+runner_commit() {  # runner_commit <message> [<places.rec>]: mac-studio's runner's branch on madswan's state, with the files given
+  local tree runner_rec
+  runner_rec=$(printf '%%rec: Runner\n%%key: Host\n%%type: Since date\n%%mandatory: Host Version Since\n%%allowed: Host Version Since\n\nHost: mac-studio\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n')
+  tree=$( { printf '100644 blob %s\trunner.rec\n' "$(printf '%s\n' "$runner_rec" | git --git-dir "$ms" hash-object -w --stdin)"
+            [[ -z ${2:-} ]] || printf '100644 blob %s\tplaces.rec\n' "$(printf '%s\n' "$2" | git --git-dir "$ms" hash-object -w --stdin)"; } |
+          git --git-dir "$ms" mktree)
+  git --git-dir "$ms" update-ref refs/heads/madswan/runner/mac-studio "$(git --git-dir "$ms" -c user.name=runner -c user.email=runner@example.com \
+    commit-tree "$tree" $(git --git-dir "$ms" rev-parse -q --verify refs/heads/madswan/runner/mac-studio | sed 's/^/-p /') -m "$1")"
+}
+runner_commit "runner: serve madswan on mac-studio"
+t0=$(act_tip madswan/main "$ms")
+expect_ok crew role open design --label madswan
+has "$out" "asked madswan-design to open: its run opens as the place crew-design--madswan in herdr on mac-studio once the runner there makes it"
+eq "$(asks -e "What = 'open'" -p Role,What | tr '\n' ' ')" "Role: design What: open "
+[[ $(asks -e "What = 'open'" -P From) == *@mac-studio ]] || fail "the open ask is not from the user at mac-studio"
+eq "$(at roles.rec | recsel -t Role -e "Role = 'design'" -P Address)" "madswan/design"
+eq "$(acts_since "$t0" madswan/main "$ms")" "1"
+ok "the user opening a role that runs as its kind, with no run of it live, is an open ask naming the place its run opens as"
+
+# Once the runner's places.rec shows the design agent's run live, opening it writes nothing and names its place.
+live='{"status":{"places":[{"place":"/flume/places/crew-design--madswan","phase":"live","current":"turn","waiting_on":null,"stalled":false}],"host":{}}}'
+runner_commit "runner: madswan/design's run" "$(printf '%%rec: Place\n%%key: Request\n%%type: Request int\n%%type: At date\n%%mandatory: Request Place At Status\n%%allowed: Request Place At Status\n\n%%rec: Run\n%%key: Address\n%%type: At date\n%%mandatory: Address At\n%%allowed: Address Place At Status Words\n\nAddress: madswan/design\nPlace: /flume/places/crew-design--madswan\nAt: 2026-10-31T12:10:00Z\nStatus: %s\n' "$live")"
+t0=$(git --git-dir "$ms" rev-parse madswan/main)
+expect_ok crew role open design --label madswan
+has "$out" "madswan-design's run is live on mac-studio, the place /flume/places/crew-design--madswan: talk to it there now, as crew-design--madswan in herdr; nothing is written"
+eq "$(git --git-dir "$ms" rev-parse madswan/main)" "$t0"
+ok "opening a role whose run the runner shows live writes nothing and names the run's place"

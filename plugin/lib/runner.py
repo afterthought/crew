@@ -259,7 +259,10 @@ def runner_branch(label, host):
 # these descriptors (flywheel-runner core.2), and never by crew (state.5). runner.rec names the host and the runner
 # serving the partition there, so a branch that exists says a runner answers; answers.rec where each request it has
 # read stands; places.rec Flume's status of each place it launched, `flume status --json <place>`'s answer on one line
-# as Flume gave it (flywheel-runner core.1), kept after Flume tidies the place until its work has left crew's plan.
+# as Flume gave it (flywheel-runner core.1), kept after Flume tidies the place until its work has left crew's plan,
+# and after those each role's latest run on the host, a Run record keyed by the role's address (R4 of
+# roles-run-as-flume-kinds), with Flume's status of its place, or the runner's words where no run could be launched
+# (flywheel-runner's the-runner-carries-crews-work-into-flume, Decision 14).
 RUNNER = """\
 %rec: Runner
 %key: Host
@@ -284,6 +287,13 @@ PLACES = """\
 %mandatory: Request Place At Status
 %allowed: Request Place At Status
 """
+RUNS = """\
+%rec: Run
+%key: Address
+%type: At date
+%mandatory: Address At
+%allowed: Address Place At Status Words
+"""
 FILES = {"runner.rec": "Runner", "answers.rec": "Answer", "places.rec": "Place"}
 
 
@@ -293,7 +303,8 @@ def host_read(label, host, tip, files, refused):
     for one the tip lacks, answers and places then none; refused, recfix's words for each file it refused. Returns
     the reading, its host, branch and tip, with either why it could not be read, which hides this host's work alone
     (read.1, read.3), or the runner's record, each answer by its request's number and each place by its launch's: the
-    place's path, when the runner carried it, and its Status parsed, or with why it could not be."""
+    place's path, when the runner carried it, and its Status parsed, or with why it could not be; and each role's run
+    by its address, likewise, with the runner's words where it could launch none."""
     branch = runner_branch(label, host)
     out = {"host": host, "branch": branch, "tip": tip, "why": None}
     if tip is None:
@@ -324,7 +335,35 @@ def host_read(label, host, tip, files, refused):
         except ValueError as e:
             status, why = None, f"{at}: places.rec's status of the place of request {n} is no JSON ({e})"
         places[n] = {"place": r.get("Place"), "at": r.get("At"), "status": status, "why": why}
-    return dict(out, runner=run[0], answers=answers, places=places)
+    runs = {}
+    for r in files["places.rec"].recs("Run") if files.get("places.rec") is not None else []:
+        a = r.get("Address")
+        if not a or a in runs:
+            return dict(out, why=f"{host}'s runner can't be read: {at}: places.rec holds "
+                        + ("a run with no role's address" if not a else f"the run of {a} twice"))
+        try:
+            status, why = (json.loads(r.get("Status")) if r.get("Status") is not None else None), None
+        except ValueError as e:
+            status, why = None, f"{at}: places.rec's status of the run of {a} is no JSON ({e})"
+        runs[a] = {"place": r.get("Place"), "at": r.get("At"), "status": status, "words": r.get("Words"), "why": why}
+    return dict(out, runner=run[0], answers=answers, places=places, runs=runs)
+
+
+def role_run(reading, address):
+    """A role's latest run on a host as its runner's records show it (R4 of roles-run-as-flume-kinds), from host_read's
+    reading and the role's address, <label>/<role>: whether it is live, its place, the runner's words where it could
+    launch none, and why crew can't tell, the host's runner unread or the run's status no JSON (read.1). A run is live
+    while its place reads live or making in Flume's status, as the runner judges a run that stands; one tidied, over,
+    gone, refused or never launched is not."""
+    if reading.get("why"):
+        return {"live": None, "place": None, "words": None, "why": reading["why"]}
+    r = reading["runs"].get(address)
+    if r is None:
+        return {"live": False, "place": None, "words": None, "why": None}
+    if r["why"]:
+        return {"live": None, "place": r["place"], "words": r["words"], "why": r["why"]}
+    facts = flume_facts(r["status"], r["place"]) if r["status"] is not None else None
+    return {"live": bool(facts) and facts["phase"] in ("live", "making"), "place": r["place"], "words": r["words"], "why": None}
 
 
 def of_host(reads, label, host):
