@@ -165,7 +165,7 @@ class TestRows:
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {}, "forecasts": [conflict]}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: takes main first: forecast to conflict with main on README.md, "
-                                   "until its team's take-main fix moves its head")
+                                   "until a fix taking main in moves its head")
         assert land["cmds"] == [] and land["bolts"][0]["can"] is False
         held["wldn"]["forecasts"] = [dict(conflict, Heads="bolt/apex-zones@ccccccc main@e4f5a6b")]
         land, = [r for r in rows(held=held) if r["group"] == "land"]
@@ -185,8 +185,8 @@ class TestRows:
         # ticked: the raise records none left, and the line takes main first until the fix moves its head
         held["wldn"]["left"] = [left, dict(left, Heads="")]
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1].endswith(": takes main first: forecast to conflict with main on README.md, until its team's "
-                                        "take-main fix moves its head")
+        assert land["what"][1].endswith(": takes main first: forecast to conflict with main on README.md, until a fix "
+                                        "taking main in moves its head")
         # left and clean: as today
         held["wldn"].update(forecasts=[], left=[left])
         land, = [r for r in rows(held=held) if r["group"] == "land"]

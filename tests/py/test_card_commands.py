@@ -1116,10 +1116,51 @@ def test_a_bolt_ticked_that_the_record_holds_taking_main_first_is_left_out_of_th
     got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:y", "land:z"]}}
     assert plan.landing_lines("swancloud", got, heads, main_first={"z"}) == [
         "  to land, in the card's order: y",
-        "  z takes main first: its team takes main in by a fix, and the user's send stands for it",
+        "  z takes main first until a fix taking main in moves its head, and the user's send stands for it",
         "  lands them: crew bolt submit y --label swancloud"]
     assert plan.landing_lines("swancloud", got, heads, main_first={"y", "z"})[-1] == (
-        "  z takes main first: its team takes main in by a fix, and the user's send stands for it")
+        "  z takes main first until a fix taking main in moves its head, and the user's send stands for it")
+
+
+def test_a_ticked_bolt_that_landed_or_left_the_plan_is_said_and_left_out_of_the_submit():
+    """main-level "Ops lands a bolt on a send that still stands", "Read again after part of the send landed": z landed
+    on the send, w left the plan, y takes main in, so the submit lands y alone."""
+    heads = plan.card_heads("y@abc1234 z@abc1234 w@abc1234")
+    got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:y", "land:z", "land:w"]}}
+    assert plan.landing_lines("swancloud", got, heads, gone={"z": "landed", "w": "left the plan"}) == [
+        "  to land, in the card's order: y",
+        "  z landed since the card was posted, so it is no bolt to land",
+        "  w left the plan since the card was posted, so it is no bolt to land",
+        "  lands them: crew bolt submit y --label swancloud"]
+    assert plan.landing_lines("swancloud", got, heads, gone={"y": "landed", "z": "landed", "w": "landed"})[-1] == (
+        "  w landed since the card was posted, so it is no bolt to land")
+
+
+class TestTickedGone:
+    """What the read of a sent landings card leaves out of the submit: each ticked bolt the run record holds landed since
+    the card's first entry, by sluice's landing or crew's close, or that the plan no longer holds (plan.landed_since,
+    plan.ticked_gone)."""
+    POSTED = post("land/crew", "swancloud-ops", "req_k1", at="2026-10-31T10:00:00Z", Heads="y@abc1234 z@abc1234")
+
+    def test_a_bolt_sluice_landed_or_crew_closed_since_the_post_is_landed(self):
+        entries = [self.POSTED,
+                   dict(Act="bolt.submit", On=["bolt/z"], Outcome="landed", At="2026-10-31T10:05:00Z"),
+                   dict(Act="bolt.land", On=["bolt/w"], At="2026-10-31T10:06:00Z")]
+        assert plan.landed_since(entries, "req_k1") == {"z", "w"}
+
+    def test_a_landing_before_the_post_a_refused_one_and_a_queued_one_are_not(self):
+        entries = [dict(Act="bolt.land", On=["bolt/z"], At="2026-10-30T09:00:00Z"), self.POSTED,
+                   dict(Act="bolt.submit", On=["bolt/y"], Refused="a conflict on README.md", At="2026-10-31T10:05:00Z"),
+                   dict(Act="bolt.submit", On=["bolt/y"], Outcome="queued", At="2026-10-31T10:04:00Z"),
+                   dict(Act="bolt.land", On=["bolt/w"], Refused="w has not landed", At="2026-10-31T10:06:00Z")]
+        assert plan.landed_since(entries, "req_k1") == set()
+
+    def test_a_card_the_record_holds_no_entry_of_has_nothing_landed_since(self):
+        assert plan.landed_since([dict(Act="bolt.land", On=["bolt/z"], At="2026-10-31T10:06:00Z")], "req_k1") == set()
+
+    def test_landed_and_gone_from_the_plan_are_told_apart(self):
+        assert plan.ticked_gone(["y", "z", "w"], {"y", "z"}, {"z"}) == {"z": "landed", "w": "left the plan"}
+        assert plan.ticked_gone(None, {"y"}, set()) == {} and plan.ticked_gone(["y"], {"y"}, set()) == {}
 
 
 class ReadSent:
@@ -1130,7 +1171,9 @@ class ReadSent:
              "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "mac-studio",
                                  "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}}
 
-    def __init__(self, monkeypatch, got, told=(), branch=()):
+    PLAN = "%rec: Bolt\n\nBolt: y\nRepo: crew\n\nBolt: z\nRepo: crew\n\n%rec: Unit\n\n"
+
+    def __init__(self, monkeypatch, got, told=(), branch=(), held=PLAN):
         import argparse
         self.entries = [post("land/crew", "swancloud-ops", "req_k1", Heads="y@abc1234 z@abc1234")]
         self.raised, self.calls = [], []
@@ -1150,28 +1193,29 @@ class ReadSent:
         monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
         monkeypatch.setattr(plan, "land_hand", raised)
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: list(branch))
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: held and plan.Plan(held))
         self.run = lambda json=False: plan.card_read(self.FLEET, argparse.Namespace(key="land/crew", label=None, json=json, sub="read"))
 
 
 TICKED = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
-Z_TOLD = dict(Act="forecast", On=["bolt/z"], Heads="bolt/z@abc1234 main@e4f5a6b", Paths="README.md", Reached="told")
+Z_HELD = dict(Act="forecast", On=["bolt/z"], Heads="bolt/z@abc1234 main@e4f5a6b", Paths="README.md", Reached="held")
 
 
 def test_reading_a_sent_landings_card_raises_it_first_and_leaves_a_bolt_taking_main_first_out_of_the_submit(monkeypatch, capsys):
-    """rail-cards "Ticking a left bolt that conflicts with main starts its take-main fix": the raise tells z's conductor
-    the fix, recorded on this host, and the read gives y alone to land."""
-    read = ReadSent(monkeypatch, TICKED, told=[Z_TOLD])
+    """rail-cards "A row forecast to conflict with main takes main first until a fix takes main in": the raise records z held, on this host, and
+    the read gives y alone to land."""
+    read = ReadSent(monkeypatch, TICKED, told=[Z_HELD])
     read.run()
     out, err = capsys.readouterr()
     assert read.raised == ["crew"] and "is left as it is" in err and "is left as it is" not in out
     assert out.splitlines()[-3:] == [
         "  to land, in the card's order: y",
-        "  z takes main first: its team takes main in by a fix, and the user's send stands for it",
+        "  z takes main first until a fix taking main in moves its head, and the user's send stands for it",
         "  lands them: crew bolt submit y --label swancloud"]
 
 
 def test_a_conflict_a_wait_recorded_on_the_branch_leaves_the_bolt_out_too(monkeypatch, capsys):
-    read = ReadSent(monkeypatch, TICKED, branch=[dict(Z_TOLD, Reached="wait", Id="e-1")])
+    read = ReadSent(monkeypatch, TICKED, branch=[dict(Z_HELD, Reached="wait", Id="e-1")])
     read.run()
     assert capsys.readouterr().out.splitlines()[-1] == "  lands them: crew bolt submit y --label swancloud"
 
@@ -1184,6 +1228,32 @@ def test_a_ticked_bolt_with_no_conflict_lands_as_any_and_the_json_answer_is_left
     read.run(json=True)
     out, err = capsys.readouterr()
     assert json.loads(out) == TICKED and "is left as it is" in err
+
+
+def test_a_send_read_again_after_part_of_it_landed_gives_the_rest_alone_to_land(monkeypatch, capsys):
+    """main-level "Read again after part of the send landed": crew bolt submit y z landed y, closed and gone from the
+    plan, and sluice refused z for a conflict with main, launching its take-main fix, the answered card still open; the
+    read prints the submit of z alone, naming y as landed, and none naming a bolt that landed."""
+    landed = [dict(Act="bolt.submit", On=["bolt/y"], Outcome="landed", At="2026-10-12T10:05:00Z", Id="e-2"),
+              dict(Act="bolt.land", On=["bolt/y"], At="2026-10-12T10:05:30Z", Id="e-3")]
+    read = ReadSent(monkeypatch, TICKED, branch=landed, held="%rec: Bolt\n\nBolt: z\nRepo: crew\n\n%rec: Unit\n\n")
+    read.run()
+    assert capsys.readouterr().out.splitlines()[-3:] == [
+        "  to land, in the card's order: z",
+        "  y landed since the card was posted, so it is no bolt to land",
+        "  lands them: crew bolt submit z --label swancloud"]
+
+
+def test_a_bolt_sluice_landed_that_is_not_closed_yet_is_no_bolt_to_land_either(monkeypatch, capsys):
+    read = ReadSent(monkeypatch, TICKED, told=[dict(Act="bolt.submit", On=["bolt/y"], Outcome="landed", At="2026-10-12T10:05:00Z")])
+    read.run()
+    assert capsys.readouterr().out.splitlines()[-1] == "  lands them: crew bolt submit z --label swancloud"
+
+
+def test_a_plan_that_cant_be_read_refuses_the_read_of_what_the_send_lands(monkeypatch, capsys):
+    read = ReadSent(monkeypatch, TICKED, held=None)
+    with pytest.raises(crew.Refusal, match="swancloud/main could not be read, so which bolts land/crew's send still lands can't be told"):
+        read.run()
 
 
 def test_a_card_still_waiting_on_the_user_is_not_raised(monkeypatch, capsys):

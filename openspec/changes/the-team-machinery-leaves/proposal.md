@@ -42,8 +42,9 @@ None.
 - `chores`: a chore is built as Flume's chore kind, holds no slot, and is written by the planner, design or the user.
 - `review-batches`: a batch spans the partition's bolts, reckoned at the rail's sweep on the main-level host; no conductor runs construct again.
 - `run-record`: no stage's end is recorded by crew; a landing's age runs from the entry that made the bolt's branch.
-- `crew-rail`, `crew-board`, `board-page`, `fleet-page`, `rail-cards`: no team, slot or conductor in a row, a lane, a card or a dock; a question is asked by three roles; the board's JSON lists no teams.
-- `kit-toolchain`, `crew-sites`: crew readies no place; sites are listed for each host that keeps a kit.
+- `crew-rail`, `crew-board`, `board-page`, `fleet-page`, `rail-cards`: no team, slot or conductor in a row, a lane, a card or a dock; a question is asked by three roles; the board's JSON lists no teams; a row forecast to conflict with main is held, recorded once and told to no one, until a fix taking main in moves its head; a started bolt's ledger shows no dev server.
+- `main-level`: the read of a landings card's send gives to land only the ticked bolts the plan holds and no landing since the card's post.
+- `kit-toolchain`, `crew-sites`: crew readies no place; sites are listed for each host that keeps a kit, a started bolt with no dev server until the runner reports a place's addresses.
 - `flywheel-state`: a kit's host, its folders there and its work's stream are read from the runners' `runner.rec`; a launch with no stream is refused at a bolt's start.
 
 ## Impact

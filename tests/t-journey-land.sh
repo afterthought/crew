@@ -792,7 +792,7 @@ eq "$(field $box forecast Heads bolt/west) | $(field $box forecast Reached bolt/
 echo '{"answer": {"choiceIds": ["land:west"]}}' > "$(home_of $box)/.stub-pendingyou/answered/$left.json"
 : > "$CREW_TEST_LOG"
 out=$(ops card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
-has "$out" "west takes main first: its team takes main in by a fix, and the user's send stands for it"
+has "$out" "west takes main first until a fix taking main in moves its head, and the user's send stands for it"
 lacks "$out" "crew bolt submit"
 eq "$(field $box landing.left Heads kit/switchboard-kit)" "near@$(short origin/bolt/near)"
 ok "a bolt the user left keeps its box when main moves under it, the card saying it would take main first and the forecast recorded as found while left; a send ticking it, read by ops, submits nothing of it"

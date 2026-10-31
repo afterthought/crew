@@ -22,6 +22,46 @@ crew SHALL refuse a post, change or close from any role but the three, naming th
 - **WHEN** wldn-ops calls `post_request` with the key `land/b1_`, or wldn-planner with `batch/7_` or `batch/7:2`
 - **THEN** the call is refused, saying the card is crew's
 
+### Requirement: A row forecast to conflict with main takes main first until a fix takes main in
+A row whose bolt is forecast to conflict with what the kit's main holds, by the card's forecast or by one the run record holds at the bolt's present head, SHALL be held with no box, saying it takes main first, the files, and that it does until a fix taking main in moves its head. The raise that first finds the conflict at a bolt head and revision of main SHALL record it once, as a `forecast` on the bolt, and SHALL tell no agent and start nothing: a fix taking main in is launched when sluice refuses the bolt's landing for a conflict with main, as "A landing that conflicts with main takes main in by a fix place" has it, or by a fix launched on the bolt by hand. It SHALL NOT be offered to land, and SHALL have a box again once the bolt reads proven at a new head with no conflict forecast. A conflict only with a bolt above it holds nothing. A row whose bolt the user left SHALL NOT be held so: it keeps its box and says it would take main first, as "A row the user left says whether it would take main first" has it.
+
+#### Scenario: Main landed a change the bolt also made
+- **WHEN** `y` reads proven and main has landed a change to `openspec/specs/artifact-buckets/spec.md` that `y`'s own archive also changed
+- **THEN** `land/crew` holds `y` with no box, saying `y` takes main first, forecast to conflict with main on `openspec/specs/artifact-buckets/spec.md`, until a fix taking main in moves its head; the run record gains one `forecast` on `bolt/y` at `y`'s head and main's revision; and no agent is told
+
+#### Scenario: Raised again at the same heads
+- **WHEN** the run record holds `y`'s forecast at `y`'s present head, and the card's own forecast against main could not be made
+- **THEN** `y` is still held taking main first, in the recorded files, and nothing more is recorded
+
+#### Scenario: Only a bolt above it
+- **WHEN** `z` is forecast to conflict with `y`, the row above it, and with nothing on main
+- **THEN** `z` keeps its box, its row naming the conflict with `y`
+
+#### Scenario: The fix merges
+- **WHEN** a fix taking main in merges into `y` and `y` reads proven at its new head with no conflict forecast against main
+- **THEN** `y` has its box on `land/crew` again
+
+#### Scenario: A bolt the user left
+- **WHEN** the user cleared `z` on their send of `land/crew`, and main then lands a change `z` also makes
+- **THEN** `z` keeps its box on the card that follows, unticked, and is not held taking main first
+
+## MODIFIED Requirements
+
+### Requirement: A row the user left says whether it would take main first
+Each row of a bolt the user left SHALL be forecast against main whenever the card is raised, as every row is, and SHALL keep its box. When its forecast against main finds a conflict, the row SHALL say it would take main first if ticked, on which files and at which revision of main, and that once it is ticked it waits for a fix taking main in, the user's send standing through it; otherwise it SHALL say it lands clean. When the forecast first finds such a conflict at the bolt's head and main's revision while a card waits on the user, crew SHALL change the card in place saying so; the same forecast SHALL NOT change the card again.
+
+#### Scenario: Left, and main conflicts with it
+- **WHEN** `z` is left on `land/crew`, waiting on the user, and main moves to `e4f5a6b`, landing a change to `README.md` that `z` also makes
+- **THEN** `land/crew` is changed in place, its note saying `z`, which they left, would take main first, forecast to conflict with main on `README.md` at `e4f5a6b`; `z` keeps its box, its row saying it would take main first once ticked; and no agent is told
+
+#### Scenario: Raised again at the same heads
+- **WHEN** the card is raised again and neither `z` nor main has moved
+- **THEN** the card is not changed for it
+
+#### Scenario: Left and clean
+- **WHEN** `z` is left and its forecast against main finds no conflict
+- **THEN** its row says no conflict is forecast
+
 ## REMOVED Requirements
 
 ### Requirement: The conductor's tell to the operator agents is for what has no card
@@ -43,3 +83,7 @@ crew SHALL refuse a post, change or close from any role but the three, naming th
 ### Requirement: crew refuses a question card from any other role or under a row's key
 **Reason**: Record 0047 move 5: no stage agent of crew's asks its conductor, and no conductor posts.
 **Migration**: "crew refuses a question card from any role but the three, or under a row's key", added by this change.
+
+### Requirement: A row forecast to conflict with main takes main first
+**Reason**: Record 0047 move 5: no conductor's wait records a forecast and no team takes main in; the landings card's raise records the forecast and tells no one (Task notes 2.2).
+**Migration**: "A row forecast to conflict with main takes main first until a fix takes main in", added by this change.

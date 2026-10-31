@@ -171,7 +171,11 @@ A ruling the design agent gives about how a service or a system behaves SHALL na
 - **THEN** the design agent reads what they turn on and answers all three in one message
 
 ### Requirement: Ops lands a bolt on a send that still stands
-`crew card read land/<kit>` SHALL name each bolt an earlier send of the user's still lands, at its head now, with the `crew bolt submit` that lands it, whether or not a landings card of the kit is open; a bolt whose head now crew cannot read SHALL be named as one it cannot tell of, and left out of the command. Main-level ops SHALL land such a bolt on that send, asking the user nothing, once `crew bolts` reads it proven.
+`crew card read land/<kit>` SHALL name each bolt an earlier send of the user's still lands, at its head now, with the `crew bolt submit` that lands it, whether or not a landings card of the kit is open; a bolt whose head now crew cannot read SHALL be named as one it cannot tell of, and left out of the command. Of the bolts the open card's send ticked, the command SHALL name only those the plan still holds and the run record holds no landing of since the card was posted, each other said as landed or as gone from the plan. Main-level ops SHALL land such a bolt on that send, asking the user nothing, once `crew bolts` reads it proven.
+
+#### Scenario: Read again after part of the send landed
+- **WHEN** the user's send on `land/crew` ticked `y` and `z`, `crew bolt submit y z` landed `y` and closed it, sluice refused `z` for a conflict with main and its take-main fix was launched, and the answered card is still open
+- **THEN** `crew card read land/crew` says `y` landed since the card was posted and prints `crew bolt submit z --label swancloud`, naming no bolt that landed
 
 #### Scenario: No card open
 - **WHEN** the user's send on `land/crew` ticked `z`, its card closed with `z` held for sluice's refusal, `z`'s take-main fix has merged, and no landings card of crew is open

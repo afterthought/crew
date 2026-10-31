@@ -734,7 +734,7 @@ def forecast_said(forecast, why=None, would=None):
         said.append(f"Its forecast against {joined(unmade)} could not be made: {(why or 'git could not tell').rstrip('.')}.")
     if would:
         said = [f"It would take main first if you tick it: forecast to conflict with main on {joined(list(would[1]))} at "
-                f"{would[0][:7]}. Ticked, its team takes main in by a fix, your send standing through it."] + (
+                f"{would[0][:7]}. Ticked, it waits for a fix taking main in, your send standing through it."] + (
             [] if said == ["No conflict is forecast."] else said)
     return " ".join(said)
 
