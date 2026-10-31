@@ -8,9 +8,13 @@
 # answered in its name, read from Pending You as madswan-planner; an ask written after the start is not the turn's; crew
 # role end, as the turn's prompt names it, answers the turn and writes the report; and outside a run each is refused.
 # The user opens madswan's design agent: with no run of it in mac-studio's runner's records, an open ask from the user
-# naming the place its run opens as; with one live there, nothing written and the run's place named.
-# What a tell decides, the ask's fields, what a start takes and prints and what an open reads of the runner are logic
-# cases (tests/py/test_tell_asks.py, test_asks.py); each step here checks a command's wiring once.
+# naming the place its run opens as; with one live there, nothing written and the run's place named. The design agent's
+# run lands a record: crew role land writes a launch of Flume's chore kind in a blueprints repository on main for
+# mac-studio's runner, the brief file's text whole and madswan/design its recipient, which crew trace lists; a repository
+# crew does not name, and a land outside a run, are refused requesting nothing.
+# What a tell decides, the ask's fields, what a start takes and prints, what an open reads of the runner and what a land
+# writes or refuses are logic cases (tests/py/test_tell_asks.py, test_asks.py); each step here checks a command's wiring
+# once.
 # Reads: plugin/flume/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -118,3 +122,30 @@ expect_ok crew role open design --label madswan
 has "$out" "madswan-design's run is live on mac-studio, the place /flume/places/crew-design--madswan: talk to it there now, as crew-design--madswan in herdr; nothing is written"
 eq "$(git --git-dir "$ms" rev-parse madswan/main)" "$t0"
 ok "opening a role whose run the runner shows live writes nothing and names the run's place"
+
+# madswan's design agent's run lands a record: a launch of Flume's chore kind in a blueprints repository on its default
+# branch, for mac-studio's runner, the brief file's text whole and the run's address its recipient, in a commit of its own.
+printf 'Write docs/adr/0053-roles-run-as-kinds.md with this text whole:\n# 53. Roles run as kinds\n' > "$T/record-0053.md"
+design() { FLUME_PLACE=$T/flume/places/crew-design--madswan "$@"; }
+t0=$(act_tip madswan/main "$ms")
+design expect_ok crew role land afterthought/blueprints record-0053 --brief-file "$T/record-0053.md"
+has "$out" "the runner on mac-studio launches chore record-0053 in afterthought/blueprints on main (request 1) in stream madswan-main"
+landed() { at requests.rec | recsel -t Request -e "Work = 'role/design/record-0053'" "$@"; }
+eq "$(landed -P Act,Host,Repo,Kind,Name,Base,Stream,Priority,Intent,Recipient,By | tr '\n' ' ')" \
+   "launch mac-studio afterthought/blueprints chore record-0053 main madswan-main 0 madswan-design madswan/design madswan-design "
+eq "$(landed -P Brief)" "$(cat "$T/record-0053.md")"
+eq "$(acts_since "$t0" madswan/main "$ms")" "1"
+expect_ok crew trace role/design/record-0053 --label madswan
+has "$out" "role.land"
+ok "a role's run lands its work as a chore launch on the repository's main, its brief whole and its address the recipient"
+
+# A repository crew does not name, and a land outside a role's run, are refused and request nothing; the first, in the
+# run, records its refusal.
+before=$(at requests.rec)
+design expect_fail "crew names no repository afterthought/crew" crew role land afterthought/crew record-0054 --brief-file "$T/record-0053.md"
+CREW_AGENT=madswan-design expect_fail "crew role land runs only in a run of a crew role" \
+  crew role land afterthought/blueprints record-0054 --brief-file "$T/record-0053.md"
+eq "$(at requests.rec)" "$before"
+expect_ok crew trace role/design/record-0054 --label madswan
+has "$out" "crew names no repository afterthought/crew"
+ok "a land in a repository crew does not name, or outside a role's run, is refused and requests nothing"

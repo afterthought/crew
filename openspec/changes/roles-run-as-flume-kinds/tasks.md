@@ -31,7 +31,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 6. A role's work that lands
 
-- [ ] 6.1 `crew role land` writes a chore launch in the named repository on its default branch, the brief whole and the run's address its recipient, refusing outside a run and for a repository crew does not name (design Decision 10; Task notes 6.1); *needs teams-cross*; passes `tests/py/test_asks.py`, and the moon task `tests:t-journey-roles` ends with "0 failed".
+- [x] 6.1 `crew role land` writes a chore launch in the named repository on its default branch, the brief whole and the run's address its recipient, refusing outside a run and for a repository crew does not name (design Decision 10; Task notes 6.1); *needs teams-cross*; passes `tests/py/test_asks.py`, and the moon task `tests:t-journey-roles` ends with "0 failed".
 
 ## 7. The reviewer
 

@@ -5,6 +5,7 @@ run's open turn superseded and its asks taken again; an ask's key already held; 
 runner's records show waiting on a role, read from Flume's status; and the role records the teams file makes due.
 That crew writes asks.rec and roles.rec on the branch and recfix holds them is the contract tier's (test_recfix)."""
 import json
+import re
 
 import pytest
 
@@ -791,3 +792,108 @@ class TestOpen:
         with pytest.raises(crew.Refusal, match="^which partition's design\\? add --label madswan$"):
             open_role(opening, label=None)
         assert opening.files == {}
+
+
+CREW_KIT = {"name": "crew", "repo": "afterthought/crew", "dir": "/w/crew", "main": "/w/crew/main"}
+
+
+@pytest.fixture
+def landing(monkeypatch, tmp_path):
+    """A command run in madswan's design agent's run on deneb (FLUME_PLACE crew-design--madswan), the design agent
+    running as its kind, with swancloud's crw-4 building afterthought/crew, a kit the teams file names for another
+    partition; its writes applied to madswan's branch in memory, and a brief over two lines in a file."""
+    swancloud = dict(madswan(), label="swancloud", blueprints=["afterthought/blueprints"])
+    fleet = {"partitions": {"madswan": madswan(design="madswan-main"), "swancloud": swancloud},
+             "teams": {"crw-4": {"name": "crw-4", "label": "swancloud", "kits": [CREW_KIT], "kit": CREW_KIT, "flume": False}}, "hosts": {}}
+    monkeypatch.setenv("FLUME_PLACE", RUN_PLACE)
+    b = on_branch(monkeypatch, fleet, {})
+    b.brief = tmp_path / "record-0053.md"
+    b.brief.write_text("Write docs/adr/0053-roles-run-as-kinds.md with this text whole:\n# 53. Roles run as kinds\n")
+    return b
+
+
+def land(b, repo="afterthought/crew", name="record-0053", brief=None):
+    import argparse
+    import plan
+    plan.role_land(b.fleet, argparse.Namespace(repo=repo, name=name, brief_file=str(brief or b.brief)))
+
+
+def requested(b):
+    import plan
+    return [dict((f, v) for f, v in reversed(r.fields)) for r in plan.Plan(b.files["requests.rec"]).recs("Request")]
+
+
+class TestLand:
+    """crew role land (design Decision 10; role-runs "A role's work that lands is a place it launches")."""
+
+    def test_the_design_agents_records_are_a_chore_launch_on_the_repositorys_default_branch(self, landing, capsys):
+        """role-runs, The design agent's records."""
+        land(landing)
+        (r,) = requested(landing)
+        assert {f: r[f] for f in ("Request", "Act", "Host", "Work", "Repo", "Kind", "Name", "Base", "Stream", "Priority", "Intent",
+                                  "Recipient", "By")} == {
+            "Request": "1", "Act": "launch", "Host": "deneb", "Work": "role/design/record-0053", "Repo": "afterthought/crew", "Kind": "chore",
+            "Name": "record-0053", "Base": "main", "Stream": "madswan-main", "Priority": "0", "Intent": "madswan-design",
+            "Recipient": "madswan/design", "By": "madswan-design"}
+        assert r["Brief"] == landing.brief.read_text().rstrip("\n") and "Hold" not in r and "After" not in r
+        assert [m.split("\n")[0] for m in landing.writes] == ["land(madswan-design): record-0053 in afterthought/crew (madswan-design)"]
+        assert landing.entries == [("role.land", ["role/design/record-0053", "agent/madswan-design"],
+                                    "land(madswan-design): record-0053 in afterthought/crew", {"Repo": "afterthought/crew"})]
+        assert "Write docs" not in str(landing.entries)
+        assert capsys.readouterr().out.endswith(
+            "the runner on deneb launches chore record-0053 in afterthought/crew on main (request 1) in stream madswan-main, your brief its "
+            "brief whole and madswan/design its recipient: Flume builds it and submits it through sluice, and its landing, or a wait on "
+            "you, reaches madswan-design's next run\n")
+
+    def test_a_blueprints_repository_or_one_the_plan_names_is_named_and_requests_follow_those_held(self, landing, monkeypatch):
+        import plan
+        monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(
+            plan.HEADER.replace("%rec: Unit", "Bolt: b\nRepo: agentplot/flywheel-web\nGoal: g\n\n%rec: Unit")))
+        land(landing, "afterthought/blueprints", "record-0054")
+        land(landing, "agentplot/flywheel-web", "diagram-the-method")
+        assert [(r["Request"], r["Repo"], r["Work"]) for r in requested(landing)] == [
+            ("1", "afterthought/blueprints", "role/design/record-0054"), ("2", "agentplot/flywheel-web", "role/design/diagram-the-method")]
+
+    @pytest.mark.parametrize("repo, why", [
+        ("afterthought/crew-state", "^crew names no repository afterthought/crew-state: a role's work lands in a blueprints repository "
+                                    "or a kit the teams file names, or a repository the plan names, and it names afterthought/blueprints, "
+                                    "afterthought/crew, afterthought/flywheel-web$"),
+        ("crew", "^a repository is named by its forge address, <owner>/<name>, which the runner resolves to its clone, not crew$")])
+    def test_a_repository_crew_does_not_name_is_refused_writing_nothing_and_the_refusal_is_recorded(self, landing, repo, why):
+        """role-runs, A role's work that lands: "A repository neither the teams file nor the plan names SHALL be refused"."""
+        import crew
+        with pytest.raises(crew.Refusal, match=why):
+            land(landing, repo)
+        assert landing.files == {} and landing.writes == []
+        ((act, on, _, f),) = landing.entries
+        assert (act, on, f["Repo"]) == ("role.land", ["role/design/record-0053", "agent/madswan-design"], repo)
+        assert re.match(why, f["refused"])
+
+    def test_a_name_in_use_a_name_crew_does_not_mint_and_a_brief_with_no_words_or_no_file_are_refused(self, landing, tmp_path):
+        import crew
+        land(landing)
+        with pytest.raises(crew.Refusal, match="^record-0053 is in use for madswan/design: request 1 launched it in afterthought/crew as "
+                                               "Flume place chore--record-0053, so name this work differently$"):
+            land(landing, "afterthought/blueprints")
+        with pytest.raises(crew.Refusal, match="^work that lands is named with lowercase words and dashes, not Record-53$"):
+            land(landing, name="Record-53")
+        (tmp_path / "empty.md").write_text("\n \n")
+        with pytest.raises(crew.Refusal, match="^the brief for record-0055 holds no words, and a chore's agent starts fresh with its brief alone$"):
+            land(landing, name="record-0055", brief=tmp_path / "empty.md")
+        with pytest.raises(crew.Refusal, match=f"^the brief {tmp_path}/gone.md can't be read: No such file or directory$"):
+            land(landing, name="record-0055", brief=tmp_path / "gone.md")
+        assert len(requested(landing)) == 1 and len(landing.writes) == 1
+
+    def test_a_land_outside_a_run_is_refused_and_writes_nothing(self, landing, monkeypatch):
+        """role-runs, A role's work that lands: "and so SHALL a run outside a role's run"; a standing design agent's CREW_AGENT is
+        no run."""
+        import crew
+        for place in ("/kit/places/change--a", None):
+            if place:
+                monkeypatch.setenv("FLUME_PLACE", place)
+            else:
+                monkeypatch.delenv("FLUME_PLACE")
+                monkeypatch.setenv("CREW_AGENT", "madswan-design")
+            with pytest.raises(crew.Refusal, match="crew role land runs only in a run of a crew role, in the place Flume made for it"):
+                land(landing)
+        assert landing.files == {} and landing.writes == [] and landing.entries == []

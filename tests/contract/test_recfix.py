@@ -126,13 +126,19 @@ def requests_text(*recs):
 def test_requests_of_every_act_pass_and_the_descriptor_refuses_what_it_does_not_allow():
     """plan.request appends each act's request to requests.rec, and land checks the file by recfix with the plan write
     (runner.REQUESTS; Decision 4 of teams-cross-to-flume-as-their-bolts-land, plan.1): a launch with its brief over two
-    lines and its After, a retry with a stage and words, a retry of the submission, a drop and a priority pass; an act,
-    a kind or a hold the enums do not hold, a number that is no number and a date that is none are refused."""
+    lines and its After, a retry with a stage and words, a retry of the submission, a drop, a priority and a role's chore
+    launch on main at priority 0 (runner.role_launch; Decision 10 of roles-run-as-flume-kinds) pass; an act, a kind or a
+    hold the enums do not hold, a number that is no number and a date that is none are refused."""
     other = lambda n, act, **g: plan.Rec("Request", runner.request_fields(n, act, "deneb", "unit/a", g, "2026-10-31T12:00:00Z", "madswan-planner"))
+    (_, _, work, given), _ = runner.role_launch([], {"afterthought/crew"}, "madswan", "design", "deneb", "madswan-main", "afterthought/crew",
+                                                "record-0053", "Write docs/adr/0053.md whole:\n# 53. Roles run as kinds")
+    role_land = plan.Rec("Request", runner.request_fields(7, "launch", "deneb", work, given, "2026-10-31T12:00:00Z", "madswan-design"))
     text = requests_text(launch_rec(1, "unit/a"), launch_rec(2, "unit/b", after=[1]), other(3, "retry", Of=1, Stage="construct", Words="Read it again."),
-                         other(4, "retry", Of=1, Submission=True), other(5, "drop", Of=2), other(6, "priority", Of=1, Priority=5))
+                         other(4, "retry", Of=1, Submission=True), other(5, "drop", Of=2), other(6, "priority", Of=1, Priority=5), role_land)
     plan.checked({"requests.rec": text})
-    assert [r.get("Act") for r in plan.Plan(text).recs("Request")] == ["launch", "launch", "retry", "retry", "drop", "priority"]
+    assert [r.get("Act") for r in plan.Plan(text).recs("Request")] == ["launch", "launch", "retry", "retry", "drop", "priority", "launch"]
+    assert [(r.get("Work"), r.get("Kind"), r.get("Base"), r.get("Priority")) for r in plan.Plan(text).recs("Request")][-1] == (
+        "role/design/record-0053", "chore", "main", "0")
     assert plan.Plan(text).recs("Request")[0].get("Brief") == "Build a.\nSource: a.md"
     for right, wrong in (("Act: priority", "Act: reorder"), ("Kind: change", "Kind: spike"), ("Submission: yes", "Submission: maybe"),
                          ("Request: 6", "Request: six"), ("Date: 2026-10-31T12:00:00Z", "Date: soon"), ("Of: 2", "Of: 2\nTeam: crw-4")):

@@ -5585,7 +5585,8 @@ def may_write(fleet, key, a):
 # The commands that write a request for a runner beyond the plan writes the role table already lets their callers run
 # (Decision 16 of teams-cross-to-flume-as-their-bolts-land, roles.1), each with the roles besides the user who may run
 # it, the first the one to tell: crew answer, crew fix of a bolt given through Flume, and crew main fix, its --send
-# among it, which ops runs only on the user's word (roles.2).
+# among it, which ops runs only on the user's word (roles.2). crew role land is a role's run's alone, told by its place
+# and never by a name a standing agent carries too (role_land, run_named; Decision 10 of roles-run-as-flume-kinds).
 REQUESTERS = {"answer": ("planner", "design", "main-ops"), "fix": ("planner", "main-ops"), "main fix": ("main-ops",)}
 ROLE_SAID = {"planner": "the planner", "design": "the design agent", "main-ops": "main-level ops"}
 
@@ -6596,6 +6597,52 @@ def role_open(fleet, a):
           "and greets you in its pane")
     if r["words"]:
         print(f"the runner on {host} could not launch {run}'s last run: {r['words']}")
+
+
+def land_named(fleet, plan):
+    """The repositories a role's work may land in (runner.role_launch): those the teams file names, every partition's
+    blueprints repositories and every team's kits, as owner/name, and those the plan names as its bolts' and work's
+    Repo. Not a state repository, whose branches crew's own commands alone write (state.1)."""
+    named = {b for p in fleet["partitions"].values() for b in p["blueprints"]}
+    named |= {k["repo"] for t in fleet["teams"].values() for k in crew.kits_of(t)}
+    return named | {r.get("Repo") for r in plan.bolts() + plan.work() if r.get("Repo")}
+
+
+def role_land(fleet, a):
+    """crew role land <repo> <name> --brief-file <file>, a role's run's work that lands (design Decision 10; role-runs "A
+    role's work that lands is a place it launches"; roles.7 part 3): in a commit of its own, a launch of Flume's chore
+    kind named <name> in the repository on its default branch, on the main level's host in the role's stream, the
+    file's text whole its brief and the run's address its recipient, for the runner there to launch (runner.role_launch),
+    read again at the tip it is applied to (plan.1). Recorded as role.land on role/<role>/<name> and the run, done or
+    refused; none of the brief's words (record.3). The run commits on no branch, submits nothing and leaves no worktree:
+    Flume builds the chore, submits it through sluice and tidies its place, and its landing, or a wait on its caller,
+    reaches the role's next run. Refused anywhere but a role's run (run_named), which is who writes it, never by its
+    name (Decision 16 of teams-cross-to-flume-as-their-bolts-land, may_request)."""
+    label, role, run = run_named(fleet, "crew role land")
+    on, seen = [f"role/{role}/{a.name}", f"agent/{run}"], {}
+    host, stream = crew.partition_of(fleet, label)["machine"], crew.role_stream(fleet, label, role)
+    try:
+        crew.NAME.match(a.name) or fail(f"work that lands is named with lowercase words and dashes, not {a.name}")
+        path = pathlib.Path(a.brief_file).expanduser()
+        try:
+            brief = path.read_text().rstrip("\n")  # the text whole, less the file's last line end
+        except (OSError, UnicodeDecodeError) as e:
+            fail(f"the brief {path} can't be read: {e.strerror or e}")
+
+        def change(w):
+            launched, why = runner.role_launch(requests_of(w).recs("Request"), land_named(fleet, w.plan), label, role, host, stream,
+                                               a.repo, a.name, brief)
+            not why or fail(why)
+            act, h, work, given = launched
+            seen.update(n=request(w, act, h, work, **given))
+            return []
+        write(fleet, label, change, f"land({run}): {a.name} in {a.repo}", act="role.land", on=on, fields={"Repo": a.repo})
+    except Refusal as e:
+        record.emit(label, "role.land", on, refused=str(e), Repo=a.repo)
+        raise
+    print(f"the runner on {host} launches chore {a.name} in {a.repo} on {runner.ROLE_BASE} (request {seen['n']}) in stream {stream}, "
+          f"your brief its brief whole and {label}/{role} its recipient: Flume builds it and submits it through sluice, and its "
+          f"landing, or a wait on you, reaches {run}'s next run")
 
 
 # --------------------------------------------------------------------------------------------- proposals
@@ -19000,6 +19047,10 @@ def parser(cls=argparse.ArgumentParser, only=None):
     v = ro.add_parser("open")
     v.add_argument("role", choices=crew.KIND_ROLES)
     v.add_argument("--label")
+    v = ro.add_parser("land")
+    v.add_argument("repo")
+    v.add_argument("name")
+    v.add_argument("--brief-file", required=True)
     v = sub.add_parser("main").add_subparsers(dest="sub", required=True).add_parser("fix")  # up, down and status are _main's
     v.add_argument("kit")
     v.add_argument("name")
@@ -19324,7 +19375,7 @@ COMMANDS = {
     ("card", "preview"): card_preview, ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
     ("card", "read"): card_read, ("card", "answer"): batch_answer,
     ("record", None): record_status, ("answer", None): answer, ("main", "fix"): main_fix,
-    ("role", "start"): role_start, ("role", "end"): role_end, ("role", "open"): role_open,
+    ("role", "start"): role_start, ("role", "end"): role_end, ("role", "open"): role_open, ("role", "land"): role_land,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit, ("bolt", "leave"): bolt_leave,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),

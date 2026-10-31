@@ -99,7 +99,7 @@ LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
 KINDS = ("unit/", "chore/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/",
-         "proof/", "batch/", "env/", "host/")
+         "proof/", "batch/", "env/", "host/", "role/")
 
 _ids = itertools.count(1)  # each entry's count in this process, safe from threads
 _session = ...  # resolved once per process

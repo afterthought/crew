@@ -31,6 +31,9 @@ team building the kit (main_fixer, main_fix_launch), a bolt of one chore where n
 row carries it once its code has delivered and its submission waits held (main_fixes_waiting), and the user's send of
 it is the retry of its submission, made once (send_refusal, sent_of).
 
+A main-level role that runs as its kind has its run read from the runner's records (role_run), and its work that lands
+is a launch of Flume's chore kind on its repository's default branch, the role's address its recipient (role_launch).
+
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
 import json
@@ -131,7 +134,8 @@ def crossed_refusal(team, path, stream, host, what):
 
 REQUESTS = """\
 # crew's requests of each host's runner: a launch of a Flume place for a
-# crossed team's work, or a retry, drop or priority of a place launched.
+# crossed team's work or a role's that lands, or a retry, drop or priority of
+# a place launched.
 # Written only by crew, each in the commit of the plan write that occasions it;
 # numbered once, and never changed or removed. Each host's runner answers on
 # <label>/runner/<host> of this repository, which crew reads and never writes.
@@ -160,8 +164,9 @@ ACTS = {
     "drop": (("Of",), ()),
     "priority": (("Of", "Priority"), ()),
 }
-# The work a request serves, as crew names it: a unit, a chore, a fix on a bolt or a fix of a kit's main.
-WORK = re.compile(r"^(?:unit/N|chore/N|fix/N/N|fix/main/N/N)$".replace("N", "[a-z0-9][a-z0-9-]*"))
+# The work a request serves, as crew names it: a unit, a chore, a fix on a bolt or a fix of a kit's main, or a role's
+# work that lands (Decision 10 of roles-run-as-flume-kinds).
+WORK = re.compile(r"^(?:unit/N|chore/N|fix/N/N|fix/main/N/N|role/N/N)$".replace("N", "[a-z0-9][a-z0-9-]*"))
 
 
 def number(v):
@@ -211,7 +216,8 @@ def request_refusal(requests, new):
     if extra:
         return f"{act} {n} for {work} carries {', '.join(extra)}, which a {act} does not take"
     if not WORK.match(work):
-        return f"{act} {n} serves {work}, and a request serves unit/<unit>, chore/<chore>, fix/<bolt>/<name> or fix/main/<kit>/<name>"
+        return (f"{act} {n} serves {work}, and a request serves unit/<unit>, chore/<chore>, fix/<bolt>/<name>, fix/main/<kit>/<name> "
+                "or role/<role>/<name>")
     by = {r.get("Request"): r for r in requests}
     if act != "launch":
         of = by.get(new.get("Of"))
@@ -1001,3 +1007,37 @@ def main_fixes_waiting(requests, reads, label):
                         since=flume_facts(place["status"], place["place"])["waiting_since"], carried=place["at"],
                         sent=number(sent.get("Request")) if sent is not None else None))
     return out
+
+
+# ------------------------------------------------------------------------------------- a role's work that lands
+
+# The branch a role's work lands on, its repository's default: main, as crew reads every kit's main (plan.18) and cuts a
+# fix of it (main_fix_launch).
+ROLE_BASE = "main"
+FORGE = re.compile(r"^[^/\s]+/[^/\s]+$")
+
+
+def role_launch(requests, named, label, role, host, stream, repo, name, brief):
+    """The launch crew role land <repo> <name> --brief-file <file> appends for a role's work that lands (Decision 10 of
+    roles-run-as-flume-kinds; roles.7 part 3), as (act, host, work, its fields as plan.request takes them), or (None,
+    why): a place of Flume's own chore kind named name, cut from repo's default branch (ROLE_BASE), on the main level's
+    host and in the role's stream, at priority 0, its intent the role's run, <label>-<role>, its recipient the role's
+    address, <label>/<role>, so its landing, or a wait on its caller, reaches the role's next run, and its brief the
+    file's text whole, since the stage's agent is fresh. Refused for a repository not named as its forge address,
+    <owner>/<name>, or one crew does not name (named, the teams file's and the plan's), for a brief with no words, and
+    while a launch of role/<role>/<name> stands, since the name is in use there."""
+    if not FORGE.match(repo):
+        return None, f"a repository is named by its forge address, <owner>/<name>, which the runner resolves to its clone, not {repo}"
+    if repo not in named:
+        return None, (f"crew names no repository {repo}: a role's work lands in a blueprints repository or a kit the teams file "
+                      "names, or a repository the plan names, and it names " + ", ".join(sorted(n for n in named if FORGE.match(n))))
+    if not brief.strip():
+        return None, f"the brief for {name} holds no words, and a chore's agent starts fresh with its brief alone"
+    work = f"role/{role}/{name}"
+    l = launch_of(requests, work)
+    if l is not None:
+        return None, (f"{name} is in use for {label}/{role}: request {l.get('Request')} launched it in {l.get('Repo')} as Flume "
+                      f"place chore--{l.get('Name')}, so name this work differently")
+    return ("launch", host, work, {
+        "Repo": repo, "Kind": "chore", "Name": name, "Base": ROLE_BASE, "Stream": stream, "Priority": 0,
+        "Intent": f"{label}-{role}", "Recipient": f"{label}/{role}", "Brief": brief}), None
