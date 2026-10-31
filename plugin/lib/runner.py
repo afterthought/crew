@@ -12,7 +12,8 @@ crew asks a host's runner for work by requests on the flywheel's branch, request
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
 recfix; each runner answers on a branch of its own, <label>/runner/<host>, which crew fetches with <label>/main and
 reads (host_read) and never writes (state.5). A crossed piece's stage is read from its launch, the runner's answer and
-Flume's status of its place as the runner carried it (stage_of, flume_facts).
+Flume's status of its place as the runner carried it (stage_of, flume_facts), and shown with its team's path on every
+view (path_facts, path_said, piece_said).
 
 A give to a crossed team launches its bolt whole, refused only where no runner answers (runnerless), and every plan
 write reaches the places a crossed bolt launched as its own act: added work launched, dropped work dropped, a dependent
@@ -456,6 +457,58 @@ def stage_of(work, launch, answer, place, read, after=()):
     return dict(res, stage=f["current"])
 
 
+# ------------------------------------------------------------------------------- a crossed team's work as it is shown
+
+def path_facts(path, setting, held):
+    """A team's path as crew bolts, the rail and the board say it (Decision 14), from facts: its path (team_path), its
+    setting (crew.load's `flume`) and each bolt it holds as (name, its Path). {path, due, stream, first}: today's, due
+    or crossed; which way a due team is due, cross or back; the stream its setting names, None while it is off; and
+    the bolts a due team finishes before its path is its setting's, those it holds of its old path, in the plan's
+    order."""
+    kind, way = path
+    old = None if way == "cross" else "flume"
+    return {"path": kind, "due": way, "stream": setting or None, "first": [n for n, p in held if p == old] if kind == "due" else []}
+
+
+def path_said(facts):
+    """A team's path in the words of its bolt's head line (Decision 14): a crossed team's Flume stream; a due team's way
+    and what it finishes first, `due to cross once x lands`; nothing on today's path."""
+    if facts["path"] == "crossed":
+        return f"in Flume stream {facts['stream']}"
+    if facts["path"] == "due":
+        first = " and ".join(facts["first"])
+        return f"due {'to cross' if facts['due'] == 'cross' else 'back'} once {first} {'lands' if len(facts['first']) == 1 else 'land'}"
+    return ""
+
+
+def bare(work):
+    """A piece of work as a line names it: a unit or chore by its own name, a fix by its place's, <bolt>--<name>."""
+    kind, _, rest = work.partition("/")
+    return rest.replace("/", "--", 1) if kind == "fix" else rest if kind in ("unit", "chore") else work
+
+
+def piece_said(s):
+    """A crossed piece's stage (stage_of) as its line in crew bolts and the board says it (Decision 14): (its stage, as
+    today's piece's word, with the tasks of a stage that has them and sluice's number of a submission; what goes with
+    it, or ""): the work it waits on; the question it stopped short with, or the work it found; sluice's words it was
+    sent back with; Flume's words of what it waits on its caller for, its held submission waiting on the user's send;
+    the room it is queued for; the runner's words refusing it; or why crew can't tell its stage."""
+    st = s["stage"]
+    tasks = f" {s['tasks'][0]}/{s['tasks'][1]}" if s.get("tasks") and s["tasks"][1] and st in ("code", "verify") else ""
+    stage = f"submitted #{s['submission']}" if st == "submitted" and s.get("submission") else st + tasks
+    first = (s.get("words") or "").strip().splitlines()[0] if (s.get("words") or "").strip() else ""
+    detail = (
+        "on " + ", ".join(bare(w) for w in s.get("after", [])) if st == "waiting" else
+        (f"found at {s.get('of')}: {first}" if s.get("found") else f"asks at {s.get('of')}: {first}") if st == "needs" else
+        f"sent back by sluice: {first}" if s.get("sent_back") else
+        "its submission waits held for the user's send" if st in ("waits", "stalled") and s.get("held") else
+        f"waits on its caller at {s.get('of') or 'its submission'}: {first or s.get('why') or 'no words'}" if st in ("waits", "stalled") else
+        f"for room at {s['of']}" if st == "queued" and s.get("of") else
+        f"refused by the runner: {first or 'no words'}" if st == "refused" else
+        s.get("why") or "" if st == "unknown" else "")
+    return stage, detail
+
+
 # ------------------------------------------------------------------------------------- a crossed team's launches
 
 def work_of(u):
@@ -735,18 +788,20 @@ def fix_flume_refusal(mode, team, bolt, name):
             f"code has delivered, telling the planner its end, so {said} has nothing to do: crew bolts shows its stage")
 
 
+def fixes_on(requests, reads, label, base):
+    """Each fix whose launch stands on a base, bolt/<bolt> or main, in requests.rec's order, as (its launch, its stage),
+    read from its host's runner (reads, by host, of_host; piece_stage)."""
+    return [(l, piece_stage(requests, of_host(reads, label, l.get("Host")), l)) for l in standing(requests)
+            if l.get("Base") == base and (l.get("Work") or "").startswith("fix/")]
+
+
 def fixes_in_flight(requests, reads, label, bolt):
     """The fixes in flight on a bolt given through Flume (Decision 10), {fix/<bolt>/<name>: its brief}: each whose launch
     stands and whose place has not merged into the bolt, landed or been dropped, its stage read from its host's runner
-    (reads, by host, of_host; piece_stage), one crew can't read counted in flight (read.1). A fix in flight holds the
-    bolt's landing as today's does (plan.landing_unready, landing_rows)."""
-    out = {}
-    for l in standing(requests):
-        work = l.get("Work") or ""
-        if l.get("Base") == f"bolt/{bolt}" and work.startswith(f"fix/{bolt}/"):
-            if piece_stage(requests, of_host(reads, label, l.get("Host")), l)["stage"] not in ("merged", "landed", "dropped"):
-                out[work] = l.get("Brief")
-    return out
+    (fixes_on), one crew can't read counted in flight (read.1). A fix in flight holds the bolt's landing as today's does
+    (plan.landing_unready, landing_rows)."""
+    return {l.get("Work"): l.get("Brief") for l, s in fixes_on(requests, reads, label, f"bolt/{bolt}")
+            if l.get("Work").startswith(f"fix/{bolt}/") and s["stage"] not in ("merged", "landed", "dropped")}
 
 
 # ------------------------------------------------------------------------------------------------ a fix of main

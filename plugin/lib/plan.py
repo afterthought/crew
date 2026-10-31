@@ -1359,10 +1359,80 @@ class Stages:
     tracks another bolt, one it has left, kept from a drop or a move, is not its place: its stage is read as having none,
     and that place is marked left, which the tidy removes and no stage starts over (left_refusal). Work with no bolt is
     queued, and work whose host does not answer, or whose bolt crew can't tell where to read, is unknown, unless main
-    holds it landed."""
+    holds it landed. A unit or chore of a bolt given through Flume (Path: flume) reads its stage from the runner's
+    records alone, never from a place in the kit (crossed; Decision 8 of teams-cross-to-flume-as-their-bolts-land),
+    each partition's requests and runners read once for the command beside its plan (runs, {label: (requests,
+    readings)} as runner_facts reads them, read when first needed where not given; plan.12)."""
 
-    def __init__(self, fleet, plan, survey):
-        self.fleet, self.plan, self.survey, self.memo = fleet, plan, survey, {}
+    def __init__(self, fleet, plan, survey, runs=None):
+        self.fleet, self.plan, self.survey, self.memo, self.runs = fleet, plan, survey, {}, dict(runs or {})
+
+    def runner(self, label):
+        """The partition's requests and its runners as read (runner_facts), or why they could not be read."""
+        if label not in self.runs:
+            try:
+                self.runs[label] = runner_facts(self.fleet, label)
+            except Refusal as e:
+                self.runs[label] = str(e)
+        return self.runs[label]
+
+    def crossed(self, name, u, bolt, res):
+        """A crossed piece's stage (runner.stage_of) from its newest launch not dropped, the runner's answer to it and
+        its place's record, read on its host's runner branch: unknown where the bolt's team or its runner can't be read,
+        or it has no launch, as stage_of says; merged once its place has landed on its bolt, and landed once main holds
+        it, a unit's change archived there or a chore's trailer, as today's do. It has no worktree in the kit, and
+        flume holds the whole of stage_of's answer, which the views show (runner.piece_said)."""
+        try:
+            t = bolt_team(self.fleet, bolt)
+        except Refusal as e:
+            t, res["why"] = None, str(e)
+        if not t:
+            res.setdefault("why", f"team {bolt.get('Team')} is not in the teams file")
+            res["flume"] = {"stage": "unknown", "why": res["why"]}
+            return res
+        run, work = self.runner(t["label"]), runner.work_of(u)
+        if isinstance(run, str):
+            s = runner.stage_of(work, None, None, None, f"crew can't read {t['label']}'s requests or runners: {run}")
+        else:
+            requests, reads = run
+            launch = runner.launch_of(requests, work)
+            reading = runner.of_host(reads, t["label"], launch.get("Host") if launch is not None else t["machine"])
+            s = runner.piece_stage(requests, reading, launch) if launch is not None else \
+                runner.stage_of(work, None, None, None, reading["why"] or True)
+        if s["stage"] == "merged":
+            k, _ = self.kit(bolt)
+            if k and name in (k.get("chores", []) if is_chore(u) else k["main"]):
+                s = dict(s, stage="landed")
+        res.update(stage=s["stage"], tasks=s.get("tasks"), flume=s, **({"why": s["why"]} if s.get("why") else {}))
+        return res
+
+    def fixes(self, bolt):
+        """Each fix standing on a bolt given through Flume, in requests.rec's order, as (its work, fix/<bolt>/<name>,
+        its launch, its stage as stage_of gives it), read as its units and chores are; none where the bolt's team or
+        runner can't be read, which unread names."""
+        t = self.team_of(bolt)
+        run = self.runner(t["label"]) if t else None
+        if not t or isinstance(run, str):
+            return []
+        return [(l.get("Work"), l, s) for l, s in runner.fixes_on(*run, t["label"], f"bolt/{bolt.name()}")]
+
+    def unread(self, bolt):
+        """Why the runner a bolt given through Flume is read from can't be read, as (what, why), or None: its
+        partition's requests, or its team's host's runner branch, missing or refused (read.1, read.3)."""
+        t = self.team_of(bolt)
+        if not t:
+            return None
+        run = self.runner(t["label"])
+        if isinstance(run, str):
+            return f"the requests and runners of {t['label']}", run
+        why = runner.of_host(run[1], t["label"], t["machine"])["why"]
+        return (f"{t['machine']}'s runner", why) if why else None
+
+    def team_of(self, bolt):
+        try:
+            return bolt_team(self.fleet, bolt)
+        except Refusal:
+            return None
 
     def kit(self, b):
         """The bolt's team, host and kit as read, or why they can't be."""
@@ -1390,6 +1460,8 @@ class Stages:
             res["stage"] = "queued"
             return res
         bolt = self.plan.bolt(b)
+        if bolt.get("Team") and bolt.get("Path") == "flume":
+            return self.crossed(name, u, bolt, res)
         if bolt.get("Team"):
             k, why = self.kit(bolt)
             if not k:
@@ -2196,6 +2268,12 @@ def answer_place(w, named, words):
     w.subject = f"plan({(launch.get('Intent') or '').split('/', 1)[-1]}): answer {work}'s {what}"
     w.on += [work] + ([launch.get("Base")] if (launch.get("Base") or "").startswith("bolt/") else [])
     return dict(n=n, work=work, host=host, place=s.get("place") or launch.get("Name"), what=what)
+
+
+def path_facts(plan, t):
+    """A team's path as the views say it (runner.path_facts; Decision 14 of teams-cross-to-flume-as-their-bolts-land),
+    from its plan: its setting and each bolt the plan gives it, with the Path it was given on."""
+    return runner.path_facts(runner.path_of(plan, t), t["flume"], [(b.name(), b.get("Path")) for b in held_by(plan, t["name"])])
 
 
 def give_due(plan, t):
@@ -12691,16 +12769,20 @@ def standing_said(sub):
     return f"#{sub['id']}" + (f" {words}" if words else "")
 
 
-def bolts_data(fleet, labels, found, sv, errors, bolt=None):
+def bolts_data(fleet, labels, found, sv, errors, bolt=None, runs=None):
     """What crew bolts shows, from the plans read (found) and the survey of the hosts holding their bolts (sv): each
     partition's plans, each bolt with its team, host, state, verification (sluice's verdict on its last landing, as
     kit.verification reads it, for a bolt whose kit was read), units and chores in build order with their kinds and
     stages read from the kits, and fixes, each with the number and state of its merge standing in sluice's queue on
     the bolt's branch (submission), the bolt's landing standing on its kit's main (landing), and, when the queue could
     not be read on the team's host, why (submissions_error), no line then given a submission (submission_rows,
-    teams.22); and the queue; the hosts that did not answer and the plans that could not be read. With bolt, that bolt
-    alone."""
-    data = {"partitions": [], "unreachable": {h: v["error"] for h, v in sv.items() if not v["ok"]}, "unread": errors}
+    teams.22); and the queue; the hosts that did not answer and the plans that could not be read. Each held bolt says
+    its team's path (path_facts), and a bolt given through Flume its units' and chores' stages and its fixes' from the
+    runner's records (Stages.crossed, Stages.fixes), each with stage_of's answer (flume), no worktree and no submission
+    of crew's, and the runners that could not be read, which hide that work alone (runners_unread; Decisions 8 and 14
+    of teams-cross-to-flume-as-their-bolts-land), read once for the command (runs, as Stages takes them, read when
+    first needed where not given). With bolt, that bolt alone."""
+    data = {"partitions": [], "unreachable": {h: v["error"] for h, v in sv.items() if not v["ok"]}, "unread": errors, "runners_unread": {}}
     for l in labels:
         part = {"label": l, "plans": []}
         for pl, repo, tip, plan in found:
@@ -12709,7 +12791,7 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None):
             if not plan:
                 part["plans"].append({"repo": repo, "plan": None, "bolts": [], "queue": []})
                 continue
-            st = Stages(fleet, plan, sv)
+            st = Stages(fleet, plan, sv, runs)
             bolts = []
             for b in plan.bolts():
                 if bolt not in (None, b.name()):
@@ -12717,8 +12799,14 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None):
                 t = bolt_team(fleet, b)
                 k, _ = st.kit(b) if t else (None, None)
                 units = [dict(unit=u.name(), kind=kind_of(u), after=u.all("After"), sources=u.all("Source"), **{
-                    x: st.of(u.name())[x] for x in ("stage", "tasks", "worktree")}) for u in plan.work_of(b.name())]
-                fixes = [dict(fix=f["fix"], worktree=f["path"], merged=f["merged"]) for f in (k["fixes"] if k else []) if f["bolt"] == b.name()]
+                    x: st.of(u.name())[x] for x in ("stage", "tasks", "worktree")}, flume=st.of(u.name()).get("flume"))
+                    for u in plan.work_of(b.name())]
+                crossed = t and b.get("Path") == "flume"
+                fixes = [dict(fix=f["fix"], worktree=f["path"], merged=f["merged"]) for f in (k["fixes"] if k else []) if f["bolt"] == b.name()] \
+                    if not crossed else [dict(fix=w, worktree=None, merged=s["stage"] in ("merged", "landed"), flume=s) for w, _, s in st.fixes(b)]
+                silent = st.unread(b) if crossed else None
+                if silent:
+                    data["runners_unread"][silent[0]] = silent[1]
                 bk = (k or {}).get("bolts", {}).get(b.name()) or {}
                 verified = dict(zip(("state", "said"), kit.verification(bk.get("head"), bk.get("verdict")))) if k and bk.get("exists") else None
                 unread = (k or {}).get("submissions_error")
@@ -12728,7 +12816,7 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None):
                     x["submission"] = rows.get(x.get("unit") or x.get("fix"))
                 bolts.append(dict(bolt=b.name(), repo=b.get("Repo"), goal=b.get("Goal"), sources=b.all("Source"), team=b.get("Team"),
                                   host=t["machine"] if t else None, state=st.bolt_state(b), verification=verified, units=units, fixes=fixes,
-                                  landing=landing, submissions_error=unread))
+                                  landing=landing, submissions_error=unread, given=b.get("Path"), path=path_facts(plan, t) if t else None))
             queue = [] if bolt else [dict(unit=u.name(), kind=kind_of(u), repo=u.get("Repo"), stage="queued", sources=u.all("Source"))
                                      for u in plan.queue()]
             part["plans"].append({"repo": repo, "plan": tip, "bolts": bolts, "queue": queue})
@@ -12741,7 +12829,10 @@ def bolts_text(data):
     in sluice, `landing #<n> <state>` (standing_said), that its submissions can't be read on its host and why, once,
     when they can't, its verification when its kit was read, and each unit with its stage, tasks, its merge standing in
     sluice, `#<n> <state>`, and place, each chore among them with `chore` before its stage, each fix with its merge, the
-    queue by repo with each unit's and chore's sources, and each host that did not answer."""
+    queue by repo with each unit's and chore's sources, and each host that did not answer. A held bolt's team's path is
+    on its head line (runner.path_said), and a crossed piece's line says its stage as the runner's records give it, its
+    Flume place in its place's stead and what goes with its stage after (runner.piece_said); each runner that could not
+    be read is named, the stages of the work it runs unknown (Decision 14 of teams-cross-to-flume-as-their-bolts-land)."""
     lines = []
     for p in data["partitions"]:
         for pl in p["plans"]:
@@ -12750,7 +12841,8 @@ def bolts_text(data):
                 continue
             lines.append(f"{p['label']}/main {pl['plan'][:7]}  {pl['repo']}")
             for b in pl["bolts"]:
-                who = f"{b['team']} @ {b['host']}" if b["team"] else "no team"
+                who = (f"{b['team']} @ {b['host']}" if b["team"] else "no team") + (
+                    f", {runner.path_said(b['path'])}" if b.get("path") and runner.path_said(b["path"]) else "")
                 lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}"
                              + (f"  landing {standing_said(b['landing'])}" if b.get("landing") else ""))
                 if b.get("submissions_error"):
@@ -12758,12 +12850,21 @@ def bolts_text(data):
                 if b.get("verification"):
                     lines.append(f"  verification: {b['verification']['state']}, {b['verification']['said']}")
                 for u in b["units"]:
+                    if u.get("flume"):
+                        stage, detail = runner.piece_said(u["flume"])
+                        stage = ("chore " if u.get("kind") == "chore" else "") + stage
+                        lines.append(f"  {u['unit']:<40} {stage:<12} {flume_place(u['flume'])}  {detail}".rstrip())
+                        continue
                     stage = ("chore " if u.get("kind") == "chore" else "") + u["stage"] + (
                         f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else "") + (
                         f" {standing_said(u['submission'])}" if u.get("submission") else "")
                     where = "places/" + os.path.basename(u["worktree"]) if u["worktree"] else ""
                     lines.append(f"  {u['unit']:<40} {stage:<12} {where}".rstrip())
                 for f in b["fixes"]:
+                    if f.get("flume"):
+                        stage, detail = runner.piece_said(f["flume"])
+                        lines.append(f"  {f['fix']:<40} {'fix ' + stage:<12} {flume_place(f['flume'])}  {detail}".rstrip())
+                        continue
                     fixed = ("fix merged" if f["merged"] else "fix") + (f" {standing_said(f['submission'])}" if f.get("submission") else "")
                     lines.append(f"  {f['fix']:<40} {fixed:<12} places/{os.path.basename(f['worktree'])}")
             repos = sorted({u["repo"] for u in pl["queue"]})
@@ -12774,7 +12875,15 @@ def bolts_text(data):
                     lines.append(f"  {u['unit']:<40} {queued:<12} {', '.join(u['sources'])}".rstrip())
     for h, why in data["unreachable"].items():
         lines.append(f"{h} did not answer ({why}): the stages of its bolts are unknown")
+    for what, why in data.get("runners_unread", {}).items():
+        lines.append(f"{what} can't be read ({why}): the stages of the work crossed to Flume there are unknown")
     return "\n".join(lines)
+
+
+def flume_place(s):
+    """A crossed piece's Flume place as its line names it, flume/<the place's folder>, a tidied place's time left off;
+    nothing before the runner has launched it."""
+    return f"flume/{os.path.basename(s['place']).split('@')[0]}" if s.get("place") else ""
 
 
 # ------------------------------------------------------------------------------------------------- a bolt's time

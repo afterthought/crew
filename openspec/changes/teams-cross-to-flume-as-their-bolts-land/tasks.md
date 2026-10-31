@@ -41,7 +41,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 
 ## 7. A crossed team's work in every view
 
-- [ ] 7.1 `Stages.of` and `crew bolts`, text and JSON, read a crossed piece's stage from the runner's records and say each team's path (design Decisions 8 and 14; Task notes 7.1); passes `tests/py/test_bolt_commands.py` and `tests/py/test_stages.py` in `tests:logic`.
+- [x] 7.1 `Stages.of` and `crew bolts`, text and JSON, read a crossed piece's stage from the runner's records and say each team's path (design Decisions 8 and 14; Task notes 7.1); passes `tests/py/test_bolt_commands.py` and `tests/py/test_stages.py` in `tests:logic`.
 - [ ] 7.2 A crossed bolt reads proven and closes at its landing from its pieces' runner stages, a chore asked for no trailer (design Decision 12; Task notes 7.2); passes `tests/py/test_landing.py` in `tests:logic`.
 - [ ] 7.3 A crossed team's unit enters a review batch once its change has landed on GitHub's bolt, read at that commit (design Decision 13; Task notes 7.3); passes `tests/py/test_batches.py` in `tests:logic`.
 - [ ] 7.4 The rail's rows, the board's ledger and `board.agent_views` show crossed and due teams, the planner's band the places waiting on an answer and ops's the fixes in flight, and the mod draws them (design Decision 14, `code.8`; Task notes 7.4); passes `tests/py/test_board.py` and `tests/py/test_rail.py` in `tests:logic`, and verify `tests/suite mod` (`tests:mod`) ends with "0 failed".

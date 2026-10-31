@@ -180,6 +180,26 @@ def crossed_fleet(**settings):
                       for n, f in settings.items()}}
 
 
+def crossed_fleet_read(**settings):
+    """madswan's fleet (crossed_fleet), crew's kit with its main checkout on deneb, so a kit read there (crew_read) can
+    say what main and a bolt hold."""
+    fleet = crossed_fleet(**settings)
+    for t in fleet["teams"].values():
+        t["kit"] = dict(CREW_KIT, main="/crew/main", dir="/crew")
+        t["kits"] = [t["kit"]]
+    return fleet
+
+
+def crew_read(main=(), chores=(), bolts=None):
+    """A survey of deneb (plan.survey's answer) holding crew's kit as read there: main's changes and chores, and each
+    bolt in bolts, {bolt: its facts over a bolt holding nothing yet, its head d…d with no verdict}."""
+    empty = {"exists": True, "at": "origin/bolt/x", "changes": [], "archived": [], "open": {}, "chores": [], "head": "d" * 40,
+             "head_at": "2026-10-31T12:00:00Z", "verdict": ""}
+    k = {"ok": True, "main": list(main), "chores": list(chores), "places": {}, "chore_places": {}, "fixes": [],
+         "bolts": {b: dict(empty, at=f"origin/bolt/{b}", **facts) for b, facts in (bolts or {}).items()}}
+    return {"deneb": {"ok": True, "kits": {"/crew/main": k}}}
+
+
 def flume_plan(bolts=(), work=()):
     """madswan's plan.rec text, every bolt and piece of work in crew: bolts as (name, team or None, Path or None), work as
     (name, bolt or None, [after], kind, [sources]), kind "chore" or "unit", each in order and intended `Build <name>.`."""
@@ -212,3 +232,20 @@ def ran(launched=None, held=(), host="deneb", label="madswan"):
     files = {"runner.rec": plan.Plan(runner.RUNNER + f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n"),
              "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)}
     return {host: runner.host_read(label, host, "5e1f0c2a" + "0" * 32, files, {})}
+
+
+def launched(bolts, work=(), team="crw-4", fleet=None, held=()):
+    """madswan's plan (flume_plan) with each bolt in bolts given to team through Flume and its work launched as a give
+    launches it (plan.reach_places), and each of held, (bolt, its team), given to that team on today's path: (the plan,
+    requests.rec's records as the writes leave them). The requests name their writer: set CREW_AGENT first."""
+    import plan
+    import runner
+    fleet = fleet or crossed_fleet()
+    w = FactsWrite(flume_plan([(b, None, None) for b in [*bolts, *(b for b, _ in held)]], work), label="madswan")
+    for b, t in held:
+        w.plan.bolt(b).set("Team", t)
+    for b in bolts:
+        w.plan.bolt(b).set("Team", team)
+        w.plan.bolt(b).set("Path", "flume", after="Team")
+        plan.reach_places(fleet, w, b, fleet["teams"][team])
+    return w.plan, plan.Plan(w.files.get("requests.rec") or runner.REQUESTS).recs("Request")
