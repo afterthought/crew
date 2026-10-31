@@ -101,7 +101,9 @@ Each is the write's own act, in its own commit (`plan.3`: an approval applies th
 - a unit or chore added to, or moved into, a crossed team's bolt is launched as the give launches it;
 - an approved amendment of a unit whose place is launched is a `retry` of construct with the amendment's words, the place's later stages then running again as Flume runs a kind through (`plan.15`'s outcome, the approval's own act); of a unit whose launch is still held or unanswered, a `drop` of that launch and a new launch whose brief carries the amendment;
 - a unit or chore dropped, or a crossed team's bolt dropped, drops each of its launches still standing;
+- a dependent whose launch waits on a launch the write drops or launches anew is dropped and launched again naming the new, or none, so no place waits on a launch that will never land; it has not launched, since its After work has not landed;
 - a move out of a crossed team's bolt, a split, or a change of `After` on work whose launch is written is refused, naming the work's place and `drop` then `add` as the way on, since a place's base and order are fixed at its launch;
+- work with a place on today's path is not moved into a crossed team's bolt, refused naming `drop` then `add`, since nothing moves work in flight from one path to the other (Decision 2);
 - work joins no bolt whose landing is queued or that reads proven (`plan.8`), as today.
 
 ### 8. A crossed team's work reads its stage from the runner's records
