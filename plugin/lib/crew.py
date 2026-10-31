@@ -2735,10 +2735,12 @@ class Agents:
 
 
 def main_sessions(p):
-    """A main level's sessions, the main level's own first, each with its standing roles in MAIN_STANDING's order."""
+    """A main level's sessions, the main level's own first, each with its standing roles in MAIN_STANDING's order. A
+    role its partition runs as its kind stands in none (design Decision 14), but the session it stood in is still one,
+    so a standing agent of it left there is ended."""
     by = {}
     for role in MAIN_STANDING:
-        by.setdefault(role_session(p, role), []).append(role)
+        by.setdefault(role_session(p, role), []).extend([role] if p["flume"][role] is False else [])
     return [(s, tuple(by[s])) for s in sorted(by, key=lambda s: (s != p["session"], s))]
 
 

@@ -253,6 +253,14 @@ class TestRoleSessions:
         p = crew.partition_of(self.load(tmp_path, monkeypatch, {}), "swancloud")
         assert crew.main_sessions(p) == [("swancloud-1", ("design", "planner", "ops", "operator"))]
 
+    def test_a_role_that_runs_as_its_kind_stands_in_no_session_though_its_session_is_still_one(self, tmp_path, monkeypatch):
+        """main-level, Two roles run as their kinds: no tab and no start for the planner; the session it was named
+        stays one of the main level's, so a standing agent of it left there is ended (design Decision 14)."""
+        fleet = self.load(tmp_path, monkeypatch, {"planner": {"session": "swancloud-2"}})
+        p = dict(crew.partition_of(fleet, "swancloud"))
+        p["flume"] = dict(p["flume"], planner="swancloud-main", ops="swancloud-main")
+        assert crew.main_sessions(p) == [("swancloud-1", ("design", "operator")), ("swancloud-2", ())]
+
     @pytest.mark.parametrize("roles, said", [
         ({"planner": {"session": "madswan-1"}}, "partition swancloud's planner runs in deneb's session madswan-1, which is in partition business, not personal"),
         ({"planner": {"session": "swancloud-9"}}, "partition swancloud's planner uses herdr session swancloud-9, which .* does not list on deneb"),

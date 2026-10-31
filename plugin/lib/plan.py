@@ -11980,12 +11980,66 @@ def elsewhere(fleet, host, *argv):
 def moved_role(fleet, label, ms):
     """What refuses a main level's up while one of its roles' agents still runs in a session the role no longer stands
     in, its pane recorded there, so up would start it a second time in its own: None when none does."""
+    flume = crew.partition_of(fleet, label)["flume"]
     for m in ms:
         for role, *_ in m.lines("panes"):
-            if role in crew.MAIN_STANDING and role not in m.standing and m.status(role):
+            if role in crew.MAIN_STANDING and flume[role] is False and role not in m.standing and m.status(role):
                 return (f"{label}-{role} still runs in session {m.session} ({m.pane(role)}), and its partition names it another session "
                         f"now: crew main down {label} ends it, then crew main up {label} starts it there")
     return None
+
+
+def kinds_up(fleet, label, ms):
+    """What crew main up does for the roles its partition runs as its kind, none of which it starts or greets (design
+    Decision 14, main-level "The main level is one herdr workspace"): roles.rec on the flywheel's branch written to
+    match the teams file where anything is due (asks.roles_due), in a commit of its own; and a standing agent of such a
+    role still up ended and its tab closed, or, while it works, left and said so."""
+    p = crew.partition_of(fleet, label)
+    kinds = [r for r in crew.MAIN_STANDING + ("reviewer",) if p["flume"][r] is not False]
+    if not kinds:
+        return
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    metas = {r: crew.definition(asks.definition_of(r))[0] for r in kinds}
+    due, gone = asks.roles_due(asks.parse_roles(show(repo, tip, "roles.rec")), p, metas)
+    def change(w):
+        roles_lines(w, fleet, label)
+        return []
+    if due or gone:
+        write(fleet, label, change, f"roles({label}): to match the teams file",
+              act="main.up", on=[f"agent/{label}-{r}" for r in [d["Role"] for d in due] + gone],
+              why=f"main({label}): roles.rec to match the teams file")
+    for role in kinds:
+        m = next((m for m in ms if m.session == crew.role_session(p, role)), None)
+        if not m or not m.status(role):
+            continue
+        why = m.stop(role)
+        if why:
+            print(f"{why}: {label}'s {role} runs as its kind, so it is ended once it is not working")
+            continue
+        m.close_pane(role)
+        m.record("main.down", f"main({label}): end {label}-{role}, which runs as its kind", [role])
+        print(f"{label}-{role}'s standing agent is ended: {label}'s {role} runs as its kind")
+
+
+def kinds_said(fleet, label):
+    """What crew main status says of each role the partition runs as its kind (main-level "A role that runs as its kind
+    is not started by crew-role"), {role: words}: that it runs as its kind, in which stream, and how many asks of it
+    wait and since when, read from asks.rec on the flywheel's branch (asks.pending)."""
+    p = crew.partition_of(fleet, label)
+    kinds = [r for r in crew.KIND_ROLES if p["flume"][r] is not False]
+    if not kinds:
+        return {}
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref)
+    held, turns = asks.parse(show(repo, tip, "asks.rec") if tip else None)
+    out = {}
+    for role in kinds:
+        waiting, _ = asks.pending(held, [], turns, role)
+        out[role] = (f"runs as its kind in stream {p['flume'][role]}; "
+                     + (f"{len(waiting)} ask{'' if len(waiting) == 1 else 's'} wait{'s' if len(waiting) == 1 else ''}, the oldest since {waiting[0]['At']}"
+                        if waiting else "no ask waits"))
+    return out
 
 
 def main_cmd(fleet, a):
@@ -12005,6 +12059,7 @@ def main_cmd(fleet, a):
         not_held()
         moved = moved_role(fleet, label, ms)
         not moved or fail(moved)
+        kinds_up(fleet, label, ms)
         started_in = []
         for m in ms:
             m.mark(down=False)
@@ -12048,6 +12103,8 @@ def main_cmd(fleet, a):
         for m in ms:
             for role in m.standing:
                 print("%-34s %-8s %-14s %s" % (m.agent_of(role), m.pane(role), m.session, m.status(role) or "not up"))
+        for role, said in kinds_said(fleet, label).items():
+            print("%-34s %-8s %-14s %s" % (f"{label}-{role}", "-", "-", said))
         for host in hosts:
             if host == here:
                 dispatch_cmd(fleet, argparse.Namespace(act="status", label=label))
