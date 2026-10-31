@@ -159,6 +159,13 @@ def new_id():
     return entry_id(datetime.datetime.now(datetime.timezone.utc), crew.this_host(), os.getpid(), next(_ids))
 
 
+def ask_entry(run, what, names=None, words=None):
+    """An ask's entry, as emit takes it (the run-record spec, An ask and a turn are entries): an `ask` on the asked
+    role's run, agent/<run>, and the record the ask names, its Why made from names, and the length of its words, never
+    their text (record.3)."""
+    return dict(act="ask", on=[f"agent/{run}"] + ([names] if names else []), why=f"ask {run}: {what}", Chars=len(words) if words else None)
+
+
 def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, by=None, **extra):
     """Append one entry to the label's run record on this host, in one write; its id, or None when it could not be
     written, which is said on standard error and nothing more. eid is an id made ahead with new_id; by, the role an

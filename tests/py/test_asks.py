@@ -6,6 +6,8 @@ runner's records show waiting on a role, read from Flume's status; and the role 
 That crew writes asks.rec and roles.rec on the branch and recfix holds them is the contract tier's (test_recfix)."""
 import json
 
+import pytest
+
 import asks
 
 ASKS = """\
@@ -198,7 +200,7 @@ class TestRoleRecords:
 
     def test_role_records_are_read_from_their_file(self):
         text = "%rec: Role\n%key: Role\n\nRole: planner\nStream: madswan-main\n\nStream: none\n"
-        assert asks.parse_roles(text) == [{"Took": [], "Role": "planner", "Stream": "madswan-main"}]
+        assert asks.parse_roles(text) == [{"Role": "planner", "Stream": "madswan-main"}]
 
 
 def status(**place):
@@ -258,3 +260,110 @@ class TestWaitsOn:
         reqs = [launch(12), launch(3), launch(4, act="retry"), launch(5, recipient="madswan/ops")]
         places = [{"Request": n, "Place": f"/p{n}", "Status": on} for n in ("12", "3", "4", "5", "99")]
         assert [w[1] for w in asks.waits_on("madswan/planner", reqs, places)] == ["3", "12"]
+
+
+MADSWAN = {"partitions": {"madswan": madswan(planner="madswan-main")}, "teams": {}, "hosts": {}}
+
+
+@pytest.fixture
+def deneb(monkeypatch):
+    import crew
+    monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+
+
+def written(files=None):
+    from facts import FactsWrite
+    w = FactsWrite("", files)
+    w.label = "madswan"
+    return w
+
+
+@pytest.mark.usefixtures("deneb")
+class TestWrite:
+    """plan.ask_rec, ask_lines, ask_write and roles_lines: what a write of an ask puts in asks.rec and roles.rec, and how
+    the commit names it (design Decision 4; plan.2). That recfix holds the files to their headers is test_recfix's."""
+
+    def test_the_first_ask_starts_asks_rec_and_writes_its_roles_record_beside_it(self):
+        """role-runs, An ask before main up: the ask's commit holds the planner's record too."""
+        import plan
+        w = written()
+        rec = plan.ask_rec(w, MADSWAN, "madswan", "planner", "tell", "madswan-design", words="record 0053\nis accepted")
+        got, turns = asks.parse(w.files["asks.rec"])
+        assert w.files["asks.rec"].startswith(plan.ASKS.split("\n\n")[0]) and turns == []
+        assert [(a["Id"], a["Role"], a["From"], a["What"], a["Words"]) for a in got] == [("1", "planner", "madswan-design", "tell", "record 0053\nis accepted")]
+        assert rec.get("Id") == "1" and "Key" not in got[0] and "Names" not in got[0]
+        assert asks.parse_roles(w.files["roles.rec"]) == [asks.role_record(MADSWAN["partitions"]["madswan"], "planner", PLANNER)]
+        assert plan.ask_rec(w, MADSWAN, "madswan", "planner", "card", "crew", names="proposal/12", key="card/req_1/t").get("Id") == "2"
+        assert [a["Id"] for a in asks.parse(w.files["asks.rec"])[0]] == ["1", "2"]
+
+    def test_an_ask_whose_key_the_tip_holds_writes_nothing(self):
+        """role-runs, One answer seen twice: the second write finds the key and leaves every file as it was."""
+        import plan
+        w = written()
+        plan.ask_rec(w, MADSWAN, "madswan", "planner", "card", "crew", names="proposal/12", key="card/req_1/t")
+        again = written(dict(w.files))
+        assert plan.ask_rec(again, MADSWAN, "madswan", "planner", "card", "crew", names="proposal/12", key="card/req_1/t") is None
+        assert again.files == w.files
+
+    def test_an_ask_in_its_acts_commit_is_named_beside_the_acts_entry_and_a_held_key_is_kept_to_say(self):
+        import plan
+        w = written()
+        rec = plan.ask_lines(w, MADSWAN, "madswan", "planner", "landed", "crew", names="bolt/b", key="landed/b")
+        assert [r for _, r in w.asked] == [rec] and w.asked[0][0] and w.held == []
+        assert plan.ask_lines(w, MADSWAN, "madswan", "planner", "landed", "crew", names="bolt/b", key="landed/b") is None
+        assert len(w.asked) == 1 and w.held == [("madswan-planner", "landed/b")]
+
+    def test_roles_rec_follows_the_teams_file_and_a_branch_with_nothing_due_gets_none(self):
+        """role-runs, The planner moves and The planner stands again."""
+        import plan
+        w = written()
+        assert plan.roles_lines(w, MADSWAN, "madswan") and [r["Role"] for r in asks.parse_roles(w.files["roles.rec"])] == ["planner"]
+        assert not plan.roles_lines(w, MADSWAN, "madswan")
+        moved = {"partitions": {"madswan": madswan(planner="madswan-main", ops="madswan-ops")}}
+        assert not plan.roles_lines(w, moved, "madswan", ["planner"])
+        assert plan.roles_lines(w, moved, "madswan") and [r["Role"] for r in asks.parse_roles(w.files["roles.rec"])] == ["planner", "ops"]
+        assert asks.parse_roles(w.files["roles.rec"])[1]["Model"] == "claude-opus-5-5[1m]"
+        stood = {"partitions": {"madswan": madswan(ops="madswan-ops")}}
+        assert plan.roles_lines(w, stood, "madswan") and [r["Role"] for r in asks.parse_roles(w.files["roles.rec"])] == ["ops"]
+        none = written()
+        assert not plan.roles_lines(none, {"partitions": {"madswan": madswan()}}, "madswan") and "roles.rec" not in none.files
+
+    def test_a_write_names_its_acts_entry_and_each_asks_and_emits_the_asks_after_the_act(self, monkeypatch, capsys):
+        """plan.2: the commit's Crew-Entry trailers name the act's entry and the ask's, and each is emitted once pushed."""
+        import plan
+        import record
+        made, emitted = [], []
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("afterthought/madswan-state", f"{label}/main"))
+        monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(""))
+        monkeypatch.setattr(plan, "show", lambda repo, tip, path: None)
+        monkeypatch.setattr(plan, "land", lambda repo, ref, path, make: made.append(make("t" * 40)) or "c" * 40)
+        monkeypatch.setattr(plan, "notify", lambda fleet, seen, subject: None)
+        monkeypatch.setattr(record, "emit", lambda label, act, on=(), frm=(), commit=(), why=None, eid=None, **f: emitted.append((act, on, eid, f)))
+        monkeypatch.setattr(plan, "agent", lambda: "madswan-ops")
+
+        def change(w):
+            plan.ask_lines(w, MADSWAN, "madswan", "planner", "landed", "crew", names="bolt/b", key="landed/b")
+            return []
+        plan.write(MADSWAN, "madswan", change, "plan(b): land the bolt", act="bolt.land", on=["bolt/b"])
+        (files, msg), = made
+        eids = [l.split(": ", 1)[1] for l in msg.splitlines() if l.startswith("Crew-Entry: ")]
+        assert len(eids) == 2 and "asks.rec" in files and "roles.rec" in files
+        assert [(a, on, eid) for a, on, eid, _ in emitted] == [("bolt.land", ["bolt/b"], eids[0]), ("ask", ["agent/madswan-planner", "bolt/b"], eids[1])]
+        assert "asked madswan-planner: landed on bolt/b" in capsys.readouterr().out
+
+    def test_an_ask_alone_whose_key_is_held_commits_nothing_and_says_so(self, monkeypatch, capsys):
+        import plan
+        held = written()
+        plan.ask_rec(held, MADSWAN, "madswan", "planner", "card", "crew", names="proposal/12", key="card/req_1/t")
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("afterthought/madswan-state", f"{label}/main"))
+        monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(""))
+        monkeypatch.setattr(plan, "show", lambda repo, tip, path: held.files.get(path))
+        monkeypatch.setattr(plan, "land", lambda repo, ref, path, make: make("t" * 40) and "c" * 40)
+        assert plan.ask_write(MADSWAN, "madswan", "planner", "card", "crew", names="proposal/12", key="card/req_1/t") is None
+        assert capsys.readouterr().out == "madswan/main: madswan-planner is already asked by card/req_1/t; nothing written\n"
+
+    def test_an_asks_entry_holds_the_length_of_its_words_and_never_their_text(self):
+        import record
+        assert record.ask_entry("madswan-planner", "tell", None, "x" * 40) == dict(act="ask", on=["agent/madswan-planner"], why="ask madswan-planner: tell", Chars=40)
+        assert record.ask_entry("madswan-design", "capture", "signals/s/01-c")["on"] == ["agent/madswan-design", "signals/s/01-c"]
+        assert record.ask_entry("madswan-planner", "open")["Chars"] is None

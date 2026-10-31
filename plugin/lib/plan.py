@@ -117,6 +117,7 @@ if __name__ == "__main__":
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
+import asks  # noqa: E402
 import crew  # noqa: E402
 import gather  # noqa: E402
 import kit  # noqa: E402
@@ -843,6 +844,7 @@ class Write:
         self.files = {}  # every other file the change replaced, {path: text}, committed with the plan
         self.quiet = set()  # teams the write's own command greets, so notify leaves them be
         self.on, self.frm = [], []  # objects only the change can name, for the write's run-record entry
+        self.asked, self.held = [], []  # the asks the change wrote in its commit (ask_lines), and the keys it found held
 
     def text(self, path):
         """A file of the branch as the change has left it: replaced, else at the tip, else None."""
@@ -874,8 +876,9 @@ class Write:
 
 def message(subject, body, eid):
     """A commit message: the subject, the body where there is one, and the Crew-Entry trailer naming the run-record
-    entry that describes the commit."""
-    return subject + (f"\n\n{body}" if body else "") + (f"\n\nCrew-Entry: {eid}" if eid else "") + "\n"
+    entry that describes the commit, or one trailer for each of several, an act's and each ask written with it."""
+    eids = [e for e in (eid if isinstance(eid, list) else [eid]) if e]
+    return subject + (f"\n\n{body}" if body else "") + ("\n\n" + "\n".join(f"Crew-Entry: {e}" for e in eids) if eids else "") + "\n"
 
 
 def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None, by=None, why=None):
@@ -883,8 +886,9 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
     with crew's, commit every file it changed, each checked first, and push, replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
     the change added to them, with the act's own fields, and reaches the branch as the commit after it (read.5); by, the
-    role an act of crew's own is in the name of, and why, the entry's Why in place of the subject's (record.emit).
-    Returns the commit."""
+    role an act of crew's own is in the name of, and why, the entry's Why in place of the subject's (record.emit). An ask
+    the change wrote in its commit (ask_lines) is named in the commit beside the act's entry, and its own entry written
+    after the act's; a key the change found held is said. Returns the commit."""
     repo, ref = state_of(fleet, label)
     seen = {"eid": record.new_id()}
     CONTEXT.update(label=label, eid=seen["eid"])
@@ -898,13 +902,14 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         check(w.plan)
         files = {"plan.rec": w.plan.text(), **w.files}
         seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
-                    subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
-        return files, message(seen["subject"], body, seen["eid"])
+                    subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm, asked=w.asked, held=w.held)
+        return files, message(seen["subject"], body, [seen["eid"]] + [eid for eid, _ in w.asked])
     sha = land(repo, ref, None, make)
     print(f"{ref} {sha[:7]}: {seen['subject']}")
     if act:
         record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], why or record.subject(seen["subject"]), eid=seen["eid"],
                     by=by, **(fields or {}))
+    asked(label, f"{repo}@{sha}", seen["asked"], seen["held"])
     notify(fleet, seen, seen["subject"])
     return sha
 
@@ -5619,6 +5624,146 @@ def direct(key):
         if op.after:
             op.after(state_of(fleet, op.label)[0], sha)
     return run
+
+
+# -------------------------------------------------------------------------------------------------- asks
+
+ASKS = """\
+# The asks of the partition's main-level roles that run as their kinds, and the turns their runs took them in
+# (record 0047 move 6). An ask names a role, whose next run takes it at its start, crew role start, and answers it at
+# its end, crew role end. Written only through crew. An ask is never removed, and its number is never reused.
+
+%rec: Ask
+%doc: One ask of a role: who or what asks (From), what kind of ask it is (What), the record it names (Names), the key it is written once by (Key), its words and when.
+%key: Id
+%type: Id int
+%type: Role enum design planner reviewer ops operator
+%type: What enum tell send capture landed card open batch delivered
+%type: At date
+%mandatory: Id Role From What At
+%allowed: Id Role From What Names Key Words At
+%unique: Role From What Names Key Words At
+
+%rec: Turn
+%doc: A run of a role taking what was pending for it (Took: ask/<id>, place/<request>@<since>, landed/<request>), from its start (Began) to its end (Ended, with what it Said it did), or Superseded by the turn that took its asks again.
+%key: Turn
+%type: Turn,Superseded int
+%type: Role enum design planner reviewer ops operator
+%type: Began,Ended date
+%mandatory: Turn Role Run Place Host Began
+%allowed: Turn Role Run Place Host Took Began Ended Said Superseded
+%unique: Role Run Place Host Began Ended Said Superseded
+"""
+ROLES = """\
+# The runs of the partition's main-level roles that run as their kinds: one record for each, the launch the host's
+# runner makes while anything is pending for the role (asks.rec). Written only through crew, to match the teams file,
+# at crew main up and with an ask whose role's record is missing or differs.
+
+%rec: Role
+%doc: A role's run: the place <Kind>--<Name> in Repository on Host, launched from crew's kinds in Stream at Priority for Intent, with Model and Effort.
+%key: Role
+%type: Role enum design planner reviewer ops operator
+%type: Priority int
+%type: Effort enum low medium high xhigh max
+%mandatory: Role Address Run Host Repository Kinds Kind Name Stream Priority Intent Model Effort
+%allowed: Role Address Run Host Repository Kinds Kind Name Stream Priority Intent Model Effort
+%unique: Role Address Run Host Repository Kinds Kind Name Stream Priority Intent Model Effort
+"""
+
+
+class AskHeld(Exception):
+    """An ask written alone whose key asks.rec holds at the tip the write was applied to: nothing is committed."""
+
+
+def rec_file(w, path, header):
+    """One of crew's recutils files on the flywheel as the write has it, its record descriptors in step with crew's
+    (in_step), or a new one when the branch has none yet."""
+    pl = Plan(w.text(path) or header)
+    in_step(pl, header)
+    return pl
+
+
+def ask_rec(w, fleet, label, role, what, frm, names=None, key=None, words=None):
+    """An ask of the partition's role appended to asks.rec in the write w (design Decision 4), and the role's record
+    written to roles.rec where it is missing or differs (roles_lines), so it stands before the runner can want the
+    role: the ask's record, or None when asks.rec at the tip the write is applied to holds an ask with its key, which
+    writes nothing (role-runs "An ask with a key is written once"), on the tip first tried and on any a refused push is
+    applied again to (plan.1, state.1). frm, an agent's name, <user>@<host> or crew; names, the record it names."""
+    pl = rec_file(w, "asks.rec", ASKS)
+    held, _ = asks.parse(pl.text())
+    if asks.keyed(held, key):
+        return None
+    at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rec = Rec("Ask", [("Id", str(asks.next_id(held))), ("Role", role), ("From", frm), ("What", what)]
+              + [(f, v) for f, v in (("Names", names), ("Key", key), ("Words", words)) if v] + [("At", at)])
+    pl.insert(rec)
+    w.replace("asks.rec", pl.text())
+    roles_lines(w, fleet, label, [role])
+    return rec
+
+
+def ask_lines(w, fleet, label, role, what, frm, names=None, key=None, words=None):
+    """An ask written in the commit of the act that makes it, the write w (role-runs "An ask is written with the act that
+    makes it"): ask_rec, its run-record entry's id made ahead, so write names it in the commit beside the act's own and
+    emits it once pushed (plan.2). Returns the ask's record, or None when its key was held, which write says."""
+    rec = ask_rec(w, fleet, label, role, what, frm, names, key, words)
+    if rec is None:
+        w.held.append((f"{label}-{role}", key))
+        return None
+    w.asked.append((record.new_id(), rec))
+    return rec
+
+
+def ask_write(fleet, label, role, what, frm, names=None, key=None, words=None):
+    """An ask of the role in a commit of its own, where the act that makes it writes nothing to the flywheel's branch:
+    its own write, its entry the ask's; or nothing, said, when asks.rec holds an ask with its key at the tip the write is
+    applied to (ask_rec). Returns the commit, or None when nothing was written."""
+    run, e = f"{label}-{role}", record.ask_entry(f"{label}-{role}", what, names, words)
+
+    def change(w):
+        if ask_rec(w, fleet, label, role, what, frm, names, key, words) is None:
+            raise AskHeld()
+        return []
+    try:
+        return write(fleet, label, change, f"ask({run}): {what} from {frm}", act=e["act"], on=e["on"], why=e["why"], fields={"Chars": e["Chars"]})
+    except AskHeld:
+        print(f"{label}/main: {run} is already asked by {key}; nothing written")
+        return None
+
+
+def asked(label, commit, made, held):
+    """Once a write that made asks in its commit is pushed (write): each ask's entry, by the id the commit names, and
+    each key found held said."""
+    for eid, rec in made:
+        run = f"{label}-{rec.get('Role')}"
+        record.emit(label, commit=[commit], eid=eid, **record.ask_entry(run, rec.get("What"), rec.get("Names"), rec.get("Words")))
+        print(f"asked {run}: {rec.get('What')}" + (f" on {rec.get('Names')}" if rec.get("Names") else ""))
+    for run, key in held:
+        print(f"{label}/main: {run} is already asked by {key}; nothing more asked")
+
+
+def roles_lines(w, fleet, label, only=None):
+    """roles.rec in the write w brought to match the teams file (asks.roles_due; role-runs "Role records follow the teams
+    file"), for the roles in only, or for every one: each record missing or differing written, and each of a role the
+    partition no longer runs as its kind removed. A branch with no roles.rec and nothing due is left with none. Returns
+    whether anything changed."""
+    p = crew.partition_of(fleet, label)
+    metas = {r: crew.definition(asks.definition_of(r))[0] for r, s in p["flume"].items() if s is not False}
+    pl = rec_file(w, "roles.rec", ROLES)
+    due, gone = asks.roles_due(asks.parse_roles(pl.text()), p, metas)
+    due, gone = [d for d in due if only is None or d["Role"] in only], [g for g in gone if only is None or g in only]
+    if not (due or gone):
+        return False
+    have = {r.get("Role"): r for r in pl.recs("Role")}
+    for d in due:
+        if d["Role"] in have:
+            have[d["Role"]].fields = list(d.items())
+        else:
+            pl.insert(Rec("Role", list(d.items())))
+    for g in gone:
+        pl.remove(have[g])
+    w.replace("roles.rec", pl.text())
+    return True
 
 
 # --------------------------------------------------------------------------------------------- proposals

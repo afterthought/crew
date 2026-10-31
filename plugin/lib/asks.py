@@ -28,8 +28,8 @@ WAITS = ("answer", "lost", "past_bound")
 
 
 def records(text):
-    """recutils text as its records, each (its record set, {field: value}) in file order: a field of LISTS a list, a
-    value continued on `+` lines joined by newlines; descriptors and comments left out."""
+    """recutils text as its records, each (its record set, {field: value}) in file order: a field of LISTS a list where
+    it is there, a value continued on `+` lines joined by newlines; descriptors and comments left out."""
     out, kind, cur = [], None, []
     for line in (text or "").split("\n") + [""]:
         if line.strip():
@@ -38,7 +38,7 @@ def records(text):
         if any(l.startswith("%rec:") for l in cur):
             kind = next(l[5:].split()[0] for l in cur if l.startswith("%rec:"))
         elif cur and any(FIELD.match(l) for l in cur if not l.startswith(("#", "%"))):
-            f: dict = {k: [] for k in LISTS}
+            f: dict = {}
             last = None
             for l in cur:
                 if l.startswith(("#", "%")):
@@ -51,7 +51,7 @@ def records(text):
                 if m:
                     last = m.group(1)
                     if last in LISTS:
-                        f[last].append(m.group(2))
+                        f.setdefault(last, []).append(m.group(2))
                     else:
                         f.setdefault(last, m.group(2))
             out.append((kind, f))
@@ -72,7 +72,7 @@ def parse(text):
         if kind == "Ask" and whole(f.get("Id")) and f.get("Role"):
             asks.append(f)
         elif kind == "Turn" and whole(f.get("Turn")) and f.get("Role") and f.get("Run"):
-            turns.append(f)
+            turns.append(dict(f, Took=f.get("Took", [])))
     return asks, turns
 
 
