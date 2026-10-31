@@ -801,9 +801,10 @@ def land(repo, ref, path, make):
 
 
 def agent():
-    """Who is writing: the agent crew started (CREW_AGENT), else the user at this host."""
+    """Who is writing: the agent crew started (CREW_AGENT), or the role's run the command's Flume place is, named as
+    the role (crew.caller), else the user at this host."""
     import getpass
-    return os.environ.get("CREW_AGENT") or f"{getpass.getuser()}@{crew.this_host()}"
+    return crew.caller() or f"{getpass.getuser()}@{crew.this_host()}"
 
 
 # ---------------------------------------------------------------------------------------------------- the plan
@@ -1346,8 +1347,9 @@ def stages_for(fleet, plan, bolts, fetch=False):
 # ------------------------------------------------------------------------------------------- finding the plans
 
 def default_label(fleet, a):
-    """The partition a command means: --label, else the agent's own (CREW_LABEL), else none."""
-    label = getattr(a, "label", None) or os.environ.get("CREW_LABEL")
+    """The partition a command means: --label, else the agent's own (CREW_LABEL, or its run's: crew.caller_label),
+    else none."""
+    label = getattr(a, "label", None) or crew.caller_label(fleet)
     if label:
         crew.partition_of(fleet, label)
         CONTEXT.setdefault("label", label)
@@ -5085,8 +5087,9 @@ def may_write(fleet, key, a):
     conductor narrows, orders and sets dependencies within the bolt its team holds (checked once its unit is found),
     and marks a unit of it amended by running construct again (run_check); the design agent queues; a dispatcher
     gives bolts; the main level's ops lands them. A chore's commands are written by the same hands as the unit's of the
-    same name (plan.11). Any other plan write by an agent crew started is refused, naming the planner."""
-    name = os.environ.get("CREW_AGENT")
+    same name (plan.11). Any other plan write by an agent crew started is refused, naming the planner. A role's run
+    writes as its role (crew.caller)."""
+    name = crew.caller(fleet)
     kind, of = role(fleet, name)
     if key not in PLAN_WRITES or kind == "user":
         return
@@ -5349,7 +5352,7 @@ def op_unit_add(ctx, a):
 
 def conductor_scope(ctx, plan, a):
     """A conductor narrows, orders and sets dependencies only within the bolt its team holds, of units and chores alike."""
-    kind, team = role(ctx.fleet, os.environ.get("CREW_AGENT"))
+    kind, team = role(ctx.fleet, crew.caller(ctx.fleet))
     if ctx.direct and kind == "conductor":
         b = plan.item(a.unit).get("Bolt")
         b and plan.bolt(b).get("Team") == team or fail(
@@ -6100,8 +6103,8 @@ def plan_propose(fleet, a):
     when a bolt it creates, or a unit or chore it adds or moves into a bolt, names a decision record its main on GitHub
     does not hold accepted (proposal_records, unaccepted). Once it is written, crew raises its card in the planner's
     name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
-    kind, of = role(fleet, os.environ.get("CREW_AGENT"))
-    kind in ("planner", "user") or fail(proposer_refusal(fleet, os.environ.get("CREW_AGENT"), kind, of))
+    kind, of = role(fleet, crew.caller(fleet))
+    kind in ("planner", "user") or fail(proposer_refusal(fleet, crew.caller(fleet), kind, of))
     label = of if kind == "planner" else proposal_label(fleet, a)
     a.label in (None, label) or fail(f"{label}-planner proposes for {label}, not {a.label}")
     CONTEXT["label"] = label
@@ -6241,7 +6244,7 @@ def plan_agree(fleet, a):
     team holds; the user may agree for any team the proposal touches."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
-    name = os.environ.get("CREW_AGENT")
+    name = crew.caller(fleet)
     kind, of = role(fleet, name)
     w0, _, p0, argvs = at_tip(fleet, label, a.n)
     p0.get("State") == "open" or fail(f"proposal {a.n} is {p0.get('State')}, so there is nothing to agree to")
@@ -7123,7 +7126,7 @@ def signal(fleet, a):
     again writes nothing. The user's note at a shell is its own excerpt. One write, one commit."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
     signal_refusal(a.slug, a.asserts) and fail(signal_refusal(a.slug, a.asserts))
-    name, host = os.environ.get("CREW_AGENT"), crew.this_host()
+    name, host = crew.caller(fleet), crew.this_host()
     now = datetime.datetime.now(datetime.timezone.utc)
     excerpt = a.excerpt
     if a.excerpt_file:
@@ -7756,7 +7759,7 @@ def run_check(fleet, a):
     not why or fail(why)
     amended_at = entry = ""
     after = {d: st_all.of(d)["stage"] for d in u.all("After")}
-    why = stage_refusal(a.unit, bolt, a.stage, st, mark, after, role(fleet, os.environ.get("CREW_AGENT")), t["name"],
+    why = stage_refusal(a.unit, bolt, a.stage, st, mark, after, role(fleet, crew.caller(fleet)), t["name"],
                         s.get("open") or [], a.stage in ("settle", "merge") and st == "verify" and verified(label, a.unit),
                         bool(a.words), chores={d for d in u.all("After") if is_chore(plan.item(d))},
                         reports=team_state(t) / "reports")
@@ -15020,7 +15023,7 @@ def card_end(fleet, a):
 def card_asker(fleet, a):
     """The partition and the asker of a crew card read (briefs.16): --label, else the agent's own; the asker the agent
     crew started, else the user at this host. An agent's label is its own."""
-    agent, own = os.environ.get("CREW_AGENT"), os.environ.get("CREW_LABEL")
+    agent, own = crew.caller(fleet), crew.caller_label(fleet)
     not (agent and own and a.label and a.label != own) or fail(
         f"{agent}'s cards are {own}'s: crew card {a.sub} runs as the agent's own partition")
     label = default_label(fleet, a) or fail(f"crew card {a.sub} runs as the card's partition: run it as a crew agent, or add --label")
@@ -18036,7 +18039,7 @@ def named(a):
 
 def refused(fleet, a, key, e):
     """A refused command that would have moved work, in its partition's run record, with crew's reason."""
-    label = CONTEXT.get("label") or getattr(a, "label", None) or os.environ.get("CREW_LABEL")
+    label = CONTEXT.get("label") or getattr(a, "label", None) or crew.caller_label(fleet)
     if not label and getattr(a, "team", None) in fleet["teams"]:
         label = fleet["teams"][a.team]["label"]
     if label in fleet["partitions"]:

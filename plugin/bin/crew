@@ -404,7 +404,14 @@ cmd=${1:-}
 
 # Every command is one Python process (code.7): exec'd below, or run by `one`, which runs a command on a team or a main
 # level on the host its agents run on. Who asks, and the Claude session behind them, go with a command run on another
-# host, so what it records there names them (code.3).
+# host, so what it records there names them (code.3). A role's run is started by Flume with nothing of crew's in its
+# environment: in a place named as a run's, crew-<role>--<label>, it is named here as its role, <label>-<role>, and
+# given its partition, as crew-role names a standing agent, so every command runs, and is carried, as the role.
+flume_place=${FLUME_PLACE:-}; flume_place=${flume_place%/}
+if [[ -z ${CREW_AGENT:-} && ${flume_place##*/} == crew-*--* ]]; then
+  run_name=$(py run-name) || exit 1
+  eval "$run_name"
+fi
 identity() { echo "CREW_AGENT=${CREW_AGENT:-$(id -un)@$(this_host)}"; }
 there() {  # there <host's ssh name> <crew on that host> <args...>: run a crew command on another host, never prompting
   local target=$1 remote=$2; shift 2

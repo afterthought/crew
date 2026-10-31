@@ -102,9 +102,10 @@ _session = ...  # resolved once per process
 
 
 def who():
-    """Who asked: the agent crew started, else the user at this host."""
+    """Who asked: the agent crew started, or the role's run the command's place is (crew.caller), else the user at
+    this host."""
     import getpass
-    return os.environ.get("CREW_AGENT") or f"{getpass.getuser()}@{crew.this_host()}"
+    return crew.caller() or f"{getpass.getuser()}@{crew.this_host()}"
 
 
 def session():
@@ -460,7 +461,7 @@ def labels_for(fleet, label):
     if label:
         crew.partition_of(fleet, label)
         return [label]
-    own = os.environ.get("CREW_LABEL")
+    own = crew.caller_label(fleet)
     return [own] if own in fleet["partitions"] else list(fleet["partitions"])
 
 

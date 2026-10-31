@@ -20,6 +20,8 @@
   crew.py found <agent>               an agent of this host as herdr lists it, one JSON object, its name given back in
                                       the pane crew keeps for it when herdr dropped it there from the session crew
                                       started (read_agent from another host)
+  crew.py run-name                    the name and partition of the role's run FLUME_PLACE is, as shell assignments of
+                                      CREW_AGENT and CREW_LABEL; nothing for a place that is no run
 
 The agents themselves, a team's and a main level's, are started, greeted and ended by plan.py's commands, through
 Agents and Team here.
@@ -315,6 +317,58 @@ def kind_role_of(fleet, name):
     return None
 
 
+# The place a role's run is, as its role record names it: <Kind>--<Name>, crew-<role>--<label>.
+RUN_PLACE = re.compile(r"crew-([a-z]+)--([a-z0-9][a-z0-9-]*)")
+
+
+def run_of(fleet, place):
+    """The role's run a Flume place is (record 0047 move 6), (label, role), from its path alone: its folder is
+    crew-<role>--<label>, the place the role record names, and its partition runs that role as its kind. None for any
+    other place, a change's or a fix's among them, and for one so named whose role stands."""
+    m = RUN_PLACE.fullmatch(pathlib.PurePath(place or "").name)
+    if not m or m[2] not in fleet["partitions"] or m[1] not in KIND_ROLES:
+        return None
+    return (m[2], m[1]) if fleet["partitions"][m[2]]["flume"][m[1]] is not False else None
+
+
+def run_here(fleet=None):
+    """The role's run this command runs in, (label, role), read from FLUME_PLACE, the place Flume started it in; None
+    elsewhere. The teams file is read only for a place named as a run's."""
+    place = os.environ.get("FLUME_PLACE")
+    if not place or not RUN_PLACE.fullmatch(pathlib.PurePath(place).name):
+        return None
+    return run_of(fleet or load(), place)
+
+
+def caller(fleet=None):
+    """The agent a crew command runs as: CREW_AGENT, which crew gives each agent it starts, else the role's run its
+    place is, named as the role, <label>-<role> (run_here); None for the user."""
+    name = os.environ.get("CREW_AGENT")
+    if name:
+        return name
+    run = run_here(fleet)
+    return f"{run[0]}-{run[1]}" if run else None
+
+
+def caller_label(fleet=None):
+    """The partition a crew command runs as: CREW_LABEL, which crew gives each agent it starts, else the label of the
+    role's run its place is (run_here); None for none."""
+    label = os.environ.get("CREW_LABEL")
+    if label:
+        return label
+    run = run_here(fleet)
+    return run[0] if run else None
+
+
+def run_exports(run):
+    """What plugin/bin/crew sets for a role's run before it runs or forwards any command (code.3): its name and
+    partition as a standing agent's CREW_AGENT and CREW_LABEL, and no Claude session, which a run has none of crew's
+    to read, as shell assignments quoted (teams.9); nothing for a place that is no run."""
+    if not run:
+        return ""
+    return "export " + " ".join(f"{k}={shlex.quote(v)}" for k, v in (("CREW_AGENT", f"{run[0]}-{run[1]}"), ("CREW_LABEL", run[0]), ("CREW_SESSION", "")))
+
+
 def role_session(p, role):
     """The session a main-level role runs in: the one its partition's `roles` names for its definition, else the
     main level's; the reviewer, named none, opens beside the planner (record 0035)."""
@@ -437,7 +491,7 @@ def send(fleet, name, text):
     the receiving partition's record, with its length and never its text, and no tell entry; one that typed nothing
     records nothing."""
     import record as rec  # record imports this module
-    label, door, team = send_door(fleet, name, os.environ.get("CREW_AGENT"))
+    label, door, team = send_door(fleet, name, caller(fleet))
     sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who())
     if sent:
         rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
@@ -1266,7 +1320,7 @@ def crew_argv(fleet, host, *args):
     """crew on a host, run as the one asking here: their name, partition and Claude session go with it, so what it
     records names them and not the host that did the work."""
     import record as rec  # record imports this module
-    return ["env", f"CREW_AGENT={rec.who()}", f"CREW_LABEL={os.environ.get('CREW_LABEL', '')}",
+    return ["env", f"CREW_AGENT={rec.who()}", f"CREW_LABEL={caller_label(fleet) or ''}",
             f"CREW_SESSION={rec.session() or ''}", "bash", crew_at(fleet, host), *args]
 
 
@@ -2767,6 +2821,8 @@ def main(a):
         sys.exit(0 if send(fleet, a[1], a[2]) else 1)
     elif a[:1] == ["found"] and len(a) == 2:
         print(json.dumps(found_here(fleet, a[1])))
+    elif a == ["run-name"]:
+        print(run_exports(run_of(fleet, os.environ.get("FLUME_PLACE"))))
     else:
         sys.exit(__doc__)
 
