@@ -122,6 +122,56 @@ class TestDrop:
             plan.main_fix_change(crossed_fleet(), write(), "crew", "red", "drop", None, None)
 
 
+class TestSend:
+    """The main-level spec's "The user's send": once the runner's record shows the fix's code delivered and its
+    submission held (tests/py/flume-0.3.6/held.json), ops's crew main fix crew <name> --send on the user's send appends
+    the retry of its submission, once."""
+    def launched(self, at="held"):
+        """crew main fix crew a-test-reads-its-fixture launched as request 1, deneb's runner showing its place at the flume
+        fixture named."""
+        w = write(runners=ran({1: at}))
+        plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "start", WORDS, None)
+        return w
+
+    def test_the_users_send_appends_the_retry_of_its_submission(self):
+        w = self.launched()
+        assert plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None) == dict(
+            n=2, host="deneb", stream="madswan")
+        assert requests(w)[1] == {"Request": "2", "Act": "retry", "Host": "deneb", "Work": "fix/main/crew/a-test-reads-its-fixture",
+                                  "Of": "1", "Submission": "yes"}
+        assert w.subject == "plan(main): send fix a-test-reads-its-fixture of crew"
+
+    def test_a_send_is_made_once(self):
+        w = self.launched()
+        plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+        with pytest.raises(plan.Refusal, match="^fix/main/crew/a-test-reads-its-fixture was sent on the user's word by request 2, which "
+                                               "the runner on deneb acts on, so it is not sent twice$"):
+            plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+
+    def test_a_send_the_runner_refused_is_made_again_and_one_crew_cant_read_stands(self):
+        reading = ran({1: "held"})["deneb"]
+        reading["answers"][2] = plan.Rec("Answer", [("Request", "2"), ("Outcome", "refused"), ("At", "2026-10-31T12:03:00Z")])
+        rs = [plan.Rec("Request", [("Request", "1"), ("Act", "launch"), ("Work", "fix/main/crew/x")]),
+              plan.Rec("Request", [("Request", "2"), ("Act", "retry"), ("Of", "1"), ("Submission", "yes")])]
+        assert runner.sent_of(rs, reading, rs[0]) is None
+        assert runner.sent_of(rs, dict(reading, why="unread"), rs[0]) is rs[1]
+
+    def test_a_fix_whose_code_has_not_delivered_is_not_sent(self):
+        w = self.launched("code")
+        with pytest.raises(plan.Refusal, match=r"^fix/main/crew/a-test-reads-its-fixture's place \S+ is at code, and a fix of main is sent "
+                                               r"only once its code has delivered and its submission waits held$"):
+            plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+
+    def test_one_crew_cant_read_or_with_no_launch_is_not_sent(self):
+        w = self.launched()
+        w.runner_of = lambda host: runner.of_host({}, "madswan", host)
+        with pytest.raises(plan.Refusal, match="^can't tell whether fix/main/crew/a-test-reads-its-fixture's submission waits held, so it "
+                                               "is not sent: no runner answers on deneb"):
+            plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+        with pytest.raises(plan.Refusal, match="^no launch of fix/main/crew/red stands in requests.rec, so there is no fix of main to send$"):
+            plan.main_fix_change(crossed_fleet(), w, "crew", "red", "send", None, None)
+
+
 class TestCommand:
     def test_crew_main_fix_is_its_own_row_of_the_role_table(self, monkeypatch):
         """Decision 16: main-level ops and the user run it; a conductor or the planner is refused, told ops runs it."""

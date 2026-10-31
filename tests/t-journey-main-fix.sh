@@ -37,3 +37,25 @@ eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act
 eq "$(field "$HOST" fix.start On)" "fix/main/switchboard-kit/a-test-reads-its-fixture"
 eq "$(launches)" ""
 ok "crew main fix of a kit a crossed team builds appends a launch of a fix on main, held for the user's send with ops its recipient, on the team's host and in its stream, starting no agent"
+
+# The runner launched the fix, and Flume's status of its place, carried on the runner's branch, shows its code
+# delivered and its submission held: the branch gains answers.rec and places.rec beside runner.rec.
+place=/flume/places/fix--main--a-test-reads-its-fixture
+answers_rec=$(printf '%%rec: Answer\n%%key: Request\n%%type: Request int\n%%type: Outcome enum held launched done refused\n%%type: At date\n%%mandatory: Request Outcome At\n%%allowed: Request Outcome Place Words At\n\nRequest: 1\nOutcome: launched\nPlace: %s\nAt: 2026-10-31T12:01:00Z\n' "$place")
+status='{"status":{"places":[{"place":"'"$place"'","kind":"fix","phase":"live","current":"code","stages":[{"name":"code","state":"delivered"}],"submission":{"read":"none","submits":0,"send_backs":0,"verdict":null,"waiting":null,"held":true},"waiting_on":{"act":"retry","stage":null,"why":"on_hold","since":1793469348,"words":null},"stalled":true,"holds":[{"on":"submission","since":1793469048}]}]}}'
+places_rec=$(printf '%%rec: Place\n%%key: Request\n%%type: Request int\n%%type: At date\n%%mandatory: Request Place At Status\n%%allowed: Request Place At Status\n\nRequest: 1\nPlace: %s\nAt: 2026-10-31T12:20:00Z\nStatus: %s\n' "$place" "$status")
+runner_writes runner answers places
+expect_ok crew rail --label wldn
+has "$out" "switchboard-kit (wldn): 1 fix of main waits to land on its main; wldn-ops lands them"
+has "$out" "fix main--a-test-reads-its-fixture on $box: tests:logic failed on main after landing smoke: tests/py/test_rail.py reads a fixture that is gone.; can land: wldn-ops sends it with crew main fix switchboard-kit a-test-reads-its-fixture --send"
+has "$out" "crew tell wldn-ops \"Land fix main--a-test-reads-its-fixture.\""
+ok "once the runner's record shows the fix's code delivered and its submission held, the kit's landings row carries it, naming ops's command for the user's send"
+
+expect_ok crew main fix switchboard-kit a-test-reads-its-fixture --send
+has "$out" "fix main--a-test-reads-its-fixture of switchboard-kit's main is sent on the user's word (request 2): the runner on $box submits it"
+eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Request = 2" -P Act,Host,Work,Of,Submission | grep . | paste -sd ' ' -)" \
+  "retry $box fix/main/switchboard-kit/a-test-reads-its-fixture 1 yes"
+eq "$(field "$HOST" fix.merge On)" "fix/main/switchboard-kit/a-test-reads-its-fixture"
+expect_ok crew rail --label wldn
+has "$out" "fix main--a-test-reads-its-fixture on $box: tests:logic failed on main after landing smoke: tests/py/test_rail.py reads a fixture that is gone.; sent on the user's word (request 2): the runner on $box submits it"
+ok "crew main fix --send on the user's word appends the retry of the fix's submission, once, and its row says it is sent"

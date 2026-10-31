@@ -4588,6 +4588,14 @@ def submit_word_refusal(bolt, v):
                          "the user lands a bolt on its landing card or in main-level ops's pane")
 
 
+def send_word_refusal(name, v):
+    """Why crew main fix --send --excerpt sends nothing of a fix of main (Decision 11 of
+    teams-cross-to-flume-as-their-bolts-land, plan.16, roles.2), or None, as submit_word_refusal judges the words that
+    land a bolt, holding none of them (record.3). A decision of facts alone (code.7)."""
+    return words_refusal(f"crew sends nothing of fix main--{name}", v, "send a fix of main",
+                         "the user sends a fix of main on its kit's landings card or in main-level ops's pane")
+
+
 def submit_refusal(bolts, kits, teams):
     """Why crew bolt submit submits nothing (rail-cards, Decision 6), or None, from facts alone: bolts, in the order
     given; kits, {bolt: its kit}; teams, {bolt: the team holding it, or None}. A bolt named twice; bolts of two kits,
@@ -11863,18 +11871,25 @@ def fix_flume(w, t, bolt, mode, name, words):
 
 
 def main_fix(fleet, a):
-    """crew main fix <kit> <name> "<the failure's words>" | --drop [--team <team>] [--label L]: a fix of a kit's red main
-    as a Flume place on main (Decision 11 of teams-cross-to-flume-as-their-bolts-land, state.3), main-level ops's or the
-    user's on reading main's checks red after a landing (may_request), a plan write on the asking host that starts
-    nothing there: a launch of Flume's fix kind on main, its submission held for the user's send and main-level ops its
-    recipient, on the host of the crossed team building the kit (runner.main_fixer, runner.main_fix_launch), refused
-    naming state.3's way, a bolt of one chore proposed first among the planned, where no crossed team builds it or no
-    runner answers on its host; --drop a drop of its launch (runner.fix_drop_refusal). The kit's partition is the one
-    whose teams build it, --label choosing. Recorded as fix.start or fix.drop on fix/main/<kit>/<name>, done or
-    refused."""
-    mode = "drop" if a.drop else "start"
-    (a.words is None) == a.drop or fail('crew main fix takes the failure\'s words or --drop: crew main fix <kit> <name> "<words>" | --drop')
-    a.team is None or mode == "start" or fail("--team chooses the host a fix of main is launched on, and a drop finds its launch")
+    """crew main fix <kit> <name> "<the failure's words>" | --drop | --send [--excerpt "<the user's words>"] [--team
+    <team>] [--label L]: a fix of a kit's red main as a Flume place on main (Decision 11 of
+    teams-cross-to-flume-as-their-bolts-land, state.3), main-level ops's or the user's on reading main's checks red after
+    a landing (may_request), a plan write on the asking host that starts nothing there: a launch of Flume's fix kind on
+    main, its submission held for the user's send and main-level ops its recipient, on the host of the crossed team
+    building the kit (runner.main_fixer, runner.main_fix_launch), refused naming state.3's way, a bolt of one chore
+    proposed first among the planned, where no crossed team builds it or no runner answers on its host; --drop a drop of
+    its launch (runner.fix_drop_refusal); --send, ops's on the user's send of the kit's landings row, the retry of its
+    submission once its code has delivered and the submission waits held, made once (runner.send_refusal), the user's
+    words with --excerpt read first in the caller's own transcript as crew bolt submit reads them (pane_words), nothing
+    sent unless crew reads them as the user's, and without it the word being the row's send (plan.16, roles.2). The
+    kit's partition is the one whose teams build it, --label choosing. Recorded as fix.start, fix.drop or fix.merge on
+    fix/main/<kit>/<name>, done or refused, a send's naming the transcript record the words were read from and their
+    length, none of the words (record.3)."""
+    mode = "drop" if a.drop else "send" if a.send else "start"
+    (a.words is not None) + a.drop + a.send == 1 or fail(
+        'crew main fix takes the failure\'s words, --drop or --send: crew main fix <kit> <name> "<words>" | --drop | --send')
+    a.excerpt is None or mode == "send" or fail("--excerpt carries the user's words a fix of main is sent on, with --send")
+    a.team is None or mode == "start" or fail("--team chooses the host a fix of main is launched on, and a drop or a send finds its launch")
     crew.NAME.match(a.name) or fail("a fix is named with lowercase words and dashes")
     label = default_label(fleet, a)
     builders = kit_teams(fleet, a.kit, label)
@@ -11883,19 +11898,27 @@ def main_fix(fleet, a):
     len(labels) == 1 or fail(f"{a.kit} is built in {' and '.join(labels)}: add --label")
     CONTEXT["label"] = label = labels[0]
     kit_name = builders[0]["kit"]["name"]
-    on, act, seen = [f"fix/main/{kit_name}/{a.name}"], {"start": "fix.start", "drop": "fix.drop"}[mode], {}
+    on, act, seen = [f"fix/main/{kit_name}/{a.name}"], {"start": "fix.start", "drop": "fix.drop", "send": "fix.merge"}[mode], {}
+    frm, fields = [], {}
     try:
-        (a.words or "").strip() or mode == "drop" or fail(f"crew main fix needs the failure's words: crew main fix {kit_name} {a.name} \"<words>\"")
+        (a.words or "").strip() or mode != "start" or fail(f"crew main fix needs the failure's words: crew main fix {kit_name} {a.name} \"<words>\"")
+        if a.excerpt is not None:
+            a.excerpt.strip() or fail("crew main fix --send needs the user's words: --excerpt \"<their words, as they wrote them>\"")
+            frm, fields = [pane_words(CardActs(fleet), a.excerpt, lambda v: send_word_refusal(a.name, v))], {"Chars": len(a.excerpt)}
 
         def change(w):
             seen.update(main_fix_change(fleet, w, kit_name, a.name, mode, a.words, a.team))
             return []
-        write(fleet, label, change, f"plan(main): fix {a.name} of {kit_name}", act=act, on=on)
+        write(fleet, label, change, f"plan(main): fix {a.name} of {kit_name}", act=act, on=on, frm=frm, fields=fields)
     except Refusal as e:
-        record.emit(label, act, on, refused=str(e))
+        record.emit(label, act, on, frm, refused=str(e))
         raise
     if mode == "drop":
         print(f"fix main--{a.name} of {kit_name}'s main is dropped (request {seen['n']}): the runner on {seen['host']} drops its place")
+        return
+    if mode == "send":
+        print(f"fix main--{a.name} of {kit_name}'s main is sent on the user's word (request {seen['n']}): the runner on {seen['host']} "
+              "submits it to main through sluice")
         return
     print(f"the runner on {seen['host']} launches fix main--{a.name} on {kit_name}'s main (request {seen['n']}) in stream {seen['stream']}, "
           f"its submission held for the user's send: once its code has delivered, {kit_name}'s landings row carries it")
@@ -11904,9 +11927,19 @@ def main_fix(fleet, a):
 def main_fix_change(fleet, w, kit, name, mode, words, team):
     """crew main fix's change to a write (main_fix), each fact read again at the tip it is applied to (plan.1): for a
     new fix, the crossed team on whose host it runs (runner.main_fixer), that host's runner answering, and the launch
-    appended (runner.main_fix_launch); for --drop, its launch's drop (runner.fix_drop_refusal), its stage read from the
-    runner's records as the write reads them. Returns what it asked, {n, host, stream}."""
+    appended (runner.main_fix_launch); for --drop, its launch's drop (runner.fix_drop_refusal); for --send, the retry of
+    its submission (runner.send_refusal); each stage read from the runner's records as the write reads them. Returns
+    what it asked, {n, host, stream}."""
     requests, work = requests_of(w).recs("Request"), f"fix/main/{kit}/{name}"
+    if mode == "send":
+        launch = runner.launch_of(requests, work)
+        reading = w.runner_of(launch.get("Host")) if launch is not None else None
+        s, sent = (runner.piece_stage(requests, reading, launch), runner.sent_of(requests, reading, launch)) if launch is not None else (None, None)
+        why = runner.send_refusal(work, launch, s, sent)
+        not why or fail(why)
+        w.subject = f"plan(main): send fix {name} of {kit}"
+        return dict(n=request(w, "retry", launch.get("Host"), work, Of=launch.get("Request"), Submission=True), host=launch.get("Host"),
+                    stream=launch.get("Stream"))
     if mode == "drop":
         launch = runner.launch_of(requests, work)
         s = runner.piece_stage(requests, w.runner_of(launch.get("Host")), launch) if launch is not None else None
@@ -13717,7 +13750,7 @@ def record_reading(l, entries, plan, fresh, missing=None):
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
 
 
-def rail_rows(fleet, found, sv, props, times, held=None):
+def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
     """What waits on the user in the plans read, from the open proposals and when each was proposed, the batches the run
     record holds (held, as rail_record reads it), and the kits as surveyed: each row's group, its partition, its card
     key, the time it began to wait (shown as a date alone when that is all that is known), what it is, its commands, and
@@ -13736,8 +13769,12 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     (main_conflict, held's forecasts); until then its line says which units no batch has held, which batches wait on the
     user's answer, the fix, sluice's words, or that it takes main first (briefs.12), or for a bolt the user left on the
     kit's landings card (left_of, held's left), that it takes main first once ticked (crew-rail "A left bolt's land line
-    says it would take main first once ticked"). The row's answer tells ops to land those that can, in order, and
-    offers nothing while none can."""
+    says it would take main first once ticked"). A kit's row carries too, ahead of its bolts, each fix of its main whose
+    code has delivered and whose submission waits held (runner.main_fixes_waiting, from each partition's requests and
+    runners, runs, {label: (requests, readings)}, as rail_runs reads them; Decision 11 of
+    teams-cross-to-flume-as-their-bolts-land), a row of its own where no bolt of the kit waits, each line naming ops's
+    command for the user's send of it (main_fix_line, fixes, each {fix, host, can, send}). The row's answer tells ops
+    to land those that can, in order, and offers nothing while none can."""
     rows, here, held = [], crew.this_host(), held or {}
     for d in props:
         l, n = d["label"], d["proposal"]
@@ -13813,14 +13850,35 @@ def rail_rows(fleet, found, sv, props, times, held=None):
             kits.setdefault(kit_name, []).append(
                 dict(bolt=b.name(), team=team, host=host, at=at, can=not lands, line=f"{b.name()}, {team} on {host}: "
                      + "; ".join(said + (lands or can))))
-        for kit_name, bolts in kits.items():
-            can = [x["bolt"] for x in bolts if x["can"]]
-            what = [f"{kit_name} ({l}): {plural_of(len(bolts), 'bolt waits', 'bolts wait')} to land on its main, in the plan's order; "
-                    f"{l}-ops lands them"] + [x["line"] for x in bolts]
-            rows.append(dict(group="land", label=l, key=f"land/{kit_name}", at=min(utc(x["at"]) for x in bolts), doc=None, what=what,
-                             cmds=[("answer", f'crew tell {l}-ops "Land {", ".join(can)}."')] if can else [],
-                             bolts=[{k_: x[k_] for k_ in ("bolt", "team", "host", "can")} for x in bolts]))
+        waiting = {}
+        for f in runner.main_fixes_waiting(*(runs or {}).get(l, ([], {})), l):
+            waiting.setdefault(f["kit"], []).append(f)
+        for kit_name in list(kits) + [k_ for k_ in waiting if k_ not in kits]:
+            bolts, fixes = kits.get(kit_name, []), [main_fix_line(l, kit_name, f) for f in waiting.get(kit_name, [])]
+            can = [f"fix {f['fix']}" for f in fixes if f["can"]] + [x["bolt"] for x in bolts if x["can"]]
+            items = ([plural_of(len(fixes), "fix of main", "fixes of main")] if fixes else []) + ([plural_of(len(bolts), "bolt", "bolts")] if bolts else [])
+            what = [f"{kit_name} ({l}): {' and '.join(items)} {'waits' if len(fixes) + len(bolts) == 1 else 'wait'} to land on its main"
+                    + (", in the plan's order" if bolts else "") + f"; {l}-ops lands them"] + [f["line"] for f in fixes] + [x["line"] for x in bolts]
+            rows.append(dict(group="land", label=l, key=f"land/{kit_name}", at=min([utc(x["at"]) for x in bolts] + [f["at"] for f in fixes]),
+                             doc=None, what=what, cmds=[("answer", f'crew tell {l}-ops "Land {", ".join(can)}."')] if can else [],
+                             bolts=[{k_: x[k_] for k_ in ("bolt", "team", "host", "can")} for x in bolts],
+                             fixes=[{k_: f[k_] for k_ in ("fix", "host", "can", "send")} for f in fixes]))
     return rows
+
+
+def main_fix_line(label, kit, f):
+    """A fix of main's line on its kit's landings row (Decision 11 of teams-cross-to-flume-as-their-bolts-land; crew-rail
+    "A fix of main waits to land on its kit's row"), from runner.main_fixes_waiting's f: fix main--<name> on its host
+    with the first line of its brief, the failure's words, and ops's command for the user's send of it, or that the
+    send was made and the runner acts on it; the time it began to wait, Flume's since, else when the runner carried
+    the status that shows it waiting. {fix, host, can, send, line, at}."""
+    send = f"crew main fix {kit} {f['name']} --send"
+    first = (f["brief"].strip().splitlines() or [""])[0]
+    then = (f"can land: {label}-ops sends it with {send}" if f["sent"] is None else
+            f"sent on the user's word (request {f['sent']}): the runner on {f['host']} submits it")
+    at = datetime.datetime.fromtimestamp(f["since"], datetime.timezone.utc) if f["since"] is not None else utc(f["carried"])
+    return dict(fix=f"main--{f['name']}", host=f["host"], can=f["sent"] is None, send=send, at=at,
+                line=f"fix main--{f['name']} on {f['host']}: {first}; {then}")
 
 
 def plural_of(n, one, more):
@@ -14189,6 +14247,19 @@ def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
     return {"live": sorted((rowed - closed) | set(readings)), "blind": sorted(blind)}
 
 
+def rail_runs(found):
+    """What the rail reads of each partition's runners for the fixes of main its landings rows carry (rail_rows,
+    runner.main_fixes_waiting): {label: (requests.rec's records at the tip the read found, its runners as read beside
+    it, runners)}, for each partition whose requests hold a fix of main standing; a partition with none reads no
+    runner."""
+    out = {}
+    for l, repo, tip, p in found:
+        rq = Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request") if p and tip else []
+        if any((r.get("Work") or "").startswith("fix/main/") for r in runner.standing(rq)):
+            out[l] = (rq, runners(repo, l))
+    return out
+
+
 def landings_moved(cards_, mains, kept):
     """Which kits' landings cards main moved under (rail-cards "Main moves under an open card", "Main has not moved"),
     from facts alone (code.7): cards_, each open landings card as (label, kit); mains, the revision of main the survey
@@ -14227,7 +14298,8 @@ def rail_read(fleet, labels, board=False, sweep=False):
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
-                gives=gives, ops=opses, logs=logs, batched=batched, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
+                gives=gives, ops=opses, logs=logs, batched=batched,
+                rows=rail_rows(fleet, found, sv, props, times, batched, rail_runs(found)) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
         k = READ.follower
@@ -14290,8 +14362,9 @@ def rail_text(fleet, labels, read, now):
         for r in mine:
             at = r.get("date") or (f"{r['at'].astimezone():%Y-%m-%d %H:%M}" if r["at"] else "-")
             first, *rest = r["what"]
-            if g == "land":  # each bolt's line ends with its time, drawn now as the board draws it (land_times)
-                rest = [f"{w}; {t}" for w, t in zip(rest, land_times(fleet, read, r, now))]
+            if g == "land":  # each bolt's line, after the fixes of main ahead of them, ends with its time, drawn now as the board draws it (land_times)
+                k = len(r.get("fixes", []))
+                rest = rest[:k] + [f"{w}; {t}" for w, t in zip(rest[k:], land_times(fleet, read, r, now))]
             lines.append(f"  {at:<16}  {age(r['at'], now) if r['at'] else '-':<7}  {first}")
             lines += [" " * 29 + w for w in rest]
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
@@ -18101,6 +18174,8 @@ def parser(cls=argparse.ArgumentParser, only=None):
     v.add_argument("name")
     v.add_argument("words", nargs="?")
     v.add_argument("--drop", action="store_true")
+    v.add_argument("--send", action="store_true")
+    v.add_argument("--excerpt")
     v.add_argument("--team")
     v.add_argument("--label")
     ca = sub.add_parser("card").add_subparsers(dest="sub", required=True)

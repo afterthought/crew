@@ -1592,3 +1592,73 @@ class TestLandTime:
         out = plan.rail_text(FLEET, ["wldn"], read, NOW)
         assert ("can land; 5h 00m; who held its time can't be told: its submissions can't be read: what sluice's overview names "
                 "decided was not read") in out
+
+
+class TestMainFix:
+    """crew-rail "A fix of main waits to land on its kit's row" (Decision 11 of teams-cross-to-flume-as-their-bolts-land):
+    a fix of switchboard-kit's main whose code has delivered and whose submission waits held, as the runner on the box
+    carries Flume's status of it (tests/py/flume-0.3.6/held.json), is a line of the kit's landings row, ahead of the
+    bolts, naming ops's command for the user's send; the main-level spec's "The user's send" is test_main_fix's."""
+    BRIEF = "tests:logic failed on main after landing apex-zones: a fixture is gone.\nThe check's whole output."
+    SINCE = datetime.datetime.fromtimestamp(1793469348, datetime.timezone.utc)
+
+    @staticmethod
+    def requests(*recs):
+        """requests.rec's records: a launch of a fix of switchboard-kit's main for each name, then each retry given."""
+        import runner
+        text = runner.REQUESTS
+        for n, r in enumerate(recs, 1):
+            text += (f"\nRequest: {n}\nAct: launch\nHost: {BOX}\nWork: fix/main/{KIT}/{r}\nRepo: WilldanGroup/{KIT}\nKind: fix\n"
+                     f"Name: main--{r}\nBase: main\nStream: wldn\nPriority: 1\nIntent: wldn/main/{KIT}\nRecipient: wldn/ops\n"
+                     "Hold: submission\nBrief: " + TestMainFix.BRIEF.replace("\n", "\n+ ") + "\n"
+                     if not isinstance(r, int) else f"\nRequest: {n}\nAct: retry\nHost: {BOX}\nWork: fix/main/{KIT}/gone\nOf: {r}\n"
+                     "Submission: yes\n") + "Date: 2026-10-31T12:00:00Z\nBy: wldn-ops\n"
+        return plan.Plan(text).recs("Request")
+
+    def land(self, runs, merged=True):
+        found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+        return [r for r in plan.rail_rows(FLEET, found, survey(merged=merged), [], {}, None, runs) if r["group"] == "land"]
+
+    def test_a_fix_of_main_waits_beside_a_bolt_ahead_of_it_naming_ops_command_for_its_send(self):
+        """crew-rail "A fix of main waits beside a bolt"."""
+        from facts import ran
+        land, = self.land({"wldn": (self.requests("gone"), ran({1: "held"}, host=BOX, label="wldn"))})
+        assert land["what"] == [
+            f"{KIT} (wldn): 1 fix of main and 1 bolt wait to land on its main, in the plan's order; wldn-ops lands them",
+            f"fix main--gone on {BOX}: tests:logic failed on main after landing apex-zones: a fixture is gone.; can land: wldn-ops "
+            f"sends it with crew main fix {KIT} gone --send",
+            f"apex-zones, swb-2 on {BOX}: can land"]
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land fix main--gone, apex-zones."')]
+        assert land["fixes"] == [dict(fix="main--gone", host=BOX, can=True, send=f"crew main fix {KIT} gone --send")]
+        assert land["at"] == min(self.SINCE, plan.utc(iso(30)))
+
+    def test_with_no_bolt_waiting_a_fix_of_main_is_its_kits_row_alone(self):
+        from facts import ran
+        land, = self.land({"wldn": (self.requests("gone"), ran({1: "held"}, host=BOX, label="wldn"))}, merged=False)
+        assert (land["key"], land["at"], land["bolts"]) == (f"land/{KIT}", self.SINCE, [])
+        assert land["what"][0] == f"{KIT} (wldn): 1 fix of main waits to land on its main; wldn-ops lands them"
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land fix main--gone."')]
+
+    @pytest.mark.parametrize("at", ["code", "submitted", "landed", None])
+    def test_a_fix_of_main_still_at_its_code_submitted_landed_or_unread_is_no_line(self, at):
+        from facts import ran
+        assert self.land({"wldn": (self.requests("gone"), ran({1: at}, host=BOX, label="wldn") if at else {})}, merged=False) == []
+
+    def test_a_fix_sent_on_the_users_word_is_not_offered_again_until_the_runner_refuses_its_send(self):
+        from facts import ran
+        reads = ran({1: "held"}, host=BOX, label="wldn")
+        land, = self.land({"wldn": (self.requests("gone", 1), reads)}, merged=False)
+        assert land["what"][1].endswith(f"; sent on the user's word (request 2): the runner on {BOX} submits it")
+        assert (land["cmds"], land["fixes"][0]["can"]) == ([], False)
+        reads[BOX]["answers"][2] = plan.Rec("Answer", [("Request", "2"), ("Outcome", "refused"), ("At", "2026-10-31T12:03:00Z")])
+        land, = self.land({"wldn": (self.requests("gone", 1), reads)}, merged=False)
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land fix main--gone."')]
+
+    def test_the_rail_draws_the_fix_line_whole_and_each_bolt_line_with_its_time(self):
+        from facts import ran
+        rs = self.land({"wldn": (self.requests("gone"), ran({1: "held"}, host=BOX, label="wldn"))})
+        out = text(rs)
+        line = next(x.strip() for x in out.splitlines() if "fix main--gone" in x)
+        assert line.endswith(f"crew main fix {KIT} gone --send")
+        assert next(x.strip() for x in out.splitlines() if x.strip().startswith("apex-zones,")).startswith(
+            f"apex-zones, swb-2 on {BOX}: can land; ")

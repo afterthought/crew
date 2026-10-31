@@ -37,7 +37,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 ## 6. A fix of a red main
 
 - [x] 6.1 `crew main fix <kit> <name> "<words>"` launches a fix place on main with its submission held and ops as its recipient on the host of the crossed team building the kit, refused with `state.3`'s way where none does (design Decision 11; Task notes 6.1); passes `tests/py/test_main_fix.py` in `tests:logic`, and verify `tests/suite t-journey-main-fix` (`tests:t-journey-main-fix`) ends with "0 failed".
-- [ ] 6.2 The kit's landings row carries a fix of main whose code delivered and whose submission waits held, and `crew main fix <kit> <name> --send` on the user's words appends the retry of its submission (design Decision 11; Task notes 6.2); passes `tests/py/test_rail.py` in `tests:logic`, and verify `tests/suite t-journey-main-fix` ends with "0 failed".
+- [x] 6.2 The kit's landings row carries a fix of main whose code delivered and whose submission waits held, and `crew main fix <kit> <name> --send` on the user's words appends the retry of its submission (design Decision 11; Task notes 6.2); passes `tests/py/test_rail.py` in `tests:logic`, and verify `tests/suite t-journey-main-fix` ends with "0 failed".
 
 ## 7. A crossed team's work in every view
 

@@ -25,7 +25,9 @@ A fix on a crossed bolt is a launch of Flume's fix kind on the bolt's branch (fi
 (fix_drop_refusal), merged and waited on by Flume alone (fix_flume_refusal), and holds the bolt's landing while it is in
 flight (fixes_in_flight); a crossed bolt whose landing sluice refused for a conflict with main takes main in by one
 (take_main). A red main's fix is a launch of the fix kind on main with its submission held, on the host of a crossed
-team building the kit (main_fixer, main_fix_launch), a bolt of one chore where none does (state.3).
+team building the kit (main_fixer, main_fix_launch), a bolt of one chore where none does (state.3); its kit's landings
+row carries it once its code has delivered and its submission waits held (main_fixes_waiting), and the user's send of
+it is the retry of its submission, made once (send_refusal, sent_of).
 
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
@@ -353,7 +355,8 @@ def flume_facts(status, place):
     landed; its current stage, that stage's state and end; its tasks, ticked and in all; its submission: the merge
     queue's entry's number and state, why Flume could not read it, the pull request its last submit opened, how often
     it was submitted and sent back, the last verdict and its words, and whether it is held; what it waits on its caller
-    for, the stage named, why and Flume's words, and whether it is stalled. None when status holds no entry for it."""
+    for, the stage named, why, Flume's words and since when, in seconds, and whether it is stalled. None when status
+    holds no entry for it."""
     places = at(status, "status", "places")
     mine = [p for p in places if isinstance(p, dict) and isinstance(p.get("place"), str)
             and (p["place"] == place or p["place"].startswith(f"{place}@"))] if isinstance(places, list) and place else []
@@ -383,7 +386,7 @@ def flume_facts(status, place):
         "request": text(sub.get("request")), "submits": count(sub.get("submits")), "send_backs": count(sub.get("send_backs")),
         "verdict": verdict, "verdict_words": text(vf.get("words")) or text(vf.get("reason")), "held": sub.get("held") is True,
         "waiting": text(waiting.get("why")), "waiting_stage": text(waiting.get("stage")), "waiting_words": text(waiting.get("words")),
-        "stalled": p.get("stalled") is True,
+        "waiting_since": count(waiting.get("since")), "stalled": p.get("stalled") is True,
     }
 
 
@@ -800,3 +803,57 @@ def main_fix_launch(plan, requests, label, team, name, words, served):
         "Repo": team["kit"]["repo"], "Kind": "fix", "Name": f"main--{name}", "Base": "main", "Stream": team["flume"],
         "Priority": main_priority(plan), "Intent": f"{label}/main/{kit}", "Recipient": f"{label}/ops", "Hold": "submission",
         "Brief": words}), None
+
+
+def sent_of(requests, reading, launch):
+    """The retry that sent a fix of main's held submission on the user's word (Decision 11), standing for its launch:
+    the newest retry of its submission, unless its host's runner (reading, host_read's) answered it refused; None while
+    none stands. One whose host's runner crew can't read stands, so no send is made twice on a reading crew lacks
+    (read.1)."""
+    n = launch.get("Request")
+    sent = next((r for r in reversed(requests) if r.get("Act") == "retry" and r.get("Of") == n and r.get("Submission") == "yes"), None)
+    answer = None if sent is None or reading["why"] else reading["answers"].get(number(sent.get("Request")))
+    return None if answer is not None and answer.get("Outcome") == "refused" else sent
+
+
+def send_refusal(work, launch, s, sent):
+    """Why crew main fix <kit> <name> --send appends no retry of a fix of main's submission (Decision 11, state.3), or
+    None to send it: no launch of it stands; the user's send of it was made already (sent_of), which the runner acts
+    on, so it is not made twice; crew can't tell its stage (read.1); or its place is not one whose code has delivered
+    and whose submission waits held, the one a send submits. s, its stage (piece_stage)."""
+    if launch is None:
+        return f"no launch of {work} stands in requests.rec, so there is no fix of main to send"
+    if sent is not None:
+        return (f"{work} was sent on the user's word by request {sent.get('Request')}, which the runner on {launch.get('Host')} "
+                "acts on, so it is not sent twice")
+    if s["stage"] == "unknown":
+        return f"can't tell whether {work}'s submission waits held, so it is not sent: {s['why']}"
+    if s["stage"] in ("waits", "stalled") and s.get("held"):
+        return None
+    return (f"{work}'s place{' ' + s['place'] if s.get('place') else ''} is {stage_said(s)}, and a fix of main is sent only once "
+            "its code has delivered and its submission waits held")
+
+
+def main_fixes_waiting(requests, reads, label):
+    """Each fix of main a kit's landings row carries (Decision 11; crew-rail "A fix of main waits to land on its kit's
+    row"): those whose launch stands and whose code has delivered with its submission waiting held, their stage read
+    from their host's runner (reads, by host, of_host; piece_stage), in requests.rec's order, each {kit, name, host,
+    brief, since, carried, sent}: since, when Flume read it waiting, in seconds, or None; carried, when the runner
+    carried that status; sent, the number of the request that sent it on the user's word (sent_of), None while it waits
+    on that word. One crew can't read is left off, as a bolt whose stage crew can't read is, being in no state it can
+    tell to send (read.1)."""
+    out = []
+    for l in standing(requests):
+        work = l.get("Work") or ""
+        if not work.startswith("fix/main/"):
+            continue
+        reading = of_host(reads, label, l.get("Host"))
+        s = piece_stage(requests, reading, l)
+        if s["stage"] not in ("waits", "stalled") or not s.get("held"):
+            continue
+        place, sent = reading["places"][number(l.get("Request"))], sent_of(requests, reading, l)
+        _, _, kit, name = work.split("/", 3)
+        out.append(dict(kit=kit, name=name, host=l.get("Host"), brief=l.get("Brief") or "",
+                        since=flume_facts(place["status"], place["place"])["waiting_since"], carried=place["at"],
+                        sent=number(sent.get("Request")) if sent is not None else None))
+    return out

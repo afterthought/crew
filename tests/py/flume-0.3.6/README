@@ -16,8 +16,8 @@ stopped-short.json  18:15:32Z  flume status --json (every place), the entry of f
                     with the host's answer: a change whose code ended short needing an answer (end.needs needs_answer),
                     waiting_on why answer with the agent's words, and stalled
 
-No place on the host stood waiting for room, sent back, submitted, lost, landed or dropped that day, so these six are
-made from the captures above by flume 0.3.6's own types, read at agentplot/flume v0.3.6
+No place on the host stood waiting for room, sent back, submitted, lost, landed, dropped or held for its send that day,
+so these seven are made from the captures above by flume 0.3.6's own types, read at agentplot/flume v0.3.6
 (crates/flume-seams/src/held.rs Phase, Over, StageState, Waits and WaitingOn; crates/flume-seams/src/merge_queue.rs
 Verdict, SubmissionState, Submission and SubmissionRead; crates/flume-core/src/answer.rs SubmissionStatus;
 crates/flume-core/src/status.rs place_status; crates/flume-core/src/submit.rs fix_round), each field serialised as
@@ -34,3 +34,10 @@ landed.json         submitted.json tidied: phase tidied over landed with its com
                     place <path>@<when>, and head, delivered, tasks, submission and agent null, as status gives a tidied
                     place's (read_facts is false for Tidied)
 dropped.json        code.json tidied over dropped, its code stopped, the same fields null
+held.json           submitted.json as a fix of crew's main launched with its submission held and no hold words (crew
+                    main fix; Decision 11): fix@1's one stage, code, delivered, no tasks (a fix is no change), no
+                    submission yet and held, waiting_on why on_hold with no stage and no words, and stalled, as a
+                    submission held with no words is once five minutes pass (crates/flume-seams/src/held.rs Hold,
+                    HoldOn::Submission, WaitingOn, Waits::OnHold; crates/flume-core/src/status.rs place_status, whose
+                    submission's held is whether a hold on the submission stands); its intent and stream the launch's
+                    (held.rs IntentKey::Launch, its digest the SHA-256 of name:<name>; host.rs StreamFrom::Launch)

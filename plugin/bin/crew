@@ -277,6 +277,12 @@
 #                                      crossed to Flume that builds the kit, --team choosing among several on different
 #                                      hosts; refused, naming a bolt of one chore proposed first among the planned as
 #                                      the way, where no crossed team builds the kit or no runner answers on its host
+#   crew main     fix <kit> <name> --send [--excerpt "<the user's words>"] [--label L]
+#                                      main-level ops's, on the user's send of the kit's landings row, which carries the
+#                                      fix once its code has delivered and its submission waits held: the retry of its
+#                                      submission, appended once, which the runner makes and sluice lands on main; with
+#                                      --excerpt, on the user's words in ops's pane, sent only once crew reads them in
+#                                      ops's own transcript as the user's, no words in the run record
 #   crew main     fix <kit> <name> --drop [--label L]
 #                                      drop a fix of main not wanted: its launch dropped; a landed one is refused
 #   crew review   <label> [--wait [--timeout <ms>]]
