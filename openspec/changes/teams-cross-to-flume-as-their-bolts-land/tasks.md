@@ -13,6 +13,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 - [x] 2.3 `crew bolt give` refuses a due team naming each bolt it finishes first, and crew's tell that a team is free leaves a due team out (design Decision 2; Task notes 2.3); passes `tests/py/test_cross.py` and `tests/py/test_bolt_commands.py` in `tests:logic`.
 - [x] 2.4 A crossed team's conductor and ops are due an end, given at their stop or by the hand that gives an idle agent its due restart, its workspaces closed and `team.cross` recorded once both are down, never on a held host (design Decision 3; Task notes 2.4); passes `tests/py/test_hold.py` and `tests/py/test_cross.py` in `tests:logic`, and verify `tests/suite t-journey-cross` (`tests:t-journey-cross`) ends with "0 failed".
 - [x] 2.5 `crew up` and every other standing-agent or slot command of a crossed team refuses at once, naming where its work runs (design Decision 15; Task notes 2.5); passes `tests/py/test_cross.py` in `tests:logic`, and verify `tests/suite t-journey-cross` ends with "0 failed".
+- [x] 2.6 A crossed team whose conductor and ops are both down, a host's hold or another hand having ended them, is closed by the act that finds them down, the landing's tidy, `crew go` or `crew update`: its workspaces closed, the team marked down, its slots freed, `team.cross` recorded once and the dispatchers told, never on a held host (design Decision 3; Task notes 2.6); passes `tests/py/test_cross.py` and `tests/py/test_hold.py` in `tests:logic`, and verify `tests/suite t-journey-cross` ends with "0 failed".
 
 ## 3. The exchange with the runner
 
@@ -26,6 +27,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 - [x] 4.2 Every write that launches or reorders bolts sends the priorities the plan's order changed (design Decision 6; Task notes 4.2); passes `tests/py/test_runner.py` in `tests:logic`.
 - [x] 4.3 An added, amended or dropped unit or chore, and a dropped bolt, reach a crossed team's places as launches, retries and drops, and a move, split or `After` change of launched work is refused naming drop and add (design Decision 7; Task notes 4.3); passes `tests/py/test_cross.py` and `tests/py/test_amend.py` in `tests:logic`.
 - [x] 4.4 A bolt planned for a kit a crossed team builds, held by no team, is told to the partition's dispatchers that are up (design Decisions 3 and 5; Task notes 4.4); passes `tests/py/test_cross.py` in `tests:logic`.
+- [x] 4.5 A give to a crossed team that holds a bolt whose work has not merged, and then two, is refused for neither (design Decision 5; Task notes 4.5); verify `tests/suite t-journey-cross` ends with "0 failed".
 
 ## 5. Answers and fixes on a crossed team's bolt
 

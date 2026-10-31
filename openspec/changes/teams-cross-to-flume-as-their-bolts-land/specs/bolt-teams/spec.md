@@ -79,7 +79,7 @@ crew SHALL read a team's path from its setting and the bolts the plan gives it, 
 - **THEN** no dispatcher is told that crw-4 can take a bolt
 
 ### Requirement: A team crosses once its last bolt of today's path has gone
-When a team's path reads crossed, its conductor and ops SHALL be due an end, never a restart: crew SHALL end each at its next stop once idle with no question open, or by the hand that gives an idle agent its due restart, never on a held host, closing the team's workspaces and freeing its slots. Once neither is up, crew SHALL record `team.cross` on `team/<team>` naming the stream, and tell the partition's dispatchers that are up that the team takes bolts of its kits whenever one is planned.
+When a team's path reads crossed, its conductor and ops SHALL be due an end, never a restart: crew SHALL end each at its next stop once idle with no question open, or by the hand that gives an idle agent its due restart, never on a held host.
 
 #### Scenario: A due team's bolt lands
 - **WHEN** crw-4 is due to cross, `x` is the only bolt it holds, and main-level ops lands `x`
@@ -88,6 +88,17 @@ When a team's path reads crossed, its conductor and ops SHALL be due an end, nev
 #### Scenario: A held host
 - **WHEN** crw-4 has crossed and its host is held
 - **THEN** its conductor and ops are not ended until the host goes
+
+### Requirement: A crossed team is closed once neither of its roles is up
+Once a crossed team's conductor and ops are both down, however they went down, ended at their stops, by a host's hold or by any other hand, crew SHALL close the team's workspaces, mark it down and free its slots, record `team.cross` on `team/<team>` naming the stream, once, and tell the partition's dispatchers that are up that the team takes bolts of its kits whenever one is planned, never on a held host.
+
+#### Scenario: Its roles ended by the host's hold
+- **WHEN** crw-4 is due to cross, its host is held and `crew hold wait` ends its conductor and ops, `x`, the only bolt it holds, lands, and then `crew go` lifts the hold
+- **THEN** nothing of crw-4 is closed or recorded while the host is held, and at `crew go` its conductor and ops are not brought back, its workspaces are closed, `team.cross` is recorded for crw-4 once, and the dispatchers are told
+
+#### Scenario: A crossing already recorded
+- **WHEN** crw-4's crossing is recorded and its workspaces closed, and a later `crew go` or `crew update` finds its conductor and ops down
+- **THEN** nothing of crw-4 is closed or recorded again
 
 ### Requirement: A crossed team runs no standing agent
 crew SHALL refuse `crew up`, `rebuild`, `restart`, `resume`, `clear` and `down` of a crossed team, and `crew unit run`, `unit wait`, `unit free`, `chore wait` and `fix --wait` on its work, at once and touching no pane, saying that its work runs in Flume places on its host and that `crew bolts` shows them.

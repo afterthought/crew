@@ -1979,7 +1979,7 @@ def end_due(fleet, name):
     except this.Refusal as e:
         print(f"whether {name} is due an end can't be told: {e}", file=sys.stderr)
         return False
-    return role in runner.cross_due(path, [role])[0]
+    return role in runner.cross_due(path, [role])
 
 
 def branch_now(fleet, name):

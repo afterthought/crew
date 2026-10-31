@@ -3,8 +3,9 @@
 # ~/.config/crew/teams.json, version 2 or 3. Version 3 names each team's flume: false for today's path, or the Flume
 # stream its work runs in on its host; version 2 has no setting, and every team in it is on today's path. A team whose
 # setting names a stream is due to cross to Flume while it holds a bolt given on today's path, and is given no bolt
-# then; the landing or drop of its last one crosses it: its conductor and ops are ended at their next stop, never on a
-# held host, its workspaces closed and team.cross recorded, and the dispatchers told it takes bolts of its kits. A
+# then; the landing or drop of its last one crosses it: its conductor and ops are ended at their next stop, and once
+# both are down, however they went down, its workspaces are closed, team.cross recorded once and the dispatchers told it
+# takes bolts of its kits; nothing of it on a held host, whose crew go closes what the hold left. A
 # crossed team runs no conductor, ops or slot, its work running in Flume places on its host: up, rebuild, restart,
 # resume, clear, down and revive of it, and unit run, unit wait, unit free, chore run, chore wait, chore free and fix
 # --wait on its work, are refused at once, naming where its work runs and crew bolts; close still closes. A team whose
@@ -376,7 +377,8 @@
 #                                      what still works on each held host; wait waits until each is quiet and then
 #                                      ends every crew agent there, its panes kept, so herdr can be restarted
 #   crew go       <host>|--all         lift the hold: every standing agent brought back with its conversation and
-#                                      greeted, or told to carry on, and every one an update made due restarted
+#                                      greeted, or told to carry on, and every one an update made due restarted; a
+#                                      team crossed to Flume meanwhile is closed, never brought back
 #   crew update   [<host>|--all]       every standing agent whose start crew's update, or its brief's, has made due
 #                                      restarted on crew as it now is once it is idle, a conductor fresh and every
 #                                      other with its conversation; crew's Stop hook does the same at the end of a due

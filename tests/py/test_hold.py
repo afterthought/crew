@@ -117,6 +117,108 @@ class TestCrossing:
             "Flume places. Give it the next planned bolt of its kits.")
 
 
+class Crossed:
+    """A crossed team on its host as hold.close_crossing reads and acts on it: which of its standing roles herdr reads
+    up, and what was done to it."""
+
+    def __init__(self, t, up=()):
+        self.t, self.name, self.standing, self.up, self.done = t, t["name"], ("conductor", "ops"), set(up), []
+
+    def agent_of(self, role):
+        return f"{self.name}-{role}"
+
+    def status(self, role, fresh=False):
+        return "idle" if role in self.up else None
+
+    def teardown(self, ending=None):
+        self.done.append("closed")
+
+    def mark(self, down):
+        self.done.append("down" if down else "up")
+
+    def stop(self, role, ending=None, waits=False):
+        self.done.append(f"{role} ended")
+
+
+class TestCrossingClosed:
+    """A crossed team's crossing is closed once neither its conductor nor its ops is up, however they went down, once,
+    and never on a held host (Decision 3 of teams-cross-to-flume-as-their-bolts-land, the bolt-teams scenario "A held
+    host"): its workspaces closed, the team marked down, its slots freed, team.cross recorded naming its stream and
+    the dispatchers told (hold.close_crossing), its record read from this host's own day files (hold.crossing_recorded).
+    That a hold's crew go closes it through crew _renew is the cross journey's (t-journey-cross)."""
+    T = {"name": "crw-4", "flume": "madswan", "label": "madswan", "machine": "mac-studio", "kit": {"name": "crew"}}
+
+    @pytest.fixture
+    def host(self, monkeypatch, tmp_path):
+        """This host, held or not, the team crossed, its record under tmp_path; what was reaped and told."""
+        import plan
+        import record
+        seen = {"held": None, "reaped": [], "told": []}
+        monkeypatch.setattr(record, "ROOT", tmp_path / "crew")
+        monkeypatch.setattr(record, "_session", None)
+        monkeypatch.setenv("CREW_AGENT", "crw-4-ops")
+        monkeypatch.setattr(crew, "held", lambda: seen["held"])
+        monkeypatch.setattr(plan, "crossing_path", lambda fleet, t: ("crossed", None))
+        monkeypatch.setattr(plan, "reap", lambda fleet, team, *a, **k: seen["reaped"].append(team.name))
+        monkeypatch.setattr(plan, "tell_dispatchers", lambda fleet, label, text: seen["told"].append((label, text)))
+        return seen
+
+    def crossings(self):
+        import record
+        return [e for f in sorted((record.ROOT / "madswan/runs/mac-studio").glob("*.rec")) for e in record.parse(f.read_text())
+                if e["Act"] == "team.cross"]
+
+    def test_a_held_host_closes_nothing_until_it_goes(self, host, capsys):
+        host["held"] = {"by": "chuck@mac-studio", "why": "herdr 0.9.6", "at": "2026-10-31T12:00Z"}
+        team = Crossed(self.T)
+        hold.close_crossing(FLEET, team)
+        assert team.done == [] and host["reaped"] == [] and host["told"] == [] and self.crossings() == []
+        assert "mac-studio is held; crew go mac-studio closes crw-4's crossing to Flume" in capsys.readouterr().out
+        host["held"] = None
+        hold.close_crossing(FLEET, team)
+        assert team.done == ["closed", "down"] and host["reaped"] == ["crw-4"] and len(self.crossings()) == 1
+
+    def test_a_held_host_ends_neither_role_until_it_goes(self, host, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(hold, "RENEW", tmp_path / "renew")
+        host["held"] = {"by": "chuck@mac-studio", "why": "herdr 0.9.6", "at": "2026-10-31T12:00Z"}
+        team = Crossed(self.T, ["conductor", "ops"])
+        hold.cross_end(FLEET, team, "ops")
+        assert team.done == [] and self.crossings() == []
+        assert "mac-studio is held; crew go mac-studio hands crw-4-ops its end" in capsys.readouterr().out
+
+    def test_neither_role_up_closes_the_team_records_its_crossing_and_tells_the_dispatchers_once(self, host, capsys):
+        team = Crossed(self.T)
+        hold.close_crossing(FLEET, team)
+        assert team.done == ["closed", "down"] and host["reaped"] == ["crw-4"]
+        [e] = self.crossings()
+        assert (e["On"], e["State"], e["Why"]) == (["team/crw-4"], "madswan", "team(crw-4): cross to flume")
+        assert host["told"] == [("madswan", hold.crossed_told("crw-4", ["crew"]))]
+        assert ("crw-4 has crossed to Flume: its workspaces are closed, and its work runs in Flume places on mac-studio, in "
+                "stream madswan") in capsys.readouterr().out
+        again = Crossed(self.T)
+        hold.close_crossing(FLEET, again)
+        assert again.done == [] and len(self.crossings()) == 1 and len(host["told"]) == 1
+        assert "crw-4's crossing to Flume is recorded already: nothing of it is left to close" in capsys.readouterr().out
+
+    @pytest.mark.parametrize("up", [["conductor"], ["ops"]])
+    def test_a_role_still_up_leaves_the_close_to_its_end(self, host, up):
+        team = Crossed(self.T, up)
+        hold.close_crossing(FLEET, team)
+        assert team.done == [] and self.crossings() == [] and host["told"] == []
+
+    def test_the_record_is_read_from_this_hosts_day_files_newest_first(self, host, tmp_path):
+        d = tmp_path / "crew/madswan/runs/mac-studio"
+        d.mkdir(parents=True)
+        rec = lambda at, act, on: f"Id: {at}-{act}\nAt: {at}\nAct: {act}\n" + "".join(f"On: {o}\n" for o in on) + "\n"
+        (d / "2026-10-29.rec").write_text(rec("2026-10-29T10:00:00Z", "team.up", ["team/crw-4", "agent/crw-4-ops"]))
+        (d / "2026-10-30.rec").write_text(rec("2026-10-30T10:00:00Z", "team.cross", ["team/crw-4"]))
+        (d / "2026-10-31.rec").write_text(rec("2026-10-31T09:00:00Z", "tell", ["agent/madswan-ops"]))
+        assert hold.crossing_recorded("madswan", "crw-4") is True
+        assert hold.crossing_recorded("madswan", "crw-5") is False
+        (d / "2026-10-31.rec").write_text(rec("2026-10-31T10:00:00Z", "agent.restart", ["team/crw-4", "agent/crw-4-ops"]))
+        assert hold.crossing_recorded("madswan", "crw-4") is False
+
+
 class TestStanding:
     @pytest.mark.parametrize("name, role", [
         ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("wldn-design", ("wldn", "design")),

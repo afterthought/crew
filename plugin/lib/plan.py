@@ -12171,8 +12171,10 @@ def team_tidy(fleet, a):
     deleted by sluice once the landing's place is gone (land_delete, plan.19), and its card closed there with the words
     (landing_cards_closed); and what the units of a bolt that landed or was dropped (--units) recorded as made, kept
     here for its batch's card, removed (made_drop). Once the landing or drop leaves the team crossed to Flume, each of
-    its standing agents up is handed its end (runner.cross_due), given once it is idle (hold.renew); a team whose plan
-    can't be read is handed none, said (read.1)."""
+    its standing agents up is handed its end (runner.cross_due), given once it is idle (hold.renew), and when none is up
+    and its crossing is not yet recorded (runner.cross_close), each is handed to hold.renew all the same, which finds it
+    down and closes the crossing (hold.close_crossing), its roles having gone down by a host's hold or another hand; a
+    team whose plan can't be read is handed none, said (read.1)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     reap(fleet, team, a.landed)
@@ -12187,7 +12189,14 @@ def team_tidy(fleet, a):
         path = None
         print(f"{e}; none of its agents is handed an end", file=sys.stderr)
     if path:
-        due |= {team.agent_of(r) for r in runner.cross_due(path, [r for r in team.standing if team.status(r)])[0]}
+        up = [r for r in team.standing if team.status(r)]
+        ends = runner.cross_due(path, up)
+        try:
+            if runner.cross_close(path, up, hold.crossing_recorded(t["label"], t["name"])):
+                ends = team.standing
+        except Refusal as e:
+            print(f"{e}; {t['name']}'s crossing to Flume is not closed", file=sys.stderr)
+        due |= {team.agent_of(r) for r in ends}
     for name in sorted(due):
         hold.hand(name)
     if a.landed:

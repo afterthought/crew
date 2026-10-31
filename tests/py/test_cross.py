@@ -95,19 +95,50 @@ class TestDue:
         assert told("crw-5")
 
 
-class TestCrossing:
-    """Once a team has crossed, its conductor and ops are due an end, and the crossing is whole once neither is up
-    (Decision 3)."""
+def entry(act, on, refused=None):
+    """A run-record entry as record.parse gives one."""
+    return {"Act": act, "On": on, **({"Refused": refused} if refused else {})}
 
-    def test_once_crossed_every_role_up_is_due_an_end_and_the_crossing_is_whole_once_none_is(self):
-        assert runner.cross_due(("crossed", None), ["conductor", "ops"]) == (["conductor", "ops"], False)
-        assert runner.cross_due(("crossed", None), ["ops"]) == (["ops"], False)
-        assert runner.cross_due(("crossed", None), []) == ([], True)
+
+class TestCrossing:
+    """Once a team has crossed, its conductor and ops are due an end, and its crossing is closed once neither is up,
+    once, however they went down (Decision 3)."""
+
+    def test_once_crossed_every_role_up_is_due_an_end(self):
+        assert runner.cross_due(("crossed", None), ["conductor", "ops"]) == ["conductor", "ops"]
+        assert runner.cross_due(("crossed", None), ["ops"]) == ["ops"]
+        assert runner.cross_due(("crossed", None), []) == []
 
     @pytest.mark.parametrize("path", [("today", None), ("due", "cross"), ("due", "back")])
     def test_a_team_that_has_not_crossed_owes_its_agents_nothing(self, path):
-        assert runner.cross_due(path, ["conductor", "ops"]) == ([], False)
-        assert runner.cross_due(path, []) == ([], False)
+        assert runner.cross_due(path, ["conductor", "ops"]) == []
+        assert not runner.cross_close(path, [], False)
+
+    def test_a_crossed_team_with_neither_role_up_is_closed_once(self):
+        assert runner.cross_close(("crossed", None), [], False)
+        assert not runner.cross_close(("crossed", None), [], True)
+
+    @pytest.mark.parametrize("up", [["conductor"], ["ops"], ["conductor", "ops"]])
+    def test_a_crossed_team_with_a_role_up_is_closed_by_that_roles_end(self, up):
+        assert not runner.cross_close(("crossed", None), up, False)
+
+    def test_the_crossing_is_recorded_once_the_teams_newest_cross_or_start_is_its_crossing(self):
+        up = entry("team.up", ["team/crw-4", "agent/crw-4-conductor", "agent/crw-4-ops"])
+        cross = entry("team.cross", ["team/crw-4"])
+        assert runner.cross_recorded([up, entry("host.down", ["team/crw-4", "agent/crw-4-ops"]), cross,
+                                      entry("agent.end", ["team/crw-4", "agent/crw-4-ops"])], "crw-4") is True
+        assert runner.cross_recorded([up, entry("agent.end", ["team/crw-4", "agent/crw-4-ops"])], "crw-4") is False
+
+    @pytest.mark.parametrize("act", runner.STARTS)
+    def test_a_start_after_a_crossing_is_a_crossing_the_team_came_back_from(self, act):
+        assert runner.cross_recorded([entry("team.cross", ["team/crw-4"]), entry(act, ["team/crw-4", "agent/crw-4-ops"])], "crw-4") is False
+
+    def test_another_teams_acts_and_a_refused_start_tell_nothing(self):
+        cross = entry("team.cross", ["team/crw-4"])
+        assert runner.cross_recorded([cross, entry("team.up", ["team/crw-5", "agent/crw-5-ops"]),
+                                      entry("team.up", ["team/crw-4"], refused="crw-4 has crossed to Flume")], "crw-4") is True
+        assert runner.cross_recorded([entry("team.cross", ["team/crw-5"]), entry("tell", ["agent/crw-4-ops"])], "crw-4") is None
+        assert runner.cross_recorded([], "crw-4") is None
 
 
 class TestNoStandingAgent:

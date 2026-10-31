@@ -79,9 +79,10 @@ ok "the README, the skill and the usage say a team may hold one more bolt that w
 
 for doc in usage readme skill; do
   for want in "version 2 or 3" "due to cross once <bolt> lands" "in Flume stream" "Path: flume" "team.cross" "still closes" \
+    "however they went down" "closes what the hold left" \
     "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
 done
-ok "the README, the skill and the usage say a team's setting and path, its crossing, what a crossed team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix"
+ok "the README, the skill and the usage say a team's setting and path, its crossing however its roles went down and after a hold, what a crossed team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix"
 
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)

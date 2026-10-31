@@ -5,8 +5,9 @@ A team's path is read from its setting in teams.json (crew.load's `flume`, False
 plan gives it, a bolt given while the team was crossed marked `Path: flume`: today's, crossed or due (team_path). A due
 team is given no new bolt (due_refusal); its bolts go on as they were given until each lands or is dropped, and the
 landing or drop that leaves it holding none of its old path makes its path its setting's. A crossed team runs no
-standing agent and has no slots: its conductor and ops are due an end (cross_due), and every standing-agent or slot
-command of it is refused (crossed_refusal).
+standing agent and has no slots: its conductor and ops are due an end (cross_due), its workspaces are closed and its
+crossing recorded once neither is up (cross_close, cross_recorded), and every standing-agent or slot command of it is
+refused (crossed_refusal).
 
 crew asks a host's runner for work by requests on the flywheel's branch, requests.rec (REQUESTS), each appended in the
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
@@ -84,13 +85,37 @@ def runnerless(label, host, tips):
 
 
 def cross_due(path, up):
-    """What a team's crossing owes its standing agents (Decision 3), from facts: its path (team_path) and its standing
-    roles that are up. Returns (the roles due an end, whether the crossing is whole): once it has crossed, every role
-    up is due an end, never a restart, and the crossing is whole once none is up, when the act that ended the last
-    closes its workspaces and records team.cross. A team not crossed owes nothing."""
-    if path[0] != "crossed":
-        return [], False
-    return list(up), not up
+    """The standing roles a team's crossing ends (Decision 3), from facts: its path (team_path) and its standing roles
+    that are up. Once it has crossed, every role up is due an end, never a restart; a team not crossed owes nothing."""
+    return list(up) if path[0] == "crossed" else []
+
+
+def cross_close(path, up, recorded):
+    """Whether a team's crossing is due its close (Decision 3), from facts: its path (team_path), its standing roles
+    that are up, and whether its crossing is already recorded (cross_recorded). Once it has crossed with none up, its
+    workspaces are closed, it is marked down, its slots freed, team.cross recorded and the dispatchers told, once,
+    however its roles went down: ended at their stops by the crossing, by a host's hold or by any other hand."""
+    return path[0] == "crossed" and not up and not recorded
+
+
+# The acts that start a team's standing role, on team/<team> in the run record: a crossing recorded before one of them
+# is a crossing the team has since come back from (cross_recorded).
+STARTS = ("team.up", "team.rebuild", "agent.start", "agent.restart", "agent.resume", "agent.renew")
+
+
+def cross_recorded(entries, team):
+    """Whether run-record entries, oldest first, hold a team's crossing (cross_close): True when the newest of those on
+    team/<team> that record its crossing (team.cross) or a start of one of its standing roles (STARTS) is its
+    crossing, False when it is a start, and None when they hold neither, so that older entries tell. A refused act
+    started nothing."""
+    for e in reversed(entries):
+        if f"team/{team}" not in e.get("On", []) or e.get("Refused"):
+            continue
+        if e.get("Act") == "team.cross":
+            return True
+        if e.get("Act") in STARTS:
+            return False
+    return None
 
 
 def crossed_refusal(team, path, stream, host, what):

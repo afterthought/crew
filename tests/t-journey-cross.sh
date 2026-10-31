@@ -7,8 +7,11 @@
 # does, sluice makes the bolt's branch, the plan marks the bolt Path: flume and requests.rec on the state branch holds a
 # launch of each of its units and chores, and no agent starts. Once the runner's record shows a's place stopped short
 # asking, crew answer a appends the retry of that stage with the answer's words, and crew fix of swb-1 appends a launch
-# of a fix on its bolt. A team's path, the give's refusal, who is due an end, the launches, what an answer retries, a
-# fix's launch and drop and the refusals' words are logic cases (tests/py/test_cross.py, tests/py/test_hold.py,
+# of a fix on its bolt. swb-1, holding that bolt, is given two more, neither refused for the bolts it holds. swb-2, due
+# on the same host when the host is held and crew hold wait ends its conductor and ops, crosses at its bolt's landing
+# with nothing closed while the host is held, and crew go closes it, once. A team's path, the give's refusal, who is
+# due an end, when a crossing is closed and whether it is recorded, the launches, what an answer retries, a fix's
+# launch and drop and the refusals' words are logic cases (tests/py/test_cross.py, tests/py/test_hold.py,
 # tests/py/test_fix.py).
 # Reads: plugin/hooks/ plugin/roles/ plugin/lib/hold.py tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -106,3 +109,47 @@ eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Re
 eq "$(field "$HOST" fix.start On)" "fix/next/tidy bolt/next"
 eq "$(launches)" ""
 ok "crew fix of a crossed team appends a launch of a fix on its bolt, starting no agent"
+
+# swb-1, crossed, holds next, none of whose work has merged, and is given two bolts more: a crossed team's give waits
+# on no bolt it holds, neither for its proof nor for holding two (teams.16 binds today's path).
+crew bolt new more "More of it." --repo switchboard-kit >/dev/null
+crew bolt new last "The last of it." --repo switchboard-kit >/dev/null
+: > "$CREW_TEST_CLAUDE_LOG"
+expect_ok crew bolt give swb-1 more
+has "$out" "the runner on $box launches nothing, the bolt holding no unit or chore yet"
+expect_ok crew bolt give swb-1 last
+eq "$(git --git-dir "$ws" show wldn/main:plan.rec | recsel -t Bolt -e "Team = 'swb-1'" -P Bolt,Path | grep . | paste -sd ' ' -)" \
+  "next flume more flume last flume"
+eq "$(launches)" ""
+ok "a crossed team holding a bolt whose work has not merged, and then two, is given another all the same, starting no agent"
+
+# swb-2, on the same host, builds a bolt of today's path when its setting is turned on, and the host is held for a
+# restart before that bolt lands: crew hold wait ends swb-2's conductor and ops with their panes kept, the landing that
+# crosses swb-2 closes nothing while the host is held, and crew go closes it, once.
+expect_ok crew up swb-2
+crew bolt new other "Other work." --repo switchboard-kit >/dev/null
+expect_ok crew bolt give swb-2 other
+edit teams "$(team swb-2)['flume'] = 'wldn'"
+expect_ok crew hold $box "herdr 0.9.6"
+expect_ok crew hold wait $box --timeout 60000
+eq "$(herdr_state $box wldn-1 '.agents | length')" "0"
+workspaces=$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')
+[[ -n $workspaces ]] || fail "crew hold wait closed swb-2's workspaces"
+expect_ok crew bolt land other
+swb2() { cat "$(home_of $box)"/.local/state/crew/renew/swb-2-*.log 2>/dev/null; }
+held() { [[ $(swb2) == *"$box is held; crew go $box hands swb-2-conductor what it is due"* &&
+            $(swb2) == *"$box is held; crew go $box hands swb-2-ops what it is due"* ]]; }
+until_ok held || fail "swb-2's crossing was not handed back to crew go: $(swb2)"
+eq "$(count $box team.cross)" "1"
+eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "$workspaces"
+ok "the landing that crosses a team on a held host closes nothing: its workspaces stay and no crossing is recorded until crew go"
+
+expect_ok crew go $box
+closed() { [[ $(swb2) == *"swb-2 has crossed to Flume: its workspaces are closed, and its work runs in Flume places on $box, in stream wldn"* &&
+              $(swb2) == *"swb-2's crossing to Flume is recorded already: nothing of it is left to close"* ]]; }
+until_ok closed || fail "crew go did not close swb-2's crossing: $(swb2)"
+eq "$(count $box team.cross)" "2"
+eq "$(field $box team.cross State) $(field $box team.cross On)" "wldn team/swb-2"
+eq "$(herdr_state $box wldn-1 '.agents | length')" "0"
+eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" ""
+ok "crew go closes the crossing its host's hold left: the team's conductor and ops not brought back, its workspaces closed, and team.cross recorded once"
