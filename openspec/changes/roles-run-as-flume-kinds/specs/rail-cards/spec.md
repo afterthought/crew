@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: An answer wakes the owner, which acts on the user's word
-An answer on a crew card SHALL be acted on by the role whose row it is, woken in its session by the card it adopted, and by no other: the planner applies or rewrites the proposal, and reads a batch's answer with `crew card read batch/<n>`; main-level ops lands the bolts the user ticked on a kit's landings card, in the card's order, and passes a note naming a defect in a bolt to that bolt's conductor, who starts a fix on it; main-level ops runs the deploy's approval or the step's state; the design agent sets the record's status. crew SHALL then close the card at that act's event. No process of crew's SHALL wait on a card's answer. Where the role runs as its kind, the host's follower SHALL write an ask of the role for each answer its card sweep finds on a card in the role's name, once per answer, and the role's next run SHALL act on it as the woken session would.
+An answer on a crew card SHALL be acted on by the role whose row it is, woken in its session by the card it adopted, and by no other: the planner applies or rewrites the proposal, and reads a batch's answer with `crew card read batch/<n>`; main-level ops lands the bolts the user ticked on a kit's landings card, in the card's order, and passes a note naming a defect in a bolt to that bolt's conductor, who starts a fix on it; main-level ops runs the deploy's approval or the step's state; the design agent sets the record's status. crew SHALL then close the card at that act's event. No process of crew's SHALL wait on a card's answer. Where the role runs as its kind, the host's follower SHALL write an ask of the role for each change Pending You's notice names on a card in the role's name, once per version of the card, reading nothing of the card, and the role's next run SHALL read the card in the role's own name and act on it as the woken session would.
 
 #### Scenario: A proposal approved from the phone
 - **WHEN** the user approves the card for proposal 4 on the phone
@@ -21,4 +21,4 @@ An answer on a crew card SHALL be acted on by the role whose row it is, woken in
 
 #### Scenario: A proposal approved while the planner runs as its kind
 - **WHEN** madswan's planner runs as its kind, no run of it is live, and the user approves proposal 12's card on the phone
-- **THEN** the follower's next card sweep writes one ask of the planner naming `proposal/12`, and the planner's next run runs `crew plan answer` and `crew plan approve 12`
+- **THEN** the host's follower, told by Pending You's notice, writes one ask of the planner naming the card's request, and the planner's next run reads the card in madswan-planner's name and runs `crew plan answer` and `crew plan approve 12`

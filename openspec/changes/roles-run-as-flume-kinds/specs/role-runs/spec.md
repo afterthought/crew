@@ -25,8 +25,8 @@ An ask SHALL be a record of `asks.rec` on the partition's flywheel branch, writt
 An ask whose key `asks.rec` already holds SHALL write nothing and say so, on the tip it was first tried on and on any tip a refused push is applied again to.
 
 #### Scenario: One answer seen twice
-- **WHEN** the followers of deneb and mac-studio both sweep the card of madswan's proposal 12, answered at 10:04, while madswan's planner runs as its kind
-- **THEN** `asks.rec` on `madswan/main` holds one ask of the planner keyed by that card's answer, and the second write says the ask is there
+- **WHEN** Pending You's notice of the answer on madswan's proposal 12's card, at its version 3, reaches deneb's follower twice, while madswan's planner runs as its kind
+- **THEN** `asks.rec` on `madswan/main` holds one ask of the planner keyed by that card's request and version 3, and the second write says the ask is there
 
 ### Requirement: An ask is written with the act that makes it
 An ask SHALL be written in the same commit as the act that makes it, where that act writes to the flywheel's branch, and in a commit of its own where it does not.
@@ -54,11 +54,26 @@ A signal captured through crew SHALL be an ask of a design agent that runs as it
 - **THEN** that write holds an ask of the planner and one of the design agent, each naming the bolt
 
 ### Requirement: A card's answer, an opening and a batch are asks
-A card's answer found by the follower's card sweep on a card in the name of a role that runs as its kind SHALL be an ask of that role, keyed by the card's request and when it was answered. The user opening a role SHALL be an ask of it. A batch from `crew review` SHALL be an ask of a reviewer that runs as its kind, and a batch delivered an ask of the planner.
+A change on a card in the name of a role that runs as its kind, the user's answer among them, as Pending You's notice names it to the host's follower, SHALL be an ask of that role, keyed by the card's request and version; the follower SHALL read nothing of the card, and SHALL write nothing for a card in any other name. The user opening a role SHALL be an ask of it. A batch from `crew review` SHALL be an ask of a reviewer that runs as its kind, and a batch delivered an ask of the planner.
 
 #### Scenario: A deploy approved from the phone
 - **WHEN** swancloud's ops runs as its kind and the user approves `deploy/deneb` on the phone
-- **THEN** the follower's next card sweep writes one ask of ops naming `deploy/deneb`
+- **THEN** the host's follower, told by Pending You's notice, writes one ask of ops naming the card's request, and reads nothing of the card
+
+#### Scenario: A standing agent's card
+- **WHEN** Pending You's notice names an answer on a card in wldn-planner's name, and wldn's planner stands
+- **THEN** the follower writes no ask, and the card's answer wakes wldn-planner as today
+
+### Requirement: The follower hears Pending You's notice while a role here runs as its kind
+The host's follower SHALL run Pending You's notice of changes on the host's cards, `pendingyou watch`, while a partition whose main level runs on its host runs a role as its kind, and only then.
+
+#### Scenario: A role here runs as its kind
+- **WHEN** madswan's main level runs on deneb and its planner runs as its kind
+- **THEN** deneb's follower runs `pendingyou watch` for as long as it holds the host's follower lock
+
+#### Scenario: No role here runs as its kind
+- **WHEN** no partition whose main level runs on deneb runs a role as its kind
+- **THEN** deneb's follower runs no `pendingyou watch`
 
 ### Requirement: A role that stands is asked nothing
 For a role its partition does not run as its kind, no tell, notice, send, capture, landing, card's answer, opening or batch SHALL write an ask: each SHALL do what it does today.
@@ -145,11 +160,11 @@ What is pending for a role SHALL be each of its asks and each place that waits o
 - **THEN** it refuses, saying it runs only in a run of a crew role, and writes nothing
 
 ### Requirement: A run's start gives its brief and what it took
-`crew role start` SHALL write the role's brief, filled for its partition as `crew-role` fills it, to a file on the host, and print the file's path to read whole first, then each ask it took, oldest first, with who asked, what, the record it names and its words, then each place that waits on the role, with its work, its place and its words, and last that Pending You's `list_pending` gives the run's own cards.
+`crew role start` SHALL write the role's brief, filled for its partition as `crew-role` fills it, to a file on the host, and print the file's path to read whole first, then each ask it took, oldest first, with who asked, what, the record it names and its words, then each place that waits on the role, with its work, its place and its words, and last the role's answered cards, read in the role's own Pending You name, each with its key and the answer.
 
 #### Scenario: What the planner's run reads
 - **WHEN** the planner's start took an ask from the design agent and a card's answer
-- **THEN** it prints the brief's path, then the design agent's words, then the card's key, then the line on `list_pending`
+- **THEN** it prints the brief's path, then the design agent's words, then the card's ask, then the card's key and the user's answer, read in madswan-planner's name
 
 ### Requirement: A start takes again what a lost run took
 A turn of the role still open when a run starts SHALL be recorded superseded by the new turn, which takes its asks again; a superseded turn SHALL answer nothing.
