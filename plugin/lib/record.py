@@ -37,8 +37,8 @@ crew trace, the batches, the rail, the board and the page, reads the branch alon
   record.py trace <object> [--label L]    one bolt's, unit's, chore's or signal's history, read from the entries alone
 
 An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>,
-agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of
-the partition), and
+agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, fix/main/<kit>/<name> (a fix of a kit's red main, a Flume
+place on main), plan/<label>, proposal/<n>, batch/<n> (a review batch of the partition), and
 what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>. A signal is
 named by its full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>, which is the one signal of that capture
 numbered NN."""

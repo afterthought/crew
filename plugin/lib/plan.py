@@ -11862,6 +11862,69 @@ def fix_flume(w, t, bolt, mode, name, words):
     return dict(n=request(w, act, host, work, **given), host=host, stream=given["Stream"])
 
 
+def main_fix(fleet, a):
+    """crew main fix <kit> <name> "<the failure's words>" | --drop [--team <team>] [--label L]: a fix of a kit's red main
+    as a Flume place on main (Decision 11 of teams-cross-to-flume-as-their-bolts-land, state.3), main-level ops's or the
+    user's on reading main's checks red after a landing (may_request), a plan write on the asking host that starts
+    nothing there: a launch of Flume's fix kind on main, its submission held for the user's send and main-level ops its
+    recipient, on the host of the crossed team building the kit (runner.main_fixer, runner.main_fix_launch), refused
+    naming state.3's way, a bolt of one chore proposed first among the planned, where no crossed team builds it or no
+    runner answers on its host; --drop a drop of its launch (runner.fix_drop_refusal). The kit's partition is the one
+    whose teams build it, --label choosing. Recorded as fix.start or fix.drop on fix/main/<kit>/<name>, done or
+    refused."""
+    mode = "drop" if a.drop else "start"
+    (a.words is None) == a.drop or fail('crew main fix takes the failure\'s words or --drop: crew main fix <kit> <name> "<words>" | --drop')
+    a.team is None or mode == "start" or fail("--team chooses the host a fix of main is launched on, and a drop finds its launch")
+    crew.NAME.match(a.name) or fail("a fix is named with lowercase words and dashes")
+    label = default_label(fleet, a)
+    builders = kit_teams(fleet, a.kit, label)
+    labels = sorted({t["label"] for t in builders})
+    labels or fail(f"no team {f'of {label} ' if label else ''}builds {a.kit}, so crew has no main of it to fix")
+    len(labels) == 1 or fail(f"{a.kit} is built in {' and '.join(labels)}: add --label")
+    CONTEXT["label"] = label = labels[0]
+    kit_name = builders[0]["kit"]["name"]
+    on, act, seen = [f"fix/main/{kit_name}/{a.name}"], {"start": "fix.start", "drop": "fix.drop"}[mode], {}
+    try:
+        (a.words or "").strip() or mode == "drop" or fail(f"crew main fix needs the failure's words: crew main fix {kit_name} {a.name} \"<words>\"")
+
+        def change(w):
+            seen.update(main_fix_change(fleet, w, kit_name, a.name, mode, a.words, a.team))
+            return []
+        write(fleet, label, change, f"plan(main): fix {a.name} of {kit_name}", act=act, on=on)
+    except Refusal as e:
+        record.emit(label, act, on, refused=str(e))
+        raise
+    if mode == "drop":
+        print(f"fix main--{a.name} of {kit_name}'s main is dropped (request {seen['n']}): the runner on {seen['host']} drops its place")
+        return
+    print(f"the runner on {seen['host']} launches fix main--{a.name} on {kit_name}'s main (request {seen['n']}) in stream {seen['stream']}, "
+          f"its submission held for the user's send: once its code has delivered, {kit_name}'s landings row carries it")
+
+
+def main_fix_change(fleet, w, kit, name, mode, words, team):
+    """crew main fix's change to a write (main_fix), each fact read again at the tip it is applied to (plan.1): for a
+    new fix, the crossed team on whose host it runs (runner.main_fixer), that host's runner answering, and the launch
+    appended (runner.main_fix_launch); for --drop, its launch's drop (runner.fix_drop_refusal), its stage read from the
+    runner's records as the write reads them. Returns what it asked, {n, host, stream}."""
+    requests, work = requests_of(w).recs("Request"), f"fix/main/{kit}/{name}"
+    if mode == "drop":
+        launch = runner.launch_of(requests, work)
+        s = runner.piece_stage(requests, w.runner_of(launch.get("Host")), launch) if launch is not None else None
+        why = runner.fix_drop_refusal(kit, work, launch, s)
+        not why or fail(why)
+        w.subject = f"plan(main): drop fix {name} of {kit}"
+        return dict(n=request(w, "drop", launch.get("Host"), work, Of=launch.get("Request")), host=launch.get("Host"),
+                    stream=launch.get("Stream"))
+    named, why = runner.main_fixer(w.plan, fleet["teams"], w.label, kit, team)
+    not why or fail(why)
+    t = crew.with_kit(fleet["teams"][named], kit)
+    launched, why = runner.main_fix_launch(w.plan, requests, w.label, t, name, words, w.runner_of(t["machine"])["tip"] is not None)
+    not why or fail(why)
+    act, host, work, given = launched
+    w.subject = f"plan(main): fix {name} of {kit}"
+    return dict(n=request(w, act, host, work, **given), host=host, stream=given["Stream"])
+
+
 def fix_drop(fleet, team, said, on):
     """crew fix <team> <name> --drop, once fix_cmd let it (teams.3, record 0028): the fix's slot freed, or given back to
     the work it was lent from (teams.1), its agent ended when one is up, a working one only with --force (teams.2); its
@@ -18033,6 +18096,13 @@ def parser(cls=argparse.ArgumentParser, only=None):
     v.add_argument("work")
     v.add_argument("words")
     v.add_argument("--label")
+    v = sub.add_parser("main").add_subparsers(dest="sub", required=True).add_parser("fix")  # up, down and status are _main's
+    v.add_argument("kit")
+    v.add_argument("name")
+    v.add_argument("words", nargs="?")
+    v.add_argument("--drop", action="store_true")
+    v.add_argument("--team")
+    v.add_argument("--label")
     ca = sub.add_parser("card").add_subparsers(dest="sub", required=True)
     for c in ("session", "wait", "end"):
         x = ca.add_parser(c)
@@ -18344,7 +18414,7 @@ COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
     ("card", "preview"): card_preview, ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
     ("card", "read"): card_read, ("card", "answer"): batch_answer,
-    ("record", None): record_status, ("answer", None): answer,
+    ("record", None): record_status, ("answer", None): answer, ("main", "fix"): main_fix,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit, ("bolt", "leave"): bolt_leave,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),

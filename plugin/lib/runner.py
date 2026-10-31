@@ -24,7 +24,8 @@ A place that stopped short asking, or waits on its caller, is answered by a retr
 A fix on a crossed bolt is a launch of Flume's fix kind on the bolt's branch (fix_launch), dropped by a drop
 (fix_drop_refusal), merged and waited on by Flume alone (fix_flume_refusal), and holds the bolt's landing while it is in
 flight (fixes_in_flight); a crossed bolt whose landing sluice refused for a conflict with main takes main in by one
-(take_main).
+(take_main). A red main's fix is a launch of the fix kind on main with its submission held, on the host of a crossed
+team building the kit (main_fixer, main_fix_launch), a bolt of one chore where none does (state.3).
 
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
@@ -591,6 +592,13 @@ def launched_refusal(requests, work, how):
             f"again as it should be (crew {kind} add)")
 
 
+def crossed_builders(plan, teams, label, kit):
+    """The partition's teams that have crossed to Flume and build a kit, by its name or owner/name, by name, sorted:
+    those a bolt planned in it is given to (takers), and those whose host runs a fix of its main (main_fixer)."""
+    return sorted(n for n, t in teams.items() if t["label"] == label and path_of(plan, t)[0] == "crossed"
+                  and any(kit in (k.get("name"), k.get("repo")) for k in t.get("kits") or [t.get("kit") or {}]))
+
+
 def takers(plan, teams, label, bolt):
     """The partition's teams that have crossed to Flume and build a planned bolt's kit, by name, sorted (Decision 3):
     a bolt held by no team in a kit one of them builds is theirs whenever it is planned, a crossed team holding no
@@ -598,8 +606,7 @@ def takers(plan, teams, label, bolt):
     b = plan.bolt(bolt)
     if b is None or b.get("Team"):
         return []
-    return sorted(n for n, t in teams.items() if t["label"] == label and path_of(plan, t)[0] == "crossed"
-                  and any(b.get("Repo") in (k.get("name"), k.get("repo")) for k in t.get("kits") or [t.get("kit") or {}]))
+    return crossed_builders(plan, teams, label, b.get("Repo"))
 
 
 def planned_said(bolt, names):
@@ -702,16 +709,17 @@ def take_main(plan, requests, bolt, team, main, words):
 
 
 def fix_drop_refusal(team, work, launch, s):
-    """Why crew fix --drop of a fix on a bolt given through Flume is refused (Decision 10, teams.3), or None to drop the
-    launch standing: none stands, so the team has no such fix; crew can't tell how far its place got (read.1); or its
-    place has merged into the bolt, so what it changed is the bolt's and a new fix undoes it. s, its stage (piece_stage)."""
+    """Why crew fix --drop of a fix on a bolt given through Flume, or crew main fix --drop of a fix of main, is refused
+    (Decisions 10 and 11, teams.3), or None to drop the launch standing: none stands, so the team, or the kit, has no
+    such fix; crew can't tell how far its place got (read.1); or its place has merged into its base, so what it changed
+    is the bolt's, or main's, and a new fix undoes it. s, its stage (piece_stage)."""
     if launch is None:
         return f"{team} has no fix {work}: no launch of it stands in requests.rec"
     if s["stage"] == "unknown":
         return f"can't tell whether {work}'s place has merged into {launch.get('Base')}, so it is not dropped: {s['why']}"
     if s["stage"] in ("merged", "landed"):
-        return (f"{work} has merged into {launch.get('Base')}, so it is not dropped: what it changed is the bolt's, and a new "
-                "fix undoes it")
+        return (f"{work} has merged into {launch.get('Base')}, so it is not dropped: what it changed is "
+                f"{'main' if launch.get('Base') == 'main' else 'the bolt'}'s, and a new fix undoes it")
     return None
 
 
@@ -736,3 +744,59 @@ def fixes_in_flight(requests, reads, label, bolt):
             if piece_stage(requests, of_host(reads, label, l.get("Host")), l)["stage"] not in ("merged", "landed", "dropped"):
                 out[work] = l.get("Brief")
     return out
+
+
+# ------------------------------------------------------------------------------------------------ a fix of main
+
+def main_fixer(plan, teams, label, kit, team=None):
+    """The team on whose host a fix of a kit's red main runs (Decision 11, state.3), as (its name, None), or (None, why):
+    among the partition's teams crossed to Flume that build the kit (crossed_builders), the one team names, else the
+    first by name while they all run on one host, since the place wants the host and its stream and nothing else of a
+    team. Refused when team names none of them, when they run on several hosts and team names none, and when no team
+    crossed to Flume builds the kit, its red main's fix then being a bolt of one chore, proposed first among the
+    planned, as state.3 has it until one does."""
+    names = crossed_builders(plan, teams, label, kit)
+    if not names:
+        return None, (f"no team of {label} crossed to Flume builds {kit}, so a fix of its red main is no Flume place: it is a bolt "
+                      "of one chore, proposed first among the planned, which the dispatcher gives to the next team that frees "
+                      f"(state.3); tell {label}-planner, who proposes it")
+    if team is not None:
+        return (team, None) if team in names else (None, (
+            f"{team} is no team of {label} crossed to Flume building {kit}; " + " and ".join(names)
+            + (" is" if len(names) == 1 else " are")))
+    hosts = sorted({teams[n]["machine"] for n in names})
+    if len(hosts) > 1:
+        return None, (f"{' and '.join(names)} build {kit} through Flume on {' and '.join(hosts)}: name the team on whose host the "
+                      "fix runs, --team <team>")
+    return names[0], None
+
+
+def main_priority(plan):
+    """A fix of main's priority at its launch (Decision 11): one above every bolt given through Flume (priority_of), so
+    Flume starts its code ahead of theirs, a red main holding back every landing on it."""
+    return sum(1 for b in plan.bolts() if b.get("Path") == "flume") + 1
+
+
+def main_fix_launch(plan, requests, label, team, name, words, served):
+    """The launch crew main fix <kit> <name> "<the failure's words>" appends (Decision 11), as (act, host, work, its
+    fields as plan.request takes them), or (None, why): a place of the fix kind named main--<name>, cut from main, on
+    the host of team (main_fixer, carrying the kit as its kit) and in its stream, ahead of every bolt (main_priority),
+    its intent the kit's main, main-level ops as its recipient, the failure's words as its brief, and its submission
+    held for the user's send (state.3). Refused while no runner answers on the host (served, whether its runner's
+    branch exists), since nothing would launch it there and the red main waits on it, the fix then being a bolt of one
+    chore as main_fixer has it where no crossed team builds the kit; and while a launch of that fix of the kit's main
+    stands, landed or not, since the name is in use there."""
+    kit, host = team["kit"]["name"], team["machine"]
+    if not served:
+        return None, (f"no runner answers on {host}: {runner_branch(label, host)} does not exist, so nothing would launch the fix "
+                      f"there; until the runner (flywheel-runner) serves {label} there, a fix of {kit}'s red main is a bolt of one "
+                      f"chore, proposed first among the planned (state.3); tell {label}-planner, who proposes it")
+    work = f"fix/main/{kit}/{name}"
+    l = launch_of(requests, work)
+    if l is not None:
+        return None, (f"fix {name} of {kit}'s main is in use: it is launched as Flume place {l.get('Name')} (request "
+                      f"{l.get('Request')}), so name this fix differently")
+    return ("launch", host, work, {
+        "Repo": team["kit"]["repo"], "Kind": "fix", "Name": f"main--{name}", "Base": "main", "Stream": team["flume"],
+        "Priority": main_priority(plan), "Intent": f"{label}/main/{kit}", "Recipient": f"{label}/ops", "Hold": "submission",
+        "Brief": words}), None

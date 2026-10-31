@@ -270,6 +270,15 @@
 #                                      another, and a dispatcher on each host the partition's teams run on;
 #                                      each agent up starts is greeted to read where the partition stands and carry on;
 #                                      a pane herdr brought back dead is closed and opened again in its workspace, said
+#   crew main     fix <kit> <name> "<the failure's words>" [--team <team>] [--label L]
+#                                      main-level ops's or the user's, on reading the kit's main red after a landing:
+#                                      a Flume fix place on main, its submission held for the user's send and ops its
+#                                      recipient, appended to requests.rec for the runner on the host of the team
+#                                      crossed to Flume that builds the kit, --team choosing among several on different
+#                                      hosts; refused, naming a bolt of one chore proposed first among the planned as
+#                                      the way, where no crossed team builds the kit or no runner answers on its host
+#   crew main     fix <kit> <name> --drop [--label L]
+#                                      drop a fix of main not wanted: its launch dropped; a landed one is refused
 #   crew review   <label> [--wait [--timeout <ms>]]
 #                                      the partition's reviewer, started fresh for the batch of changes due, in a
 #                                      review tab beside the planner; --wait waits for its summary, records the batch,
@@ -531,8 +540,9 @@ case $cmd in
     # stops and by every crew act that reads the bolt after
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   main)
+    [[ ${2:-} == fix ]] && exec python3 "$here/../lib/plan.py" "${args[@]}"  # a plan write, on the asking host
     need_label "${3:-}"
-    case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;
+    case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label> | fix <kit> <name> ..." >&2; exit 2 ;; esac ;;
   review)  # crew review <label> [--wait [--timeout <ms>]]: the partition's reviewer, fresh for one batch, in a review tab
     # of the main level's workspace beside the planner; --wait waits for its summary, records the batch and closes its tab
     need_label "${2:-}"
