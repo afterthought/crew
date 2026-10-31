@@ -63,4 +63,4 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 ## 13. Documentation and the suite
 
 - [x] 13.1 README, `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage say the role commands, `crew review delivered`, a partition's `flume`, `asks.rec` and `roles.rec` together (`docs.2`; Task notes 13.1); the moon task `tests:t-docs` ends with "0 failed".
-- [ ] 13.2 `tests/moon.yml` matches the tests after `tests/moon-tasks`, `t-journey-roles` among them, and the tests the change affects pass (`tests.10`; Task notes 13.2); verify `tests/suite --affected` ends with "0 failed".
+- [x] 13.2 `tests/moon.yml` matches the tests after `tests/moon-tasks`, `t-journey-roles` among them, and the tests the change affects pass (`tests.10`; Task notes 13.2); verify `tests/suite --affected` ends with "0 failed".
