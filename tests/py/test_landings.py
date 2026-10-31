@@ -195,6 +195,53 @@ def test_a_take_main_fix_in_flight_holds_its_row_as_taking_main_first_in_its_wor
     assert z["why"] == f'held for a fix: A zone is missing. (fix/z/gap); takes main first: take-main-e4f5a6b taking main in: "{words}"'
 
 
+class TestCrossedTakesMain:
+    """A crossed team's landing refused for a conflict with main launches its take-main fix with sluice's words, once,
+    and its row says it takes main first (Decision 10 of teams-cross-to-flume-as-their-bolts-land, plan.8)."""
+    MAIN, WORDS = "4d3d9be" + "0" * 33, "#137 conflict: README.md, plugin/lib/plan.py"
+
+    @pytest.fixture(autouse=True)
+    def ops(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-ops")
+
+    def launched(self):
+        """crossed crw-4's x, its unit a launched as a give launches it."""
+        from facts import FactsWrite, crossed_fleet, flume_plan
+        fleet = crossed_fleet()
+        w = FactsWrite(flume_plan([("x", "crw-4", "flume")], [("a", "x", [], "unit", [])]), label="madswan")
+        plan.reach_places(fleet, w, "x", fleet["teams"]["crw-4"])
+        return w, fleet["teams"]["crw-4"]
+
+    def test_a_landing_refused_for_a_conflict_launches_one_take_main_fix_with_sluices_words(self):
+        """main-level ops's crew bolt submit x reads sluice refusing x for a conflict with main at 4d3d9be."""
+        import runner
+        w, t = self.launched()
+        act, host, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
+        assert (act, host, work, given["Kind"], given["Name"], given["Base"], given["Recipient"]) == (
+            "launch", "deneb", "fix/x/take-main-4d3d9be", "fix", "x--take-main-4d3d9be", "bolt/x", "madswan/planner")
+        assert given["Brief"] == (
+            "Take main into the bolt: merge origin/main, at 4d3d9be, into this place, cut from bolt/x, resolving each conflicting "
+            "path keeping both intents, main's and the bolt's; sluice refused the bolt's landing for its conflict with main: "
+            "#137 conflict: README.md, plugin/lib/plan.py")
+        assert given["Brief"].startswith(plan.TAKE_MAIN)
+
+    def test_read_twice_it_launches_nothing_more(self):
+        """A later read of the same refusal finds x--take-main-4d3d9be standing."""
+        import runner
+        w, t = self.launched()
+        act, host, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
+        plan.request(w, act, host, work, **given)
+        assert runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS) is None
+
+    def test_its_row_says_it_takes_main_first(self):
+        import runner
+        w, t = self.launched()
+        brief = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)[3]["Brief"]
+        held = plan.refusals([submitted("x", "a" * 40, "#137 conflict: README.md, plugin/lib/plan.py")])
+        x, = plan.landing_rows(["x"], {"x": facts("x", fixes={"fix/x/take-main-4d3d9be": brief})}, held)
+        assert (x["box"], x["takes_main"], x["why"]) == (False, True, f'takes main first: take-main-4d3d9be taking main in: "{brief}"')
+
+
 def test_a_bolt_the_user_left_forecast_to_conflict_with_main_keeps_its_box_marked_that_it_would_take_main_first():
     """rail-cards "A bolt the user left" and "Left, and main conflicts with it": no fix is started for it, so it is not
     held taking main first."""

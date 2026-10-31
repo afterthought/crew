@@ -35,7 +35,7 @@ class TestNotices:
     TEAMS = {"swb-1": {}, "swb-2": {}}
 
     def notices(self, before, after, touched, me="chuck@mac-studio", quiet=()):
-        seen = dict(before=before, after=after, touched=touched, quiet=set(quiet), label="wldn")
+        seen = dict(before=before, after=after, touched=touched, quiet=set(quiet), due=set(), label="wldn")
         return plan.notices(self.TEAMS, seen, me, "plan(te): add u (chuck@mac-studio)")
 
     def test_a_write_to_a_held_bolt_tells_its_conductor_the_subject(self):

@@ -16,6 +16,10 @@ Your team builds one bolt at a time: a body of work on the branch `bolt/<bolt>`,
 
 `{{TEAM_CMD}} bolts` shows the bolt your team holds, each unit's and chore's stage and worktree, a chore's marked `chore`, and the fixes in flight. Read stages there, never from memory: every stage is read from the kit, so nothing needs writing down to be true. Units are built in the order the plan lists them, side by side as your slots allow. A unit that comes after another is constructed once that one's change is committed, never waiting on its merge: its place takes that unit's work as it stands, and it merges only after that unit has merged.
 
+## When your team moves to Flume
+
+The user moves teams to Flume one at a time, by a setting in the teams file. When your team's is turned on while it holds a bolt, your team is due to cross, and your bolt's head line in `{{TEAM_CMD}} bolts` says so: `due to cross once <bolt> lands`. Build your bolt to its landing as this brief says, every stage, fix and card of it: nothing of it moves to Flume. Your team is given no next bolt meanwhile, so wait for no give: a give is refused naming your bolt. Once your last bolt has landed or been dropped your team has crossed: crew ends you and `{{OPS}}` at your next stop once you are idle, with no restart, and closes your team's workspaces, and the bolts it is given after run as Flume places on its host, with no conductor.
+
 ## The plan
 
 The plan is `plan.rec` on `{{LABEL}}/main` of {{STATE_REPO}}, your partition's state repository: which bolts there are, their units and their order. It is the one tracking file there is. You change it only through crew, never by hand and never in a checkout:

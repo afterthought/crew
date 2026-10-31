@@ -37,7 +37,7 @@ import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, 
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import crew, gather, ops, plan, record, sites  # noqa: E402
+import crew, gather, ops, plan, record, runner, sites  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 # Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button. An operation's
@@ -45,9 +45,10 @@ from crew import Refusal, fail  # noqa: E402
 GLYPH = {"proposals": "✓", "land": "✓", "operations": "✓"}
 ATTENTION = "!"
 # A unit's stage as one pip, filling as it goes: not begun, being designed, coded, every task ticked, merged; a stage
-# crew could not read is "?". A bolt is its units' pips in the plan's order.
-PIP = {"queued": "○", "waiting": "○", "ready": "○", "amended": "◔", "construct": "◔", "planned": "◔", "code": "◑", "verify": "◕",
-       "merged": "●", "landed": "●"}
+# crew could not read is "?". A bolt is its units' pips in the plan's order; a crossed piece the runner is launching
+# has not begun (pip).
+PIP = {"queued": "○", "waiting": "○", "ready": "○", "launching": "○", "amended": "◔", "construct": "◔", "planned": "◔", "code": "◑",
+       "verify": "◕", "merged": "●", "landed": "●"}
 # How many explorations an agent's view names before it counts the rest.
 SHOWN = 6
 # The frames the host's follower writes for the rail and board tabs and the agents' mods, by label.
@@ -206,7 +207,13 @@ def board_data(fleet, labels, read, now):
     {holder, what, since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
-    the design agent's band shows (records_proposed)."""
+    the design agent's band shows (records_proposed). Each team says its path, a crossed team's stream with it, and a due
+    team what it finishes first (plan.path_facts), as each ledger does for its team; a bolt given through Flume has its
+    units', chores' and fixes' stages from the runner's records with what goes with each (flume, Stages.crossed,
+    Stages.fixes), no slot, and a runner that could not be read is named for attention; and each partition lists the
+    crossed places that wait on an answer and the fixes of main and take-main fixes in flight (asking and fixing,
+    flume_waits), which the planner's and main-level ops's bands show (Decision 14 of teams-cross-to-flume-as-their-
+    bolts-land)."""
     here = crew.this_host()
     rows, cards, sv = read["rows"], read["cards"], read["sv"]
     since = plan.utc(record.when(None)[1])
@@ -217,7 +224,8 @@ def board_data(fleet, labels, read, now):
         repo, tip, pl = found or (plan.state_of(fleet, l)[0], None, None)
         unread, logs = read["unread"].get(l, {}), read.get("logs", {}).get(l, [])
         teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "kits": [k["name"] for k in crew.kits_of(fleet["teams"][t])],
-                  "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
+                  "host": fleet["teams"][t]["machine"], "path": plan.path_facts(pl, fleet["teams"][t]) if pl else None} for t in p["teams"]]
+        paths = {t["team"]: t["path"] for t in teams}
 
         def building(repo):
             return [t["team"] for t in teams if repo and repo in t["kits"]]
@@ -276,8 +284,9 @@ def board_data(fleet, labels, read, now):
                       "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"]), logs), "teams": proposal_teams(d)}
                      for d in read["props"] if d["label"] == l]
         planned, queue, construction = [], [], []
+        runs = (read.get("runs") or {}).get(l)
         if pl:
-            st = plan.Stages(fleet, pl, sv)
+            st = plan.Stages(fleet, pl, sv, read.get("runs"))
             for b in pl.bolts():
                 units = pl.work_of(b.name())
                 if not b.get("Team"):
@@ -295,13 +304,17 @@ def board_data(fleet, labels, read, now):
                 def slot(kind, name):
                     return next((s["slot"] for s in held if s.get("kind") == kind and s.get("name") == name), None)
                 state = st.bolt_state(b) if t else "unknown"
-                fixes = [f for f in k.get("fixes", []) if f["bolt"] == b.name()]
+                crossed = t is not None and b.get("Path") == "flume"
+                fixes = [f for f in k.get("fixes", []) if f["bolt"] == b.name()] if not crossed else []
+                silent = st.unread(b) if crossed else None
+                if silent:
+                    attention.append({"what": "runner", "name": silent[0], "why": silent[1]})
                 unread = k.get("submissions_error")
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
                                                      [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
                 recorded = landing_of(logs, b.name())
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
-                          "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
+                          "path": paths.get(b.get("Team")), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
                           "landing": landing, "submissions_error": unread, "record": recorded,
                           "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
@@ -309,15 +322,18 @@ def board_data(fleet, labels, read, now):
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
                                             "slot": slot(plan.kind_of(u), u.name()), "submission": subs.get(u.name()),
-                                            "worktree": s["worktree"], "url": url(s["worktree"])})
+                                            "worktree": s["worktree"], "url": url(s["worktree"]), "flume": s.get("flume")})
                 ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "submission": subs.get(f["fix"]),
-                                    "worktree": f["path"], "url": url(f["path"])} for f in fixes]
+                                    "worktree": f["path"], "url": url(f["path"]), "flume": None} for f in fixes]
+                ledger["fixes"] += [{"fix": w, "merged": x["stage"] in ("merged", "landed"), "slot": None, "submission": None, "worktree": None,
+                                     "url": None, "flume": x} for w, _, x in (st.fixes(b) if crossed else [])]
                 construction.append(ledger)
                 if state == "landed" or (recorded or {}).get("unclosed"):
                     attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {recorded['unclosed']}"
                                       if (recorded or {}).get("unclosed") else "every unit has landed on main, and the bolt is still in the plan"})
             queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))}
                      for u in pl.queue()]
+        asking, fixing = flume_waits(construction, runs, l)
         operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
                       "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
@@ -331,8 +347,35 @@ def board_data(fleet, labels, read, now):
                                                       key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
                                     "explorations": explorations},
                       "bolt_plan": {"proposals": proposals, "planned": planned, "queue": queue},
-                      "construction": construction, "operation": operation, "environments": envs, "attention": attention})
+                      "construction": construction, "operation": operation, "environments": envs, "attention": attention,
+                      "asking": asking, "fixing": fixing})
     return {"read_at": iso(now), "from": here, "partitions": parts, "unread": read["errors"]}
+
+
+def flume_waits(construction, runs, label):
+    """What a partition's crossed places wait on its roles for (Decision 14 of teams-cross-to-flume-as-their-bolts-land),
+    a decision of facts alone (code.7): (asking, fixing). asking, for the planner's band, each unit, chore or fix of a
+    bolt given through Flume, from its ledger (construction), whose place stopped short asking or waits on its caller,
+    which crew answer answers (runner.answer_retry), {bolt, repo, team, name, stage, said}; fixing, for main-level ops's
+    band, each fix of a kit's main (runs, the partition's (requests, runners) as the rail read them, runner.fixes_on) and
+    each take-main fix of a crossed bolt that has not merged, landed or been dropped, the fixes of main first, {fix,
+    repo, host, stage, said}; stage and said, as runner.piece_said says them."""
+    asking, fixing = [], []
+    for l, s in runner.fixes_on(*runs, label, "main") if runs else []:
+        if s["stage"] not in ("merged", "landed", "dropped"):
+            fixing.append(dict(fix=l.get("Name"), repo=(l.get("Work") or "").split("/")[2], host=l.get("Host"),
+                               **dict(zip(("stage", "said"), runner.piece_said(s)))))
+    for b in construction:
+        for x in b["units"] + b["fixes"]:
+            s = x.get("flume")
+            if not s:
+                continue
+            name, said = x.get("unit") or runner.bare(x["fix"]), dict(zip(("stage", "said"), runner.piece_said(s)))
+            if runner.answer_retry(name, s)[0]:
+                asking.append(dict(bolt=b["bolt"], repo=b["repo"], team=b["team"], name=name, **said))
+            if x.get("fix", "").startswith(f"fix/{b['bolt']}/take-main-") and s["stage"] not in ("merged", "landed", "dropped"):
+                fixing.append(dict(fix=name, repo=b["repo"], host=b["host"], **said))
+    return asking, fixing
 
 
 # ------------------------------------------------------------------------------------------------- the text
@@ -373,9 +416,27 @@ def gutter(ms, attention=False):
 
 
 def stage_of(u):
-    """A unit's stage with its tasks, a chore's with `chore` before it (plan.11), in the board and each agent's view."""
+    """A unit's stage with its tasks, a chore's with `chore` before it (plan.11), in the board and each agent's view; a
+    crossed piece's as the runner's records give it (runner.piece_said)."""
+    if u.get("flume"):
+        return ("chore " if u.get("kind") == "chore" else "") + runner.piece_said(u["flume"])[0]
     return (("chore " if u.get("kind") == "chore" else "") + u["stage"]
             + (f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else ""))
+
+
+def fix_stage(f):
+    """A fix's stage on its line: merged or not, or a crossed fix's as the runner's records give it."""
+    return "fix " + runner.piece_said(f["flume"])[0] if f.get("flume") else "fix merged" if f["merged"] else "fix"
+
+
+def detail_of(x):
+    """What goes with a crossed piece's stage on its line (runner.piece_said), nothing for any other."""
+    return runner.piece_said(x["flume"])[1] if x.get("flume") else ""
+
+
+def path_of(b):
+    """A held bolt's team's path on its head line (runner.path_said), nothing on today's path."""
+    return runner.path_said(b["path"]) if b.get("path") else ""
 
 
 def local(at):
@@ -477,12 +538,12 @@ def board_text(data, width=None, color=False, stale=None):
 
         heading("Construction")
         for b in p["construction"]:
-            line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
+            line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"], path_of(b),
                         head_said(b), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
             for u in b["units"]:
-                line(fields(u["unit"], stage_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
+                line(fields(u["unit"], stage_of(u), detail_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
-                line(fields(f["fix"], "fix merged" if f["merged"] else "fix", merge_said(f), f["slot"] or "", f["url"] or ""), " ", 2)
+                line(fields(f["fix"], fix_stage(f), detail_of(f), merge_said(f), f["slot"] or "", f["url"] or ""), " ", 2)
             if b["url"]:
                 line(fields("server", b["url"]), " ", 2)
         if not p["construction"]:
@@ -512,7 +573,8 @@ def board_text(data, width=None, color=False, stale=None):
 def attention_text(a):
     """What needs attention, as the board says it."""
     return {"host": f"{a['name']} did not answer ({a['why']})", "plan": f"the plan, {a['name']}: {a['why']}",
-            "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}"}[a["what"]]
+            "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}",
+            "runner": f"{a['name']} can't be read ({a['why']}): the stages of the work crossed to Flume there are unknown"}[a["what"]]
 
 
 # ------------------------------------------------------------------------------------------------- the agents' views
@@ -521,9 +583,18 @@ def many(n, one, more):
     return f"{n} {one if n == 1 else more}"
 
 
+def pip(u):
+    """A unit's stage as its pip; a crossed piece waiting on its caller as the stage it waits at, and one submitted as
+    every task ticked."""
+    st = u["stage"]
+    if st in ("needs", "waits", "stalled") and (u.get("flume") or {}).get("of"):
+        st = u["flume"]["of"]
+    return PIP.get("verify" if st == "submitted" else st, "?")
+
+
 def pips(units):
     """Units' stages as pips, one to a unit in the plan's order."""
-    return "".join(PIP.get(u["stage"], "?") for u in units)
+    return "".join(pip(u) for u in units)
 
 
 def merged(b):
@@ -604,11 +675,11 @@ def needs_eye(b):
 
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
-    dim; then its pips, its name, its state unless active, or what its landing is (head_said), its landing standing in
+    dim; then its pips, its name, its team's path (path_of), its state unless active, or what its landing is (head_said), its landing standing in
     sluice (landing_said), that its submissions can't be read when they can't (queue_said), how many of its units have
     merged, and its age and who held its time (time_of); its landing's marker in the gutter, or attention once every
     unit has landed or its close was refused (needs_eye)."""
-    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], head_said(b),
+    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], path_of(b), head_said(b),
                       landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
 
 
@@ -616,8 +687,8 @@ def ledger_rows(b):
     """A held bolt as its conductor reads it: the bolt, then a unit to a line, its pip, stage, its merge standing in
     sluice (merge_said) and slot, then each fix with its merge."""
     return ([bolt_row(b)]
-            + [row(fields(PIP.get(u["stage"], "?"), u["unit"], stage_of(u), merge_said(u), u["slot"] or ""), " ", 2) for u in b["units"]]
-            + [row(fields(f["fix"], "fix merged" if f["merged"] else "fix", merge_said(f), f["slot"] or ""), " ", 2) for f in b["fixes"]])
+            + [row(fields(pip(u), u["unit"], stage_of(u), detail_of(u), merge_said(u), u["slot"] or ""), " ", 2) for u in b["units"]]
+            + [row(fields(f["fix"], fix_stage(f), detail_of(f), merge_said(f), f["slot"] or ""), " ", 2) for f in b["fixes"]])
 
 
 def team_rows(p):
@@ -625,7 +696,8 @@ def team_rows(p):
     none."""
     out = []
     for t in sorted(p["teams"], key=lambda t: t["kit"]):
-        out += [bolt_row(b, t["team"]) for b in held(p, t["team"])] or [row(fields(t["kit"], (t["team"], "dim"), ("holds no bolt", "dim")), " ")]
+        out += [bolt_row(b, t["team"]) for b in held(p, t["team"])] or [
+            row(fields(t["kit"], (t["team"], "dim"), ("holds no bolt", "dim"), path_of(t)), " ")]
     return out
 
 
@@ -672,12 +744,15 @@ def conductor_view(p, team):
 
 
 def planner_view(p):
-    """The planner's: the plan in brief, each team's bolt, the open proposals, what is planned next and queued, and
-    what needs attention."""
-    bp = p["bolt_plan"]
+    """The planner's: the plan in brief, each team's bolt, the crossed places that wait on an answer with each question
+    or Flume's words (asking; crew-board "A question in the planner's band"), the open proposals, what is planned next
+    and queued, and what needs attention."""
+    bp, asking = p["bolt_plan"], p.get("asking", [])
     head = row(fields((f"{p['label']} plan", "bold"), f"{len(p['construction'])} held", f"{len(bp['planned'])} planned",
-                      f"{len(bp['queue'])} queued", many(len(bp["proposals"]), "proposal open", "proposals open")))
-    return [head] + team_rows(p) + [proposal_row(d) for d in bp["proposals"]] + next_rows(p) + attention_rows(p)
+                      f"{len(bp['queue'])} queued", many(len(bp["proposals"]), "proposal open", "proposals open"),
+                      many(len(asking), "place waits on an answer", "places wait on an answer") if asking else ""))
+    return ([head] + team_rows(p) + [row(fields(a["repo"] or "", (a["bolt"], "dim"), a["name"], a["stage"], a["said"]), " ") for a in asking]
+            + [proposal_row(d) for d in bp["proposals"]] + next_rows(p) + attention_rows(p))
 
 
 def record_row(r):
@@ -739,7 +814,8 @@ def operator_view(p):
 
 
 def ops_view(p):
-    """Main-level ops's: the partition's operations in brief; each kit's landing row, its landings card ops's, naming
+    """Main-level ops's: the partition's operations in brief; each fix of a kit's main and each take-main fix in flight,
+    with its stage (fixing; crew-board "A fix of main in ops's band"); each kit's landing row, its landings card ops's, naming
     the bolts that wait on its main in the plan's order, each with its landing standing in sluice when one stands
     (landing_said), with its card, and each held bolt whose landing stands on no such row; then, environment by
     environment, each deploy
@@ -751,9 +827,11 @@ def ops_view(p):
     steps = [(e["env"], w) for e in p.get("environments", []) for w in e["waiting"]]
     word = sum(d["answer"] == "waiting" for _, d in pending)
     running = sum(bool(d["started"]) for _, d in pending)
+    fixing = p.get("fixing", [])
     head = row(fields((f"{p['label']} operations", "bold"), many(word, "deploy waits on the user's word", "deploys wait on the user's word"),
-                      many(running, "deploy running", "deploys running"), many(len(steps), "operation waiting", "operations waiting")))
-    out = [head]
+                      many(running, "deploy running", "deploys running"), many(len(steps), "operation waiting", "operations waiting"),
+                      many(len(fixing), "fix in flight", "fixes in flight") if fixing else ""))
+    out = [head] + [row(fields(f["repo"] or "", f"fix {f['fix']}", f["stage"], f["said"], (f"on {f['host']}", "dim")), " ") for f in fixing]
     lands = {}
     for b in p.get("construction", []):
         for m in b["markers"]:
