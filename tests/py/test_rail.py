@@ -19,8 +19,8 @@ import plan
 
 BOX = "chuck-herdr-alpha"
 FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": BOX, "teams": ["swb-1", "swb-2"]}},
-         "teams": {t: {"name": t, "label": "wldn", "machine": BOX, "kit": {"main": "/kit/main", "dir": "/kit", "name": "switchboard-kit"}}
-                   for t in ("swb-1", "swb-2")},
+         "teams": {t: {"name": t, "label": "wldn", "machine": BOX, "flume": False,
+                       "kit": {"main": "/kit/main", "dir": "/kit", "name": "switchboard-kit"}} for t in ("swb-1", "swb-2")},
          "hosts": {BOX: {"ssh": BOX, "home": "/h/box"}, "mac-studio": {"ssh": "mac-studio", "home": "/h/mac"}}}
 KIT = "switchboard-kit"
 NOW = START + datetime.timedelta(hours=4)
@@ -1446,7 +1446,7 @@ class TestBolts:
         b = {x["bolt"]: x for x in self.data()["partitions"][0]["plans"][0]["bolts"]}
         assert {u["unit"]: u["stage"] for u in b["tenant-environments"]["units"]} == {"early": "planned", "checked": "verify", "stale": "verify"}
         assert (b["tenant-environments"]["team"], b["tenant-environments"]["host"], b["tenant-environments"]["state"]) == ("swb-1", BOX, "active")
-        assert b["apex-zones"]["state"] == "waits" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None, submission=None)]
+        assert b["apex-zones"]["state"] == "waits" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None, flume=None, submission=None)]
 
     def test_the_text_names_the_branch_each_bolt_and_each_units_stage_and_place(self):
         out = plan.bolts_text(self.data())
@@ -1592,3 +1592,120 @@ class TestLandTime:
         out = plan.rail_text(FLEET, ["wldn"], read, NOW)
         assert ("can land; 5h 00m; who held its time can't be told: its submissions can't be read: what sluice's overview names "
                 "decided was not read") in out
+
+
+class TestMainFix:
+    """crew-rail "A fix of main waits to land on its kit's row" (Decision 11 of teams-cross-to-flume-as-their-bolts-land):
+    a fix of switchboard-kit's main whose code has delivered and whose submission waits held, as the runner on the box
+    carries Flume's status of it (tests/py/flume-0.3.6/held.json), is a line of the kit's landings row, ahead of the
+    bolts, naming ops's command for the user's send; the main-level spec's "The user's send" is test_main_fix's."""
+    BRIEF = "tests:logic failed on main after landing apex-zones: a fixture is gone.\nThe check's whole output."
+    SINCE = datetime.datetime.fromtimestamp(1793469348, datetime.timezone.utc)
+
+    @staticmethod
+    def requests(*recs):
+        """requests.rec's records: a launch of a fix of switchboard-kit's main for each name, then each retry given."""
+        import runner
+        text = runner.REQUESTS
+        for n, r in enumerate(recs, 1):
+            text += (f"\nRequest: {n}\nAct: launch\nHost: {BOX}\nWork: fix/main/{KIT}/{r}\nRepo: WilldanGroup/{KIT}\nKind: fix\n"
+                     f"Name: main--{r}\nBase: main\nStream: wldn\nPriority: 1\nIntent: wldn/main/{KIT}\nRecipient: wldn/ops\n"
+                     "Hold: submission\nBrief: " + TestMainFix.BRIEF.replace("\n", "\n+ ") + "\n"
+                     if not isinstance(r, int) else f"\nRequest: {n}\nAct: retry\nHost: {BOX}\nWork: fix/main/{KIT}/gone\nOf: {r}\n"
+                     "Submission: yes\n") + "Date: 2026-10-31T12:00:00Z\nBy: wldn-ops\n"
+        return plan.Plan(text).recs("Request")
+
+    def land(self, runs, merged=True):
+        found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+        return [r for r in plan.rail_rows(FLEET, found, survey(merged=merged), [], {}, None, runs) if r["group"] == "land"]
+
+    def test_a_fix_of_main_waits_beside_a_bolt_ahead_of_it_naming_ops_command_for_its_send(self):
+        """crew-rail "A fix of main waits beside a bolt"."""
+        from facts import ran
+        land, = self.land({"wldn": (self.requests("gone"), ran({1: "held"}, host=BOX, label="wldn"))})
+        assert land["what"] == [
+            f"{KIT} (wldn): 1 fix of main and 1 bolt wait to land on its main, in the plan's order; wldn-ops lands them",
+            f"fix main--gone on {BOX}: tests:logic failed on main after landing apex-zones: a fixture is gone.; can land: wldn-ops "
+            f"sends it with crew main fix {KIT} gone --send",
+            f"apex-zones, swb-2 on {BOX}: can land"]
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land fix main--gone, apex-zones."')]
+        assert land["fixes"] == [dict(fix="main--gone", host=BOX, can=True, send=f"crew main fix {KIT} gone --send")]
+        assert land["at"] == min(self.SINCE, plan.utc(iso(30)))
+
+    def test_with_no_bolt_waiting_a_fix_of_main_is_its_kits_row_alone(self):
+        from facts import ran
+        land, = self.land({"wldn": (self.requests("gone"), ran({1: "held"}, host=BOX, label="wldn"))}, merged=False)
+        assert (land["key"], land["at"], land["bolts"]) == (f"land/{KIT}", self.SINCE, [])
+        assert land["what"][0] == f"{KIT} (wldn): 1 fix of main waits to land on its main; wldn-ops lands them"
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land fix main--gone."')]
+
+    @pytest.mark.parametrize("at", ["code", "submitted", "landed", None])
+    def test_a_fix_of_main_still_at_its_code_submitted_landed_or_unread_is_no_line(self, at):
+        from facts import ran
+        assert self.land({"wldn": (self.requests("gone"), ran({1: at}, host=BOX, label="wldn") if at else {})}, merged=False) == []
+
+    def test_a_fix_sent_on_the_users_word_is_not_offered_again_until_the_runner_refuses_its_send(self):
+        from facts import ran
+        reads = ran({1: "held"}, host=BOX, label="wldn")
+        land, = self.land({"wldn": (self.requests("gone", 1), reads)}, merged=False)
+        assert land["what"][1].endswith(f"; sent on the user's word (request 2): the runner on {BOX} submits it")
+        assert (land["cmds"], land["fixes"][0]["can"]) == ([], False)
+        reads[BOX]["answers"][2] = plan.Rec("Answer", [("Request", "2"), ("Outcome", "refused"), ("At", "2026-10-31T12:03:00Z")])
+        land, = self.land({"wldn": (self.requests("gone", 1), reads)}, merged=False)
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land fix main--gone."')]
+
+    def test_the_rail_draws_the_fix_line_whole_and_each_bolt_line_with_its_time(self):
+        from facts import ran
+        rs = self.land({"wldn": (self.requests("gone"), ran({1: "held"}, host=BOX, label="wldn"))})
+        out = text(rs)
+        line = next(x.strip() for x in out.splitlines() if "fix main--gone" in x)
+        assert line.endswith(f"crew main fix {KIT} gone --send")
+        assert next(x.strip() for x in out.splitlines() if x.strip().startswith("apex-zones,")).startswith(
+            f"apex-zones, swb-2 on {BOX}: can land; ")
+
+
+class TestCrossedLandings:
+    """crew-rail "A crossed team's bolt waits to land on its kit's row" (Decisions 12 and 14 of
+    teams-cross-to-flume-as-their-bolts-land): crossed crw-4's x is a row of crew's landings card on the same terms as any
+    bolt, its pieces' stages and its fixes in flight read from the runner's records, its line naming the team's host and
+    stream."""
+
+    @pytest.fixture(autouse=True)
+    def writer(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
+
+    def rows(self, at, extra=()):
+        from facts import crew_read, crossed_fleet_read, launched, ran
+        fleet = crossed_fleet_read()
+        p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("c", "x", [], "chore", [])],
+                               fleet=fleet)
+        runs = {"madswan": (requests + [plan.Rec("Request", list(f.items())) for f in extra], ran(at))}
+        sv = crew_read(bolts={"x": {"verdict": "passed (3 run)", "head_at": "2026-10-31T12:00:00Z"}})
+        return [r for r in plan.rail_rows(fleet, [("madswan", "afterthought/crew-state", "tip0", p)], sv, [], {}, None, runs) if r["group"] == "land"]
+
+    def test_a_crossed_bolt_proven(self):
+        """crew-rail "A crossed bolt proven": a, b and c merged by the runner's records and sluice green at x's head."""
+        rows = self.rows({1: "landed", 2: "landed", 3: "landed"})
+        assert [(r["key"], r["what"][1:], r["bolts"]) for r in rows] == [
+            ("land/crew", ["x, crw-4 on deneb, in Flume stream madswan: can land"], [{"bolt": "x", "team": "crw-4", "host": "deneb", "can": True}])]
+        assert rows[0]["cmds"] == [("answer", 'crew tell madswan-ops "Land x."')]
+
+    def test_a_piece_the_runner_reads_unmerged_keeps_it_off_the_row(self):
+        assert self.rows({1: "landed", 2: "submitted", 3: "landed"}) == []
+
+    def test_a_fix_in_flight_on_it_holds_its_landing(self):
+        """bolt-teams "A review note marked fix": x's row says it lands once that fix has merged or been dropped."""
+        fix = {"Request": "4", "Act": "launch", "Host": "deneb", "Work": "fix/x/rail-word", "Repo": "afterthought/crew", "Kind": "fix",
+               "Name": "x--rail-word", "Base": "bolt/x"}
+        rows = self.rows({1: "landed", 2: "landed", 3: "landed", 4: "code"}, extra=[fix])
+        assert rows[0]["what"][1] == "x, crw-4 on deneb, in Flume stream madswan: lands once fix/x/rail-word has merged or been dropped"
+        assert self.rows({1: "landed", 2: "landed", 3: "landed", 4: "landed"}, extra=[fix])[0]["bolts"][0]["can"] is True
+
+    def test_a_due_teams_bolt_says_what_its_landing_lets_the_team_do(self):
+        """Decision 14: crw-5, its setting madswan, holds y, given on today's path and proven, and is due to cross."""
+        from facts import crew_read, crossed_fleet_read, launched, ran
+        fleet = crossed_fleet_read(**{"crw-5": "madswan"})
+        p, requests = launched([], work=[("y1", "y", [], "unit", [])], fleet=fleet, held=[("y", "crw-5")])
+        sv = crew_read(bolts={"y": {"verdict": "passed (1 run)", "archived": ["y1"]}})
+        rows = plan.rail_rows(fleet, [("madswan", "afterthought/crew-state", "tip0", p)], sv, [], {}, None, {"madswan": (requests, ran())})
+        assert [r["what"][1] for r in rows if r["group"] == "land"] == ["y, crw-5 on deneb, due to cross once y lands: can land"]

@@ -2394,3 +2394,115 @@ class TestAgeAndSplit:
         assert plan.landing_split(self.ENTRIES, self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit",
                                   (None, "sluice status main exited 1: sluice is not running here"), later) == {}
         assert plan.landing_split(self.ENTRIES[1:], self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit", (self.LANDED, None), later) == {}
+
+
+MAIN_AT = "4d3d9be" + "0" * 33  # main's revision a conflicting landing met
+
+
+class TestConflictWithMain:
+    """A landing sluice refused for a conflict with main, read where its end is read (plan.landing_conflict): main's
+    revision and sluice's words, from which a crossed bolt's take-main fix is launched (Decision 10 of
+    teams-cross-to-flume-as-their-bolts-land); its launch and its row are test_landings's."""
+    MAIN = MAIN_AT
+    REFUSED = said(2, new=OLD, github=MAIN, held="no", level="''")
+
+    def test_a_conflict_with_main_names_mains_revision_and_sluices_words(self):
+        """main-level ops's crew bolt submit x reads sluice refusing x for a conflict with main at 4d3d9be."""
+        assert plan.landing_conflict(self.REFUSED, doc=CONFLICT) == (
+            self.MAIN, "#137 conflict: README.md, plugin/bin/crew, plugin/lib/plan.py, plugin/skills/crew/SKILL.md")
+
+    def test_one_read_from_sluices_listing_once_sluice_itself_failed_names_its_verdict(self):
+        sub = {"id": 160, "state": "conflict", "conflict": {"paths": ["README.md"]}, "verdict": "#160 conflict: README.md"}
+        assert plan.landing_conflict(said(3, new=OLD, github=self.MAIN, held="no", level="''", sluice=FAILED), sub=sub) == (
+            self.MAIN, "#160 conflict: README.md")
+
+    def test_a_conflict_with_a_submission_queued_on_main_is_waited_out(self):
+        met = dict(CONFLICT, conflict=dict(CONFLICT["conflict"], **{"with": [{"id": 12, "from": {"worktree": "/c/places/u"}}]}))
+        assert plan.landing_conflict(self.REFUSED, doc=met) is None
+
+    @pytest.mark.parametrize("out, doc", [
+        (said(1, new=OLD, github=MAIN_AT, held="no", level="''"), RAN),
+        (said(0, github=NEW), None),
+        (said(2, new=OLD, github=MAIN_AT, held="no", fetched="fatal: no network"), CONFLICT),
+        ("wt: command not found\n", CONFLICT)])
+    def test_any_other_end_or_a_main_crew_cant_read_is_none(self, out, doc):
+        assert plan.landing_conflict(out, doc=doc) is None
+
+
+class TestACrossedBoltLands:
+    """A crossed team's bolt lands by the one procedure (Decision 12 of teams-cross-to-flume-as-their-bolts-land; crew-rail
+    "A crossed bolt proven"): it reads proven from its pieces' stages in the runner's records and sluice's verdict at its
+    head, and its close reads each piece merged there, a chore asked for no trailer, landing once main holds the commit
+    each place landed at on the bolt (plan.land_refusal, runner.unlanded)."""
+    GREEN = "passed (3 run, 1 replayed)"
+    LANDED = "d185a879b51dba33555c036392b50443f4dfc5e8"  # where flume's landed.json says its place landed
+
+    @pytest.fixture(autouse=True)
+    def writer(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-ops")
+
+    def stages(self, at, main=(), verdict=GREEN):
+        """crossed crw-4's x, holding a, b after a, and chore c, launched as requests 1 to 3, each at the flume fixture at
+        names; crew's kit as read on deneb, its main holding main's changes, x's head d…d carrying verdict."""
+        from facts import crew_read, crossed_fleet_read, launched, ran
+        fleet = crossed_fleet_read()
+        p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("c", "x", [], "chore", [])],
+                               fleet=fleet)
+        return plan.Stages(fleet, p, crew_read(main, bolts={"x": {"verdict": verdict}}), runs={"madswan": (requests, ran(at))})
+
+    def test_every_piece_merged_and_green_at_its_head_reads_proven(self):
+        """crew-rail "A crossed bolt proven": a, b and c merged by the runner's records, sluice green at x's head."""
+        st = self.stages({1: "landed", 2: "landed", 3: "landed"})
+        work = [(n, st.of(n)["kind"], st.of(n)["stage"]) for n in "abc"]
+        assert work == [("a", "unit", "merged"), ("b", "unit", "merged"), ("c", "chore", "merged")]
+        assert plan.landing_unready(work, "d" * 40, self.GREEN, []) is None
+        assert st.bolt_state(st.plan.bolt("x")) == "waits"
+        assert [w for w, _, _, _, unread in plan.proven_facts(st, st.plan, [st.plan.bolt("x")])] == ["x"]
+
+    def test_a_piece_still_in_code_keeps_it_unproven(self):
+        st = self.stages({1: "landed", 2: "code", 3: "landed"})
+        assert plan.landing_unready([(n, st.of(n)["kind"], st.of(n)["stage"]) for n in "abc"], "d" * 40, self.GREEN, []) == (
+            "unit b has not merged: it is code")
+        assert st.bolt_state(st.plan.bolt("x")) == "active"
+
+    def refusal(self, st, held, outside=()):
+        return plan.land_refusal("x", ["a", "b", "c"], st.of, list(outside), "madswan", held, "crew")
+
+    def test_its_close_reads_each_piece_merged_and_asks_a_chore_for_no_trailer(self):
+        """The kit's main holds a's change archived and no trailer of c's, and main holds the commit each place landed at."""
+        st = self.stages({1: "landed", 2: "landed", 3: "landed"}, main=["a"])
+        assert (st.of("a")["stage"], st.of("c")["stage"]) == ("landed", "merged")
+        assert self.refusal(st, {self.LANDED: 0}) is None
+
+    def test_a_bolt_sluice_has_not_landed_is_not_closed(self):
+        """crew bolt land by hand before the landing: main does not hold where the places landed on the bolt."""
+        st = self.stages({1: "landed", 2: "landed", 3: "landed"})
+        assert self.refusal(st, {self.LANDED: 1}) == (
+            "unit a has not landed on crew's main: its place landed on bolt/x at d185a87, which main does not hold")
+
+    def test_a_commit_git_could_not_read_refuses_saying_so(self):
+        st = self.stages({1: "landed", 2: "landed", 3: "landed"})
+        assert self.refusal(st, {}) == "cannot tell whether unit a has landed on crew's main: git could not read d185a87 there"
+
+    def test_a_piece_not_merged_or_unread_refuses_naming_it(self):
+        assert self.refusal(self.stages({1: "landed", 2: "submitted", 3: "landed"}), {self.LANDED: 0}) == (
+            "unit b has not merged into bolt/x: it is submitted")
+        assert self.refusal(self.stages({1: "landed", 3: "landed"}), {self.LANDED: 0}) == "unit b has not merged into bolt/x: it is launching"
+
+    def test_units_no_batch_has_held_still_hold_the_close(self):
+        st = self.stages({1: "landed", 2: "landed", 3: "landed"})
+        assert self.refusal(st, {self.LANDED: 0}, outside=["a"]).startswith("bolt x lands only once every unit's latest change has been in a batch")
+
+    def test_main_holds_asks_git_on_the_teams_host_for_each_commit_and_reads_only_its_lines(self, monkeypatch):
+        from facts import crossed_fleet_read
+        asked = []
+
+        def host_run(fleet, host, script, *args):
+            asked.append((host, script, args))
+            return f"{self.LANDED} 0\n{'e' * 40} 1\nnot a line\n{'f' * 40} 128\n"
+        monkeypatch.setattr(plan, "host_run", host_run)
+        t = crossed_fleet_read()["teams"]["crw-4"]
+        assert plan.main_holds({}, t, "origin/main", [self.LANDED, "e" * 40, None, "-x", "f" * 40, self.LANDED]) == {
+            self.LANDED: 0, "e" * 40: 1, "f" * 40: 128}
+        assert asked == [("deneb", plan.MAIN_HOLDS, ("/crew/main", "origin/main", self.LANDED, "e" * 40, "f" * 40))]
+        assert plan.main_holds({}, t, "origin/main", [None]) == {} and len(asked) == 1

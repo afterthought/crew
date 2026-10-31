@@ -713,3 +713,40 @@ for want in "**Unit, fix or chore.**" "chore add <chore> \"<what is done>\" --bo
 expect_ok crewpy brief wldn design
 has "$out" "is queued the same way as a chore: \`$CREW/plugin/bin/crew chore add <chore> \"<what is done>\" --repo <kit>\`"
 ok "the coder, verifier, conductor, planner and design agent each carry what a chore is to them"
+
+# A team moves to Flume one at a time (record 0050, roles.8; teams-cross-to-flume-as-their-bolts-land): a due team is
+# given nothing, its bolt going on with its conductor until it lands, which crosses it; a crossed team runs no standing
+# agent and takes every planned bolt of its kits; its places' answers and fixes are the planner's, its landing ops's by
+# the one procedure, the read of its refusal for a conflict with main launching its take-main fix, and a red main of a
+# kit a crossed team builds is a Flume fix place on main, sent on the user's word (state.3).
+expect_ok crewpy brief wldn dispatcher
+for want in "## Teams that move to Flume" "\`in Flume stream <stream>\`" "\`due to cross once <bolt> lands\`" \
+  "**A due team is given nothing.**" "naming each bolt it finishes first and on which path, and never tells you a due team is free" \
+  "**A crossed team is never full.**" "however many it already holds" \
+  "bolt give <team> <bolt>\`, which makes the bolt's branch as any give does and starts no agent" "while no runner answers there" \
+  "refuse a crossed team at once, naming where its work runs"; do has "$out" "$want"; done
+expect_ok crewpy brief swb-1 conductor
+for want in "## When your team moves to Flume" "\`due to cross once <bolt> lands\`" "Build your bolt to its landing as this brief says" \
+  "nothing of it moves to Flume" "Your team is given no next bolt meanwhile" \
+  "crew ends you and \`swb-1-ops\` at your next stop once you are idle, with no restart"; do has "$out" "$want"; done
+expect_ok crewpy brief wldn planner
+for want in "## Teams crossed to Flume" "so \`bolt order\` is how you move one ahead" "keep chains short" \
+  "**Plan writes reach its places by their approval.**" "naming drop and add as the way on, so propose the drop and the add" \
+  "by your address \`wldn/planner\`" "answer <work> \"<the answer, in the words of whoever gave it>\"\`" \
+  "when the place neither stopped short nor waits on its caller" "**Its fixes are yours to start.**" \
+  "fix <team> <name> \"<what is wrong, in the words of whoever found it>\" --bolt <bolt>\`" \
+  "so \`--merge\` and \`--wait\` are refused" "fix <team> <name> --drop --bolt <bolt>\`" \
+  "is in a batch only once its place has merged into its bolt"; do has "$out" "$want"; done
+expect_ok crewpy brief wldn main-ops
+for want in "A bolt of a team crossed to Flume lands by these same steps" "It has no conductor, so there is none to tell of it" \
+  "crew's read of that refusal launches its take-main fix itself" "\`<bolt>--take-main-<main's revision>\`" "start nothing yourself" \
+  "the user's send that ticked it still lands it: land it on that send" "fix <team> <name> \"<the note>\" --bolt <bolt>\`" \
+  "main fix <kit> <name> \"<the failure's words>\" --label wldn\`" "which you launch on reading main red" \
+  "\`--team <team>\` choosing among crossed teams" "its submission held for the user's word" "\`fixes in flight\`" \
+  "answer main--<name> \"<the answer>\" --label wldn\`" "\`fix main--<name>\` with the failure's first line" \
+  "main fix <kit> <name> --send --label wldn\`" \
+  "with \`--excerpt \"<their words, as they wrote them>\"\`, which crew reads in your own session's transcript as the user's and refuses otherwise, sending nothing" \
+  "Send it ahead of the bolts the same word lands" "main fix <kit> <name> --drop --label wldn\`" \
+  "who proposes it as a bolt of one chore, first among the planned"; do has "$out" "$want"; done
+lacks "$out" "who decide which team builds it"
+ok "a due team is given nothing and its conductor builds its bolt to its landing, a crossed team takes every planned bolt of its kits and runs no standing agent, its places' answers and fixes are the planner's, its landing ops's by the one procedure, and a red main of a kit a crossed team builds is a Flume fix place sent on the user's word"
