@@ -30,6 +30,10 @@ Each role is an agent definition, roles/<role>.md: frontmatter naming its model 
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
 import collections, functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+# Run as the command, this module is the crew the modules it imports import, so a refusal raised in plan.py, which a
+# tell to a role that runs as its kind writes its ask through, is the Refusal main catches.
+if __name__ == "__main__":
+    sys.modules.setdefault("crew", sys.modules[__name__])
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -455,16 +459,25 @@ ROLE_OF = {"bolt": "conductor", "unit": "conductor", "fix": "conductor", "propos
            "signal": "design", "record": "design", "landing": "ops", "deploy": "ops", "operation": "ops"}
 
 
-def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again=""):
+def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again="", ask="tell", reading=None):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
     transcript, never take it for the user's typing. A tell reaches its agent as a prompt or not at all (teams.11):
     an agent that is not up, one waiting on a question in its pane, and one crew can't read that of is reported, with
     nothing typed, and the tell fails. With taken, the text is taken or sent again (send_taken), and a sending not
     taken fails the tell, saying so of what was sent, with again, what to do once it is ready, when it was never
-    taken. A tell is in the run record of the recipient's partition, with its length and never its text."""
+    taken. A tell is in the run record of the recipient's partition, with its length and never its text.
+
+    To a role its partition runs as its kind (record 0047 move 6), with no standing agent of it up, the tell is an ask
+    of the role instead, of the kind ask, from the sender or crew (tell_ask), and does not fail for the agent not being
+    up; a standing agent of it still up is told as today, and one crew can't read is refused (asks_instead). reading,
+    what waits_on_question read of the agent, where the caller already read it."""
     host, session = place_of_agent(fleet, name)
-    why = tell_refusal(name, host, *waits_on_question(fleet, name))
+    status, asking, unread = reading or waits_on_question(fleet, name)
+    run = kind_role_of(fleet, name)
+    if asks_instead(run, status, unread):
+        return tell_ask(fleet, run, text, sender or "crew", ask)
+    why = tell_refusal(name, host, status, asking, unread, run)
     if why:
         print(why, file=sys.stderr)
         return False
@@ -485,15 +498,41 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     return sent
 
 
+def asks_instead(run, status, unread):
+    """Whether a tell is an ask of the role rather than a prompt (role-runs "A tell finds a standing agent of the role
+    first"): the agent is a role its partition runs as its kind, run, and crew read that no standing agent of it is up.
+    One still up is told as today; one crew could not read is refused (tell_refusal), never asked on a guess (read.1)."""
+    return bool(run) and status is None and not unread
+
+
+def tell_ask(fleet, run, text, frm, what="tell"):
+    """A tell to a role that runs as its kind, run (label, role), written as an ask of the role on its partition's
+    flywheel branch (plan.ask_write), from frm, carrying the text, typed into no pane; `asked <label>-<role>` once it is
+    written. Whether it was written: an ask crew could not write is said, as a tell not typed is."""
+    import plan  # plan imports this module
+    name = f"{run[0]}-{run[1]}"
+    try:
+        plan.ask_write(fleet, run[0], run[1], what, frm, words=text)
+    except Refusal as e:
+        print(f"could not ask {name}: {e}; nothing was sent", file=sys.stderr)
+        return False
+    print(f"asked {name}")
+    return True
+
+
 def send(fleet, name, text):
     """Send the text to the door of the team or partition named (briefs.10): a tell to its operator, marked with who
     sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
     the receiving partition's record, with its length and never its text, and no tell entry; one that typed nothing
-    records nothing."""
+    records nothing. To an operator that runs as its kind, with no standing operator up, the send is a `send` ask of it
+    carrying `(sent to <name>)` and the text, its entry the ask's (tell)."""
     import record as rec  # record imports this module
     label, door, team = send_door(fleet, name, caller(fleet))
-    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who())
-    if sent:
+    run = kind_role_of(fleet, door)
+    reading = waits_on_question(fleet, door) if run else None
+    asked = bool(reading) and asks_instead(run, reading[0], reading[2])
+    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who(), ask="send", reading=reading)
+    if sent and not asked:
         rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
     return sent
 
@@ -547,9 +586,13 @@ def board_tell(fleet, raw):
     return sent
 
 
-def tell_refusal(name, host, status, asking, unread):
+def tell_refusal(name, host, status, asking, unread, run=None):
     """Why a tell types nothing (teams.11), from what crew read of the agent: what it could not read, the agent not
-    up, or waiting on a question in its pane; None when the tell may be typed."""
+    up, or waiting on a question in its pane; None when the tell may be typed. For a role that runs as its kind, run,
+    what crew could not read is whether a standing agent of it is up, so it neither types nor asks."""
+    if unread and run:
+        return (f"could not tell {name} on {host}: {unread}, so crew can't tell whether a standing agent of it is up or "
+                f"its role is to be asked; nothing was sent or asked")
     if unread:
         return f"could not tell {name} on {host}: {unread}, so crew can't tell whether it is waiting on a question; nothing was sent"
     if status is None:
