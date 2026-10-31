@@ -18,7 +18,7 @@ A give to a crossed team launches its bolt whole, refused only where no runner a
 write reaches the places a crossed bolt launched as its own act: added work launched, dropped work dropped, a dependent
 launched again when what it waits on is (reach), an amendment a retry of construct or a launch anew (amending), and a
 move, split or change of After of launched work refused (launched_refusal); each launch's priority follows its bolt's
-place in the plan (priorities).
+place in the plan (priorities). A bolt planned in a crossed team's kit is the dispatchers' to give it (takers).
 
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
@@ -584,3 +584,22 @@ def launched_refusal(requests, work, how):
             f"base and order are fixed at its launch, so it is not {how}: drop it (crew {kind} drop {name}) and add it "
             f"again as it should be (crew {kind} add)")
 
+
+def takers(plan, teams, label, bolt):
+    """The partition's teams that have crossed to Flume and build a planned bolt's kit, by name, sorted (Decision 3):
+    a bolt held by no team in a kit one of them builds is theirs whenever it is planned, a crossed team holding no
+    bound; none for a bolt a team holds."""
+    b = plan.bolt(bolt)
+    if b is None or b.get("Team"):
+        return []
+    return sorted(n for n, t in teams.items() if t["label"] == label and path_of(plan, t)[0] == "crossed"
+                  and any(b.get("Repo") in (k.get("name"), k.get("repo")) for k in t.get("kits") or [t.get("kit") or {}]))
+
+
+def planned_said(bolt, names):
+    """What the partition's dispatchers are told of a bolt planned in a kit teams crossed to Flume build (Decision 3,
+    takers): that it can be given, and to whom."""
+    who = " or ".join(names)
+    return (f"bolt {bolt} can be given to {who}, which {'has' if len(names) == 1 else 'have'} crossed to Flume and "
+            f"{'takes' if len(names) == 1 else 'take'} each planned bolt of {'its' if len(names) == 1 else 'their'} kits: "
+            + " or ".join(f"crew bolt give {n} {bolt}" for n in names))

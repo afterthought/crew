@@ -955,7 +955,8 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
             appended(w)
         files = {"plan.rec": w.plan.text(), **w.files}
         seen.update(before=before, after=w.plan.teams(), due=due_teams(fleet, w.plan), touched=touched, quiet=w.quiet, label=label,
-                    subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
+                    subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm,
+                    takers=planned_takers(fleet, label, w.plan, [b for b in touched if b not in before]))
         return files, message(seen["subject"], body, seen["eid"])
     sha = land(repo, ref, None, make)
     print(f"{ref} {sha[:7]}: {seen['subject']}")
@@ -1017,7 +1018,23 @@ def notify(fleet, seen, subject):
     for line in shown:
         print(line)
     if dispatch:
-        tell_dispatchers(fleet, seen["label"], f"{subject}. Give a free team its next bolt.")
+        tell_dispatchers(fleet, seen["label"], dispatch_said(subject, seen.get("takers") or {}))
+
+
+def planned_takers(fleet, label, plan, added):
+    """Of the bolts a write added (added, by name), each held by no team in a kit a team crossed to Flume builds, with
+    those teams (runner.takers; Decisions 3 and 5 of teams-cross-to-flume-as-their-bolts-land): {bolt: [team]}."""
+    found = {b: runner.takers(plan, fleet["teams"], label, b) for b in added}
+    return {b: names for b, names in found.items() if names}
+
+
+def dispatch_said(subject, takers):
+    """What the partition's dispatchers are told of a write that added a bolt or freed a team (notices): the write's
+    subject, then for each bolt added in a kit a team crossed to Flume builds, that it can be given to that team
+    (runner.planned_said), else to give a free team its next bolt."""
+    if not takers:
+        return f"{subject}. Give a free team its next bolt."
+    return f"{subject}. " + " ".join(runner.planned_said(b, names) + "." for b, names in takers.items())
 
 
 def tell_dispatchers(fleet, label, text):

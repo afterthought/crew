@@ -345,3 +345,29 @@ class TestReach:
         with pytest.raises(plan.Refusal, match="^bolt x is given to crw-9, which .*teams.json does not name, so crew can't tell where its work runs$"):
             plan.reach_places(FLEET, w, "x")
 
+
+class TestPlanned:
+    """A bolt planned in a kit a crossed team builds, held by no team, is told to the partition's dispatchers that are up
+    as theirs to give it (Decisions 3 and 5)."""
+
+    def test_a_planned_bolt_of_a_crossed_teams_kit_names_the_team_and_the_give(self):
+        p = flume_plan([("x", "crw-4", "flume"), ("next", None, None)])
+        assert plan.planned_takers(FLEET, "madswan", plan.Plan(p), ["next"]) == {"next": ["crw-4"]}
+        assert plan.dispatch_said("plan(next): add the bolt (madswan-planner)", {"next": ["crw-4"]}) == (
+            "plan(next): add the bolt (madswan-planner). bolt next can be given to crw-4, which has crossed to Flume and takes "
+            "each planned bolt of its kits: crew bolt give crw-4 next.")
+
+    def test_two_crossed_teams_building_the_kit_are_both_named(self):
+        fleet = crossed_fleet(**{"crw-5": "madswan"})
+        assert plan.planned_takers(fleet, "madswan", plan.Plan(flume_plan([("next", None, None)])), ["next"]) == {"next": ["crw-4", "crw-5"]}
+        assert runner.planned_said("next", ["crw-4", "crw-5"]) == (
+            "bolt next can be given to crw-4 or crw-5, which have crossed to Flume and take each planned bolt of their kits: "
+            "crew bolt give crw-4 next or crew bolt give crw-5 next")
+
+    def test_no_crossed_team_of_the_kit_held_or_gone_or_due_names_none_and_the_tell_is_todays(self):
+        p = plan.Plan(flume_plan([("x", "crw-4", None), ("held", "crw-5", None), ("next", None, None)]))
+        assert plan.planned_takers(FLEET, "madswan", p, ["next", "held", "gone"]) == {}
+        other = dict(FLEET, teams={"crw-4": dict(FLEET["teams"]["crw-4"], label="wldn")})
+        assert plan.planned_takers(other, "madswan", plan.Plan(flume_plan([("next", None, None)])), ["next"]) == {}
+        assert plan.dispatch_said("plan(next): add the bolt (madswan-planner)", {}) == (
+            "plan(next): add the bolt (madswan-planner). Give a free team its next bolt.")
