@@ -9,7 +9,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 2. Asks, turns and role records
 
-- [ ] 2.1 `plugin/lib/asks.py` decides what is pending for a role, whether it is wanted, its open and superseded turns, an ask's key already held, the next numbers, and the role records due, each from plain facts (design Decisions 4, 6 and 7; Task notes 2.1); passes a new `tests/py/test_asks.py` under the moon task `tests:logic`.
+- [x] 2.1 `plugin/lib/asks.py` decides what is pending for a role, whether it is wanted, its open and superseded turns, an ask's key already held, the next numbers, and the role records due, each from plain facts (design Decisions 4, 6 and 7; Task notes 2.1); passes a new `tests/py/test_asks.py` under the moon task `tests:logic`.
 - [ ] 2.2 crew writes `asks.rec` and `roles.rec` on the flywheel's branch through `land()`, with headers `recfix --check` holds them to, an ask written alone or in its act's commit (design Decision 4; Task notes 2.2); passes `tests/contract/test_recfix.py`, and the moon task `tests:contract` (`tests/suite contract`) ends with "0 failed".
 - [ ] 2.3 The run record gains `ask`, `turn.begin` and `turn.end` entries holding no words, and `crew trace agent/<label>-<role>` lists them (run-record delta; Task notes 2.3); passes `tests/py/test_record.py` under the moon task `tests:logic`.
 
