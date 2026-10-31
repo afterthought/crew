@@ -16,7 +16,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 
 ## 3. The exchange with the runner
 
-- [ ] 3.1 `requests.rec` on the flywheel's branch takes numbered, append-only requests, each checked by recfix and crew's own rules and written in the commit of the plan write that occasions it (design Decision 4; Task notes 3.1); passes `tests/contract/test_recfix.py` in `tests:contract` and `tests/py/test_runner.py` in `tests:logic`.
+- [x] 3.1 `requests.rec` on the flywheel's branch takes numbered, append-only requests, each checked by recfix and crew's own rules and written in the commit of the plan write that occasions it (design Decision 4; Task notes 3.1); passes `tests/contract/test_recfix.py` in `tests:contract` and `tests/py/test_runner.py` in `tests:logic`.
 - [ ] 3.2 crew fetches `<label>/runner/*` with `<label>/main` in one fetch and reads each host's runner, answers and places at its tip, naming a host whose branch is missing or unreadable (design Decision 4; Task notes 3.2); passes `tests/contract/test_git.py` in `tests:contract` and `tests/py/test_runner.py` in `tests:logic`.
 - [ ] 3.3 `runner.stage_of` gives a crossed piece's stage from its launch, its answer and Flume's status as the runner carried it, every field guarded, pinned by flume 0.3.6 fixtures (design Decision 8; Task notes 3.3); passes `tests/py/test_runner.py` in `tests:logic`.
 

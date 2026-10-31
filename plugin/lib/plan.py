@@ -898,6 +898,8 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         before = w.plan.teams()
         touched = change(w) or []
         check(w.plan)
+        if "requests.rec" in w.files:
+            appended(w)
         files = {"plan.rec": w.plan.text(), **w.files}
         seen.update(before=before, after=w.plan.teams(), due=due_teams(fleet, w.plan), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
@@ -909,6 +911,41 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
                     by=by, **(fields or {}))
     notify(fleet, seen, seen["subject"])
     return sha
+
+
+def requests_of(w):
+    """requests.rec of the flywheel as the write has it, its descriptor in step with crew's (runner.REQUESTS), or a new
+    one when the branch has none yet (Decision 4 of teams-cross-to-flume-as-their-bolts-land)."""
+    text = w.text("requests.rec")
+    rq = Plan(text if text is not None else runner.REQUESTS)
+    in_step(rq, runner.REQUESTS)
+    return rq
+
+
+def request(w, act, host, work, **given):
+    """A request of a host's runner (act, launch, retry, drop or priority, for work on host, with the fields given as
+    runner.request_fields takes them) appended to requests.rec in the write's own commit, beside the plan write that
+    occasions it and under its one Crew-Entry (state.1, plan.2): numbered the next, dated now and by the writer, and
+    checked by crew's own rules (runner.request_refusal) before land checks the file by recfix with every other the
+    commit holds. Returns its number."""
+    rq = requests_of(w)
+    have = rq.recs("Request")
+    n = runner.next_request(have)
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rec = Rec("Request", runner.request_fields(n, act, host, work, given, now, agent()))
+    why = runner.request_refusal(have, rec)
+    why is None or fail(why)
+    rq.insert(rec)
+    w.replace("requests.rec", rq.text())
+    return n
+
+
+def appended(w):
+    """A write that changes requests.rec only appends to it (runner.append_refusal): its requests at the tip the write
+    is applied to stand unchanged, in order, ahead of those it adds; refused otherwise."""
+    old = Plan(show(w.repo, w.tip, "requests.rec") or "").recs("Request")
+    why = runner.append_refusal([r.fields for r in old], [r.fields for r in Plan(w.files["requests.rec"]).recs("Request")])
+    why is None or fail(why)
 
 
 def either(rows):
