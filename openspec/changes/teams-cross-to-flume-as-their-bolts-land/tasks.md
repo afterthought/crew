@@ -4,7 +4,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 
 ## 1. The setting
 
-- [ ] 1.1 `crew.load` reads `teams.json` version 2 as today, every team on today's path, and version 3 with every team's `flume` required, `false` or a stream's name, refusing anything else by team and file (design Decision 1; Task notes 1.1); passes `tests/py/test_teams.py`, verify `tests/suite logic` (`tests:logic`) ends with "0 failed".
+- [x] 1.1 `crew.load` reads `teams.json` version 2 as today, every team on today's path, and version 3 with every team's `flume` required, `false` or a stream's name, refusing anything else by team and file (design Decision 1; Task notes 1.1); passes `tests/py/test_teams.py`, verify `tests/suite logic` (`tests:logic`) ends with "0 failed".
 
 ## 2. A team's path and the crossing
 
