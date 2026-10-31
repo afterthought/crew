@@ -1522,7 +1522,7 @@ def queued(subs=(), error=None):
 
 
 class TestSubmissions:
-    """crew-board "Construction shows each held bolt as a ledger": each standing merge's number and state on its line,
+    """crew-board "Construction shows each bolt in flight as a ledger, with no server for a started bolt's work": each standing merge's number and state on its line,
     the landing's on the bolt's head line, in the lane and in the bands (teams.22, code.8)."""
 
     def test_a_merge_standing_in_sluice_is_on_its_line_in_the_lane_and_the_conductors_band(self):
@@ -1709,15 +1709,17 @@ class TestCrossed:
     def writer(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
 
-    def data(self, runners, extra=()):
-        """The board of madswan, its runner as given and extra requests appended to those the give wrote."""
+    def data(self, runners, extra=(), kit=None, bolts=None):
+        """The board of madswan, its runner as given and extra requests appended to those the give wrote; kit what deneb's
+        read of crew holds beside, and bolts each bolt's facts there."""
         from facts import crew_read, crossed_fleet_read, launched
         fleet = crossed_fleet_read(**{"crw-5": "madswan"})
         fleet["partitions"]["madswan"].update(machine="deneb", blueprints=["afterthought/blueprints"], state="afterthought/crew-state")
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("y1", "y", [], "unit", [])],
                                fleet=fleet, held=[("y", "crw-5")])
         runs = {"madswan": (requests + [plan.Rec("Request", list(f.items())) for f in extra], runners)}
-        found, sv = [("madswan", "afterthought/crew-state", "tip0", p)], crew_read(bolts={"x": {}, "y": {}})
+        found, sv = [("madswan", "afterthought/crew-state", "tip0", p)], crew_read(bolts=bolts or {"x": {}, "y": {}})
+        sv["deneb"]["kits"]["/crew/main"].update(kit or {})
         r = dict(found=found, sv=sv, props=[], cards=[], unread={}, errors={}, landings=[], gives={}, signals={"madswan": ([], {})},
                  ops={"madswan": []}, logs={"madswan": []}, runs=runs, rows=plan.rail_rows(fleet, found, sv, [], {}, None, runs))
         return board.board_data(fleet, ["madswan"], r, NOW)
@@ -1734,6 +1736,20 @@ class TestCrossed:
             "    a  code 6/26", "    b  waiting  on a"]
         assert {t["team"]: t["stream"] for t in d["partitions"][0]["teams"]} == {"crw-4": "madswan", "crw-5": "madswan"}
         assert lane(board.board_text(d), "Construction")[3].startswith("  crew y  crw-5 on deneb  in Flume stream madswan")
+
+    def test_a_started_bolts_ledger_shows_no_server(self, monkeypatch):
+        """crew-board "A started bolt's work shows no server": a server running in x's own worktree, as a bolt given before
+        record 0026 had one, is drawn for no part of x, its places being Flume's (_open.md: the runner reports a place's
+        addresses), where y, given before, has it drawn."""
+        from facts import ran
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        site = {"here": "https://bolt--crew.local"}
+        kit = dict(sites={"/crew/bolts/x": site, "/crew/bolts/y": site}, routes=[{"name": "bolt--crew", "url": "https://bolt--crew.local"}])
+        d = self.data(ran({1: "code"}, held=[2]), kit=kit, bolts={"x": {"worktree": "/crew/bolts/x"}, "y": {"worktree": "/crew/bolts/y"}})
+        x, y = (next(b for b in d["partitions"][0]["construction"] if b["bolt"] == n) for n in "xy")
+        assert x["url"] is None and {u["url"] for u in x["units"]} == {None}
+        assert y["url"] == "https://bolt--crew.local"
+        assert "server" not in "\n".join(lane(board.board_text(d), "Construction")[:3])
 
     def test_a_question_in_the_planners_band(self):
         """crew-board "A question in the planner's band": a's construct stopped short asking."""

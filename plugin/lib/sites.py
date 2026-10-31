@@ -2,17 +2,23 @@
 """sites.py: crew sites [<label>] [--json]
 
 For each host where a partition's teams run, each bolt and its worktrees (the bolt's own, each unit's and each
-fix's), with the URL of the dev server running in it, if any. Each host is read once. A server is found among the
-host's portless routes and matched to its worktree by the name devurl gives that worktree: swancloud's naming,
-never crew's own. The URL is the one to open from where crew runs: the server's local name on its own host; on
-another, its dev.swancloud.net name when its host publishes, shown on a box marked to open from a Mac, since a
-box cannot resolve those names."""
+fix's), with the URL of the dev server running in it, if any; a started bolt with none, saying so, since its work
+runs in Flume's places, until the runner reports a place's addresses (crew-sites, _open.md). Each host is read once.
+A server is found among the host's portless routes and matched to its worktree by the name devurl gives that
+worktree: swancloud's naming, never crew's own. The URL is the one to open from where crew runs: the server's local
+name on its own host; on another, its dev.swancloud.net name when its host publishes, shown on a box marked to open
+from a Mac, since a box cannot resolve those names."""
 import argparse, json, os, pathlib, sys
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
 import crew, plan  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
+
+
+# What crew sites says of a started bolt: its places are Flume's, where crew finds no server, until the runner reports
+# a place's addresses from Flume's run record (record 0043; _open.md).
+FLUME_PLACES = "its work runs in Flume's places, whose servers crew does not show yet"
 
 
 def url_of(fleet, here, host, site, routes):
@@ -58,6 +64,9 @@ def sites(fleet, labels):
                 got = sv.get(t["machine"])
                 if not got or not got["ok"]:
                     h.update(reachable=False, error=got["error"] if got else "not read")
+                    continue
+                if b.get("Path") == "flume":
+                    entry["note"] = FLUME_PLACES
                     continue
                 k = got["kits"].get(t["kit"]["main"], {})
                 if not k.get("ok"):

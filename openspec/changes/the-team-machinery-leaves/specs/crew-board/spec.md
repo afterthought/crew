@@ -12,18 +12,16 @@ The Construction lane SHALL show each started bolt as a ledger of its units, cho
 - **WHEN** `x` is started, deneb's runner keeping its kit with the stream `madswan`, `a` at `code 3/7` and `b` waiting on `a`
 - **THEN** the board's Construction lane shows `x` on deneb in stream `madswan`, `a` at code 3/7 and `b` waiting on `a`, and no slot line
 
-## MODIFIED Requirements
-
-### Requirement: Construction shows each held bolt as a ledger
-The Construction lane SHALL show each bolt in flight as a ledger: its head line with its repository and its kit's host, the number and state of its landing while one stands in sluice, and, once every unit and chore of it has merged and sluice is green at its head while not every one has landed, that it waits to land; while the run record's last `bolt.submit` on the bolt has its landing queued and sluice's queue, read, shows no landing of it standing, that its landing is queued, with the number the run record holds; once it has landed on main and its close was refused, that it landed and was not closed, with the words of its last refused close; each unit in plan order with its stage, its tasks done and total in code or verify, the number and state of its merge while one stands in sluice, and the URL of the dev server running in its place; each fix of the bolt with whether it has merged, its merge's number and state while one stands, and its server; and the bolt's own server at the foot. Main-level ops's band SHALL draw the head line of each bolt whose close was refused.
+### Requirement: Construction shows each bolt in flight as a ledger, with no server for a started bolt's work
+The Construction lane SHALL show each bolt in flight as a ledger: its head line with its repository and its kit's host, the number and state of its landing while one stands in sluice, and, once every unit and chore of it has merged and sluice is green at its head while not every one has landed, that it waits to land; while the run record's last `bolt.submit` on the bolt has its landing queued and sluice's queue, read, shows no landing of it standing, that its landing is queued, with the number the run record holds; once it has landed on main and its close was refused, that it landed and was not closed, with the words of its last refused close; each unit in plan order with its stage, its tasks done and total in code or verify, and the number and state of its merge while one stands in sluice; and each fix of the bolt with whether it has merged, and its merge's number and state while one stands. A started bolt's ledger SHALL show no dev server for the bolt or any of its work, whose places are Flume's, until the runner reports a place's addresses. Main-level ops's band SHALL draw the head line of each bolt whose close was refused.
 
 #### Scenario: A unit in code
 - **WHEN** unit a of bolt tenant-environments is in code with 1 of 2 tasks ticked, 
 - **THEN** tenant-environments' ledger has a line for a saying code 1/2, and names no slot
 
-#### Scenario: No server running
-- **WHEN** a unit's worktree has no dev server running, or its kit has no dev server naming
-- **THEN** its line shows no URL and no note about it
+#### Scenario: A started bolt's work shows no server
+- **WHEN** `tenant-environments` is started, and a dev server runs in a worktree of its kit named for it
+- **THEN** its ledger shows no URL for the bolt, its units or its fixes, and no note about one
 
 #### Scenario: A bolt waiting to land beside the one being built
 - **WHEN** `doctor-rows` has every unit merged and sluice green at its head, and `ssh-fix` of the same kit has a unit in code
@@ -49,6 +47,8 @@ The Construction lane SHALL show each bolt in flight as a ledger: its head line 
 - **WHEN** `doctor-rows` has landed on main and the run record's last `bolt.land` on it since then is refused, saying chore `tidy-rows` has not landed on main
 - **THEN** `doctor-rows`'s head line, on the lane and in main-level ops's band, says it landed on main and was not closed, with those words, in the attention gutter
 
+## MODIFIED Requirements
+
 ### Requirement: The planner's and ops's bands show what places wait on them for
 `board.agent_views` SHALL give the planner's band each launched place that stopped short asking or waits on its caller, with its question or Flume's words, and main-level ops's band each fix of main and each take-main fix in flight with its stage; crew's mod SHALL draw both above the agent's prompt.
 
@@ -73,3 +73,7 @@ The Construction lane SHALL show each bolt in flight as a ledger: its head line 
 ### Requirement: Construction shows a crossed team's bolts from the runner's records
 **Reason**: Record 0050 part 3: no team is crossed or due, and the board's JSON lists no teams to give a path or stream.
 **Migration**: "Construction shows a started bolt from the runner's records", added by this change.
+
+### Requirement: Construction shows each held bolt as a ledger
+**Reason**: Record 0047 move 5, record 0050 part 3: no team holds a bolt and no slot holds its work; and a started bolt's places are Flume's, where crew finds no dev server, until the runner reports a place's addresses (the user's ruling of 2026-10-31; `_open.md`).
+**Migration**: "Construction shows each bolt in flight as a ledger, with no server for a started bolt's work", added by this change.

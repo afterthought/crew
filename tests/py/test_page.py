@@ -213,6 +213,36 @@ class TestSites:
         assert sites.url_of(self.FLEET, "mac-studio", "mac-studio", self.SITE, None) == (None, "portless did not answer")
 
 
+class TestSitesOfAStartedBolt:
+    """crew-sites "A started bolt's work shows no server": x, given through Flume, is listed with where its work runs and
+    no server, though one runs in a unit's place of crew's naming, since its places are Flume's (_open.md: the runner
+    reports a place's addresses); y, given before, still shows its unit's server."""
+
+    def listed(self, monkeypatch):
+        import crew
+        from facts import crew_read, crossed_fleet_read, flume_plan
+        fleet = dict(crossed_fleet_read(), hosts={"deneb": {"kind": "nixos"}})
+        p = plan.Plan(flume_plan([("x", "crw-4", "flume"), ("y", "crw-5", None)], [("a", "x", [], "unit", []), ("b", "y", [], "unit", [])]))
+        sv = crew_read(bolts={"x": {}, "y": {}})
+        k = sv["deneb"]["kits"]["/crew/main"]
+        k.update(places={u: {"path": f"/crew/places/unit-{u}"} for u in "ab"},
+                 sites={f"/crew/places/unit-{u}": {"here": f"https://unit-{u}--crew.local"} for u in "ab"},
+                 routes=[{"name": f"unit-{u}--crew", "url": f"https://unit-{u}--crew.local"} for u in "ab"])
+        monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("madswan", "afterthought/crew-state", "tip0", p)])
+        monkeypatch.setattr(plan, "survey", lambda fleet, held, sites=False: sv)
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        return sites.sites(fleet, ["madswan"])
+
+    def test_a_started_bolt_is_listed_with_no_server_saying_why(self, monkeypatch):
+        x, y = self.listed(monkeypatch)["partitions"][0]["hosts"][0]["bolts"]
+        assert (x["bolt"], x["url"], x["units"], x["note"]) == ("x", None, [], sites.FLUME_PLACES)
+        assert y["units"] == [{"worktree": "/crew/places/unit-b", "url": "https://unit-b--crew.local", "note": None, "unit": "b"}]
+
+    def test_its_line_says_where_its_work_runs(self, monkeypatch):
+        line = next(l for l in sites.text(self.listed(monkeypatch)).splitlines() if l.strip().startswith("x "))
+        assert line.endswith("its work runs in Flume's places, whose servers crew does not show yet  [crw-4]")
+
+
 class TestMore:
     def test_a_unit_and_bolt_whose_host_does_not_answer_have_no_stage_or_status(self):
         d = page.data([entry("unit.add", ["unit/a", "bolt/tenant-environments"])])

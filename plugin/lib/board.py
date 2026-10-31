@@ -298,8 +298,9 @@ def board_data(fleet, labels, read, now):
                 k = k or {}
                 held = k.get("slots", {}).get(b.get("Team"), [])
 
-                def url(path):
-                    return sites.url_of(fleet, here, t["machine"], k.get("sites", {}).get(path, {}), k.get("routes"))[0] if path and k else None
+                def url(path):  # none for a started bolt's work, whose places are Flume's (crew-board, _open.md)
+                    return (sites.url_of(fleet, here, t["machine"], k.get("sites", {}).get(path, {}), k.get("routes"))[0]
+                            if path and k and not crossed else None)
 
                 def slot(kind, name):
                     return next((s["slot"] for s in held if s.get("kind") == kind and s.get("name") == name), None)
