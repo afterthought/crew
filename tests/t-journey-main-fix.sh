@@ -1,15 +1,14 @@
 # A fix of a red main through the crew command on the stubs (Decision 11 of teams-cross-to-flume-as-their-bolts-land;
-# the main-level spec's "A red main's fix is a fix place on main where a crossed team builds the kit", state.3): with
-# swb-1 crossed to Flume, building switchboard-kit, and a runner answering on its host, crew main fix appends to
-# requests.rec on the state branch a launch of Flume's fix kind on main, its submission held and main-level ops its
-# recipient, on swb-1's host and in its stream, and starts no agent. Which team's host, the refusals where no crossed
-# team builds the kit or no runner answers, the drop and the role table are logic cases (tests/py/test_main_fix.py).
+# the main-level spec's "A red main's fix is a fix place on main on the kit's host", state.3): with swb-1 building
+# switchboard-kit in Flume's stream wldn, and a runner answering on its host, crew main fix appends to requests.rec on
+# the state branch a launch of Flume's fix kind on main, its submission held and main-level ops its recipient, on
+# swb-1's host and in its stream, and starts no agent. Which team's host, the refusals where no team builds the kit in a
+# stream or no runner answers, the drop and the role table are logic cases (tests/py/test_main_fix.py).
 # Reads: plugin/roles/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
 
-# The user turns swb-1's setting on while it holds nothing: the teams file at version 3, every team on today's path but
-# swb-1, whose work runs in Flume's stream wldn on its host, so it has crossed.
+# The teams file at version 3: swb-1's work runs in Flume's stream wldn on its host, and no other team names a stream.
 edit teams "d['version'] = 3
 for t in d['teams']: t['flume'] = False
 $(team swb-1)['flume'] = 'wldn'"
@@ -36,7 +35,7 @@ eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act
   "launch $box fix/main/switchboard-kit/a-test-reads-its-fixture fix main--a-test-reads-its-fixture main wldn wldn/main/switchboard-kit wldn/ops submission $words"
 eq "$(field "$HOST" fix.start On)" "fix/main/switchboard-kit/a-test-reads-its-fixture"
 eq "$(launches)" ""
-ok "crew main fix of a kit a crossed team builds appends a launch of a fix on main, held for the user's send with ops its recipient, on the team's host and in its stream, starting no agent"
+ok "crew main fix of a kit a team builds in a stream appends a launch of a fix on main, held for the user's send with ops its recipient, on the team's host and in its stream, starting no agent"
 
 # The runner launched the fix, and Flume's status of its place, carried on the runner's branch, shows its code
 # delivered and its submission held: the branch gains answers.rec and places.rec beside runner.rec.

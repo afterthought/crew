@@ -297,6 +297,68 @@ json.dump(d, open(f, "w"), indent=1)' "$f" "$2"
 team() { echo "[t for t in d['teams'] if t['name'] == '$1'][0]"; }
 part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }
 
+# The Flume world: every team's work runs in Flume places on its host (Decision 1 of the-team-machinery-leaves).
+# flume_world: the teams file at version 3, each team naming its partition's label as the stream its work runs in, and
+# a runner serving wldn on each host, its own branch wldn/runner/<host> on wldn's state repository.
+flume_world() {
+  edit teams "d['version'] = 3
+for t in d['teams']: t['flume'] = 'madswan' if t['name'] == 'apk-1' else 'wldn'"
+  runner_writes chuck-herdr-alpha; runner_writes mac-studio
+}
+# runner_writes <host> [<request> <place> <status JSON>]...: wldn/runner/<host> on the state repository as that host's
+# runner writes it, and crew never does: its runner.rec, and each request named answered launched at its place with
+# Flume's status of the place as the runner carried it, beside those an earlier call named
+runner_writes() {
+  local h=$1 d=$T/runner/$1 tree parent f; shift
+  mkdir -p "$d"
+  python3 - "$CREW/plugin/lib" "$d" "$h" "$@" <<'EOF'
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+import runner
+d, h, args = sys.argv[2], sys.argv[3], sys.argv[4:]
+f = os.path.join(d, "kept.json")
+kept = json.load(open(f)) if os.path.exists(f) else {}
+for i in range(0, len(args), 3):
+    kept[args[i]] = [args[i + 1], json.loads(args[i + 2])]
+json.dump(kept, open(f, "w"))
+at = "2026-10-31T12:01:00Z"
+files = {"runner": runner.RUNNER + f"\nHost: {h}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n",
+         "answers": runner.ANSWERS + "".join(f"\nRequest: {n}\nOutcome: launched\nPlace: {p}\nAt: {at}\n" for n, (p, _) in sorted(kept.items(), key=lambda x: int(x[0]))),
+         "places": runner.PLACES + "".join(f"\nRequest: {n}\nPlace: {p}\nAt: {at}\nStatus: {json.dumps(s)}\n" for n, (p, s) in sorted(kept.items(), key=lambda x: int(x[0])))}
+for name, text in files.items():
+    open(os.path.join(d, f"{name}.rec"), "w").write(text)
+EOF
+  tree=$(for f in runner answers places; do printf '100644 blob %s\t%s.rec\n' "$(git --git-dir "$ws" hash-object -w "$d/$f.rec")" "$f"; done |
+    git --git-dir "$ws" mktree)
+  parent=$(git --git-dir "$ws" rev-parse -q --verify "refs/heads/wldn/runner/$h") || parent=
+  git --git-dir "$ws" update-ref "refs/heads/wldn/runner/$h" "$(git --git-dir "$ws" -c user.name=runner -c user.email=runner@example.com \
+    commit-tree "$tree" ${parent:+-p "$parent"} -m "runner: $h")"
+}
+# landed_status <place> <commit>: Flume's status of a place whose work has landed at the commit, as runner_writes takes it
+landed_status() { printf '{"status":{"places":[{"place":"%s","phase":{"over":{"over":{"landed":{"commit":"%s"}}}},"current":"verify","stages":[]}]}}' "$1" "$2"; }
+# request_of <work>: the number of the newest launch of the work (unit/<u>, chore/<c>, fix/<bolt>/<name>) in requests.rec
+request_of() { git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Act = 'launch' && Work = '$1'" -P Request | tail -1; }
+# flume_lands <host> <unit|chore> <name> <bolt> [<file>]: what Flume does with a launched unit or chore once it has
+# built: its place, cut from the bolt on GitHub, commits its work, a unit's change written and archived and a chore's
+# commit carrying its trailer, and submits it to the bolt through sluice, which lands it there as a merge commit
+# carrying its verdict; then the runner on <host> carries Flume's status of the place, landed at the bolt's new head
+flume_lands() {
+  local h=$1 kind=$2 n=$3 b=$4 p=$T/flume/$3 head
+  git -C "$k" fetch -q origin
+  git -C "$k" worktree add -q -b "$kind/$n" "$p" "origin/bolt/$b"
+  git -C "$p" branch -q --set-upstream-to "origin/bolt/$b"
+  if [[ $kind == unit ]]; then
+    change "$p" "$n" 3 3; mkdir -p "$p/openspec/changes/archive"; mv "$p/openspec/changes/$n" "$p/openspec/changes/archive/2026-10-31-$n"
+    commit_all "$p" "docs($n): the change, archived"
+  else
+    echo "$n" > "$p/${5:-$n}"; git -C "$p" add -A && git -C "$p" commit -qm "chore($n): $n" -m "Chore: $n"
+  fi
+  merge_as "flume" "$p" "bolt/$b" || fail "$n's submission to bolt/$b failed"
+  git -C "$k" fetch -q origin; head=$(git -C "$k" rev-parse "origin/bolt/$b")
+  git -C "$k" worktree remove --force "$p"
+  runner_writes "$h" "$(request_of "$kind/$n")" "$p" "$(landed_status "$p" "$head")"
+}
+
 # race <owner/name> <host> <agent> <crew args...>: the next push to that remote first lets this crew write land,
 # run as <agent> on <host> from the remote's pre-receive hook, so the push in flight finds the branch moved.
 race() {

@@ -33,7 +33,7 @@ ok "every command in the README is in crew's usage"
 for gone in assign release opsx fable explorer verifier coder-; do
   for doc in usage readme skill; do lacks "${!doc}" "$gone"; done
 done
-for gone in assign release opsx; do expect_fail "A team builds one bolt at a time" crew $gone swb-1; done
+for gone in assign release opsx; do expect_fail "A team holds as many bolts as it is given" crew $gone swb-1; done
 for doc in usage readme skill; do lacks "${!doc}" "unit approve"; lacks "${!doc}" "review/<unit>"; done
 for doc in usage readme skill; do has "${!doc}" "crew review"; has "${!doc}" "settle"; done
 ok "none of the removed commands or roles is in the README, the skill or the usage, and each names crew review and the settle stage"

@@ -239,7 +239,8 @@ done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
 expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "makes its branch from the kit's main with no worktree" "It is the one tell not about a bolt that is yours" "ops step\` command that records it done or failed"; do has "$out" "$want"; done
-for want in "may hold one more that waits to land" "once crew tells you its bolt reads proven" "so a refusal is no fault"; do has "$out" "$want"; done
+for want in "A team is never full" "once crew tells you its bolt reads proven"; do has "$out" "$want"; done
+for gone in "may hold one more that waits to land" "so a refusal is no fault"; do lacks "$out" "$gone"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
