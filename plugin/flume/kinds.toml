@@ -1,0 +1,62 @@
+# The main-level roles as Flume kinds, carried in crew's release (roles-run-as-flume-kinds, Decisions 1 and 2).
+# The runner launches a role's run from this file, `flume launch --kinds <this file> --kind crew-<role>
+# --name <label> ...`, so its place is places/crew-<role>--<label>. Each kind is one stage, turn, that lands
+# nothing and ends once `crew role end` has written its report in the place's own folder and its agent is quiet;
+# the runner then declares the place done. Nothing here names a model, instructions or an environment: the model
+# comes with the launch from the role's definition, the brief from `crew role start`, and the environment from
+# the pool's account.
+
+[kinds.crew-design]
+branch = "crew-design"
+lands = false
+
+[[kinds.crew-design.stages]]
+name = "turn"
+prompt = "turn.md"
+deliverables = ["report:{{state}}/turn.md"]
+quiet = "4h"
+agents = [{}]
+
+[kinds.crew-planner]
+branch = "crew-planner"
+lands = false
+
+[[kinds.crew-planner.stages]]
+name = "turn"
+prompt = "turn.md"
+deliverables = ["report:{{state}}/turn.md"]
+quiet = "4h"
+agents = [{}]
+
+[kinds.crew-reviewer]
+branch = "crew-reviewer"
+lands = false
+
+[[kinds.crew-reviewer.stages]]
+name = "turn"
+prompt = "turn.md"
+deliverables = ["report:{{state}}/turn.md"]
+quiet = "4h"
+agents = [{}]
+
+[kinds.crew-ops]
+branch = "crew-ops"
+lands = false
+
+[[kinds.crew-ops.stages]]
+name = "turn"
+prompt = "turn.md"
+deliverables = ["report:{{state}}/turn.md"]
+quiet = "4h"
+agents = [{}]
+
+[kinds.crew-operator]
+branch = "crew-operator"
+lands = false
+
+[[kinds.crew-operator.stages]]
+name = "turn"
+prompt = "turn.md"
+deliverables = ["report:{{state}}/turn.md"]
+quiet = "4h"
+agents = [{}]

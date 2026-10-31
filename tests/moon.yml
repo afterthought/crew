@@ -14,7 +14,7 @@ tasks:
   logic:
     command: 'python3 -m pytest -q -p no:cacheprovider tests/py'
     deps: ['~:venv']
-    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.yaml', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/plugin/hooks/status.js', '/plugin/hooks/cards', '/plugin/hooks/hooks.json', '/tests/py/**/*']
+    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.yaml', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/plugin/hooks/status.js', '/plugin/hooks/cards', '/plugin/hooks/hooks.json', '/plugin/flume/**/*', '/tests/py/**/*']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
   mod:

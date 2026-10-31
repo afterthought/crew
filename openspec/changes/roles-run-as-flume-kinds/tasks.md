@@ -15,7 +15,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 3. The kinds in crew's release
 
-- [ ] 3.1 `plugin/flume/kinds.toml` declares the five kinds and `plugin/flume/turn.md` is their prompt, as Flume's format reads them (design Decisions 1 and 2; Task notes 3.1); passes a new `tests/py/test_role_kinds.py` under the moon task `tests:logic`.
+- [x] 3.1 `plugin/flume/kinds.toml` declares the five kinds and `plugin/flume/turn.md` is their prompt, as Flume's format reads them (design Decisions 1 and 2; Task notes 3.1); passes a new `tests/py/test_role_kinds.py` under the moon task `tests:logic`.
 
 ## 4. A run's name, start and end
 
