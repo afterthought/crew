@@ -5,6 +5,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 ## 1. One path
 
 - [ ] 1.1 No decision of crew's reads the per-team setting: every branch on it keeps the crossed path's side, the off side's code is unreachable, the tests that proved the off side are deleted, and each test of a staying feature that set its work up through the old path sets it up as the crossed path does (design Decision 1; Task notes 1.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite` naming each end-to-end test `teams-cross-to-flume-as-their-bolts-land` added ends with "0 failed".
+- [x] 1.2 This change's deltas carry each of the 22 requirements `teams-cross-to-flume-as-their-bolts-land` put in the specs, removed where it exists only for a team and otherwise renamed and said of a started bolt, its kit's host and that host's runner's stream, with the design, proposal and tasks level with them (design Risks; the stage's restart words of 2026-10-31); verify `openspec validate the-team-machinery-leaves` passes.
 
 ## 2. Stage driving, the fix slot and crew's places leave
 
