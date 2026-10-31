@@ -1,3 +1,17 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: The planner's and ops's bands show what a crossed team's places wait on them for`
+- TO: `### Requirement: The planner's and ops's bands show what places wait on them for`
+
+## ADDED Requirements
+
+### Requirement: Construction shows a started bolt from the runner's records
+The Construction lane SHALL show each started bolt as a ledger of its units, chores and fixes with the stages the runner's records give, its head line naming its kit's host and the stream that host's runner keeps the kit with, and no slot. The board's JSON SHALL give each such ledger its stream.
+
+#### Scenario: A started bolt's ledger
+- **WHEN** `x` is started, deneb's runner keeping its kit with the stream `madswan`, `a` at `code 3/7` and `b` waiting on `a`
+- **THEN** the board's Construction lane shows `x` on deneb in stream `madswan`, `a` at code 3/7 and `b` waiting on `a`, and no slot line
+
 ## MODIFIED Requirements
 
 ### Requirement: Construction shows each held bolt as a ledger
@@ -35,6 +49,17 @@ The Construction lane SHALL show each bolt in flight as a ledger: its head line 
 - **WHEN** `doctor-rows` has landed on main and the run record's last `bolt.land` on it since then is refused, saying chore `tidy-rows` has not landed on main
 - **THEN** `doctor-rows`'s head line, on the lane and in main-level ops's band, says it landed on main and was not closed, with those words, in the attention gutter
 
+### Requirement: The planner's and ops's bands show what places wait on them for
+`board.agent_views` SHALL give the planner's band each launched place that stopped short asking or waits on its caller, with its question or Flume's words, and main-level ops's band each fix of main and each take-main fix in flight with its stage; crew's mod SHALL draw both above the agent's prompt.
+
+#### Scenario: A question in the planner's band
+- **WHEN** `a`'s construct stopped short asking "Which partition's rail?"
+- **THEN** madswan-planner's view lists `a` with that question, and the mod draws it
+
+#### Scenario: A fix of main in ops's band
+- **WHEN** `main--a-test-reads-its-fixture` is in code
+- **THEN** madswan-ops's view lists it at code, and the mod draws it
+
 ## REMOVED Requirements
 
 ### Requirement: The board's JSON lists each partition's teams
@@ -44,3 +69,7 @@ The Construction lane SHALL show each bolt in flight as a ledger: its head line 
 ### Requirement: Each object in the board's JSON says whose it is
 **Reason**: Record 0047 move 5, record 0050 part 3: no object belongs to a team.
 **Migration**: None: an object's partition and kit say whose it is.
+
+### Requirement: Construction shows a crossed team's bolts from the runner's records
+**Reason**: Record 0050 part 3: no team is crossed or due, and the board's JSON lists no teams to give a path or stream.
+**Migration**: "Construction shows a started bolt from the runner's records", added by this change.

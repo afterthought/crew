@@ -20,3 +20,7 @@ Every `bolt.land` entry crew writes SHALL record two things: the bolt's age, in 
 ### Requirement: A stage's end is recorded when crew sees it
 **Reason**: Record 0047 move 5: crew starts no stage and waits on none; a stage's start and end are Flume's, carried back as the runner's records. crew writes no `stage.start` or `stage.end` (`record.5` retires as a rule of entries crew writes).
 **Migration**: The runner's records of a place's stages; `crew trace` still reads the `stage.*` entries already on the branch.
+
+### Requirement: A team's crossing is an entry
+**Reason**: Record 0050 part 3: no team is left to cross, and crew writes no `team.cross` (design Decision 8).
+**Migration**: None: `crew trace team/<team>` still reads the `team.cross` entries already on the branch.

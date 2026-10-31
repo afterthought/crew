@@ -1,3 +1,20 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: A crossed team's give launches its bolt whole`
+- TO: `### Requirement: A started bolt's work is launched whole`
+- FROM: `### Requirement: A crossed team's launch carries its stream, priority, intent and recipient`
+- TO: `### Requirement: A launch carries its stream, priority, intent and recipient`
+- FROM: `### Requirement: A crossed team's dependent launches once its After work has landed`
+- TO: `### Requirement: A dependent launches once its After work has landed`
+- FROM: `### Requirement: Plan writes reach a crossed team's places`
+- TO: `### Requirement: Plan writes reach a started bolt's places`
+- FROM: `### Requirement: A crossed team's place is answered by a retry`
+- TO: `### Requirement: A place is answered by a retry`
+- FROM: `### Requirement: A crossed team's fix is a fix place on its bolt`
+- TO: `### Requirement: A fix is a fix place on its bolt`
+- FROM: `### Requirement: A crossed team's landing that conflicts with main takes main in by a fix place`
+- TO: `### Requirement: A landing that conflicts with main takes main in by a fix place`
+
 ## ADDED Requirements
 
 ### Requirement: A bolt is a branch, and crew's one worktree is a landing's
@@ -312,6 +329,71 @@ When a landed bolt's close is refused, crew SHALL record a `bolt.land` entry on 
 - **WHEN** the planner drops `tidy-z` from the plan and the rail sweeps again on the kit's host
 - **THEN** the read closes `z`, the run record holds its `bolt.land`, and no head line for `z` remains
 
+### Requirement: A started bolt's work is launched whole
+`crew bolt start <bolt>` SHALL check the kit's policy and have sluice make `bolt/<bolt>` on its kit's host, and SHALL be refused while that host is held, has no runner branch, or no runner keeps the kit with a stream. Its one plan write SHALL set `Path: flume` on the bolt, and no `Team`, and append a launch for each of its units and chores in the file's order, cut from `bolt/<bolt>`. It SHALL start, restart and greet no agent.
+
+#### Scenario: A bolt of three
+- **WHEN** `crew bolt start x` runs, `x` holding units `a` and `b`, `b` after `a`, and chore `c`, and deneb's runner keeps `x`'s kit with the stream `madswan`
+- **THEN** the plan marks `x` `Path: flume` with no `Team`, `requests.rec` holds three launches of `change`, `change` and `chore` on `bolt/x`, each on deneb, and no agent starts
+
+#### Scenario: No runner on the host
+- **WHEN** `crew bolt start x` runs and no runner branch of madswan's state repository keeps `x`'s kit with a stream
+- **THEN** the start is refused naming the kit and that no runner runs its work, and no branch is made
+
+### Requirement: A launch carries its stream, priority, intent and recipient
+Each launch of a started bolt's work SHALL name its kit's host and the stream that host's runner keeps the kit with, the kit's forge address, the intent `<label>/<bolt>`, the recipient `<label>/planner`, a priority from its bolt's place in the plan, the highest first, and its brief, the work's own words as crew's prompts give them. A write that starts or reorders bolts SHALL append a priority for each launched place whose priority the plan's order changed.
+
+#### Scenario: Two bolts in order
+- **WHEN** `x` and then `y` are started, `x` above `y` in the plan, and deneb's runner keeps their kit with the stream `madswan`
+- **THEN** `x`'s launches carry a higher priority than `y`'s, each names deneb, stream `madswan`, intent `madswan/<bolt>` and recipient `madswan/planner`
+
+#### Scenario: A reorder
+- **WHEN** `crew bolt order` puts `y` above `x`
+- **THEN** `requests.rec` gains a priority for each launched place of `x` and `y` whose priority changed, and none for another
+
+### Requirement: A dependent launches once its After work has landed
+A launch of work whose `After` names other work SHALL name those launches, and the runner SHALL launch it only once each of their places has landed on the bolt, answering it held meanwhile, so its place is cut from a bolt that holds their work.
+
+#### Scenario: A dependent held
+- **WHEN** `x` is started, `b` after `a`
+- **THEN** `b`'s launch names `a`'s as its After, and `b` reads waiting on `a` until `a`'s place has landed on `bolt/x`
+
+### Requirement: Plan writes reach a started bolt's places
+Each as the write's own act, in its own commit: a unit or chore added to or moved into a started bolt SHALL be launched as the start launches it; an approved amendment of a unit whose place is launched SHALL be a retry of its construct with the amendment's words, and of one whose launch is held or unanswered a drop of that launch and a new launch carrying the amendment; a unit, chore or bolt dropped SHALL drop each of its launches still standing.
+
+#### Scenario: An amendment of a unit in code
+- **WHEN** the user approves an amendment of `a`, whose place on deneb's runner is in code
+- **THEN** `requests.rec` gains a retry of `a`'s construct with the amendment's words, in the approval's commit
+
+#### Scenario: A unit dropped
+- **WHEN** the user approves dropping `c`, launched on started `x`
+- **THEN** `requests.rec` gains a drop of `c`'s launch, in the approval's commit
+
+### Requirement: Launched work keeps its bolt and order
+A move out of a started bolt, a split, or a change of `After` on work whose launch is written SHALL be refused, naming its place and drop then add as the way on, since a place's base and order are fixed at its launch.
+
+#### Scenario: A move of launched work
+- **WHEN** a proposal moves `a`, launched on started `x`, to bolt `y`
+- **THEN** the proposal is refused naming `a`'s place and that it is dropped and added again
+
+### Requirement: A fix is a fix place on its bolt
+`crew fix <bolt> <name> "<words>"` SHALL append a launch of the fix kind on `bolt/<bolt>`, on its kit's host with the stream that host's runner keeps the kit with, with nothing held; `--drop` SHALL drop it, and `--merge`, `--wait` and `--bolt` SHALL be no options it has. A fix in flight SHALL hold its bolt's landing.
+
+#### Scenario: A review note marked fix
+- **WHEN** the planner runs `crew fix x rail-word "Say 'land' for a started bolt"` on a batch's note
+- **THEN** `requests.rec` gains a launch of `fix` named `x--rail-word` on `bolt/x`, and `x`'s landing row says it lands once that fix has merged or been dropped
+
+### Requirement: A landing that conflicts with main takes main in by a fix place
+When sluice refuses a started bolt at its landing for a conflict with main, the act that reads the refusal SHALL append a launch of a fix on the bolt named `take-main-<main's revision, seven>`, on its kit's host with its stream, its brief saying to take `origin/main` into the bolt with sluice's words of the conflict, unless a fix of that name already stands; the bolt's row SHALL say it takes main first.
+
+#### Scenario: A landing refused for a conflict
+- **WHEN** main-level ops's `crew bolt submit x` reads sluice refusing `x` for a conflict with main at `4d3d9be`
+- **THEN** `requests.rec` gains one launch of `fix` named `x--take-main-4d3d9be` with sluice's conflict words, and `x`'s row says it takes main first
+
+#### Scenario: Read twice
+- **WHEN** a later read of the same refusal finds `x--take-main-4d3d9be` standing
+- **THEN** no second launch is appended
+
 ## REMOVED Requirements
 
 ### Requirement: Teams are fixed in the teams file
@@ -440,7 +522,7 @@ When a landed bolt's close is refused, crew SHALL record a `bolt.land` entry on 
 
 ### Requirement: Fixes during a bolt are built beside its units
 **Reason**: Record 0047 move 5, record 0049 part 4: the fix slot and the slot lent to a fix leave; a fix is Flume's fix kind, launched on the crossed path.
-**Migration**: The crossed path's fix (`teams-cross-to-flume-as-their-bolts-land`); `crew fix` is gone.
+**Migration**: "A fix is a fix place on its bolt", in this spec; `crew fix <team>` and its slot are gone.
 
 ### Requirement: Ahead in a bolt is its merge order
 **Reason**: Record 0047 move 5: no conductor's wait forecasts, orders or settles units; a submission that fails or conflicts launches the kind's fix stage on the crossed path.
@@ -573,3 +655,23 @@ When a landed bolt's close is refused, crew SHALL record a `bolt.land` entry on 
 ### Requirement: A brief names nothing of a change's content but what crew reads
 **Reason**: Design Decision 7: no construct or coder brief is left to name what crew reads of a change.
 **Migration**: "No brief names a proof list", added by this change.
+
+### Requirement: A team's path is today's, due or crossed
+**Reason**: Record 0050 part 3, `roles.8`: every team has crossed, and the per-team setting leaves with the teams file's `teams`; a bolt's work has one path, which `crew bolt start` begins.
+**Migration**: "A started bolt's work is launched whole", in this spec; a Bolt record's `Path: flume` marks a started bolt.
+
+### Requirement: A team due to cross is given no new bolt
+**Reason**: Record 0050 part 3: no team is due, and no bolt is given to a team.
+**Migration**: None: `crew bolt give` is gone; a bolt's work starts by `crew bolt start` (bolt-plan "A bolt's work starts by crew bolt start").
+
+### Requirement: A team crosses once its last bolt of today's path has gone
+**Reason**: Record 0050 part 3: every team has crossed before this landing, and crew starts no conductor or team ops to end.
+**Migration**: None: an agent the old crew left standing is closed after the deploy (design *After deploy*).
+
+### Requirement: A crossed team is closed once neither of its roles is up
+**Reason**: Record 0050 part 3: no team's workspaces, slots or roles are left to close, and crew writes no `team.cross` (design Decision 8).
+**Migration**: None: design *After deploy*; `crew trace team/<team>` still reads the `team.cross` entries on the branch.
+
+### Requirement: A crossed team runs no standing agent
+**Reason**: Record 0047 move 5: the commands it refused for a crossed team, `crew up`, `rebuild`, `restart`, `resume`, `clear`, `down`, `unit run|wait|free`, `chore wait` and `fix --wait`, are gone for every team (design Decision 10).
+**Migration**: None: a removed command falls to crew's unknown-command answer, which prints the usage.

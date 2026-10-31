@@ -14,7 +14,7 @@ The user settled the shape around it on 2026-10-31, reading records 0047 (moves 
 ## What Changes
 
 - **BREAKING** `teams.json` holds partitions only. Its `teams` list, and the per-team setting with it, leave; the file moves to version 4, after `teams-cross-to-flume-as-their-bolts-land`'s 3, and crew refuses versions 2 and 3, naming the machine's configuration as the fix (`code.5`). A partition's `roles` override names no dispatcher.
-- **BREAKING** The team commands leave: `crew list`; `crew status|up|rebuild|close|restart|resume|clear|down <team>`; `crew unit run|wait|free`; `crew chore run|wait|free`; `crew fix`'s slot, `--merge`, `--drop` and `--wait` forms; `crew needs`; `crew bolt give`; `crew plan agree`; and the internal `_status`, `_unit-run`, `_unit-wait`, `_fix-run`, `_construct-again`, `_tidy`, `_unit-free`, `_team`, `_dispatch`, `_needs` and `_end-short`. `crew main up` starts no dispatcher, `crew revive` brings back no team agent, and `crew tell` and `crew send` name no team.
+- **BREAKING** The team commands leave: `crew list`; `crew status|up|rebuild|close|restart|resume|clear|down <team>`; `crew unit run|wait|free`; `crew chore run|wait|free`; `crew fix`'s slot form, `--merge` and `--wait`; `crew needs`; `crew bolt give`; `crew plan agree`; and the internal `_status`, `_unit-run`, `_unit-wait`, `_fix-run`, `_construct-again`, `_tidy`, `_unit-free`, `_team`, `_dispatch`, `_needs` and `_end-short`. `crew main up` starts no dispatcher, `crew revive` brings back no team agent, and `crew tell` and `crew send` name no team.
 - The briefs of the conductor, team ops and the dispatcher leave, and with the unit slots the stage briefs crew gave them, construct, coder and verify: a stage is now a Flume kind's, briefed by the kind and the kit's own files. Every staying brief, the roster and the cards' words name none of them.
 - The plan keeps its records and loses the team's part: a bolt is given to no team, so its `Team` field is never written or read; a proposal waits on no conductor's agreement, so `Agreed` is never written; the conductor's and the dispatcher's direct writes leave the role table, and ordering within a bolt is the planner's, by proposal (`roles.1`).
 - The three facts a crossed team still gave its bolts get a source with no team: a bolt's work starts by `crew bolt start <bolt>`, the crossed give with no team, which the planner proposes and the user approves; a kit's host, folders and Flume stream come from the runner's own record of what it keeps (one field more asked of the runner's `runner.rec`); `crew fix <bolt> <name> "<words>"` names its bolt, and `crew main fix` its kit alone.
@@ -32,7 +32,7 @@ None.
 
 ### Modified Capabilities
 
-- `bolt-teams`: every requirement of a team, its slots, its stages, its fixes, its give, its conductor's waits and crew's places is removed; what stays is a bolt's branch, its proof and its landing, each read and landed on its kit's host, crew's one worktree a landing's.
+- `bolt-teams`: every requirement of a team, its slots, its stages, its fixes, its give, its conductor's waits, its path and crossing and crew's places is removed; what stays is a bolt's branch, its proof and its landing, each read and landed on its kit's host, crew's one worktree a landing's, and the crossed path's launches, answers and fixes, said of a started bolt.
 - `main-level`: no dispatcher; the main level's workspace holds its four roles alone; the planner's proposals wait on no conductor; a landing that does not land is held on its row.
 - `bolt-plan`: a bolt is created, started, dropped and landed through crew and given to no team; a fix names its bolt and a fix of main its kit; an amendment's construct is handed to no team's host; a conductor hears of no write.
 - `plan-proposals`: a bolt in flight changes on the user's approval alone; the other agents' direct writes lose the conductor's and the dispatcher's.
@@ -44,6 +44,7 @@ None.
 - `run-record`: no stage's end is recorded by crew; a landing's age runs from the entry that made the bolt's branch.
 - `crew-rail`, `crew-board`, `board-page`, `fleet-page`, `rail-cards`: no team, slot or conductor in a row, a lane, a card or a dock; a question is asked by three roles; the board's JSON lists no teams.
 - `kit-toolchain`, `crew-sites`: crew readies no place; sites are listed for each host that keeps a kit.
+- `flywheel-state`: a kit's host, its folders there and its work's stream are read from the runners' `runner.rec`; a launch with no stream is refused at a bolt's start.
 
 ## Impact
 

@@ -1,3 +1,8 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: A crossed team's unit is batched once its change has landed on its bolt`
+- TO: `### Requirement: A unit is batched once its change has landed on its bolt`
+
 ## ADDED Requirements
 
 ### Requirement: A batch spans the partition's bolts
@@ -51,15 +56,26 @@ The reviewer SHALL read each due change whole and write one summary file holding
 - **WHEN** the reviewer summarizes a change whose Touches lists the card hook and its test
 - **THEN** its section names them in words, with no code block and no path
 
+### Requirement: A unit is batched once its change has landed on its bolt
+A unit of a started bolt SHALL become due for review when the runner's records read it merged, its change read archived on GitHub's bolt after a fetch, and SHALL be named in its batch with its bolt at the commit of the bolt that holds it, `<unit>:<bolt>@<commit>`, its reading opening its archived folder. A note the user marks fix on such a unit SHALL reach its bolt as a fix place, by the planner's `crew fix`.
+
+#### Scenario: Merged, then batched
+- **WHEN** `a` of started `x` lands on `bolt/x` at `9f1c2ab`, its change archived there
+- **THEN** `a` counts toward the partition's next batch, named `a:x@9f1c2ab`
+
+#### Scenario: Constructed but not landed
+- **WHEN** `b`'s construct has delivered and its place is in code
+- **THEN** `b` is not yet due for review
+
 ## REMOVED Requirements
 
 ### Requirement: Notes reach the unit's conductor
 **Reason**: Record 0047 move 5: no conductor stands; batches and amendments are the planner's, and a unit's notes reach its work as the crossed path hands them.
-**Migration**: The crossed path's requirement for a crossed bolt's notes (`teams-cross-to-flume-as-their-bolts-land`); the planner still sends nothing but the user's words.
+**Migration**: "A unit is batched once its change has landed on its bolt", in this spec; the planner still sends nothing but the user's words.
 
 ### Requirement: Notes amend a unit in flight with no re-approval
 **Reason**: Record 0047 move 5: no conductor runs construct again; the crossed path launches a unit's construct again with its notes, and a merged unit's defect as a fix on the bolt.
-**Migration**: The crossed path's requirement for a crossed bolt's notes (`teams-cross-to-flume-as-their-bolts-land`).
+**Migration**: "A unit is batched once its change has landed on its bolt", in this spec.
 
 ### Requirement: A batch spans the partition
 **Reason**: Record 0047 move 5: a batch spans the partition's bolts, reckoned on its main-level host; no team or conductor's wait.

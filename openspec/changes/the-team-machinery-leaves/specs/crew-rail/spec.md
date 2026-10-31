@@ -50,6 +50,13 @@ Each open proposal on the flywheel's branch SHALL be a row under proposals. The 
 - **WHEN** proposal 3 is approved
 - **THEN** the next `crew rail` has no row for it
 
+### Requirement: A started bolt waits to land on its kit's row
+A started bolt SHALL wait to land on its kit's landings row on the same terms as any bolt, every unit and chore merged and sluice green at its head, its pieces' stages read from the runner's records; its line SHALL name its kit's host, and no team or slot.
+
+#### Scenario: A started bolt proven
+- **WHEN** started `x` has `a`, `b` and `c` merged by the runner's records and sluice green at its head, and deneb's runner keeps its kit with a stream
+- **THEN** the rail shows crew's landings row with `x`, on deneb, can land
+
 ## REMOVED Requirements
 
 ### Requirement: A bolt whose every unit has merged and that has not landed is a row
@@ -59,3 +66,7 @@ Each open proposal on the flywheel's branch SHALL be a row under proposals. The 
 ### Requirement: An open proposal is a row until it is approved or dropped
 **Reason**: Record 0047 move 5: no conductor's agreement is needed (`plan.4`).
 **Migration**: "An open proposal is a row until the user approves or drops it", added by this change.
+
+### Requirement: A crossed team's bolt waits to land on its kit's row
+**Reason**: Record 0050 part 3: no team is crossed, and a bolt's line names its kit's host where it named a team's.
+**Migration**: "A started bolt waits to land on its kit's row", added by this change.
