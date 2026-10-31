@@ -788,6 +788,31 @@ def fix_flume_refusal(mode, team, bolt, name):
             f"code has delivered, telling the planner its end, so {said} has nothing to do: crew bolts shows its stage")
 
 
+def unlanded(bolt, kit, work, held):
+    """Why a bolt given through Flume is not closed as landed (Decision 12), or None, from facts: work, each of its
+    units and chores as (name, kind, its stage as stage_of gives it, with the commit its place landed at on the bolt);
+    held, {commit: git's exit asking whether the kit's main now holds it, 0 yes, 1 no, any other git could not tell}.
+    Its close reads each piece merged from the runner's records where today's reads a change archived or a chore's
+    trailer on main, a Flume chore's commits carrying no crew trailer, and lands once main holds the commit each place
+    landed at on the bolt, so a bolt sluice has not landed is not closed; a piece crew can't tell is not taken as
+    landed (read.1)."""
+    for name, kind, s in work:
+        if s["stage"] == "unknown":
+            return f"cannot tell whether {kind} {name} has landed: {s.get('why')}"
+        if s["stage"] not in ("merged", "landed"):
+            return f"{kind} {name} has not merged into bolt/{bolt}: it is {s['stage']}"
+        c = s.get("commit")
+        if not c:
+            return (f"cannot tell whether {kind} {name} has landed on {kit}'s main: Flume's status of its place, as the runner "
+                    "carried it, names no commit it landed at")
+        if held.get(c) == 1:
+            return (f"{kind} {name} has not landed on {kit}'s main: its place landed on bolt/{bolt} at {c[:7]}, which main does "
+                    "not hold")
+        if held.get(c) != 0:
+            return f"cannot tell whether {kind} {name} has landed on {kit}'s main: git could not read {c[:7]} there"
+    return None
+
+
 def fixes_on(requests, reads, label, base):
     """Each fix whose launch stands on a base, bolt/<bolt> or main, in requests.rec's order, as (its launch, its stage),
     read from its host's runner (reads, by host, of_host; piece_stage)."""

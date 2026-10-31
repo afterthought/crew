@@ -1764,6 +1764,28 @@ echo "SUBMISSION_OWN=$(n refs/heads/main)"
 """
 
 
+# Whether a kit's main now holds each commit given, read in its main checkout on its host after the command's fetch
+# (MAIN): a line `<commit> <exit>` for each, git merge-base --is-ancestor's exit, 0 held, 1 not, any other git could
+# not tell.
+MAIN_HOLDS = r"""main=$1 ref=$2
+shift 2
+cd "$main" || exit 1
+for c; do git merge-base --is-ancestor "$c" "$ref" 2>/dev/null; echo "$c $?"; done
+"""
+COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
+
+
+def main_holds(fleet, t, ref, commits):
+    """Whether the kit's main now (ref, as kit.main_now names it) holds each of commits, read on the team's host
+    (MAIN_HOLDS): {commit: git's exit, 0 held, 1 not, any other git could not tell}; a commit that is no commit's name,
+    or a line crew can't read, is left out, read as untold (read.2); none asked, none read."""
+    commits = sorted({c for c in commits if c and COMMIT.match(c)})
+    if not commits:
+        return {}
+    out = host_run(fleet, t["machine"], MAIN_HOLDS, t["kit"]["main"], ref, *commits)
+    return {c: int(rc) for c, rc in (l.split() for l in out.splitlines() if len(l.split()) == 2) if c in commits and rc.isdigit()}
+
+
 def main_held(name, machine, said):
     """The commit a kit's main holds now, from what MAIN read on its host (kit.main_now): (sha, None), or (None, why).
     A host's own main lagging GitHub's refuses nothing: sluice forms every landing on GitHub's main and pushes it with a
@@ -2322,10 +2344,18 @@ def to_give(plan, b, team, kits, label):
     return free[0] if free else fail(f"{label}/main has no planned bolt in {built} for {team}")
 
 
-def land_refusal(bolt, units, stage_of, outside, label):
+def land_refusal(bolt, units, stage_of, outside, label, held=None, kit_name=None):
     """Why a bolt does not land, or None (plan.16): a unit or chore (units, by name) crew cannot read, or one that has
-    not landed on main, or units whose latest change no batch has held yet (outside); a chore is in no batch."""
-    for u in units:
+    not landed on main, or units whose latest change no batch has held yet (outside); a chore is in no batch. A bolt
+    given through Flume, held given for it alone ({commit: whether kit_name's main now holds it}, main_holds), reads
+    each merged from the runner's records and lands once main holds the commit each place landed at on the bolt, a
+    chore asked for no trailer (runner.unlanded; Decision 12 of teams-cross-to-flume-as-their-bolts-land)."""
+    if held is not None:
+        why = runner.unlanded(bolt, kit_name, [(u, stage_of(u).get("kind", "unit"), stage_of(u).get("flume") or stage_of(u))
+                                               for u in units], held)
+        if why:
+            return why
+    for u in units if held is None else ():
         s = stage_of(u)
         k = s.get("kind", "unit")
         if s["stage"] == "unknown":
@@ -3771,10 +3801,14 @@ def bolt_land(fleet, a, by=None, close_why=None):
         k = k if k and k.get("ok") else None
         stage_of = unheld_stages(k, h.get("error") or f"{t['machine']} did not read {t['kit']['main']}", Stages(fleet, plan, {}).of,
                                  [u.name() for u in plan.work_of(a.bolt) if is_chore(u)])
-    landed = all(stage_of(u)["stage"] == "landed" for u in units)
+    # A bolt given through Flume has landed once main holds the commit each of its places landed at on the bolt
+    # (Decision 12 of teams-cross-to-flume-as-their-bolts-land).
+    hold = main_holds(fleet, t, ref, [(stage_of(u).get("flume") or {}).get("commit") for u in units]) \
+        if held and b.get("Path") == "flume" else None
+    landed = land_refusal(a.bolt, units, stage_of, [], label, hold, t["kit"]["name"]) is None
     entries = partition_entries(fleet, label) if landed else []
     outside = [u for u, *_ in due_changes(plan, entries) if u in units] if landed else []
-    why = land_refusal(a.bolt, units, stage_of, outside, label)
+    why = land_refusal(a.bolt, units, stage_of, outside, label, hold, t["kit"]["name"])
     not why or fail(why)
     # The user's word to land, when it was given in ops's pane, and their words, kept where it was submitted (plan.16).
     pane = pane_word_of(entries, a.bolt) if b.get("Team") else None
