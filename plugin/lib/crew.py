@@ -1668,6 +1668,40 @@ def team_tokens(fleet, t, role, self_name):
     return tok
 
 
+# How a main-level role's work reaches it, the brief's {{TURN}} (design Decision 9, role-runs "A run's brief says how a
+# turn goes"): for a role its partition runs as its kind, how a turn goes, with what is the role's own in a turn
+# (TURN_OWN); for one that stands, that its work reaches it in its pane.
+KIND_TURN = (
+    "You run as your kind: no agent of you stands, and each run of you is one turn, a place the host's runner launches "
+    "while anything waits for you, one at a time. Your turn starts with `{{TEAM_CMD}} role start`, which takes everything "
+    "asked of you since your last turn and prints this brief's path, each ask and each place that waits on you; act on "
+    "what it took, as this brief says, and end the turn with `{{TEAM_CMD}} role end`, as your turn's prompt says. Wait "
+    "in your session on nothing: where this brief says to wait for an answer, a submission, a review or a tell, end your "
+    "turn instead, and the thing reaches your next run as an ask. What is asked after your start waits for your next "
+    "turn. Ask the user only on a card in your own name, {{SELF}}, never by stopping short.")
+TURN_OWN = {
+    "reviewer": " A batch asked of you names the file its summary goes to; once each batch your turn took has its summary "
+                "written, run `{{TEAM_CMD}} review delivered`, which records it, raises its card in the planner's name and "
+                "asks the planner.",
+    "main-ops": " From your run, `{{TEAM_CMD}} bolt submit` returns once each bolt is queued: how each landing ends "
+                "reaches your next run as an ask when it does not land, and the planner's and the design agent's when it "
+                "does.",
+    "planner": " `{{TEAM_CMD}} review {{LABEL}}` asks the reviewer a batch where it runs as its kind, and its delivery "
+               "reaches you as an ask, with the line that adopts its card.",
+}
+STANDING_TURN = ("You stand in your pane, an agent crew started and keeps up: your work reaches you there, as tells marked "
+                 "`[crew tell from <sender>]` or `[crew]`, and as the answers to the cards you adopted.")
+
+
+def turn_said(p, defn):
+    """The brief's {{TURN}} for a partition's main-level role, by its definition: how a turn goes for a role its
+    partition runs as its kind (KIND_TURN, TURN_OWN), else how a standing role's work reaches it; a dispatcher stands."""
+    role = "ops" if defn == "main-ops" else defn
+    if role in KIND_ROLES and p["flume"][role] is not False:
+        return KIND_TURN + TURN_OWN.get(defn, "")
+    return STANDING_TURN
+
+
 def main_tokens(fleet, p, role, self_name):
     label, host, cmd = p["label"], this_host(), f"{HOME}/plugin/bin/crew"
     teams = [fleet["teams"][n] for n in sorted(p["teams"])]
@@ -1700,7 +1734,7 @@ def main_tokens(fleet, p, role, self_name):
         "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
         "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
         "OPERATORS": f"`{label}-operator` on {p['machine']}",
-        "TEAMS_DOORS": ", ".join(doors) or "none",
+        "TEAMS_DOORS": ", ".join(doors) or "none", "TURN": turn_said(p, role),
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
                     "`terminal-browser open <url> --split right`." if fleet["hosts"].get(host, {}).get("kind") == "darwin" else
                     f"{host} is a box, which can't open the dev.swancloud.net names: say so, and give the user the URL "

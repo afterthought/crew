@@ -58,7 +58,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 12. Briefs
 
-- [ ] 12.1 The five briefs carry `{{TURN}}`, filled for a role that runs as its kind and for one that stands, each pinned by its phrases, and every brief prints with no token unfilled for a partition running all five as kinds (design Decision 9; Task notes 12.1); the moon tasks `tests:t-briefs` and `tests:t-roles` end with "0 failed".
+- [x] 12.1 The five briefs carry `{{TURN}}`, filled for a role that runs as its kind and for one that stands, each pinned by its phrases, and every brief prints with no token unfilled for a partition running all five as kinds (design Decision 9; Task notes 12.1); the moon tasks `tests:t-briefs` and `tests:t-roles` end with "0 failed".
 
 ## 13. Documentation and the suite
 
