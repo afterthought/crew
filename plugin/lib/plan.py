@@ -1022,7 +1022,7 @@ def notify(fleet, seen, subject):
 
 
 def planned_takers(fleet, label, plan, added):
-    """Of the bolts a write added (added, by name), each held by no team in a kit a team crossed to Flume builds, with
+    """Of the bolts a write added (added, by name), each held by no team in a kit a team builds in a Flume stream, with
     those teams (runner.takers; Decisions 3 and 5 of teams-cross-to-flume-as-their-bolts-land): {bolt: [team]}."""
     found = {b: runner.takers(plan, fleet["teams"], label, b) for b in added}
     return {b: names for b, names in found.items() if names}
@@ -1030,7 +1030,7 @@ def planned_takers(fleet, label, plan, added):
 
 def dispatch_said(subject, takers):
     """What the partition's dispatchers are told of a write that added a bolt or freed a team (notices): the write's
-    subject, then for each bolt added in a kit a team crossed to Flume builds, that it can be given to that team
+    subject, then for each bolt added in a kit a team builds in a Flume stream, that it can be given to that team
     (runner.planned_said), else to give a free team its next bolt."""
     if not takers:
         return f"{subject}. Give a free team its next bolt."

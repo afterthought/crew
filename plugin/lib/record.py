@@ -14,9 +14,9 @@ cards it raises itself, with why a card's reading could not be opened in Unread,
 try of a batch's or a long proposal's reading made after its card was raised, by crew card session, the batch's wait or
 the rail's read: done when it started the reading, refused with crew's own message when it could not.
 
-A team's crossing to Flume (record 0050 part 3) ends its conductor and ops at their stops: each end is agent.end, on
-team/<team> and the agent, and once both are down the act that ended the last appends team.cross, on team/<team>, its
-State the Flume stream the team's work now runs in, so crew trace team/<team> reads when it crossed.
+A team's crossing to Flume (record 0050 part 3), which an older crew recorded as team.cross on team/<team>, its State
+the Flume stream the team's work then ran in, is read by crew trace team/<team> as written; crew writes it no more
+(Decision 8 of the-team-machinery-leaves).
 
 Each entry reaches the flywheel's branch of its state repository as it is written: the command that appended it
 pushes it there, to the same path under runs/<host>/, as a commit of its own from this host, before it goes on. The
