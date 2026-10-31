@@ -6,6 +6,7 @@ bands say of the crew they run and of the hold. That crew hold, go and update ru
 back the agents there, and that the hooks record a start's crew and hand a due agent its restart, is the hold journey's
 (t-hold)."""
 import json
+import pathlib
 import types
 
 import pytest
@@ -65,6 +66,17 @@ class TestDue:
         assert d == crew.launch_digest(dict(l, dirs=["/b", "/a"]), "brief") and len(d) == 16
         assert len({d, crew.launch_digest(dict(l, model="sonnet"), "brief"), crew.launch_digest(dict(l, effort="max"), "brief"),
                     crew.launch_digest(dict(l, dirs=["/a"]), "brief"), crew.launch_digest(l, "brief, amended")}) == 5
+
+    def test_the_launch_digest_reads_crews_own_path_in_the_brief_as_one_word(self, monkeypatch):
+        # chuck-herdr-alpha, 2026-10-31: a start by the box's checkout named /workspace/crew/main/plugin/bin/crew in its
+        # brief, the follower's release /nix/store/…-crew-0.38.7/plugin/bin/crew, and each read the other's start as due
+        l = {"model": "opus", "effort": "high", "dirs": ["/a"]}
+        monkeypatch.setattr(crew, "HOME", pathlib.Path("/workspace/crew/main"))
+        checkout = crew.launch_digest(l, "run `/workspace/crew/main/plugin/bin/crew bolts`")
+        monkeypatch.setattr(crew, "HOME", pathlib.Path("/nix/store/abc-crew-0.38.7"))
+        release = crew.launch_digest(l, "run `/nix/store/abc-crew-0.38.7/plugin/bin/crew bolts`")
+        assert checkout == release
+        assert release != crew.launch_digest(l, "run `/nix/store/abc-crew-0.38.7/plugin/bin/crew status`")
 
 
 class TestStanding:
