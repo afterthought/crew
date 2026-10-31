@@ -14,6 +14,10 @@ cards it raises itself, with why a card's reading could not be opened in Unread,
 try of a batch's or a long proposal's reading made after its card was raised, by crew card session, the batch's wait or
 the rail's read: done when it started the reading, refused with crew's own message when it could not.
 
+A team's crossing to Flume (record 0050 part 3) ends its conductor and ops at their stops: each end is agent.end, on
+team/<team> and the agent, and once both are down the act that ended the last appends team.cross, on team/<team>, its
+State the Flume stream the team's work now runs in, so crew trace team/<team> reads when it crossed.
+
 Each entry reaches the flywheel's branch of its state repository as it is written: the command that appended it
 pushes it there, to the same path under runs/<host>/, as a commit of its own from this host, before it goes on. The
 branch's file becomes the union by Id of what it had and what the host has, so a host only ever adds to its own files
@@ -79,7 +83,7 @@ DESCRIPTOR = """\
 # it, plan.21), a branch.kept's Head (the commit a unit's, chore's or
 # fix's branch the tidy kept is at) and Count (its commits whose patch its bolt, or main, lacks, plan.10), crew's own
 # order of two units a forecast found in conflict, the unit.after that puts one After the other or the one that Lifted
-# it, with the Settle whose end decided it (plan.13), a record.proposed's State (settled in the pane) and Form
+# it, with the Settle whose end decided it (plan.13), a team.cross's State (the Flume stream its team's work now runs in), a record.proposed's State (settled in the pane) and Form
 # (alternatives, when its card offered them, none of the file's words), and an operation's (ops.py): a deploy's commit
 # as Head and the one it comes from as Base, its Phase (start, step or end), a step's Step and Outcome, its Log and the
 # suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
@@ -405,6 +409,8 @@ def line(e, zoe=False):
         s += ("," if e.get("Result") else " →") + f" {e['Ended']}" + (f" {e['Delivered']}" if e.get("Delivered") else "")
     if e.get("Repo") and e.get("Head"):
         s += f" → {e['Repo']} main at {e['Head'][:7]}"
+    if e.get("Act") == "team.cross" and e.get("State"):
+        s += f" → Flume stream {e['State']}"
     if e.get("Observed"):
         s += f" (observed {e['Observed']})"
     if e.get("Chars"):

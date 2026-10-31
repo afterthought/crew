@@ -144,11 +144,12 @@ HEADER = """\
 # <owner>/<name>:<path> in another.
 
 %rec: Bolt
-%doc: Work on branch bolt/<Bolt> of Repo, deployed and tested from <Repo>/bolts/<Bolt>.
+%doc: Work on branch bolt/<Bolt> of Repo, deployed and tested from <Repo>/bolts/<Bolt>; marked Path: flume when it was given to a team crossed to Flume, whose places build it.
 %key: Bolt
 %type: Bolt regexp /^[a-z0-9][a-z0-9-]*$/
+%type: Path enum flume
 %mandatory: Repo Goal
-%allowed: Bolt Repo Goal Team Source
+%allowed: Bolt Repo Goal Team Source Path
 %unique: Repo Goal Team
 
 %rec: Unit

@@ -1,8 +1,9 @@
 """What crew assumes of recfix --check, each case naming what assumes it: plan.checked runs it on every file a write
 commits, a signal's and a capture's markdown by its frontmatter as one record, so a value that breaks the record is
 refused, named by its file and line, and nothing is pushed (plan.1, signals.4); a Move the moves file's enum does not
-allow is refused (the route a unit add --signal writes); and a hand edit that duplicates a key is refused by name
-(read.1, crew bolts naming the commit)."""
+allow is refused (the route a unit add --signal writes); a hand edit that duplicates a key is refused by name
+(read.1, crew bolts naming the commit); and a bolt given to a crossed team is marked Path: flume, the one Path the
+plan takes."""
 import re
 
 import pytest
@@ -48,3 +49,14 @@ def test_the_plan_takes_a_chore_among_its_units_and_refuses_any_other_kind():
     assert [u.name() for u in plan.Plan(text).chores()] == ["bump"]
     with pytest.raises(Refusal, match="^plan.rec fails recfix --check"):
         plan.recfix(text.replace("Kind: chore", "Kind: spike"), "plan.rec")
+
+
+def test_a_bolt_given_to_a_crossed_team_is_marked_flume_and_no_other_path_passes():
+    """A give to a crossed team marks its bolt Path: flume beside Team (the change teams-cross-to-flume-as-their-bolts-land,
+    Decision 2): plan.checked takes it, and refuses a Path the Bolt set's enum does not hold (plan.1)."""
+    bolt = "Bolt: x\nRepo: crew\nGoal: Cross.\nTeam: crw-4\nPath: flume\n\n"
+    text = plan.HEADER.replace("%rec: Unit", bolt + "%rec: Unit")
+    plan.recfix(text, "plan.rec")
+    assert [b.get("Path") for b in plan.Plan(text).bolts()] == ["flume"]
+    with pytest.raises(Refusal, match="^plan.rec fails recfix --check"):
+        plan.recfix(text.replace("Path: flume", "Path: other"), "plan.rec")
