@@ -123,3 +123,34 @@ test("main-level ops's band draws a landed bolt crew could not close", async ($,
   expect(await ui.find({ type: 'Text', text: /^! crew {2}crw-1 {2}● {2}doctor-rows {2}landed on main, not closed: chore tidy-rows has not landed on main: it is ready/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /curation-and-holds/ })).toBeUndefined()
 })
+
+// crew-board "A question in the planner's band" and "A fix of main in ops's band" (Decision 14 of
+// teams-cross-to-flume-as-their-bolts-land): the planner's band draws a crossed place that stopped short with its question,
+// and main-level ops's a fix of main in flight with its stage, as board.py's planner_view and ops_view draw them.
+test("the planner's band draws a crossed place's question and its team's Flume stream", async ($, on) => {
+  const planner = [
+    [['swancloud plan', 'bold'], ['  ', null], ['1 held', null], ['  ', null], ['1 place waits on an answer', null]],
+    [['  ', null], ['crew', null], ['  ', null], ['crw-4', 'dim'], ['  ', null], ['◑○', null], ['  ', null], ['x', null], ['  ', null], ['in Flume stream swancloud', null]],
+    [['  ', null], ['crew', null], ['  ', null], ['x', 'dim'], ['  ', null], ['a', null], ['  ', null], ['needs', null], ['  ', null],
+      ["asks at construct: Which partition's rail?", null]],
+  ]
+  const ops = [
+    [['swancloud operations', 'bold'], ['  ', null], ['1 fix in flight', null]],
+    [['  ', null], ['crew', null], ['  ', null], ['fix main--a-test-reads-its-fixture', null], ['  ', null], ['code 2/5', null], ['  ', null], ['on deneb', 'dim']],
+  ]
+  const views = { ...VIEWS, views: { 'swancloud-planner': planner, 'swancloud-ops': ops } }
+  const asked = await band($, on, { env: { CREW_AGENT: 'swancloud-planner', CREW_LABEL: 'swancloud' }, views })
+  expect(await asked.find({ type: 'Text', text: /^ {2}crew {2}x {2}a {2}needs {2}asks at construct: Which partition's rail\?$/ })).toBeDefined()
+  expect(await asked.find({ type: 'Text', text: /crew {2}crw-4 {2}◑○ {2}x {2}in Flume stream swancloud$/ })).toBeDefined()
+  expect(await asked.find({ type: 'Text', text: /main--a-test-reads-its-fixture/ })).toBeUndefined()
+})
+
+test("main-level ops's band draws a fix of main in flight with its stage", async ($, on) => {
+  const ops = [
+    [['swancloud operations', 'bold'], ['  ', null], ['1 fix in flight', null]],
+    [['  ', null], ['crew', null], ['  ', null], ['fix main--a-test-reads-its-fixture', null], ['  ', null], ['code 2/5', null], ['  ', null], ['on deneb', 'dim']],
+  ]
+  const ui = await band($, on, { env: { CREW_AGENT: 'swancloud-ops', CREW_LABEL: 'swancloud' }, views: { ...VIEWS, views: { 'swancloud-ops': ops } } })
+  expect(await ui.find({ type: 'Text', text: /^swancloud operations {2}1 fix in flight$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}crew {2}fix main--a-test-reads-its-fixture {2}code 2\/5 {2}on deneb$/ })).toBeDefined()
+})

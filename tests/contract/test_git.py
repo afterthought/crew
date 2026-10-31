@@ -1500,3 +1500,23 @@ def test_the_runners_branches_come_with_the_flywheels_branch_in_one_fetch_and_ea
     subprocess.run(["git", "-C", str(plan.cache(state.REPO)), "pack-refs", "--all"], check=True)
     plan.READ.memory.clear()
     assert plan.runner_tips(state.REPO, state.LABEL) == {"deneb": deneb}
+
+
+def test_main_holds_reads_gits_exit_for_each_commit_a_crossed_bolts_places_landed_at(repo):
+    """plan.MAIN_HOLDS, which a crossed bolt's close reads (plan.main_holds, runner.unlanded; Decision 12 of
+    teams-cross-to-flume-as-their-bolts-land): git merge-base --is-ancestor exits 0 for a commit main holds, the bolt's
+    merge landed there, 1 for one on a bolt that has not landed, and neither for a commit the checkout lacks, which crew
+    reads as untold (read.1)."""
+    import plan
+    repo.commit("chore: start", {"README.md": "r\n"})
+    repo.git("checkout", "-q", "-b", "bolt/x")
+    landed = repo.commit("feat: a", {"a": "a\n"})
+    repo.git("checkout", "-q", "-b", "bolt/y", "main")
+    waiting = repo.commit("feat: b", {"b": "b\n"})
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "--no-ff", "-m", "chore(land): x", "bolt/x")
+    gone = "0" * 40
+    r = subprocess.run(["bash", "-c", plan.MAIN_HOLDS, "crew", str(repo.path), "main", landed, waiting, gone], capture_output=True, text=True)
+    assert r.returncode == 0
+    said = dict(l.split() for l in r.stdout.splitlines())
+    assert (said[landed], said[waiting]) == ("0", "1") and said[gone] not in ("0", "1")

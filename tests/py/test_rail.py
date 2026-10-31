@@ -1662,3 +1662,50 @@ class TestMainFix:
         assert line.endswith(f"crew main fix {KIT} gone --send")
         assert next(x.strip() for x in out.splitlines() if x.strip().startswith("apex-zones,")).startswith(
             f"apex-zones, swb-2 on {BOX}: can land; ")
+
+
+class TestCrossedLandings:
+    """crew-rail "A crossed team's bolt waits to land on its kit's row" (Decisions 12 and 14 of
+    teams-cross-to-flume-as-their-bolts-land): crossed crw-4's x is a row of crew's landings card on the same terms as any
+    bolt, its pieces' stages and its fixes in flight read from the runner's records, its line naming the team's host and
+    stream."""
+
+    @pytest.fixture(autouse=True)
+    def writer(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
+
+    def rows(self, at, extra=()):
+        from facts import crew_read, crossed_fleet_read, launched, ran
+        fleet = crossed_fleet_read()
+        p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("c", "x", [], "chore", [])],
+                               fleet=fleet)
+        runs = {"madswan": (requests + [plan.Rec("Request", list(f.items())) for f in extra], ran(at))}
+        sv = crew_read(bolts={"x": {"verdict": "passed (3 run)", "head_at": "2026-10-31T12:00:00Z"}})
+        return [r for r in plan.rail_rows(fleet, [("madswan", "afterthought/crew-state", "tip0", p)], sv, [], {}, None, runs) if r["group"] == "land"]
+
+    def test_a_crossed_bolt_proven(self):
+        """crew-rail "A crossed bolt proven": a, b and c merged by the runner's records and sluice green at x's head."""
+        rows = self.rows({1: "landed", 2: "landed", 3: "landed"})
+        assert [(r["key"], r["what"][1:], r["bolts"]) for r in rows] == [
+            ("land/crew", ["x, crw-4 on deneb, in Flume stream madswan: can land"], [{"bolt": "x", "team": "crw-4", "host": "deneb", "can": True}])]
+        assert rows[0]["cmds"] == [("answer", 'crew tell madswan-ops "Land x."')]
+
+    def test_a_piece_the_runner_reads_unmerged_keeps_it_off_the_row(self):
+        assert self.rows({1: "landed", 2: "submitted", 3: "landed"}) == []
+
+    def test_a_fix_in_flight_on_it_holds_its_landing(self):
+        """bolt-teams "A review note marked fix": x's row says it lands once that fix has merged or been dropped."""
+        fix = {"Request": "4", "Act": "launch", "Host": "deneb", "Work": "fix/x/rail-word", "Repo": "afterthought/crew", "Kind": "fix",
+               "Name": "x--rail-word", "Base": "bolt/x"}
+        rows = self.rows({1: "landed", 2: "landed", 3: "landed", 4: "code"}, extra=[fix])
+        assert rows[0]["what"][1] == "x, crw-4 on deneb, in Flume stream madswan: lands once fix/x/rail-word has merged or been dropped"
+        assert self.rows({1: "landed", 2: "landed", 3: "landed", 4: "landed"}, extra=[fix])[0]["bolts"][0]["can"] is True
+
+    def test_a_due_teams_bolt_says_what_its_landing_lets_the_team_do(self):
+        """Decision 14: crw-5, its setting madswan, holds y, given on today's path and proven, and is due to cross."""
+        from facts import crew_read, crossed_fleet_read, launched, ran
+        fleet = crossed_fleet_read(**{"crw-5": "madswan"})
+        p, requests = launched([], work=[("y1", "y", [], "unit", [])], fleet=fleet, held=[("y", "crw-5")])
+        sv = crew_read(bolts={"y": {"verdict": "passed (1 run)", "archived": ["y1"]}})
+        rows = plan.rail_rows(fleet, [("madswan", "afterthought/crew-state", "tip0", p)], sv, [], {}, None, {"madswan": (requests, ran())})
+        assert [r["what"][1] for r in rows if r["group"] == "land"] == ["y, crw-5 on deneb, due to cross once y lands: can land"]

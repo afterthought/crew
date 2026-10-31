@@ -22,10 +22,12 @@ BOX = "chuck-herdr-alpha"
 KIT = {"name": "switchboard-kit", "main": "/kit/main", "dir": "/kit"}
 FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "teams": ["swb-1", "swb-2", "brd-1", "atl-1"],
                                  "blueprints": ["WilldanGroup/willdan-blueprints"], "state": "WilldanGroup/crew-state"}},
-         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "kit": KIT},
-                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": BOX, "kit": KIT},
-                   "brd-1": {"name": "brd-1", "label": "wldn", "machine": BOX, "kit": {"name": "breadboard-kit", "main": "/b/main", "dir": "/b"}},
-                   "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio", "kit": {"name": "atlas-kit", "main": "/a/main", "dir": "/a"}}},
+         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "flume": False, "kit": KIT},
+                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": BOX, "flume": False, "kit": KIT},
+                   "brd-1": {"name": "brd-1", "label": "wldn", "machine": BOX, "flume": False,
+                             "kit": {"name": "breadboard-kit", "main": "/b/main", "dir": "/b"}},
+                   "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio", "flume": False,
+                             "kit": {"name": "atlas-kit", "main": "/a/main", "dir": "/a"}}},
          "hosts": {BOX: {"kind": "nixos", "ssh": BOX}, "mac-studio": {"kind": "darwin", "ssh": "mac-studio"}}}
 NOW = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
 
@@ -1231,13 +1233,14 @@ class TestMore:
         d = data(signals=SIGS)
         p = d["partitions"][0]
         assert sorted(d) == ["from", "partitions", "read_at", "unread"]
-        assert sorted(p) == ["attention", "bolt_plan", "cards", "construction", "environments", "hosts", "inception", "label", "operation", "plan",
-                             "records", "teams"]
+        assert sorted(p) == ["asking", "attention", "bolt_plan", "cards", "construction", "environments", "fixing", "hosts", "inception", "label",
+                             "operation", "plan", "records", "teams"]
+        assert sorted(p["teams"][0]) == ["host", "kit", "kits", "path", "team"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
-        assert sorted(te) == ["bolt", "fixes", "goal", "host", "landing", "markers", "record", "repo", "state", "submissions_error", "team", "teams",
-                              "time", "units", "url"]
-        assert sorted(te["units"][0]) == ["kind", "slot", "stage", "submission", "tasks", "unit", "url", "worktree"]
-        assert sorted(te["fixes"][0]) == ["fix", "merged", "slot", "submission", "url", "worktree"]
+        assert sorted(te) == ["bolt", "fixes", "given", "goal", "host", "landing", "markers", "path", "record", "repo", "state", "submissions_error",
+                              "team", "teams", "time", "units", "url"]
+        assert sorted(te["units"][0]) == ["flume", "kind", "slot", "stage", "submission", "tasks", "unit", "url", "worktree"]
+        assert sorted(te["fixes"][0]) == ["fix", "flume", "merged", "slot", "submission", "url", "worktree"]
 
     def test_half_a_frame_or_one_with_no_time_reads_as_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr(board, "FRAMES", tmp_path)
@@ -1694,3 +1697,79 @@ def test_a_chore_is_marked_in_a_ledger_a_planned_bolt_and_the_queue(monkeypatch)
     # Its conductor's view, the mod's band, draws the chore in its ledger as the board does (code.8).
     mine = view("swb-1-conductor", sv=sv)
     assert mine[:3] == [f"  switchboard-kit  ◑◕  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2  unit-1", "    ◕  bump  chore verify  unit-2"]
+
+
+class TestCrossed:
+    """crew-board "Construction shows a crossed team's bolts from the runner's records" and "The planner's and ops's bands
+    show what a crossed team's places wait on them for" (Decision 14 of teams-cross-to-flume-as-their-bolts-land, code.8):
+    crossed crw-4 holds x, given through Flume, a launched as request 1 and b after a as request 2; crw-5, its setting
+    madswan, holds y, given on today's path, and is due to cross; deneb's runner as each case gives it."""
+
+    @pytest.fixture(autouse=True)
+    def writer(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
+
+    def data(self, runners, extra=()):
+        """The board of madswan, its runner as given and extra requests appended to those the give wrote."""
+        from facts import crew_read, crossed_fleet_read, launched
+        fleet = crossed_fleet_read(**{"crw-5": "madswan"})
+        fleet["partitions"]["madswan"].update(machine="deneb", blueprints=["afterthought/blueprints"], state="afterthought/crew-state")
+        p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("y1", "y", [], "unit", [])],
+                               fleet=fleet, held=[("y", "crw-5")])
+        runs = {"madswan": (requests + [plan.Rec("Request", list(f.items())) for f in extra], runners)}
+        found, sv = [("madswan", "afterthought/crew-state", "tip0", p)], crew_read(bolts={"x": {}, "y": {}})
+        r = dict(found=found, sv=sv, props=[], cards=[], unread={}, errors={}, landings=[], gives={}, signals={"madswan": ([], {})},
+                 ops={"madswan": []}, logs={"madswan": []}, runs=runs, rows=plan.rail_rows(fleet, found, sv, [], {}, None, runs))
+        return board.board_data(fleet, ["madswan"], r, NOW)
+
+    def views(self, runners, extra=()):
+        return {a: ["".join(s for s, _ in line) for line in v] for a, v in board.agent_views(self.data(runners, extra))["views"].items()}
+
+    def test_a_crossed_teams_ledger(self):
+        """crew-board "A crossed team's ledger": x on deneb in stream madswan, a at code, b waiting on a, and no slot line."""
+        from facts import ran
+        d = self.data(ran({1: "code"}, held=[2]))
+        assert lane(board.board_text(d), "Construction")[:3] == [
+            "  crew x  crw-4 on deneb  in Flume stream madswan  its age can't be told: the run record of the last 60 days holds no give of it",
+            "    a  code 6/26", "    b  waiting  on a"]
+        teams = {t["team"]: t["path"] for t in d["partitions"][0]["teams"]}
+        assert teams == {"crw-4": {"path": "crossed", "due": None, "stream": "madswan", "first": []},
+                         "crw-5": {"path": "due", "due": "cross", "stream": "madswan", "first": ["y"]}}
+
+    def test_a_due_team(self):
+        """crew-board "A due team": crw-5's head line says it is due to cross once y lands."""
+        from facts import ran
+        assert lane(board.board_text(self.data(ran({1: "code"}))), "Construction")[3].startswith(
+            "  crew y  crw-5 on deneb  due to cross once y lands")
+
+    def test_a_question_in_the_planners_band(self):
+        """crew-board "A question in the planner's band": a's construct stopped short asking."""
+        from facts import ran
+        v = self.views(ran({1: "stopped-short"}))["madswan-planner"]
+        assert v[0].endswith("1 place waits on an answer")
+        assert next(l for l in v if "asks at" in l).startswith("  crew  x  a  needs  asks at code: Head 118ec46 is ready for your flume:live run")
+
+    def test_a_fix_of_main_in_ops_band(self):
+        """crew-board "A fix of main in ops's band": main--a-test-reads-its-fixture is in code."""
+        from facts import ran
+        fix = {"Request": "3", "Act": "launch", "Host": "deneb", "Work": "fix/main/crew/a-test-reads-its-fixture", "Repo": "afterthought/crew",
+               "Kind": "fix", "Name": "main--a-test-reads-its-fixture", "Base": "main", "Hold": "submission"}
+        v = self.views(ran({3: "code"}), extra=[fix])["madswan-ops"]
+        assert v[0].endswith("1 fix in flight") and v[1] == "  crew  fix main--a-test-reads-its-fixture  code 6/26  on deneb"
+
+    def test_a_take_main_fix_in_flight_is_in_ops_band_and_on_its_ledger(self):
+        from facts import ran
+        fix = {"Request": "3", "Act": "launch", "Host": "deneb", "Work": "fix/x/take-main-4d3d9be", "Repo": "afterthought/crew", "Kind": "fix",
+               "Name": "x--take-main-4d3d9be", "Base": "bolt/x"}
+        d = self.data(ran({3: "code"}), extra=[fix])
+        assert "    fix/x/take-main-4d3d9be  fix code 6/26" in lane(board.board_text(d), "Construction")
+        assert "  crew  fix x--take-main-4d3d9be  code 6/26  on deneb" in self.views(ran({3: "code"}), extra=[fix])["madswan-ops"]
+
+    def test_a_runner_crew_cant_read_is_named_for_attention(self):
+        d = self.data({})
+        assert {"what": "runner", "name": "deneb's runner", "why": "no runner answers on deneb: madswan/runner/deneb does not exist"} in (
+            d["partitions"][0]["attention"])
+        assert {u["stage"] for b in d["partitions"][0]["construction"] if b["bolt"] == "x" for u in b["units"]} == {"unknown"}
+
+    def test_a_crossed_pieces_pip_is_the_stage_it_waits_at(self):
+        assert board.pips([{"stage": "needs", "flume": {"of": "code"}}, {"stage": "submitted"}, {"stage": "launching"}, {"stage": "refused"}]) == "◑◕○?"

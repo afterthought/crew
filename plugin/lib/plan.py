@@ -13956,7 +13956,10 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
     (main_conflict, held's forecasts); until then its line says which units no batch has held, which batches wait on the
     user's answer, the fix, sluice's words, or that it takes main first (briefs.12), or for a bolt the user left on the
     kit's landings card (left_of, held's left), that it takes main first once ticked (crew-rail "A left bolt's land line
-    says it would take main first once ticked"). A kit's row carries too, ahead of its bolts, each fix of its main whose
+    says it would take main first once ticked"). A bolt given through Flume is a row's on the same terms, its pieces' stages
+    and its fixes in flight read from the runner's records (Stages, runner.fixes_on), and each bolt's line says its
+    team's path after its host (runner.path_said; Decision 14 of teams-cross-to-flume-as-their-bolts-land), its team's
+    Flume stream where another's says nothing of slots. A kit's row carries too, ahead of its bolts, each fix of its main whose
     code has delivered and whose submission waits held (runner.main_fixes_waiting, from each partition's requests and
     runners, runs, {label: (requests, readings)}, as rail_runs reads them; Decision 11 of
     teams-cross-to-flume-as-their-bolts-land), a row of its own where no bolt of the kit waits, each line naming ops's
@@ -13992,7 +13995,7 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
     for l, _, _, plan in found:
         if not plan:
             continue
-        st, kits = Stages(fleet, plan, sv), {}
+        st, kits = Stages(fleet, plan, sv, runs), {}
         for b in plan.bolts():
             if not b.get("Team"):
                 continue
@@ -14000,6 +14003,7 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
             if not k:
                 continue
             team, host = k["team"]["name"], k["host"]
+            path = runner.path_said(path_facts(plan, k["team"]))
             units = plan.work_of(b.name())
             stages = [st.of(u.name())["stage"] for u in units]
             at, head = k["bolts"].get(b.name(), {}).get("head_at"), k["bolts"].get(b.name(), {}).get("head")
@@ -14018,7 +14022,9 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
                 lands = ([f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have") + " been in a batch, which is due for them"]
                          if outside else []) + ([f"lands once you have answered batch{'' if len(unread) == 1 else 'es'} "
                                                  f"{joined([str(n) for n in unread])}"] if unread else [])
-            fixes = fixes_in_flight(k.get("fixes", []), b.name())
+            # A bolt given through Flume holds its fixes as Flume places, read from the runner's records (Decision 10).
+            fixes = fixes_in_flight(k.get("fixes", []), b.name()) if b.get("Path") != "flume" else \
+                sorted(w for w, _, s in st.fixes(b) if s["stage"] not in ("merged", "landed", "dropped"))
             refused = held_at(held.get(l, {}).get("refused") or {}, b.name(), head)
             stop = stopped_at(held.get(l, {}).get("stopped") or {}, b.name(), head)
             conflict = main_conflict(held.get(l, {}).get("forecasts") or [], b.name(), head)
@@ -14035,8 +14041,8 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
             can = ["can land"] + ([f"its last landing at {head[:7]} was stopped, nothing of the bolt's: {stop.rstrip('.')}; "
                                    f"{l}-ops submits it again once that is cleared"] if stop else [])  # stopped_at, holding nothing
             kits.setdefault(kit_name, []).append(
-                dict(bolt=b.name(), team=team, host=host, at=at, can=not lands, line=f"{b.name()}, {team} on {host}: "
-                     + "; ".join(said + (lands or can))))
+                dict(bolt=b.name(), team=team, host=host, at=at, can=not lands, line=f"{b.name()}, {team} on {host}"
+                     + (f", {path}" if path else "") + ": " + "; ".join(said + (lands or can))))
         waiting = {}
         for f in runner.main_fixes_waiting(*(runs or {}).get(l, ([], {})), l):
             waiting.setdefault(f["kit"], []).append(f)
