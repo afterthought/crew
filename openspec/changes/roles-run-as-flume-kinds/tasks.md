@@ -53,8 +53,8 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 11. Views
 
-- [ ] 11.1 `board.agent_views` gives each run its view and the board's attention line names a run stopped short or lost, with the case pinning every key the mod reads (design Decision 15, `code.8`; Task notes 11.1); *needs teams-cross*; passes `tests/py/test_board.py` under the moon task `tests:logic`.
-- [ ] 11.2 crew's mod draws a run's view in its band (design Decision 15; Task notes 11.2); the moon task `tests:mod` (`tests/suite mod`) ends with "0 failed".
+- [x] 11.1 `board.agent_views` gives each run its view and the board's attention line names a run stopped short or lost, with the case pinning every key the mod reads (design Decision 15, `code.8`; Task notes 11.1); *needs teams-cross*; passes `tests/py/test_board.py` under the moon task `tests:logic`.
+- [x] 11.2 crew's mod draws a run's view in its band (design Decision 15; Task notes 11.2); the moon task `tests:mod` (`tests/suite mod`) ends with "0 failed".
 
 ## 12. Briefs
 

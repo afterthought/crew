@@ -37,7 +37,7 @@ import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, 
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import crew, gather, ops, plan, record, runner, sites  # noqa: E402
+import asks, crew, gather, ops, plan, record, runner, sites  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 # Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button. An operation's
@@ -137,7 +137,25 @@ def flow_read(fleet, labels, sweep=False):
     tab's, the read ends the card sessions of closed cards and gone rows, as crew rail's does."""
     read = plan.rail_read(fleet, labels, board=True, sweep=sweep)
     read["signals"] = {l: signals(fleet, l, tip) for l, _, tip, _ in read["found"]}
+    read["roles"] = roles_read(fleet, read["found"])
     return read
+
+
+def roles_read(fleet, found):
+    """What the board reads of each partition's roles that run as their kinds, for their runs' views and the attention
+    line (kind_runs; Decision 15 of roles-run-as-flume-kinds), beside its plan in the same read (plan.12): {label:
+    {"kinds": {role: the stream its partition names}, "asks": asks.rec's text at the tip the read found, None where it
+    holds none, "host": the main level's host, "reading": that host's runner as read beside the branch (plan.runners,
+    runner.of_host)}}, for each partition read whose teams-file entry names a stream for a role; one that runs none as
+    its kind reads nothing more."""
+    out = {}
+    for l, repo, tip, _ in found:
+        p = crew.partition_of(fleet, l)
+        kinds = {r: s for r, s in p["flume"].items() if s is not False}
+        if kinds:
+            out[l] = {"kinds": kinds, "asks": plan.show(repo, tip, "asks.rec") if tip else None, "host": p["machine"],
+                      "reading": runner.of_host(plan.runners(repo, l), l, p["machine"])}
+    return out
 
 
 # ------------------------------------------------------------------------------------------------- the data
@@ -213,7 +231,8 @@ def board_data(fleet, labels, read, now):
     Stages.fixes), no slot, and a runner that could not be read is named for attention; and each partition lists the
     crossed places that wait on an answer and the fixes of main and take-main fixes in flight (asking and fixing,
     flume_waits), which the planner's and main-level ops's bands show (Decision 14 of teams-cross-to-flume-as-their-
-    bolts-land)."""
+    bolts-land); and each role it runs as its kind, for its run's view, with each such run that stopped short or was
+    lost named for attention (runs, kind_runs; Decision 15 of roles-run-as-flume-kinds)."""
     here = crew.this_host()
     rows, cards, sv = read["rows"], read["cards"], read["sv"]
     since = plan.utc(record.when(None)[1])
@@ -334,6 +353,8 @@ def board_data(fleet, labels, read, now):
             queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))}
                      for u in pl.queue()]
         asking, fixing = flume_waits(construction, runs, l)
+        kinds, waits = kind_runs(l, (read.get("roles") or {}).get(l))
+        attention += waits
         operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
                       "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
@@ -348,8 +369,45 @@ def board_data(fleet, labels, read, now):
                                     "explorations": explorations},
                       "bolt_plan": {"proposals": proposals, "planned": planned, "queue": queue},
                       "construction": construction, "operation": operation, "environments": envs, "attention": attention,
-                      "asking": asking, "fixing": fixing})
+                      "asking": asking, "fixing": fixing, "runs": kinds})
     return {"read_at": iso(now), "from": here, "partitions": parts, "unread": read["errors"]}
+
+
+def kind_runs(label, roles):
+    """Each role the partition runs as its kind, for its run's view (crew-board "A role that runs as its kind has its
+    view"), and what the attention line names of their runs ("The attention line names a role's run that waits"), a
+    decision on the board's read of them (roles_read) alone (code.7): (runs, attention). Each run {role, run, stream,
+    turn, waiting, since}: its name, <label>-<role>; the stream its partition names; its turn as asks.run_view gives it,
+    None while it has none; how many asks wait for its next run, and when the oldest was asked. The attention names a
+    run Flume's status shows stopped short, with its words, or lost, with its place and host, and prints no command
+    (crew-board "The board answers nothing"); and each run whose standing crew can't read, those of one why together
+    (read.1). Nothing for a partition that runs no role as its kind."""
+    if not roles:
+        return [], []
+    held, turns = asks.parse(roles["asks"])
+    runs, attention, unread = [], [], {}
+    for role, stream in roles["kinds"].items():
+        turn, waiting = asks.run_view(held, turns, role)
+        runs.append({"role": role, "run": f"{label}-{role}", "stream": stream, "turn": turn, "waiting": len(waiting),
+                     "since": waiting[0]["At"] if waiting else None})
+        address, host = f"{label}/{role}", roles["host"]
+        why = runner.role_run(roles["reading"], address)["why"]
+        if why:
+            unread.setdefault(why, []).append(role)
+            continue
+        w = runner.run_waiting(roles["reading"], address)
+        if w and w[0] in ("answer", "lost"):
+            first = (w[1] or "").strip().splitlines()[0] if (w[1] or "").strip() else "no words"
+            how = "stopped short" if w[0] == "answer" else "lost"
+            attention.append({"what": "run", "name": f"{label}'s {role} run", "run": f"{label}-{role}", "how": how, "place": w[2],
+                              "host": host, "words": w[1],
+                              "why": f"{how}, its place {w[2]} on {host}" + (f": {first}" if how == "stopped short" else "")})
+    for why, rs in unread.items():
+        named = rs[0] if len(rs) == 1 else ", ".join(rs[:-1]) + " and " + rs[-1]
+        attention.append({"what": "run", "name": f"{label}'s {named} {'run' if len(rs) == 1 else 'runs'}", "run": None, "how": "unknown",
+                          "place": None, "host": roles["host"], "words": None,
+                          "why": f"crew can't tell how {'it stands' if len(rs) == 1 else 'they stand'}: {why}"})
+    return runs, attention
 
 
 def flume_waits(construction, runs, label):
@@ -574,7 +632,8 @@ def attention_text(a):
     """What needs attention, as the board says it."""
     return {"host": f"{a['name']} did not answer ({a['why']})", "plan": f"the plan, {a['name']}: {a['why']}",
             "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}",
-            "runner": f"{a['name']} can't be read ({a['why']}): the stages of the work crossed to Flume there are unknown"}[a["what"]]
+            "runner": f"{a['name']} can't be read ({a['why']}): the stages of the work crossed to Flume there are unknown",
+            "run": f"{a['name']}: {a['why']}"}[a["what"]]
 
 
 # ------------------------------------------------------------------------------------------------- the agents' views
@@ -856,6 +915,22 @@ def ops_view(p):
     return out + attention_rows(p, lambda a: a["what"] in ("host", "plan"))
 
 
+def run_rows(r, now):
+    """A role's run's own lines, at the head of its view (crew-board "A role that runs as its kind has its view"): its
+    name and stream, what its turn took, and how many asks wait for the role's next run and for how long the oldest has,
+    or that nothing waits; then each thing the turn took, an ask by its number with what it is, who asked and the record
+    it names, a waiting place by its key."""
+    t = r["turn"]
+    took = "no turn taken" if t is None else f"turn {t['turn']} took {len(t['took'])}" + (", ended" if t["ended"] else "")
+    n, since = r["waiting"], when(r["since"]) if r["since"] else None
+    old = plan.age(since, now) if since else "a time crew can't read"
+    waits = ("nothing waits" if not n else f"1 ask waits, for {old}" if n == 1 else f"{n} asks wait, the oldest for {old}")
+    head = row(fields((f"{r['run']} run", "bold"), f"in stream {r['stream']}", took, waits))
+    return [head] + [row(fields(f"ask {x['took'][4:]}" if x["took"].startswith("ask/") else x["took"],
+                                f"{x['what']} from {x['from']}" if x["what"] else "", f"on {x['names']}" if x["names"] else ""), " ")
+                     for x in (t["took"] if t else [])]
+
+
 def card_line(c, now):
     """An open card of an agent's own, as its band shows it above its view: its question or the row's card, its key,
     its id, dim, and how long it has been open."""
@@ -866,11 +941,13 @@ def card_line(c, now):
 def agent_views(data):
     """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
     prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
-    the partition's operator's, every line a list of (text, style) segments. With what this host's agents run of crew
-    (data's `here`, here_read), each standing agent here with a recorded start has the crew it started on at the end of
-    its view's first line, or as its one line when it has no view, a team's ops and a dispatcher, with the version it is
-    restarted on at its next stop once an update made it due; and while this host is held every view opens with the
-    hold (teams.19). Any other agent has no view, and its mod draws nothing.
+    the partition's operator's, every line a list of (text, style) segments; and each role's run the partition runs as
+    its kind, under the run's name, <label>-<role>, its own lines first (run_rows) and then its role's view, the
+    reviewer's its own lines alone (crew-board "A role that runs as its kind has its view"). With what this host's
+    agents run of crew (data's `here`, here_read), each standing agent here with a recorded start has the crew it
+    started on at the end of its view's first line, or as its one line when it has no view, a team's ops and a
+    dispatcher, with the version it is restarted on at its next stop once an update made it due; and while this host is
+    held every view opens with the hold (teams.19). Any other agent has no view, and its mod draws nothing.
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
     the lines the mod draws above its view. With them, the line the mod draws in place of the view and the cards once
     the frame is stale_after_ms old, so a band names no bolt that has landed since, nor a card closed since (read.1):
@@ -884,6 +961,8 @@ def agent_views(data):
         views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
         views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p), f"{p['label']}-ops": ops_view(p)})
         views[f"{p['label']}-operator"] = operator_view(p)
+        for r in p.get("runs", []):  # a role's run, under the name its standing agent had, its own lines first
+            views[r["run"]] = run_rows(r, now) + views.get(r["run"], [])
         for c in p.get("cards", []):
             cards.setdefault(c["by"], []).append(card_line(c, now))
     here = data.get("here")

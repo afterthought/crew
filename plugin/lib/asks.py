@@ -284,6 +284,23 @@ def took_said(took, held):
     return out
 
 
+def run_view(asks, turns, role):
+    """What a role's run's view shows of it (crew-board "A role that runs as its kind has its view"): the role's newest
+    turn not superseded, {turn, ended, took}, None while it has none, each thing it took as {took, what, from, names},
+    an ask's fields from asks.rec and a waiting place's key alone; and each ask of the role that waits for its next run,
+    oldest first: pending (no ended turn took it) and not taken by that turn while it is open. A waiting place is not an
+    ask, and is not counted."""
+    mine = [t for t in turns if t["Role"] == role and not t.get("Superseded")]
+    t = max(mine, key=lambda t: int(t["Turn"]), default=None)
+    by = {took_of(a): a for a in asks}
+    taken = set(t["Took"]) if t and not t.get("Ended") else set()
+    turn = None if t is None else {
+        "turn": t["Turn"], "ended": bool(t.get("Ended")),
+        "took": [{"took": x, "what": (by.get(x) or {}).get("What"), "from": (by.get(x) or {}).get("From"), "names": (by.get(x) or {}).get("Names")}
+                 for x in t["Took"]]}
+    return turn, [a for a in pending(asks, [], turns, role)[0] if took_of(a) not in taken]
+
+
 def report(turn, held, said, ended):
     """The report a run's end writes at its stage's deliverable (role-runs "A run's end answers what it took"): the turn,
     when it began and ended, what it took and what the run said it did."""

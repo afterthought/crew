@@ -11,11 +11,13 @@
 # naming the place its run opens as; with one live there, nothing written and the run's place named. The design agent's
 # run lands a record: crew role land writes a launch of Flume's chore kind in a blueprints repository on main for
 # mac-studio's runner, the brief file's text whole and madswan/design its recipient, which crew trace lists; a repository
-# crew does not name, and a land outside a run, are refused requesting nothing.
+# crew does not name, and a land outside a run, are refused requesting nothing. crew board reads each run beside the
+# plan, its turn and the asks that wait for it, and names the design agent's run for attention once the runner shows it
+# lost.
 # What a tell decides, the ask's fields, what a start takes and prints, what an open reads of the runner and what a land
-# writes or refuses are logic cases (tests/py/test_tell_asks.py, test_asks.py); each step here checks a command's wiring
-# once.
-# Reads: plugin/flume/ plugin/roles/
+# writes or refuses, and what a run's view and the attention line say, are logic cases (tests/py/test_tell_asks.py,
+# test_asks.py, test_board.py); each step here checks a command's wiring once.
+# Reads: plugin/flume/ plugin/roles/ plugin/lib/board.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints afterthought/blueprints >/dev/null; blueprints agentplot/blueprints >/dev/null
@@ -149,3 +151,17 @@ eq "$(at requests.rec)" "$before"
 expect_ok crew trace role/design/record-0054 --label madswan
 has "$out" "crew names no repository afterthought/crew"
 ok "a land in a repository crew does not name, or outside a role's run, is refused and requests nothing"
+
+# crew board reads the roles that run as their kinds beside madswan's plan: each run has its turn and the asks that wait
+# for it from asks.rec, and once mac-studio's runner shows the design agent's run lost the attention line names it, its
+# place and host, and no command.
+expect_ok crew board --label madswan --json
+eq "$(jq -c '.partitions[0].runs | map([.run, .stream, (.turn.turn // "none"), .waiting])' <<<"$out")" \
+   '[["madswan-design","madswan-main","none",1],["madswan-planner","madswan-main","1",1],["madswan-operator","madswan-main","none",1]]'
+eq "$(jq -c '[.partitions[0].attention[] | select(.what == "run")]' <<<"$out")" "[]"
+lost='{"status":{"places":[{"place":"/flume/places/crew-design--madswan","phase":"live","current":"turn","waiting_on":{"act":"retry","stage":"turn","why":"lost","since":1793440000,"words":null},"stalled":false}],"host":{}}}'
+runner_commit "runner: madswan/design's run lost" "$(printf '%%rec: Place\n%%key: Request\n%%type: Request int\n%%type: At date\n%%mandatory: Request Place At Status\n%%allowed: Request Place At Status\n\n%%rec: Run\n%%key: Address\n%%type: At date\n%%mandatory: Address At\n%%allowed: Address Place At Status Words\n\nAddress: madswan/design\nPlace: /flume/places/crew-design--madswan\nAt: 2026-10-31T12:20:00Z\nStatus: %s\n' "$lost")"
+expect_ok crew board --label madswan
+has "$out" "! madswan's design run: lost, its place /flume/places/crew-design--madswan on mac-studio"
+[[ $out != *"flume retry"* ]] || fail "the board printed a command for a lost run"
+ok "crew board reads each role's run beside the plan, its turn and the asks that wait from asks.rec, and names a run the runner shows lost"

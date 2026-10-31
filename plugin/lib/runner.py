@@ -372,6 +372,20 @@ def role_run(reading, address):
     return {"live": bool(facts) and facts["phase"] in ("live", "making"), "place": r["place"], "words": r["words"], "why": None}
 
 
+def run_waiting(reading, address):
+    """What a role's latest run on a host waits on its caller for, as Flume's status the runner carried shows it (Decision
+    15 of roles-run-as-flume-kinds): (why, words, place), why as Flume's `waiting_on.why` names it, answer for a turn
+    that stopped short and lost for one whose agent was lost, the words the stop-short's own where it has them, else
+    Flume's; None for a run that waits on nothing, is not live, or that crew can't read, which role_run says why (read.1)."""
+    r = None if reading.get("why") else reading["runs"].get(address)
+    if r is None or r["why"] or r["status"] is None:
+        return None
+    f = flume_facts(r["status"], r["place"])
+    if not f or f["phase"] != "live" or not f["waiting"]:
+        return None
+    return f["waiting"], text(f["end"].get("words")) or f["waiting_words"], r["place"]
+
+
 def of_host(reads, label, host):
     """A host's reading among a partition's (host_read's, by host), or why none is: no runner branch for it exists."""
     return reads.get(host) or host_read(label, host, None, {}, {})
