@@ -1235,9 +1235,9 @@ class TestMore:
         assert sorted(d) == ["from", "partitions", "read_at", "unread"]
         assert sorted(p) == ["asking", "attention", "bolt_plan", "cards", "construction", "environments", "fixing", "hosts", "inception", "label",
                              "operation", "plan", "records", "teams"]
-        assert sorted(p["teams"][0]) == ["host", "kit", "kits", "path", "team"]
+        assert sorted(p["teams"][0]) == ["host", "kit", "kits", "stream", "team"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
-        assert sorted(te) == ["bolt", "fixes", "given", "goal", "host", "landing", "markers", "path", "record", "repo", "state", "submissions_error",
+        assert sorted(te) == ["bolt", "fixes", "given", "goal", "host", "landing", "markers", "record", "repo", "state", "stream", "submissions_error",
                               "team", "teams", "time", "units", "url"]
         assert sorted(te["units"][0]) == ["flume", "kind", "slot", "stage", "submission", "tasks", "unit", "url", "worktree"]
         assert sorted(te["fixes"][0]) == ["fix", "flume", "merged", "slot", "submission", "url", "worktree"]
@@ -1702,8 +1702,8 @@ def test_a_chore_is_marked_in_a_ledger_a_planned_bolt_and_the_queue(monkeypatch)
 class TestCrossed:
     """crew-board "Construction shows a crossed team's bolts from the runner's records" and "The planner's and ops's bands
     show what a crossed team's places wait on them for" (Decision 14 of teams-cross-to-flume-as-their-bolts-land, code.8):
-    crossed crw-4 holds x, given through Flume, a launched as request 1 and b after a as request 2; crw-5, its setting
-    madswan, holds y, given on today's path, and is due to cross; deneb's runner as each case gives it."""
+    crw-4 holds x, given through Flume, a launched as request 1 and b after a as request 2; crw-5, in stream madswan too,
+    holds y, given before it was given through Flume; deneb's runner as each case gives it."""
 
     @pytest.fixture(autouse=True)
     def writer(self, monkeypatch):
@@ -1732,15 +1732,8 @@ class TestCrossed:
         assert lane(board.board_text(d), "Construction")[:3] == [
             "  crew x  crw-4 on deneb  in Flume stream madswan  its age can't be told: the run record of the last 60 days holds no give of it",
             "    a  code 6/26", "    b  waiting  on a"]
-        teams = {t["team"]: t["path"] for t in d["partitions"][0]["teams"]}
-        assert teams == {"crw-4": {"path": "crossed", "due": None, "stream": "madswan", "first": []},
-                         "crw-5": {"path": "due", "due": "cross", "stream": "madswan", "first": ["y"]}}
-
-    def test_a_due_team(self):
-        """crew-board "A due team": crw-5's head line says it is due to cross once y lands."""
-        from facts import ran
-        assert lane(board.board_text(self.data(ran({1: "code"}))), "Construction")[3].startswith(
-            "  crew y  crw-5 on deneb  due to cross once y lands")
+        assert {t["team"]: t["stream"] for t in d["partitions"][0]["teams"]} == {"crw-4": "madswan", "crw-5": "madswan"}
+        assert lane(board.board_text(d), "Construction")[3].startswith("  crew y  crw-5 on deneb  in Flume stream madswan")
 
     def test_a_question_in_the_planners_band(self):
         """crew-board "A question in the planner's band": a's construct stopped short asking."""

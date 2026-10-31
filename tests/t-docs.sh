@@ -74,15 +74,15 @@ has "$usage" "land and drop have sluice delete it"; has "$skill" "\`crew bolt la
 has "$readme" "for a bolt a team holds, it then has sluice delete the bolt's branch"
 ok "the README, the skill and the usage say a give has sluice make the bolt's branch on GitHub and a land and a drop have sluice delete it, a dropped bolt's kept while main lacks its tip, a give refused below sluice 0.20.0, every place cut from the bolt on GitHub, and a bolt made before local until it lands"
 
-for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "one more"; has "${!doc}" "waits to land"; done
-ok "the README, the skill and the usage say a team may hold one more bolt that waits to land, and crew fix names its bolt with --bolt"
+for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "never refused for the bolts"; has "${!doc}" "waits to land"; lacks "${!doc}" "one more"; done
+ok "the README, the skill and the usage say a give is never refused for the bolts a team holds, a proven bolt waits to land, and crew fix names its bolt with --bolt"
 
 for doc in usage readme skill; do
-  for want in "version 2 or 3" "due to cross once <bolt> lands" "in Flume stream" "Path: flume" "team.cross" "still closes" \
-    "however they went down" "closes what the hold left" \
+  for want in "version 2 or 3" "in Flume stream" "Path: flume" "still closes" \
     "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
+  for gone in "due to cross" "due back" "however they went down" "closes what the hold left" "crossed team"; do lacks "${!doc}" "$gone"; done
 done
-ok "the README, the skill and the usage say a team's setting and path, its crossing however its roles went down and after a hold, what a crossed team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix"
+ok "the README, the skill and the usage say a team's stream, what a team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
 
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)

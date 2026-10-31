@@ -62,41 +62,38 @@ class TestLaunch:
 
 
 class TestWhichTeam:
-    NONE = ("^no team of madswan crossed to Flume builds crew, so a fix of its red main is no Flume place: it is a bolt of one chore, "
-            "proposed first among the planned, which the dispatcher gives to the next team that frees \\(state.3\\); tell "
+    NONE = ("^no team of madswan builds crew in a Flume stream, so a fix of its red main is no Flume place: it is a bolt of one "
+            "chore, proposed first among the planned, which the dispatcher gives to the next team that frees \\(state.3\\); tell "
             "madswan-planner, who proposes it$")
 
-    def test_no_crossed_team_builds_the_kit_and_it_is_refused_naming_a_bolt_of_one_chore(self):
-        """The spec's "No crossed team builds the kit"."""
+    def test_no_team_builds_the_kit_in_a_stream_and_it_is_refused_naming_a_bolt_of_one_chore(self):
+        """The spec's "No runner keeps the kit with a stream", read until 5.2 as no team naming a stream."""
         w = write()
         with pytest.raises(plan.Refusal, match=self.NONE):
             plan.main_fix_change(crossed_fleet(**{"crw-4": False}), w, "crew", "gate-word", "start", WORDS, None)
         assert "requests.rec" not in w.files
 
-    def test_a_team_due_to_cross_has_not_crossed(self):
-        """crw-4's setting names a stream while it builds x on today's path: it is due, and builds no fix of main yet."""
-        w = write([("x", "crw-4", None)])
-        assert runner.path_of(w.plan, crossed_fleet()["teams"]["crw-4"]) == ("due", "cross")
-        with pytest.raises(plan.Refusal, match=self.NONE):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "gate-word", "start", WORDS, None)
+    def test_a_team_holding_a_bolt_given_before_flume_builds_the_fix_all_the_same(self):
+        """crw-4 names a stream while it holds x, given before it was given through Flume: no path holds it back."""
+        w = write([("x", "crw-4", None)], runners=ran())
+        assert plan.main_fix_change(crossed_fleet(), w, "crew", "gate-word", "start", WORDS, None) == dict(n=1, host="deneb", stream="madswan")
 
-    def test_crossed_teams_on_one_host_launch_on_it_in_the_first_by_names_stream(self):
+    def test_teams_on_one_host_launch_on_it_in_the_first_by_names_stream(self):
         fleet = crossed_fleet(**{"crw-5": "late"})
-        assert runner.main_fixer(plan.Plan(flume_plan()), fleet["teams"], "madswan", "crew") == ("crw-4", None)
-        assert runner.main_fixer(plan.Plan(flume_plan()), fleet["teams"], "madswan", "afterthought/crew", "crw-5") == ("crw-5", None)
+        assert runner.main_fixer(fleet["teams"], "madswan", "crew") == ("crw-4", None)
+        assert runner.main_fixer(fleet["teams"], "madswan", "afterthought/crew", "crw-5") == ("crw-5", None)
 
-    def test_crossed_teams_on_several_hosts_need_team_to_choose(self):
+    def test_teams_on_several_hosts_need_team_to_choose(self):
         fleet = crossed_fleet(**{"crw-5": "late"})
         fleet["teams"]["crw-5"]["machine"] = "alpha"
-        p = plan.Plan(flume_plan())
-        assert runner.main_fixer(p, fleet["teams"], "madswan", "crew") == (
+        assert runner.main_fixer(fleet["teams"], "madswan", "crew") == (
             None, "crw-4 and crw-5 build crew through Flume on alpha and deneb: name the team on whose host the fix runs, --team <team>")
         w = write(runners=ran(host="alpha"))
         assert plan.main_fix_change(fleet, w, "crew", "red", "start", WORDS, "crw-5") == dict(n=1, host="alpha", stream="late")
 
-    def test_a_team_named_that_has_not_crossed_is_refused(self):
-        assert runner.main_fixer(plan.Plan(flume_plan()), crossed_fleet()["teams"], "madswan", "crew", "crw-5") == (
-            None, "crw-5 is no team of madswan crossed to Flume building crew; crw-4 is")
+    def test_a_team_named_that_names_no_stream_is_refused(self):
+        assert runner.main_fixer(crossed_fleet()["teams"], "madswan", "crew", "crw-5") == (
+            None, "crw-5 is no team of madswan building crew in a Flume stream; crw-4 is")
 
 
 class TestDrop:

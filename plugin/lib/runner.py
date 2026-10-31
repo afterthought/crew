@@ -1,33 +1,27 @@
-"""crew's side of the runner's interface (flywheel-runner core.2): how a team crosses to Flume, one team at a time
-(record 0050 parts 2 and 3, roles.8), and the decisions over a crossed team's work.
-
-A team's path is read from its setting in teams.json (crew.load's `flume`, False or a Flume stream) and the bolts the
-plan gives it, a bolt given while the team was crossed marked `Path: flume`: today's, crossed or due (team_path). A due
-team is given no new bolt (due_refusal); its bolts go on as they were given until each lands or is dropped, and the
-landing or drop that leaves it holding none of its old path makes its path its setting's. A crossed team runs no
-standing agent and has no slots: its conductor and ops are due an end (cross_due), its workspaces are closed and its
-crossing recorded once neither is up (cross_close, cross_recorded), and every standing-agent or slot command of it is
-refused (crossed_refusal).
+"""crew's side of the runner's interface (flywheel-runner core.2), and the decisions over a bolt's work given through
+Flume: a team's work runs in Flume places on its host, in the stream its teams.json entry names (crew.load's `flume`),
+and a team runs no standing agent and has no slots, every standing-agent or slot command of it refused
+(crossed_refusal).
 
 crew asks a host's runner for work by requests on the flywheel's branch, requests.rec (REQUESTS), each appended in the
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
 recfix; each runner answers on a branch of its own, <label>/runner/<host>, which crew fetches with <label>/main and
 reads (host_read) and never writes (state.5). A crossed piece's stage is read from its launch, the runner's answer and
 Flume's status of its place as the runner carried it (stage_of, flume_facts), and shown with its team's path on every
-view (path_facts, path_said, piece_said).
+view (stream_said, piece_said).
 
-A give to a crossed team launches its bolt whole, refused only where no runner answers (runnerless), and every plan
+A give launches its bolt whole, refused only where no runner answers (runnerless), and every plan
 write reaches the places a crossed bolt launched as its own act: added work launched, dropped work dropped, a dependent
 launched again when what it waits on is (reach), an amendment a retry of construct or a launch anew (amending), and a
 move, split or change of After of launched work refused (launched_refusal); each launch's priority follows its bolt's
-place in the plan (priorities). A bolt planned in a crossed team's kit is the dispatchers' to give it (takers).
+place in the plan (priorities). A bolt planned in a kit a team builds is the dispatchers' to give it (takers).
 
 A place that stopped short asking, or waits on its caller, is answered by a retry with the answer's words (answer_retry).
 A fix on a crossed bolt is a launch of Flume's fix kind on the bolt's branch (fix_launch), dropped by a drop
 (fix_drop_refusal), merged and waited on by Flume alone (fix_flume_refusal), and holds the bolt's landing while it is in
 flight (fixes_in_flight); a crossed bolt whose landing sluice refused for a conflict with main takes main in by one
-(take_main). A red main's fix is a launch of the fix kind on main with its submission held, on the host of a crossed
-team building the kit (main_fixer, main_fix_launch), a bolt of one chore where none does (state.3); its kit's landings
+(take_main). A red main's fix is a launch of the fix kind on main with its submission held, on the host of a team
+building the kit in a stream (main_fixer, main_fix_launch), a bolt of one chore where none does (state.3); its kit's landings
 row carries it once its code has delivered and its submission waits held (main_fixes_waiting), and the user's send of
 it is the retry of its submission, made once (send_refusal, sent_of).
 
@@ -36,95 +30,22 @@ This module imports nothing outside the standard library and crew's own modules 
 import json
 import re
 
-# How a bolt was given, by its Path on the plan's Bolt record, as crew says it.
-GIVEN = {"flume": "through Flume", None: "on today's path"}
-
-
-def team_path(setting, held):
-    """A team's path (Decision 2 of teams-cross-to-flume-as-their-bolts-land), from its setting (crew.load's `flume`,
-    False or a stream's name) and the Path of each bolt the plan gives it ("flume", or None for one given on today's
-    path): ("today", None) while its setting is off and it holds no bolt given through Flume; ("crossed", None) while
-    its setting names a stream and it holds no bolt given on today's path, or none at all; and ("due", "cross") or
-    ("due", "back") while the setting and a bolt it holds disagree, due to cross while the setting names a stream and
-    due back while it is off."""
-    if setting is False:
-        return ("due", "back") if "flume" in held else ("today", None)
-    return ("due", "cross") if any(p != "flume" for p in held) else ("crossed", None)
-
-
-def path_of(plan, t):
-    """A team's path (team_path) as a plan has it: t's setting and the Path of each bolt the plan gives t."""
-    return team_path(t["flume"], [b.get("Path") for b in plan.bolts() if b.get("Team") == t["name"]])
-
-
-def due_refusal(team, path, held):
-    """Why a give hands a due team no bolt (Decision 2), or None for a team that is not due: held is each bolt the team
-    holds as (name, its Path), each named with the path it was given on, and the give is refused until those of its old
-    path have landed or been dropped, since nothing moves a bolt from one path to the other and a team crosses empty."""
-    kind, way = path
-    if kind != "due":
-        return None
-    groups = {}
-    for name, p in held:
-        groups.setdefault(p, []).append(name)
-    holds = " and ".join(f"{' and '.join(names)}, given {GIVEN[p]}" for p, names in groups.items())
-    old = groups.get(None if way == "cross" else "flume", [])
-    towards = "due to cross to Flume" if way == "cross" else "due back to today's path"
-    return (f"{team} is {towards}, so it is given no bolt now: it holds {holds}, and is given its next bolt once "
-            + " and ".join(old) + (" has" if len(old) == 1 else " have") + " landed or been dropped")
-
-
 def runnerless(label, host, tips):
-    """Why a give to a crossed team on a host is refused for want of a runner (Decision 5), or None: tips, the hosts
+    """Why a give to a team on a host is refused for want of a runner (Decision 5), or None: tips, the hosts
     whose runner branch the partition's state repository holds (plan.runner_tips), and a host with none has no runner
     answering there, so nothing would launch the bolt's work."""
     if host in tips:
         return None
     return (f"no runner answers on {host}: {runner_branch(label, host)} does not exist, so nothing would launch the bolt's "
-            "work there; a give to a team crossed to Flume waits for the runner (flywheel-runner) to serve the partition there")
+            "work there; a give waits for the runner (flywheel-runner) to serve the partition there")
 
 
-def cross_due(path, up):
-    """The standing roles a team's crossing ends (Decision 3), from facts: its path (team_path) and its standing roles
-    that are up. Once it has crossed, every role up is due an end, never a restart; a team not crossed owes nothing."""
-    return list(up) if path[0] == "crossed" else []
-
-
-def cross_close(path, up, recorded):
-    """Whether a team's crossing is due its close (Decision 3), from facts: its path (team_path), its standing roles
-    that are up, and whether its crossing is already recorded (cross_recorded). Once it has crossed with none up, its
-    workspaces are closed, it is marked down, its slots freed, team.cross recorded and the dispatchers told, once,
-    however its roles went down: ended at their stops by the crossing, by a host's hold or by any other hand."""
-    return path[0] == "crossed" and not up and not recorded
-
-
-# The acts that start a team's standing role, on team/<team> in the run record: a crossing recorded before one of them
-# is a crossing the team has since come back from (cross_recorded).
-STARTS = ("team.up", "team.rebuild", "agent.start", "agent.restart", "agent.resume", "agent.renew")
-
-
-def cross_recorded(entries, team):
-    """Whether run-record entries, oldest first, hold a team's crossing (cross_close): True when the newest of those on
-    team/<team> that record its crossing (team.cross) or a start of one of its standing roles (STARTS) is its
-    crossing, False when it is a start, and None when they hold neither, so that older entries tell. A refused act
-    started nothing."""
-    for e in reversed(entries):
-        if f"team/{team}" not in e.get("On", []) or e.get("Refused"):
-            continue
-        if e.get("Act") == "team.cross":
-            return True
-        if e.get("Act") in STARTS:
-            return False
-    return None
-
-
-def crossed_refusal(team, path, stream, host, what):
-    """What crew says refusing crew <what> of a team (Decision 15), or None when the team has not crossed: a crossed
-    team runs no conductor, ops or slot, its work running in Flume places on its host, which crew bolts shows."""
-    if path[0] != "crossed":
-        return None
-    return (f"{team} has crossed to Flume: its work runs in Flume places on {host}, in stream {stream}, and crew bolts shows "
-            f"them; it runs no conductor, ops or slot, so crew {what} has nothing of it to act on")
+def crossed_refusal(team, host, what):
+    """What crew says refusing crew <what> of a team (Decision 15 of teams-cross-to-flume-as-their-bolts-land; Decision 1
+    of the-team-machinery-leaves): a team runs no conductor, ops or slot, its work running in Flume places on its host,
+    which crew bolts shows."""
+    return (f"{team}'s work runs in Flume places on {host}, which crew bolts shows; it runs no conductor, ops or slot, so "
+            f"crew {what} has nothing of it to act on")
 
 
 # ------------------------------------------------------------------------------------------------- the requests
@@ -482,28 +403,12 @@ def stage_of(work, launch, answer, place, read, after=()):
     return dict(res, stage=f["current"])
 
 
-# ------------------------------------------------------------------------------- a crossed team's work as it is shown
+# --------------------------------------------------------------------------- a bolt given through Flume as it is shown
 
-def path_facts(path, setting, held):
-    """A team's path as crew bolts, the rail and the board say it (Decision 14), from facts: its path (team_path), its
-    setting (crew.load's `flume`) and each bolt it holds as (name, its Path). {path, due, stream, first}: today's, due
-    or crossed; which way a due team is due, cross or back; the stream its setting names, None while it is off; and
-    the bolts a due team finishes before its path is its setting's, those it holds of its old path, in the plan's
-    order."""
-    kind, way = path
-    old = None if way == "cross" else "flume"
-    return {"path": kind, "due": way, "stream": setting or None, "first": [n for n, p in held if p == old] if kind == "due" else []}
-
-
-def path_said(facts):
-    """A team's path in the words of its bolt's head line (Decision 14): a crossed team's Flume stream; a due team's way
-    and what it finishes first, `due to cross once x lands`; nothing on today's path."""
-    if facts["path"] == "crossed":
-        return f"in Flume stream {facts['stream']}"
-    if facts["path"] == "due":
-        first = " and ".join(facts["first"])
-        return f"due {'to cross' if facts['due'] == 'cross' else 'back'} once {first} {'lands' if len(facts['first']) == 1 else 'land'}"
-    return ""
+def stream_said(stream):
+    """A team's Flume stream in the words of its bolt's head line (Decision 14), nothing for a team whose teams.json
+    entry names none."""
+    return f"in Flume stream {stream}" if stream else ""
 
 
 def bare(work):
@@ -607,8 +512,8 @@ def reach(plan, requests, bolt, team, again=()):
     drops = [r for r in on if newest[r.get("Work")] is not r or r.get("Work") in fresh or r in left]
     out = [("drop", r.get("Host"), r.get("Work"), {"Of": r.get("Request")}) for r in drops]
     n, num = next_request(requests) + len(out), {}
-    # A team turned back holds its bolts given through Flume until they land (Decision 2): their work runs on in the
-    # stream its launches named.
+    # A team whose teams.json entry names no stream keeps its bolts given through Flume until they land: their work runs
+    # on in the stream its launches named.
     stream = (team["flume"] or next((r.get("Stream") for r in reversed(on)), None)) if team else None
     for u in order:
         wk = names[u.name()]
@@ -673,29 +578,29 @@ def launched_refusal(requests, work, how):
             f"again as it should be (crew {kind} add)")
 
 
-def crossed_builders(plan, teams, label, kit):
-    """The partition's teams that have crossed to Flume and build a kit, by its name or owner/name, by name, sorted:
-    those a bolt planned in it is given to (takers), and those whose host runs a fix of its main (main_fixer)."""
-    return sorted(n for n, t in teams.items() if t["label"] == label and path_of(plan, t)[0] == "crossed"
+def crossed_builders(teams, label, kit):
+    """The partition's teams that build a kit, by its name or owner/name, in a Flume stream, by name, sorted: those a
+    bolt planned in it is given to (takers), and those whose host runs a fix of its main (main_fixer)."""
+    return sorted(n for n, t in teams.items() if t["label"] == label and t["flume"]
                   and any(kit in (k.get("name"), k.get("repo")) for k in t.get("kits") or [t.get("kit") or {}]))
 
 
 def takers(plan, teams, label, bolt):
-    """The partition's teams that have crossed to Flume and build a planned bolt's kit, by name, sorted (Decision 3):
-    a bolt held by no team in a kit one of them builds is theirs whenever it is planned, a crossed team holding no
-    bound; none for a bolt a team holds."""
+    """The partition's teams that build a planned bolt's kit in a Flume stream, by name, sorted (Decision 3): a bolt
+    held by no team in a kit one of them builds is theirs whenever it is planned, a team holding no bound; none for a
+    bolt a team holds."""
     b = plan.bolt(bolt)
     if b is None or b.get("Team"):
         return []
-    return crossed_builders(plan, teams, label, b.get("Repo"))
+    return crossed_builders(teams, label, b.get("Repo"))
 
 
 def planned_said(bolt, names):
-    """What the partition's dispatchers are told of a bolt planned in a kit teams crossed to Flume build (Decision 3,
-    takers): that it can be given, and to whom."""
+    """What the partition's dispatchers are told of a bolt planned in a kit teams build (Decision 3, takers): that it
+    can be given, and to whom."""
     who = " or ".join(names)
-    return (f"bolt {bolt} can be given to {who}, which {'has' if len(names) == 1 else 'have'} crossed to Flume and "
-            f"{'takes' if len(names) == 1 else 'take'} each planned bolt of {'its' if len(names) == 1 else 'their'} kits: "
+    return (f"bolt {bolt} can be given to {who}, which {'takes' if len(names) == 1 else 'take'} each planned bolt of "
+            f"{'its' if len(names) == 1 else 'their'} kits: "
             + " or ".join(f"crew bolt give {n} {bolt}" for n in names))
 
 
@@ -713,13 +618,13 @@ def piece_stage(requests, reading, launch):
 def named_launch(requests, work):
     """The launch standing for the work a command names (Decision 9), as (launch, None), or (None, why): named as
     requests name it (unit/<u>, chore/<c>, fix/<bolt>/<name>, fix/main/<kit>/<name>), by its place's name (<u>,
-    <bolt>--<name>, main--<name>), or a unit or chore by its own name. None stands for work a team crossed to Flume
+    <bolt>--<name>, main--<name>), or a unit or chore by its own name. None stands for work Flume
     does not build, and a name two works answer to is said with both."""
     hits = {r.get("Work"): r for r in standing(requests)
             if work in (r.get("Work"), r.get("Name")) or r.get("Work") in (f"unit/{work}", f"chore/{work}")}
     if not hits:
         return None, (f"no launch of {work} stands in requests.rec, so no Flume place of it waits on an answer: crew answer "
-                      "answers a place of work a team crossed to Flume builds, by its unit's, chore's or place's name")
+                      "answers a place of work Flume builds, by its unit's, chore's or place's name")
     if len(hits) > 1:
         return None, f"{work} names {' and '.join(sorted(hits))}: name the one meant as requests.rec does"
     return next(iter(hits.values())), None
@@ -757,7 +662,7 @@ def answer_retry(work, s):
 def fix_launch(plan, requests, bolt, team, name, words):
     """The launch crew fix <team> <name> "<words>" appends for a fix on a bolt given through Flume (Decision 10), as
     (act, host, work, its fields as plan.request takes them), or (None, why): a place of the fix kind named
-    <bolt>--<name>, cut from the bolt's branch, on the team's host and in its stream (or, turned back, the stream the
+    <bolt>--<name>, cut from the bolt's branch, on the team's host and in its stream (or, where it names none, the stream the
     bolt's launches named, as reach has it), with the bolt's priority and intent, the planner as recipient, the fix's
     words as its brief and nothing held. Refused while a launch of that fix stands on the bolt, merged or not, since
     the name is in use there (teams.3). team carries the bolt's kit as its kit."""
@@ -856,21 +761,21 @@ def fixes_in_flight(requests, reads, label, bolt):
 
 # ------------------------------------------------------------------------------------------------ a fix of main
 
-def main_fixer(plan, teams, label, kit, team=None):
+def main_fixer(teams, label, kit, team=None):
     """The team on whose host a fix of a kit's red main runs (Decision 11, state.3), as (its name, None), or (None, why):
-    among the partition's teams crossed to Flume that build the kit (crossed_builders), the one team names, else the
+    among the partition's teams that build the kit in a Flume stream (crossed_builders), the one team names, else the
     first by name while they all run on one host, since the place wants the host and its stream and nothing else of a
     team. Refused when team names none of them, when they run on several hosts and team names none, and when no team
-    crossed to Flume builds the kit, its red main's fix then being a bolt of one chore, proposed first among the
-    planned, as state.3 has it until one does."""
-    names = crossed_builders(plan, teams, label, kit)
+    builds the kit in a stream, its red main's fix then being a bolt of one chore, proposed first among the planned, as
+    state.3 has it until one does."""
+    names = crossed_builders(teams, label, kit)
     if not names:
-        return None, (f"no team of {label} crossed to Flume builds {kit}, so a fix of its red main is no Flume place: it is a bolt "
+        return None, (f"no team of {label} builds {kit} in a Flume stream, so a fix of its red main is no Flume place: it is a bolt "
                       "of one chore, proposed first among the planned, which the dispatcher gives to the next team that frees "
                       f"(state.3); tell {label}-planner, who proposes it")
     if team is not None:
         return (team, None) if team in names else (None, (
-            f"{team} is no team of {label} crossed to Flume building {kit}; " + " and ".join(names)
+            f"{team} is no team of {label} building {kit} in a Flume stream; " + " and ".join(names)
             + (" is" if len(names) == 1 else " are")))
     hosts = sorted({teams[n]["machine"] for n in names})
     if len(hosts) > 1:

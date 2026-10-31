@@ -1701,11 +1701,11 @@ class TestCrossedLandings:
         assert rows[0]["what"][1] == "x, crw-4 on deneb, in Flume stream madswan: lands once fix/x/rail-word has merged or been dropped"
         assert self.rows({1: "landed", 2: "landed", 3: "landed", 4: "landed"}, extra=[fix])[0]["bolts"][0]["can"] is True
 
-    def test_a_due_teams_bolt_says_what_its_landing_lets_the_team_do(self):
-        """Decision 14: crw-5, its setting madswan, holds y, given on today's path and proven, and is due to cross."""
+    def test_a_bolt_given_before_flume_says_its_teams_stream(self):
+        """Decision 14: crw-5, in stream madswan, holds y, given before it was given through Flume, and proven."""
         from facts import crew_read, crossed_fleet_read, launched, ran
         fleet = crossed_fleet_read(**{"crw-5": "madswan"})
         p, requests = launched([], work=[("y1", "y", [], "unit", [])], fleet=fleet, held=[("y", "crw-5")])
         sv = crew_read(bolts={"y": {"verdict": "passed (1 run)", "archived": ["y1"]}})
         rows = plan.rail_rows(fleet, [("madswan", "afterthought/crew-state", "tip0", p)], sv, [], {}, None, {"madswan": (requests, ran())})
-        assert [r["what"][1] for r in rows if r["group"] == "land"] == ["y, crw-5 on deneb, due to cross once y lands: can land"]
+        assert [r["what"][1] for r in rows if r["group"] == "land"] == ["y, crw-5 on deneb, in Flume stream madswan: can land"]

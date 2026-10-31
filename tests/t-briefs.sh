@@ -714,21 +714,19 @@ expect_ok crewpy brief wldn design
 has "$out" "is queued the same way as a chore: \`$CREW/plugin/bin/crew chore add <chore> \"<what is done>\" --repo <kit>\`"
 ok "the coder, verifier, conductor, planner and design agent each carry what a chore is to them"
 
-# A team moves to Flume one at a time (record 0050, roles.8; teams-cross-to-flume-as-their-bolts-land): a due team is
-# given nothing, its bolt going on with its conductor until it lands, which crosses it; a crossed team runs no standing
-# agent and takes every planned bolt of its kits; its places' answers and fixes are the planner's, its landing ops's by
-# the one procedure, the read of its refusal for a conflict with main launching its take-main fix, and a red main of a
-# kit a crossed team builds is a Flume fix place on main, sent on the user's word (state.3).
+# Every team's work runs through Flume (record 0050, roles.8; teams-cross-to-flume-as-their-bolts-land; Decision 1 of
+# the-team-machinery-leaves): a team runs no standing agent and takes every planned bolt of its kits; its places'
+# answers and fixes are the planner's, its landing ops's by the one procedure, the read of its refusal for a conflict
+# with main launching its take-main fix, and a red main of a kit a team builds in a stream is a Flume fix place on
+# main, sent on the user's word (state.3).
 expect_ok crewpy brief wldn dispatcher
-for want in "## Teams that move to Flume" "\`in Flume stream <stream>\`" "\`due to cross once <bolt> lands\`" \
-  "**A due team is given nothing.**" "naming each bolt it finishes first and on which path, and never tells you a due team is free" \
-  "**A crossed team is never full.**" "however many it already holds" \
+for want in "## Teams and Flume" "\`in Flume stream <stream>\`" \
+  "**A team is never full.**" "however many it already holds" \
   "bolt give <team> <bolt>\`, which makes the bolt's branch as any give does and starts no agent" "while no runner answers there" \
-  "refuse a crossed team at once, naming where its work runs"; do has "$out" "$want"; done
+  "while the team names no Flume stream" "refuse a team at once, naming where its work runs"; do has "$out" "$want"; done
+for gone in "due to cross" "A due team" "crossed team"; do lacks "$out" "$gone"; done
 expect_ok crewpy brief swb-1 conductor
-for want in "## When your team moves to Flume" "\`due to cross once <bolt> lands\`" "Build your bolt to its landing as this brief says" \
-  "nothing of it moves to Flume" "Your team is given no next bolt meanwhile" \
-  "crew ends you and \`swb-1-ops\` at your next stop once you are idle, with no restart"; do has "$out" "$want"; done
+for gone in "## When your team moves to Flume" "due to cross"; do lacks "$out" "$gone"; done
 expect_ok crewpy brief wldn planner
 for want in "## Teams crossed to Flume" "so \`bolt order\` is how you move one ahead" "keep chains short" \
   "**Plan writes reach its places by their approval.**" "naming drop and add as the way on, so propose the drop and the add" \
@@ -749,4 +747,4 @@ for want in "A bolt of a team crossed to Flume lands by these same steps" "It ha
   "Send it ahead of the bolts the same word lands" "main fix <kit> <name> --drop --label wldn\`" \
   "who proposes it as a bolt of one chore, first among the planned"; do has "$out" "$want"; done
 lacks "$out" "who decide which team builds it"
-ok "a due team is given nothing and its conductor builds its bolt to its landing, a crossed team takes every planned bolt of its kits and runs no standing agent, its places' answers and fixes are the planner's, its landing ops's by the one procedure, and a red main of a kit a crossed team builds is a Flume fix place sent on the user's word"
+ok "no team is due to cross, a team takes every planned bolt of its kits and runs no standing agent, its places' answers and fixes are the planner's, its landing ops's by the one procedure, and a red main of a kit a crossed team builds is a Flume fix place sent on the user's word"

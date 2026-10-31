@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
 # crew: run bolt teams of agents in herdr, and each partition's main level. Teams and partitions are data in
-# ~/.config/crew/teams.json, version 2 or 3. Version 3 names each team's flume: false for today's path, or the Flume
-# stream its work runs in on its host; version 2 has no setting, and every team in it is on today's path. A team whose
-# setting names a stream is due to cross to Flume while it holds a bolt given on today's path, and is given no bolt
-# then; the landing or drop of its last one crosses it: its conductor and ops are ended at their next stop, and once
-# both are down, however they went down, its workspaces are closed, team.cross recorded once and the dispatchers told it
-# takes bolts of its kits; nothing of it on a held host, whose crew go closes what the hold left. A
-# crossed team runs no conductor, ops or slot, its work running in Flume places on its host: up, rebuild, restart,
-# resume, clear, down and revive of it, and unit run, unit wait, unit free, chore run, chore wait, chore free and fix
-# --wait on its work, are refused at once, naming where its work runs and crew bolts; close still closes. A team whose
-# setting is turned off is due back until its Flume bolts land.
+# ~/.config/crew/teams.json, version 2 or 3. Version 3 names each team's flume: the Flume stream its work runs in on
+# its host, or false where it names none; version 2 names none. A team runs no conductor, ops or slot, its work running
+# in Flume places on its host: up, rebuild, restart, resume, clear, down and revive of it, and unit run, unit wait,
+# unit free, chore run, chore wait, chore free and fix --wait on its work, are refused at once, naming where its work
+# runs and crew bolts; close still closes what an older crew left standing.
 #
-# A team builds one bolt at a time, and may hold one more, proven, that waits to land; a team crossed to Flume holds
-# as many as it is given:
+# A team holds as many bolts as it is given, a give never refused for the bolts it holds; a bolt that is proven, every
+# unit and chore merged and sluice green at its head, waits to land:
 #   crew list                          the teams that are defined
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
 #                                      slot with the unit or fix it holds and its stage, a unit carried onto its
@@ -101,8 +96,8 @@
 #                                      each form below takes --bolt too; a fix in flight is found by its name.
 #                                      A place that could not be made ready refuses no fix: its agent starts there,
 #                                      told the step that failed, since a fix is how a bolt is repaired. Its prompt,
-#                                      and its merge's, is taken or sent again as a unit stage's is. On a team crossed
-#                                      to Flume, the planner's or main-level ops's: a launch of a Flume fix place
+#                                      and its merge's, is taken or sent again as a unit stage's is. On a bolt given
+#                                      through Flume, the planner's or main-level ops's: a launch of a Flume fix place
 #                                      <bolt>--<name> on the bolt, appended to requests.rec for the runner on its
 #                                      host, which Flume builds and submits to the bolt itself; --drop drops its
 #                                      launch, a merged one refused, and --merge and --wait are refused, naming
@@ -118,7 +113,7 @@
 #   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>] [--bolt <bolt>]
 #                                      wait for the fix's stage to end: its commits, or its merge on the bolt
 #   crew answer  <work> "<words>" [--label L]
-#                                      answer the Flume place of a crossed team's work that stopped short asking, or
+#                                      answer the Flume place of a team's work that stopped short asking, or
 #                                      waits on its caller: the retry of that stage carrying the words, appended to
 #                                      requests.rec for the runner on its host, or of its submission where that waits
 #                                      unheld; refused, naming the place's stage, when it neither stopped short nor
@@ -133,7 +128,7 @@
 #                                      unit has, every task ticked, that its archive builds on
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
-# repository, with requests.rec, crew's requests of each host's runner for a crossed team's work, appended in the
+# repository, with requests.rec, crew's requests of each host's runner for a team's work, appended in the
 # commit of the plan write that occasions them; each runner answers on <label>/runner/<host> of the same repository,
 # which crew fetches with <label>/main and never writes; a meeting's signals stay in the partition's first blueprints
 # repo:
@@ -142,8 +137,8 @@
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
 #                                      or, in a bolt given through Flume, from its host's runner's records of Flume's
 #                                      status of its place, a host whose runner can't be read named and its work
-#                                      unknown; each bolt's head line saying its team's path, in Flume stream <s> or
-#                                      due to cross once <bolt> lands; each held bolt's verification, sluice's verdict on
+#                                      unknown; each bolt's head line saying its team's stream, in Flume stream <s>;
+#                                      each held bolt's verification, sluice's verdict on
 #                                      its last landing, and each merge and landing standing in sluice's queue with
 #                                      its number and state on its line, a queue that can't be read said once on the
 #                                      bolt's head line
@@ -152,13 +147,11 @@
 #                                      team's host), with no worktree, before the plan write; refused, nothing changed,
 #                                      in a kit whose .config/sluice.toml on origin/main names no checks or no remote
 #                                      for its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
-#                                      words when it makes none, and while a bolt the team holds is not proven (every
-#                                      unit and chore merged, sluice green at its head) or it holds two; a branch
+#                                      words when it makes none; a branch
 #                                      already on GitHub at main's tip with no commit of its own, as a give that
-#                                      failed after sluice made it leaves it, is taken and the give goes on. A team
-#                                      due to cross to Flume or back is refused, naming each bolt it finishes first.
-#                                      To a team crossed to Flume, a give is never refused for the bolts it holds,
-#                                      but while its host is held or no runner answers there (no
+#                                      failed after sluice made it leaves it, is taken and the give goes on. A give is
+#                                      never refused for the bolts the team holds, but while its host is held, the
+#                                      team names no stream, or no runner answers there (no
 #                                      <label>/runner/<host>); it marks the bolt Path: flume, appends a launch to
 #                                      requests.rec for each unit and chore, a dependent's naming the launches of its
 #                                      After work, which the runner holds it for until that work has landed on the
@@ -306,9 +299,9 @@
 #                                      main-level ops's or the user's, on reading the kit's main red after a landing:
 #                                      a Flume fix place on main, its submission held for the user's send and ops its
 #                                      recipient, appended to requests.rec for the runner on the host of the team
-#                                      crossed to Flume that builds the kit, --team choosing among several on different
+#                                      that builds the kit in a stream, --team choosing among several on different
 #                                      hosts; refused, naming a bolt of one chore proposed first among the planned as
-#                                      the way, where no crossed team builds the kit or no runner answers on its host
+#                                      the way, where no team builds the kit in a stream or no runner answers on its host
 #   crew main     fix <kit> <name> --send [--excerpt "<the user's words>"] [--label L]
 #                                      main-level ops's, on the user's send of the kit's landings row, which carries the
 #                                      fix once its code has delivered and its submission waits held: the retry of its
@@ -377,8 +370,7 @@
 #                                      what still works on each held host; wait waits until each is quiet and then
 #                                      ends every crew agent there, its panes kept, so herdr can be restarted
 #   crew go       <host>|--all         lift the hold: every standing agent brought back with its conversation and
-#                                      greeted, or told to carry on, and every one an update made due restarted; a
-#                                      team crossed to Flume meanwhile is closed, never brought back
+#                                      greeted, or told to carry on, and every one an update made due restarted
 #   crew update   [<host>|--all]       every standing agent whose start crew's update, or its brief's, has made due
 #                                      restarted on crew as it now is once it is idle, a conductor fresh and every
 #                                      other with its conversation; crew's Stop hook does the same at the end of a due

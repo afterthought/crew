@@ -207,8 +207,8 @@ def board_data(fleet, labels, read, now):
     {holder, what, since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
     Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
     record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
-    the design agent's band shows (records_proposed). Each team says its path, a crossed team's stream with it, and a due
-    team what it finishes first (plan.path_facts), as each ledger does for its team; a bolt given through Flume has its
+    the design agent's band shows (records_proposed). Each team says its Flume stream, None where it names none, as each
+    ledger does for its team; a bolt given through Flume has its
     units', chores' and fixes' stages from the runner's records with what goes with each (flume, Stages.crossed,
     Stages.fixes), no slot, and a runner that could not be read is named for attention; and each partition lists the
     crossed places that wait on an answer and the fixes of main and take-main fixes in flight (asking and fixing,
@@ -224,8 +224,8 @@ def board_data(fleet, labels, read, now):
         repo, tip, pl = found or (plan.state_of(fleet, l)[0], None, None)
         unread, logs = read["unread"].get(l, {}), read.get("logs", {}).get(l, [])
         teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "kits": [k["name"] for k in crew.kits_of(fleet["teams"][t])],
-                  "host": fleet["teams"][t]["machine"], "path": plan.path_facts(pl, fleet["teams"][t]) if pl else None} for t in p["teams"]]
-        paths = {t["team"]: t["path"] for t in teams}
+                  "host": fleet["teams"][t]["machine"], "stream": fleet["teams"][t]["flume"] or None} for t in p["teams"]]
+        streams = {t["team"]: t["stream"] for t in teams}
 
         def building(repo):
             return [t["team"] for t in teams if repo and repo in t["kits"]]
@@ -314,7 +314,7 @@ def board_data(fleet, labels, read, now):
                                                      [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
                 recorded = landing_of(logs, b.name())
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
-                          "path": paths.get(b.get("Team")), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
+                          "stream": streams.get(b.get("Team")), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
                           "landing": landing, "submissions_error": unread, "record": recorded,
                           "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
@@ -434,9 +434,9 @@ def detail_of(x):
     return runner.piece_said(x["flume"])[1] if x.get("flume") else ""
 
 
-def path_of(b):
-    """A held bolt's team's path on its head line (runner.path_said), nothing on today's path."""
-    return runner.path_said(b["path"]) if b.get("path") else ""
+def stream_of(b):
+    """A held bolt's team's Flume stream on its head line (runner.stream_said), nothing where it names none."""
+    return runner.stream_said(b.get("stream"))
 
 
 def local(at):
@@ -538,7 +538,7 @@ def board_text(data, width=None, color=False, stale=None):
 
         heading("Construction")
         for b in p["construction"]:
-            line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"], path_of(b),
+            line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"], stream_of(b),
                         head_said(b), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
             for u in b["units"]:
                 line(fields(u["unit"], stage_of(u), detail_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
@@ -675,11 +675,11 @@ def needs_eye(b):
 
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
-    dim; then its pips, its name, its team's path (path_of), its state unless active, or what its landing is (head_said), its landing standing in
+    dim; then its pips, its name, its team's stream (stream_of), its state unless active, or what its landing is (head_said), its landing standing in
     sluice (landing_said), that its submissions can't be read when they can't (queue_said), how many of its units have
     merged, and its age and who held its time (time_of); its landing's marker in the gutter, or attention once every
     unit has landed or its close was refused (needs_eye)."""
-    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], path_of(b), head_said(b),
+    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], stream_of(b), head_said(b),
                       landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
 
 
@@ -697,7 +697,7 @@ def team_rows(p):
     out = []
     for t in sorted(p["teams"], key=lambda t: t["kit"]):
         out += [bolt_row(b, t["team"]) for b in held(p, t["team"])] or [
-            row(fields(t["kit"], (t["team"], "dim"), ("holds no bolt", "dim"), path_of(t)), " ")]
+            row(fields(t["kit"], (t["team"], "dim"), ("holds no bolt", "dim"), stream_of(t)), " ")]
     return out
 
 
