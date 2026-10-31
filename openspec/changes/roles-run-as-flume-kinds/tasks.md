@@ -39,7 +39,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 8. Main-level ops's landing from a run
 
-- [ ] 8.1 `crew bolt submit` from ops's run returns once each bolt is queued, and the landing's read asks the planner, the design agent or ops as it lands or not (design Decision 12; Task notes 8.1); passes `tests/py/test_landing.py`, and the moon task `tests:t-journey-land` ends with "0 failed".
+- [x] 8.1 `crew bolt submit` from ops's run returns once each bolt is queued, and the landing's read asks the planner, the design agent or ops as it lands or not (design Decision 12; Task notes 8.1); passes `tests/py/test_landing.py`, and the moon task `tests:t-journey-land` ends with "0 failed".
 
 ## 9. A card's answer
 

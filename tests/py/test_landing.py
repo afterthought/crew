@@ -711,6 +711,39 @@ class TestTheSubmission:
         assert not f.get("frm") and "Chars" not in f
         assert self.order.index("queued") < self.order.index("WAIT")
 
+    def test_from_ops_run_a_queued_landing_is_left_to_its_waiter_and_nothing_waits(self, monkeypatch, capsys):
+        """role-runs, Main-level ops's landing from a run does not wait (design Decision 12): once sluice has queued it,
+        the run waits on nothing and reads nothing, the landing's waiter, given no Claude session to end with, reading
+        its outcome; the command exits 0."""
+        monkeypatch.setattr(plan.crew, "run_here", lambda fleet=None: ("wldn", "ops"))
+        monkeypatch.setenv("CLAUDE_PID", "4242")
+        envs = []
+        monkeypatch.setattr(plan, "submit_ran", lambda *a, run=plan.submit_ran: envs.append(plan.os.environ.get("CLAUDE_PID")) or run(*a))
+        self.submit(monkeypatch, self.BEFORE, [QUEUED])
+        assert self.scripts() == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT"]
+        assert [e[2]["Outcome"] for e in self.queued] == ["queued"] and self.emitted == [] and self.closed == []
+        assert envs == [None]
+        assert ("bolt/b is queued on k's main as #7: the landing's waiter on box reads its outcome from sluice's record, and crew "
+                "asks the roles that run as their kinds when it lands or does not; this run waits on nothing") in capsys.readouterr().out
+
+    def test_from_ops_run_two_bolts_on_two_hosts_are_each_submitted_once_the_one_before_is_queued(self, monkeypatch):
+        monkeypatch.setattr(plan.crew, "run_here", lambda fleet=None: ("wldn", "ops"))
+        other = dict(self.T, name="swb-2", machine="deneb")
+        self.submit(monkeypatch, self.BEFORE, [QUEUED, QUEUED], bolts=("b", "c"), teams={"c": other})
+        assert [r for r in self.scripts() if r in ("SUBMIT", "WAIT", "READ")] == ["SUBMIT", "SUBMIT"]
+
+    def test_from_ops_run_a_bolt_refused_before_it_was_queued_still_fails_the_command(self, monkeypatch, capsys):
+        monkeypatch.setattr(plan.crew, "run_here", lambda fleet=None: ("wldn", "ops"))
+        before = f"ORIGIN=yes\nFETCHED=fatal: could not read from remote repository\nGITHUB={OLD}\nOWN={OLD}\n"
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, before, [])
+        assert "b did not land, as said above; none landed" in capsys.readouterr().err
+
+    def test_a_run_of_another_role_waits_as_ops_at_a_shell_does(self, monkeypatch):
+        monkeypatch.setattr(plan.crew, "run_here", lambda fleet=None: ("wldn", "planner"))
+        self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")])
+        assert "WAIT" in self.scripts() and self.closed == ["b"]
+
     def test_a_wait_that_is_still_undecided_is_waited_on_again(self, monkeypatch):
         self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(5, "{}"), ran_as(5, "{}"), ran_as(0, "{}"),
                                                ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")])

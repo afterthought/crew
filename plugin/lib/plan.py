@@ -4459,7 +4459,7 @@ def submit_ran(fleet, label, host, main, path, bolt, head="", own="", n="", tip=
     return f, None
 
 
-def landing_ended(fleet, label, p, a):
+def landing_ended(fleet, label, p, a, wait=True):
     """A submitted landing's end (Decision 6, plan.21): a landing whose submission ran and failed, or that crew refused
     before anything was submitted, recorded as it is; one whose submission sluice answered with nothing crew can wait
     on (standing, left_standing) said so, recorded with the head submitted and no refusal, so no row is held for a fix,
@@ -4478,7 +4478,9 @@ def landing_ended(fleet, label, p, a):
     then as any queued one; one that landed is closed by the read. A landing on the user's words in the caller's pane
     (p's frm, the transcript record bolt_submit read them from, a's excerpt) is recorded naming that record and the
     words' length, the words kept on this host as it was queued (landing_queued). Its words printed, standard error for
-    one that did not land. Returns (bolt, landed)."""
+    one that did not land. Returns (bolt, landed). With wait False, from main-level ops's run, a landing sluice has
+    queued, or crew waits on again, is left to the landing's waiter on the team's host, said (waiter_said), its outcome
+    read by the waiter, and (bolt, None) returned: no run waits on a submission (record 0048 pattern 5)."""
     bolt, t = p["bolt"], p["t"]
     if p.get("refused") and p.get("attempted"):  # its submission ran and failed: drafted, and stopped, nothing of the bolt's
         words, why = landing_unheld(fleet, t, bolt, p["refused"] + "." + submit_again(bolt), p["refused"])
@@ -4511,6 +4513,9 @@ def landing_ended(fleet, label, p, a):
             landing_queued(label, t, bolt, str(n), tip, p["before"], p.get("frm") or (), excerpt)
             p, again = dict(p, **f), again + 1
             continue
+        if not wait:
+            print(waiter_said(bolt, t, p))
+            return bolt, None
         n = p["ID"]
         while True:
             w = crew.on_machine(fleet, host, ["bash", "-c", WAIT, "crew", main, n])
@@ -4537,6 +4542,14 @@ def landing_ended(fleet, label, p, a):
         if landed and w.returncode == 3:
             print(f"sluice exited 3 after its push: {failed or 'sluice said nothing'}. That is sluice's to report, apart from the landing.")
         return bolt, landed
+
+
+def waiter_said(bolt, t, p):
+    """What crew bolt submit in main-level ops's run says of a landing it leaves to its waiter (landing_ended)."""
+    which = f"#{p['ID']}" if p.get("ID") else f"pull request #{p['PULL']}" if p.get("PULL") else "its submission"
+    return (f"bolt/{bolt} is queued on {t['kit']['name']}'s main as {which}: the landing's waiter on {t['machine']} reads its "
+            "outcome from sluice's record, and crew asks the roles that run as their kinds when it lands or does not; this run "
+            "waits on nothing")
 
 
 def wait_unstarted(fleet, label, t, bolt, p, n, told):
@@ -4854,7 +4867,10 @@ def bolt_submit(fleet, a):
     when it can't be, and one a landing leaves open is drafted before the command says the bolt did not land
     (landing_unheld). A bolt that did not land is said in sluice's words, and the rest go on; it exits non-zero naming
     each that did not land. It moves no branch itself, and is run in the background and waited on to its end
-    (code.9)."""
+    (code.9). Run in main-level ops's run (design Decision 12), it waits on no landing: each bolt is submitted once the
+    one before is queued, and each queued landing is left to its waiter on the team's host, which reads its outcome and
+    asks the roles that run as their kinds, the waiter given no Claude session to end with, since the run's turn ends
+    at once; it exits non-zero only for a bolt that did not land before it was queued."""
     bolts = list(a.bolt) if isinstance(a.bolt, list) else [a.bolt]
     label, _, _, plan = locate(fleet, "Bolt", bolts[0], default_label(fleet, a))
     CONTEXT["label"] = label
@@ -4866,17 +4882,23 @@ def bolt_submit(fleet, a):
     if words is not None:
         words.strip() or fail("crew bolt submit needs the user's words: --excerpt \"<their words, as they wrote them>\"")
         frm = [pane_words(CardActs(fleet), words, lambda v: submit_word_refusal(", ".join(bolts), v))]
+    run = crew.run_here(fleet)
+    wait = not (run and run[1] == "ops")
+    if not wait:  # the landing's waiter outlives the run, whose turn ends once its bolts are queued (Decision 12)
+        os.environ.pop("CLAUDE_PID", None)
     outcomes, pending = [], []
     for b, when in submit_order(bolts, {b: teams[b]["machine"] for b in bolts}):
-        if when == "ended":
+        if when == "ended" and wait:
             outcomes += [landing_ended(fleet, label, p, a) for p in pending]
             pending = []
         pending.append(dict(landing_submitted(fleet, label, teams[b], b, frm, words), frm=frm))
-    outcomes += [landing_ended(fleet, label, p, a) for p in pending]
-    missed = [b for b, landed in outcomes if not landed]
+    outcomes += [landing_ended(fleet, label, p, a, wait) for p in pending]
+    missed = [b for b, landed in outcomes if landed is False]
     if missed:
-        print(f"{joined(missed)} did not land, as said above; " + (f"{joined([b for b, landed in outcomes if landed])} landed"
-                                                                    if len(missed) < len(outcomes) else "none landed"), file=sys.stderr)
+        landed, left = [b for b, x in outcomes if x], [b for b, x in outcomes if x is None]
+        print(f"{joined(missed)} did not land, as said above; " + "; ".join(
+            ([f"{joined(landed)} landed"] if landed else []) + ([f"{joined(left)} left to the landing's waiter"] if left else [])
+            or ["none landed"]), file=sys.stderr)
         raise Stopped(1)
 
 
