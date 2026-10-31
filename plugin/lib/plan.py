@@ -4895,7 +4895,11 @@ def landing_ended(fleet, label, p, a, wait=True):
     words' length, the words kept on this host as it was queued (landing_queued). Its words printed, standard error for
     one that did not land. Returns (bolt, landed). With wait False, from main-level ops's run, a landing sluice has
     queued, or crew waits on again, is left to the landing's waiter on the team's host, said (waiter_said), its outcome
-    read by the waiter, and (bolt, None) returned: no run waits on a submission (record 0048 pattern 5)."""
+    read by the waiter, and (bolt, None) returned: no run waits on a submission (record 0048 pattern 5). The waiter reads
+    it once sluice has it out, which can be before its queued entry, recorded once SUBMIT has answered, reaches the
+    branch, as with a conflict sluice finds at once, and that read finds nothing queued and records nothing: so sluice's
+    record of it is looked at once after that entry, waiting on nothing (SUBMISSION_STATUS, landing_due), and one
+    already out is read then (landing_read_on), which records it once and writes its asks, whichever read comes first."""
     bolt, t = p["bolt"], p["t"]
     if p.get("refused") and p.get("attempted"):  # its submission ran and failed: drafted, and stopped, nothing of the bolt's
         words, why = landing_unheld(fleet, t, bolt, p["refused"] + "." + submit_again(bolt), p["refused"])
@@ -4928,8 +4932,12 @@ def landing_ended(fleet, label, p, a, wait=True):
             landing_queued(label, t, bolt, str(n), tip, p["before"], p.get("frm") or (), excerpt)
             p, again = dict(p, **f), again + 1
             continue
-        if not wait:
-            print(waiter_said(bolt, t, p))
+        if not wait:  # sluice may have decided before the queued entry reached the branch, and the waiter's read with it
+            s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSION_STATUS, "crew", main, p["ID"]])
+            if landing_due(int(p["ID"]), s.returncode, s.stdout)[0] == "out":
+                landing_read_on(fleet, t, label, bolt)
+            else:
+                print(waiter_said(bolt, t, p))
             return bolt, None
         n = p["ID"]
         while True:

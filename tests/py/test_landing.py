@@ -558,6 +558,7 @@ def ran_as(code, out="", err=""):
     return type("R", (), {"returncode": code, "stdout": out, "stderr": err})()
 
 
+UNDER_TEST = ran_as(0, json.dumps({"schema": plan.SUBMISSION, "id": 7, "head": TIP, "state": "testing"}))
 QUEUED = ran_as(0, f"RC=0 TIP={TIP} OLD={OLD} ID=7 PULL= ANSWER= SAID={base64.b64encode(b'sluice: queued #7').decode()} LEVEL=\n", "sluice: queued #7\n")
 
 
@@ -713,23 +714,39 @@ class TestTheSubmission:
 
     def test_from_ops_run_a_queued_landing_is_left_to_its_waiter_and_nothing_waits(self, monkeypatch, capsys):
         """role-runs, Main-level ops's landing from a run does not wait (design Decision 12): once sluice has queued it,
-        the run waits on nothing and reads nothing, the landing's waiter, given no Claude session to end with, reading
-        its outcome; the command exits 0."""
+        the run waits on nothing, looking once at sluice's record, which has it under test, and leaves it to the
+        landing's waiter, given no Claude session to end with, which reads its outcome; the command exits 0."""
         monkeypatch.setattr(plan.crew, "run_here", lambda fleet=None: ("wldn", "ops"))
         monkeypatch.setenv("CLAUDE_PID", "4242")
         envs = []
         monkeypatch.setattr(plan, "submit_ran", lambda *a, run=plan.submit_ran: envs.append(plan.os.environ.get("CLAUDE_PID")) or run(*a))
-        self.submit(monkeypatch, self.BEFORE, [QUEUED])
-        assert self.scripts() == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT"]
+        self.submit(monkeypatch, self.BEFORE, [QUEUED], statuses=[UNDER_TEST])
+        assert self.scripts() == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "STATUS"]
         assert [e[2]["Outcome"] for e in self.queued] == ["queued"] and self.emitted == [] and self.closed == []
         assert envs == [None]
         assert ("bolt/b is queued on k's main as #7: the landing's waiter on box reads its outcome from sluice's record, and crew "
                 "asks the roles that run as their kinds when it lands or does not; this run waits on nothing") in capsys.readouterr().out
 
+    def test_from_ops_run_a_landing_sluice_has_out_already_is_read_and_asks_ops(self, monkeypatch, capsys):
+        """role-runs "A landing that conflicts", when sluice finds the conflict before the run's queued entry reaches the
+        branch, so the waiter's read, run then, found nothing queued (t-journey-land, run-held): the run's one look at
+        sluice's record finds it out, and the landing is read there, recorded not landed and ops asked with sluice's
+        words, waiting on nothing; the command still exits 0, the outcome reaching ops's next run."""
+        monkeypatch.setattr(plan.crew, "run_here", lambda fleet=None: ("wldn", "ops"))
+        conflict = ran_as(0, json.dumps({"schema": plan.SUBMISSION, "id": 7, "head": TIP, "state": "conflict",
+                                         "conflict": {"paths": ["zones.txt"], "with": []}}))
+        self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(0, said(2, new=OLD, github=OLD, level="''"))],
+                    statuses=[conflict, conflict])
+        assert self.scripts() == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "STATUS", "READ", "STATUS", "LANDED", "POLICY"]
+        (act, on, f), = self.emitted
+        assert (act, on, f["Submission"]) == ("bolt.submit", ["bolt/b"], "7") and "sluice refused it or found a conflict" in f["refused"]
+        assert self.unlanded == [("b", "k", "7")] and self.closed == []
+        assert "this run waits on nothing" not in capsys.readouterr().out
+
     def test_from_ops_run_two_bolts_on_two_hosts_are_each_submitted_once_the_one_before_is_queued(self, monkeypatch):
         monkeypatch.setattr(plan.crew, "run_here", lambda fleet=None: ("wldn", "ops"))
         other = dict(self.T, name="swb-2", machine="deneb")
-        self.submit(monkeypatch, self.BEFORE, [QUEUED, QUEUED], bolts=("b", "c"), teams={"c": other})
+        self.submit(monkeypatch, self.BEFORE, [QUEUED, QUEUED], bolts=("b", "c"), teams={"c": other}, statuses=[UNDER_TEST, UNDER_TEST])
         assert [r for r in self.scripts() if r in ("SUBMIT", "WAIT", "READ")] == ["SUBMIT", "SUBMIT"]
 
     def test_from_ops_run_a_bolt_refused_before_it_was_queued_still_fails_the_command(self, monkeypatch, capsys):

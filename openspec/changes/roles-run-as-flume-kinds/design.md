@@ -145,7 +145,7 @@ With the reviewer running as its kind, `crew review <label>` writes a `batch` as
 
 ### 12. Main-level ops lands in a run and is told the outcome as an ask
 
-Ops lands by the one procedure (`plan.16`). In a run, `crew bolt submit` returns once each bolt is queued, leaving the landing's waiter on the host as it does today (`_open.md`, the stopgap under `roles.5`); the run's turn ends, and no run waits on a submission (record 0048 pattern 5). crew's read of each landing, whichever act makes it, writes the `landed` asks of Decision 5, so a bolt that did not land reaches ops's next run with sluice's words, as today's procedure would have read them in its session.
+Ops lands by the one procedure (`plan.16`). In a run, `crew bolt submit` returns once each bolt is queued, leaving the landing's waiter on the host as it does today (`_open.md`, the stopgap under `roles.5`); the run's turn ends, and no run waits on a submission (record 0048 pattern 5). The waiter reads a landing once sluice has it out, which can come before the submit has recorded it queued, as a conflict sluice finds at once does, and such a read finds nothing queued; so the submit, once it has recorded the landing queued, looks once at sluice's record of it, waiting on nothing, and reads a landing already out itself, the read recording it once whichever comes first. crew's read of each landing, whichever act makes it, writes the `landed` asks of Decision 5, so a bolt that did not land reaches ops's next run with sluice's words, as today's procedure would have read them in its session.
 
 ### 13. The user opens a role to talk
 
