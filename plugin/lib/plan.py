@@ -11015,6 +11015,28 @@ def not_held(label=None, act=None, on=()):
     fail(said)
 
 
+def crossing_path(fleet, t):
+    """A team's path (runner.path_of) where it may have crossed to Flume: None for a team whose setting is off, which
+    has not crossed, with nothing read; else read from its plan, a branch not started holding no bolt of it, and
+    refused, naming what could not be read, when the plan can't be (read.1)."""
+    if t["flume"] is False:
+        return None
+    errors = {}
+    found = plans(fleet, [t["label"]], errors)
+    not errors or fail(f"can't tell whether {t['name']} has crossed to Flume: "
+                       + "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()))
+    return runner.path_of(found[0][3] or Plan(""), t)
+
+
+def not_crossed(fleet, t, what):
+    """crew <what> of a team refused at once when the team has crossed to Flume, before any pane or slot is read
+    (runner.crossed_refusal; Decision 15 of teams-cross-to-flume-as-their-bolts-land, teams.2): a crossed team runs no
+    conductor, ops or slot, its work running in Flume places on its host."""
+    path = crossing_path(fleet, t)
+    why = path and runner.crossed_refusal(t["name"], path, t["flume"], t["machine"], what)
+    not why or fail(why)
+
+
 def stopped(label, act, on, said):
     """A team's command refused: said on standard error, recorded as the act refused (record.1), and stopped."""
     print(said, file=sys.stderr)
@@ -11200,8 +11222,10 @@ def unit_run(fleet, a):
     """crew unit run <unit> construct|code|verify|settle|merge ["<words>"] [--force], or crew chore run <chore>
     code|verify|merge (--chore), on the host of the team whose bolt holds it: its stage started there (run_unit_stage),
     refused while a construct an amendment handed there is starting (handed_state), whose wait is crew unit wait, and
-    a construct, code or merge refused while its bolt's landing is in flight (landing_refusal)."""
+    a construct, code or merge refused while its bolt's landing is in flight (landing_refusal); refused at once for a
+    team crossed to Flume, which has no slots (not_crossed)."""
     t = team_of_unit(fleet, a)
+    not_crossed(fleet, t, f"{'chore' if a.chore else 'unit'} run {a.unit}")
     team = on_team_host(fleet, t, a.force)
     state, said = construct_handed_state(t, a.unit)
     state != "starting" or fail(f"{said}: crew unit wait {a.unit} waits for it")
@@ -11215,8 +11239,9 @@ def unit_wait(fleet, a):
     while a construct an amendment handed there is starting, its start (handed_state), saying why when it did not
     start; then the wait on the stage the slot holding it owes (stage_wait), within what is left of the timeout, whose
     merge look reads the bolt the plan places the unit in at each look (merge_bolt). Either ends with the session that
-    started it (session_ended)."""
+    started it (session_ended). Refused at once for a team crossed to Flume, which has no slots (not_crossed)."""
     t = team_of_unit(fleet, a)
+    not_crossed(fleet, t, f"unit wait {a.unit}")
     team = on_team_host(fleet, t)
     until, session = time.monotonic() + a.timeout / 1000, wait_session()
     state, said = construct_handed_state(t, a.unit)
@@ -11331,8 +11356,10 @@ def fix_run(fleet, a):
     recorded when no slot can be taken or lent, or its place is not its own; and starts as a code stage, in a place
     that could not be made ready as in one that could, its agent told what failed (record 0028); a merge starts as a
     merge stage, a submission of the fix to the bolt through sluice; a wait waits on the stage the fix's slot owes
-    (stage_wait)."""
+    (stage_wait). A wait is refused at once for a team crossed to Flume, which has no slots (not_crossed)."""
     t = at_work(fleet, a.team)
+    if a.mode == "wait":
+        not_crossed(fleet, t, f"fix {t['name']} {a.name} --wait")
     team = on_team_host(fleet, t, a.force)
     if a.mode not in ("wait", "drop"):
         not_held()
@@ -11479,7 +11506,9 @@ def team_tidy(fleet, a):
     carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing, the bolt's branch
     deleted by sluice once the landing's place is gone (land_delete, plan.19), and its card closed there with the words
     (landing_cards_closed); and what the units of a bolt that landed or was dropped (--units) recorded as made, kept
-    here for its batch's card, removed (made_drop)."""
+    here for its batch's card, removed (made_drop). Once the landing or drop leaves the team crossed to Flume, each of
+    its standing agents up is handed its end (runner.cross_due), given once it is idle (hold.renew); a team whose plan
+    can't be read is handed none, said (read.1)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     reap(fleet, team, a.landed)
@@ -11487,7 +11516,15 @@ def team_tidy(fleet, a):
     if said:
         print(said)
     import hold  # hold imports this module
-    for name in team.hint_standing(crew.team_bolt(t)):
+    due = set(team.hint_standing(crew.team_bolt(t)))
+    try:
+        path = crossing_path(fleet, t)
+    except Refusal as e:
+        path = None
+        print(f"{e}; none of its agents is handed an end", file=sys.stderr)
+    if path:
+        due |= {team.agent_of(r) for r in runner.cross_due(path, [r for r in team.standing if team.status(r)])[0]}
+    for name in sorted(due):
         hold.hand(name)
     if a.landed:
         landing_cards_closed(fleet, t, a.landed, a.outcome or "", a.said, a.here)
@@ -11497,13 +11534,15 @@ def unit_free(fleet, a):
     """crew unit free <unit> [--team <team>]: a slot still holding a unit no longer in its team's bolt freed now (teams.1),
     rather than at the read after its agent settles, its agent ended and the worktrees whose work is over removed; with
     no team named, the team of this host whose slot holds it. Refused while the unit is in the team's bolt, which a drop
-    frees, or while its place has uncommitted changes, which are the user's."""
+    frees, or while its place has uncommitted changes, which are the user's; refused at once for a team crossed to
+    Flume, which has no slots (not_crossed)."""
     if a.team:
         t = at_work(fleet, a.team)
     else:
         mine = [o for n, o in sorted(fleet["teams"].items()) if o["machine"] == crew.this_host()]
         t = next((o for o in mine if crew.Team(fleet, o).holding(a.unit)), None) or fail(
             f"no team on this host holds {a.unit} in a slot; name its team: crew unit free {a.unit} --team <team>")
+    not_crossed(fleet, t, f"unit free {a.unit}")
     team = on_team_host(fleet, t, a.force)
     slot = team.holding(a.unit) or fail(f"no slot of {t['name']} holds {a.unit}")
     said = in_bolt(fleet, t, a.unit)
@@ -11653,8 +11692,11 @@ def started_all(team):
 def team_cmd(fleet, a):
     """crew up|close|rebuild|restart|resume|clear|down <team>, on the team's host, one process (code.7): the team's
     conductor and ops started, brought back, cleared or ended there (teams.2, teams.6, teams.7), each act recorded
-    (record.1). close and rebuild end every agent, working or not."""
+    (record.1). close and rebuild end every agent, working or not. Every act but close is refused at once for a team
+    crossed to Flume, which runs no standing agent (not_crossed); close still closes what its crossing left."""
     t = at_work(fleet, a.team)
+    if a.act != "close":
+        not_crossed(fleet, t, f"{a.act} {t['name']}")
     team = on_team_host(fleet, t, a.force or a.act in ("close", "rebuild"))
     end, name = ending(fleet, t), t["name"]
     if a.act in ("up", "rebuild", "restart", "resume"):
@@ -12032,6 +12074,8 @@ def revive_cmd(fleet, a):
             if agents.down():
                 print(f"{scope} was taken down; it stays down")
                 continue
+            if kind == "team":
+                not_crossed(fleet, agents.t, f"revive {scope}")
             back, ways = [], {r: crew.revived(agents.herdr.item(agents.pane(r)), agents.status(r)) for r in agents.standing}
             if "dead" in ways.values():
                 agents.panes()

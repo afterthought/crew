@@ -67,6 +67,56 @@ class TestDue:
                     crew.launch_digest(dict(l, dirs=["/a"]), "brief"), crew.launch_digest(l, "brief, amended")}) == 5
 
 
+class TestCrossing:
+    """A crossed team's conductor and ops are due an end, never a restart (the change
+    teams-cross-to-flume-as-their-bolts-land, Decision 3): crew.end_due and crew.due_of read it from the team's path
+    (plan.crossing_path), the plan read only when the team's setting names a stream. That crew _renew ends each once
+    idle and the last end closes the team and records team.cross is the cross journey's (t-journey-cross)."""
+    FLEET = {"teams": {"crw-4": {"name": "crw-4", "flume": "madswan", "label": "madswan", "machine": "mac-studio"},
+                       "crw-5": {"name": "crw-5", "flume": False, "label": "madswan", "machine": "mac-studio"}},
+             "partitions": {"madswan": {"label": "madswan", "machine": "mac-studio", "teams": ["crw-4", "crw-5"]}}}
+
+    def paths(self, monkeypatch, path):
+        """Each team's path as given, or the refusal given; the names of the teams whose plan was read."""
+        import plan
+        read = []
+
+        def crossing_path(fleet, t):
+            read.append(t["name"])
+            if isinstance(path, Exception):
+                raise path
+            return path
+        monkeypatch.setattr(plan, "crossing_path", crossing_path)
+        monkeypatch.setattr(crew, "load", lambda: self.FLEET)
+        return read
+
+    def test_a_crossed_teams_conductor_and_ops_are_due_an_end_and_nothing_else_of_crews_is(self, monkeypatch):
+        self.paths(monkeypatch, ("crossed", None))
+        for name in ("crw-4-conductor", "crw-4-ops"):
+            assert crew.end_due(self.FLEET, name)
+            assert crew.due_of(self.FLEET, name, STARTED, C1) == (True, crew.CROSSED_SAID, STARTED)
+        assert not crew.end_due(self.FLEET, "crw-4-unit-1") and not crew.end_due(self.FLEET, "madswan-planner")
+
+    @pytest.mark.parametrize("path", [("due", "cross"), ("today", None), ("due", "back")])
+    def test_a_team_that_has_not_crossed_keeps_its_agents(self, monkeypatch, path):
+        self.paths(monkeypatch, path)
+        assert not crew.end_due(self.FLEET, "crw-4-conductor")
+
+    def test_a_team_whose_setting_is_off_has_not_crossed_and_its_plan_is_not_read(self, monkeypatch):
+        read = self.paths(monkeypatch, ("crossed", None))
+        assert not crew.end_due(self.FLEET, "crw-5-conductor") and read == []
+
+    def test_a_plan_that_cannot_be_read_ends_nothing_and_says_so(self, monkeypatch, capsys):
+        self.paths(monkeypatch, crew.Refusal("can't tell whether crw-4 has crossed to Flume: madswan/main could not be read: timed out"))
+        assert not crew.end_due(self.FLEET, "crw-4-ops")
+        assert "whether crw-4-ops is due an end can't be told: can't tell whether crw-4 has crossed to Flume" in capsys.readouterr().err
+
+    def test_the_dispatchers_are_told_a_crossed_team_takes_bolts_of_its_kits_whenever_one_is_planned(self):
+        assert hold.crossed_told("crw-4", ["crew", "weir"]) == (
+            "crw-4 has crossed to Flume: it takes a bolt of crew or weir whenever one is planned, never full, its work running in "
+            "Flume places. Give it the next planned bolt of its kits.")
+
+
 class TestStanding:
     @pytest.mark.parametrize("name, role", [
         ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("wldn-design", ("wldn", "design")),

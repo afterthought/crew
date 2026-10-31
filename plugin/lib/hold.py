@@ -17,7 +17,8 @@
                                  the consoles' tabs run again, and every agent an update has made due restarted
   crew update [<host>|--all]     every standing agent whose start an update of crew, or of its brief, has made due
                                  handed to crew _renew, which restarts it once it is idle with nothing of its own
-                                 running in the background
+                                 running in the background; a team's conductor and ops once their team has crossed to
+                                 Flume are due an end, which crew _renew gives them the same way, never a restart
 
 Each runs on the host it acts on (code.3): crew _hold set|status|wait, crew _go and crew _update there, and crew
 _renew <agent> on the agent's host, which crew's Stop hook hands it to at the end of the agent's turn (hooks/stop).
@@ -28,6 +29,7 @@ import crew
 import ops
 import plan
 import record
+import runner
 import transcript
 from crew import Refusal, Stopped, fail
 
@@ -353,7 +355,8 @@ def update_here(fleet, a):
         due, why, started = crew.due_of(fleet, name, commit=commit)
         if due:
             hand(name)
-            print(f"{name} is due ({why}): it is restarted on crew {version or (commit or '?')[:7]} once it is idle")
+            print(f"{name} is due ({why}): " + ("it is ended once it is idle, never restarted" if why == crew.CROSSED_SAID else
+                                                f"it is restarted on crew {version or (commit or '?')[:7]} once it is idle"))
         elif why:
             print(f"{name}: {why}", file=sys.stderr)
 
@@ -380,7 +383,9 @@ def renew(fleet, a):
     changed, and recorded. One process at a time per agent; nothing while the host is held. It ends with the agent
     running: one still up when its stop gives up is watched for EXITING looks and started the moment it goes, or left
     as it was, still due, when it never does, with a mark naming the session its exit was typed into; and one a later
-    restart finds those keys ended (renew_exited) is started with no stop."""
+    restart finds those keys ended (renew_exited) is started with no stop. A crossed team's conductor or ops, due an
+    end (crew.end_due), is ended in the same way once idle and never started again (cross_end); one not up has
+    nothing to end."""
     name = a.agent
     host, _ = crew.place_of_agent(fleet, name)
     host == crew.this_host() or fail(f"{name} runs on {host}: crew _renew runs there")
@@ -402,7 +407,11 @@ def renew(fleet, a):
         if not due:
             print(f"{name} is not due a restart" + (f": {why}" if why else ""))
             return
+        ending = why == crew.CROSSED_SAID
         status, asking, unread = crew.waits_on_question(fleet, name)
+        if status is None and not unread and ending:
+            print(f"{name} is not up, so its team's crossing to Flume has nothing of it to end")
+            return
         if status is None and not unread:
             holds, unread = crew.read_pane_agent(fleet, name)
             session = started["session"]
@@ -415,11 +424,14 @@ def renew(fleet, a):
             if ready:
                 break
         if time.monotonic() >= deadline:
-            print(f"{name} is not restarted: {not_yet}; the end of its next turn hands it back")
+            print(f"{name} is not {'ended' if ending else 'restarted'}: {not_yet}; the end of its next turn hands it back")
             return
         crew.nap(5)
     agents, role = holding(fleet, name)
     agents.ensure()
+    if ending:
+        cross_end(fleet, agents, role)
+        return
     commit, version = crew.crew_version()
     mark = RENEW / f"{name}.exiting"
     if gone:
@@ -451,6 +463,57 @@ def renew(fleet, a):
     else:
         crew.tell(fleet, name, notice, taken=True, what="the notice of its restart")
     print(f"{name} is restarted on crew {version or (commit or '?')[:7]}")
+
+
+def crossed_told(team, kits):
+    """What the partition's dispatchers are told once a team has crossed to Flume (Decision 3 of
+    teams-cross-to-flume-as-their-bolts-land): it takes a bolt of its kits whenever one is planned."""
+    return (f"{team} has crossed to Flume: it takes a bolt of {' or '.join(kits)} whenever one is planned, never full, its work "
+            f"running in Flume places. Give it the next planned bolt of its kits.")
+
+
+def cross_end(fleet, team, role):
+    """A crossed team's conductor or ops ended once idle, never started again (Decision 3 of
+    teams-cross-to-flume-as-their-bolts-land): its exit typed as a restart's is, watched for when slow, and recorded
+    (agent.end); then, once neither role is up (runner.cross_due), the team's workspaces closed as crew close closes
+    them and the team marked down, its slots freed (plan.reap), team.cross recorded naming its stream, and the
+    partition's dispatchers that are up told it takes bolts of its kits. One team's ends run one at a time, so the act
+    that ended the last is the one that records the crossing; a host held meanwhile ends nothing (teams.19)."""
+    name, t = team.agent_of(role), team.t
+    with open(RENEW / f"{team.name}.cross.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if crew.held():
+            print(f"{t['machine']} is held; crew go {t['machine']} hands {name} its end")
+            return
+        why = team.stop(role, waits=True)  # renew_ready: nothing runs in its background but crew's waits, which end here
+        if why == crew.working_said(name):  # it went to work since herdr read it idle, and nothing was typed to it
+            print(why, file=sys.stderr)
+            return
+        if why:  # its exit was typed and it has not gone yet: the keys may still end it
+            print(f"{name} did not exit at once; crew watches for its exit")
+            if not team.exited(role, EXITING):
+                print(f"{why}; it runs on as it was, still due its end: the end of its next turn hands it back", file=sys.stderr)
+                return
+        team.record("agent.end", f"cross({team.name}): end {name}", [role])
+        print(f"{name} is ended: {team.name} has crossed to Flume, whose places run its work")
+        try:
+            path = plan.crossing_path(fleet, t)
+        except Refusal as e:
+            print(f"{e}; {team.name}'s workspaces are left as they are", file=sys.stderr)
+            return
+        _, whole = runner.cross_due(path, [r for r in team.standing if team.status(r, fresh=True)])
+        if not whole:
+            return
+        team.teardown(plan.ending(fleet, t))
+        team.mark(down=True)
+        try:
+            plan.reap(fleet, team)
+        except Refusal as e:
+            print(e, file=sys.stderr)
+        record.emit(t["label"], "team.cross", [f"team/{team.name}"], why=f"team({team.name}): cross to flume", State=t["flume"])
+        plan.tell_dispatchers(fleet, t["label"], crossed_told(team.name, [k["name"] for k in crew.kits_of(t)]))
+        print(f"{team.name} has crossed to Flume: its workspaces are closed, and its work runs in Flume places on "
+              f"{t['machine']}, in stream {t['flume']}")
 
 
 # ------------------------------------------------------------------------------------------- across hosts

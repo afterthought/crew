@@ -90,3 +90,65 @@ class TestDue:
             return plan.notices(teams, seen, "madswan-ops", "plan(x): land the bolt (madswan-ops)")[2]
         assert not told("crw-4")
         assert told("crw-5")
+
+
+class TestCrossing:
+    """Once a team has crossed, its conductor and ops are due an end, and the crossing is whole once neither is up
+    (Decision 3)."""
+
+    def test_once_crossed_every_role_up_is_due_an_end_and_the_crossing_is_whole_once_none_is(self):
+        assert runner.cross_due(("crossed", None), ["conductor", "ops"]) == (["conductor", "ops"], False)
+        assert runner.cross_due(("crossed", None), ["ops"]) == (["ops"], False)
+        assert runner.cross_due(("crossed", None), []) == ([], True)
+
+    @pytest.mark.parametrize("path", [("today", None), ("due", "cross"), ("due", "back")])
+    def test_a_team_that_has_not_crossed_owes_its_agents_nothing(self, path):
+        assert runner.cross_due(path, ["conductor", "ops"]) == ([], False)
+        assert runner.cross_due(path, []) == ([], False)
+
+
+class TestNoStandingAgent:
+    """A crossed team runs no standing agent: every standing-agent or slot command of it is refused at once, naming
+    where its work runs (Decision 15)."""
+    FLEET = {"teams": {}, "partitions": {"madswan": {"label": "madswan"}}}
+
+    def test_a_crossed_teams_command_is_refused_naming_flume_its_host_its_stream_and_crew_bolts(self):
+        assert runner.crossed_refusal("crw-4", ("crossed", None), "madswan", "deneb", "up crw-4") == (
+            "crw-4 has crossed to Flume: its work runs in Flume places on deneb, in stream madswan, and crew bolts shows them; it "
+            "runs no conductor, ops or slot, so crew up crw-4 has nothing of it to act on")
+
+    @pytest.mark.parametrize("path", [("today", None), ("due", "cross"), ("due", "back")])
+    def test_a_team_that_has_not_crossed_is_not_refused_for_it(self, path):
+        assert runner.crossed_refusal("crw-4", path, "madswan", "deneb", "up crw-4") is None
+
+    def reads(self, monkeypatch, found, errors=None):
+        read = []
+
+        def plans(fleet, labels, errs=None):
+            read.append(labels)
+            errs.update(errors or {})
+            return [] if errors else [("madswan", "afterthought/crew-state", "a" * 40 if found else None, found)]
+        monkeypatch.setattr(plan, "plans", plans)
+        return read
+
+    def test_a_team_whose_setting_is_off_is_not_refused_and_its_plan_is_not_read(self, monkeypatch):
+        read = self.reads(monkeypatch, plan_with([("x", "crw-4", None)]))
+        plan.not_crossed(self.FLEET, team(False), "up crw-4")
+        assert read == []
+
+    def test_a_crossed_team_is_refused_from_its_plan_and_a_due_one_is_not(self, monkeypatch):
+        self.reads(monkeypatch, plan_with([("x", "crw-4", "flume")]))
+        with pytest.raises(plan.Refusal, match="^crw-4 has crossed to Flume: its work runs in Flume places on deneb"):
+            plan.not_crossed(self.FLEET, team("madswan"), "up crw-4")
+        self.reads(monkeypatch, plan_with([("x", "crw-4", None)]))
+        plan.not_crossed(self.FLEET, team("madswan"), "up crw-4")
+
+    def test_a_branch_not_started_holds_no_bolt_of_the_team_so_it_has_crossed(self, monkeypatch):
+        self.reads(monkeypatch, None)
+        assert plan.crossing_path(self.FLEET, team("madswan")) == ("crossed", None)
+
+    def test_a_plan_that_cannot_be_read_refuses_naming_it(self, monkeypatch):
+        self.reads(monkeypatch, None, {"madswan/main of afterthought/crew-state": "timed out"})
+        with pytest.raises(plan.Refusal, match="^can't tell whether crw-4 has crossed to Flume: madswan/main of "
+                                               "afterthought/crew-state could not be read: timed out$"):
+            plan.not_crossed(self.FLEET, team("madswan"), "up crw-4")
