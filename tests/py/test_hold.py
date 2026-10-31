@@ -67,6 +67,158 @@ class TestDue:
                     crew.launch_digest(dict(l, dirs=["/a"]), "brief"), crew.launch_digest(l, "brief, amended")}) == 5
 
 
+class TestCrossing:
+    """A crossed team's conductor and ops are due an end, never a restart (the change
+    teams-cross-to-flume-as-their-bolts-land, Decision 3): crew.end_due and crew.due_of read it from the team's path
+    (plan.crossing_path), the plan read only when the team's setting names a stream. That crew _renew ends each once
+    idle and the last end closes the team and records team.cross is the cross journey's (t-journey-cross)."""
+    FLEET = {"teams": {"crw-4": {"name": "crw-4", "flume": "madswan", "label": "madswan", "machine": "mac-studio"},
+                       "crw-5": {"name": "crw-5", "flume": False, "label": "madswan", "machine": "mac-studio"}},
+             "partitions": {"madswan": {"label": "madswan", "machine": "mac-studio", "teams": ["crw-4", "crw-5"]}}}
+
+    def paths(self, monkeypatch, path):
+        """Each team's path as given, or the refusal given; the names of the teams whose plan was read."""
+        import plan
+        read = []
+
+        def crossing_path(fleet, t):
+            read.append(t["name"])
+            if isinstance(path, Exception):
+                raise path
+            return path
+        monkeypatch.setattr(plan, "crossing_path", crossing_path)
+        monkeypatch.setattr(crew, "load", lambda: self.FLEET)
+        return read
+
+    def test_a_crossed_teams_conductor_and_ops_are_due_an_end_and_nothing_else_of_crews_is(self, monkeypatch):
+        self.paths(monkeypatch, ("crossed", None))
+        for name in ("crw-4-conductor", "crw-4-ops"):
+            assert crew.end_due(self.FLEET, name)
+            assert crew.due_of(self.FLEET, name, STARTED, C1) == (True, crew.CROSSED_SAID, STARTED)
+        assert not crew.end_due(self.FLEET, "crw-4-unit-1") and not crew.end_due(self.FLEET, "madswan-planner")
+
+    @pytest.mark.parametrize("path", [("due", "cross"), ("today", None), ("due", "back")])
+    def test_a_team_that_has_not_crossed_keeps_its_agents(self, monkeypatch, path):
+        self.paths(monkeypatch, path)
+        assert not crew.end_due(self.FLEET, "crw-4-conductor")
+
+    def test_a_team_whose_setting_is_off_has_not_crossed_and_its_plan_is_not_read(self, monkeypatch):
+        read = self.paths(monkeypatch, ("crossed", None))
+        assert not crew.end_due(self.FLEET, "crw-5-conductor") and read == []
+
+    def test_a_plan_that_cannot_be_read_ends_nothing_and_says_so(self, monkeypatch, capsys):
+        self.paths(monkeypatch, crew.Refusal("can't tell whether crw-4 has crossed to Flume: madswan/main could not be read: timed out"))
+        assert not crew.end_due(self.FLEET, "crw-4-ops")
+        assert "whether crw-4-ops is due an end can't be told: can't tell whether crw-4 has crossed to Flume" in capsys.readouterr().err
+
+    def test_the_dispatchers_are_told_a_crossed_team_takes_bolts_of_its_kits_whenever_one_is_planned(self):
+        assert hold.crossed_told("crw-4", ["crew", "weir"]) == (
+            "crw-4 has crossed to Flume: it takes a bolt of crew or weir whenever one is planned, never full, its work running in "
+            "Flume places. Give it the next planned bolt of its kits.")
+
+
+class Crossed:
+    """A crossed team on its host as hold.close_crossing reads and acts on it: which of its standing roles herdr reads
+    up, and what was done to it."""
+
+    def __init__(self, t, up=()):
+        self.t, self.name, self.standing, self.up, self.done = t, t["name"], ("conductor", "ops"), set(up), []
+
+    def agent_of(self, role):
+        return f"{self.name}-{role}"
+
+    def status(self, role, fresh=False):
+        return "idle" if role in self.up else None
+
+    def teardown(self, ending=None):
+        self.done.append("closed")
+
+    def mark(self, down):
+        self.done.append("down" if down else "up")
+
+    def stop(self, role, ending=None, waits=False):
+        self.done.append(f"{role} ended")
+
+
+class TestCrossingClosed:
+    """A crossed team's crossing is closed once neither its conductor nor its ops is up, however they went down, once,
+    and never on a held host (Decision 3 of teams-cross-to-flume-as-their-bolts-land, the bolt-teams scenario "A held
+    host"): its workspaces closed, the team marked down, its slots freed, team.cross recorded naming its stream and
+    the dispatchers told (hold.close_crossing), its record read from this host's own day files (hold.crossing_recorded).
+    That a hold's crew go closes it through crew _renew is the cross journey's (t-journey-cross)."""
+    T = {"name": "crw-4", "flume": "madswan", "label": "madswan", "machine": "mac-studio", "kit": {"name": "crew"}}
+
+    @pytest.fixture
+    def host(self, monkeypatch, tmp_path):
+        """This host, held or not, the team crossed, its record under tmp_path; what was reaped and told."""
+        import plan
+        import record
+        seen = {"held": None, "reaped": [], "told": []}
+        monkeypatch.setattr(record, "ROOT", tmp_path / "crew")
+        monkeypatch.setattr(record, "_session", None)
+        monkeypatch.setenv("CREW_AGENT", "crw-4-ops")
+        monkeypatch.setattr(crew, "held", lambda: seen["held"])
+        monkeypatch.setattr(plan, "crossing_path", lambda fleet, t: ("crossed", None))
+        monkeypatch.setattr(plan, "reap", lambda fleet, team, *a, **k: seen["reaped"].append(team.name))
+        monkeypatch.setattr(plan, "tell_dispatchers", lambda fleet, label, text: seen["told"].append((label, text)))
+        return seen
+
+    def crossings(self):
+        import record
+        return [e for f in sorted((record.ROOT / "madswan/runs/mac-studio").glob("*.rec")) for e in record.parse(f.read_text())
+                if e["Act"] == "team.cross"]
+
+    def test_a_held_host_closes_nothing_until_it_goes(self, host, capsys):
+        host["held"] = {"by": "chuck@mac-studio", "why": "herdr 0.9.6", "at": "2026-10-31T12:00Z"}
+        team = Crossed(self.T)
+        hold.close_crossing(FLEET, team)
+        assert team.done == [] and host["reaped"] == [] and host["told"] == [] and self.crossings() == []
+        assert "mac-studio is held; crew go mac-studio closes crw-4's crossing to Flume" in capsys.readouterr().out
+        host["held"] = None
+        hold.close_crossing(FLEET, team)
+        assert team.done == ["closed", "down"] and host["reaped"] == ["crw-4"] and len(self.crossings()) == 1
+
+    def test_a_held_host_ends_neither_role_until_it_goes(self, host, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(hold, "RENEW", tmp_path / "renew")
+        host["held"] = {"by": "chuck@mac-studio", "why": "herdr 0.9.6", "at": "2026-10-31T12:00Z"}
+        team = Crossed(self.T, ["conductor", "ops"])
+        hold.cross_end(FLEET, team, "ops")
+        assert team.done == [] and self.crossings() == []
+        assert "mac-studio is held; crew go mac-studio hands crw-4-ops its end" in capsys.readouterr().out
+
+    def test_neither_role_up_closes_the_team_records_its_crossing_and_tells_the_dispatchers_once(self, host, capsys):
+        team = Crossed(self.T)
+        hold.close_crossing(FLEET, team)
+        assert team.done == ["closed", "down"] and host["reaped"] == ["crw-4"]
+        [e] = self.crossings()
+        assert (e["On"], e["State"], e["Why"]) == (["team/crw-4"], "madswan", "team(crw-4): cross to flume")
+        assert host["told"] == [("madswan", hold.crossed_told("crw-4", ["crew"]))]
+        assert ("crw-4 has crossed to Flume: its workspaces are closed, and its work runs in Flume places on mac-studio, in "
+                "stream madswan") in capsys.readouterr().out
+        again = Crossed(self.T)
+        hold.close_crossing(FLEET, again)
+        assert again.done == [] and len(self.crossings()) == 1 and len(host["told"]) == 1
+        assert "crw-4's crossing to Flume is recorded already: nothing of it is left to close" in capsys.readouterr().out
+
+    @pytest.mark.parametrize("up", [["conductor"], ["ops"]])
+    def test_a_role_still_up_leaves_the_close_to_its_end(self, host, up):
+        team = Crossed(self.T, up)
+        hold.close_crossing(FLEET, team)
+        assert team.done == [] and self.crossings() == [] and host["told"] == []
+
+    def test_the_record_is_read_from_this_hosts_day_files_newest_first(self, host, tmp_path):
+        d = tmp_path / "crew/madswan/runs/mac-studio"
+        d.mkdir(parents=True)
+        rec = lambda at, act, on: f"Id: {at}-{act}\nAt: {at}\nAct: {act}\n" + "".join(f"On: {o}\n" for o in on) + "\n"
+        (d / "2026-10-29.rec").write_text(rec("2026-10-29T10:00:00Z", "team.up", ["team/crw-4", "agent/crw-4-ops"]))
+        (d / "2026-10-30.rec").write_text(rec("2026-10-30T10:00:00Z", "team.cross", ["team/crw-4"]))
+        (d / "2026-10-31.rec").write_text(rec("2026-10-31T09:00:00Z", "tell", ["agent/madswan-ops"]))
+        assert hold.crossing_recorded("madswan", "crw-4") is True
+        assert hold.crossing_recorded("madswan", "crw-5") is False
+        (d / "2026-10-31.rec").write_text(rec("2026-10-31T10:00:00Z", "agent.restart", ["team/crw-4", "agent/crw-4-ops"]))
+        assert hold.crossing_recorded("madswan", "crw-4") is False
+
+
 class TestStanding:
     @pytest.mark.parametrize("name, role", [
         ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("wldn-design", ("wldn", "design")),

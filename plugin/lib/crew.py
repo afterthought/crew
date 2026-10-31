@@ -1958,6 +1958,36 @@ def files_ref(common, name):
     return ""
 
 
+def files_refs(common, prefix):
+    """Every ref under a prefix read from a git folder's files, with no process, as files_ref reads one: {name: commit},
+    each loose file over its line in packed-refs; None when the files can't say, a reftable folder, a ref that is not
+    a commit's name or a file that can't be read, for the caller to ask git (read.1)."""
+    common = pathlib.Path(common)
+    if (common / "reftable").exists():
+        return None
+    refs = {}
+    try:
+        lines = (common / "packed-refs").read_text().splitlines()
+    except FileNotFoundError:
+        lines = []
+    except OSError:
+        return None
+    for line in lines:
+        sha, _, ref = line.partition(" ")
+        if ref.startswith(prefix) and SHA.fullmatch(sha):
+            refs[ref] = sha
+    try:
+        for f in (common / prefix).rglob("*"):
+            if f.is_file():
+                text = f.read_text().strip()
+                if not SHA.fullmatch(text):
+                    return None
+                refs[f.relative_to(common).as_posix()] = text
+    except OSError:
+        return None
+    return refs
+
+
 def head_here(root=None):
     """crew's checkout's commit, read from its files with no process (files_ref): its .git, a folder or a linked
     worktree's file naming one, its HEAD, and the branch HEAD names in the folder its worktrees share; through git
@@ -2115,6 +2145,26 @@ def branch_due(started, branch):
 
 # What due_of compares a start's branch with when it is not given: nothing, since reading it reads the plan.
 UNREAD = object()
+# Why a crossed team's conductor or ops is due, an end and never a restart (end_due).
+CROSSED_SAID = "its team has crossed to Flume, whose places run its work"
+
+
+def end_due(fleet, name):
+    """Whether a standing agent is due an end rather than a restart (Decision 3 of
+    teams-cross-to-flume-as-their-bolts-land): a team's conductor or ops once its team has crossed to Flume
+    (plan.crossing_path, runner.cross_due), its plan read only when its setting names a stream; never another agent,
+    nor one whose team's plan can't be read, which is said and ends nothing (read.1)."""
+    t = team_of_agent(fleet, name)
+    role = name[len(t["name"]) + 1:] if t else ""
+    if role not in ("conductor", "ops") or t["flume"] is False:
+        return False
+    import crew as this, plan, runner  # read in this process; plan imports this module by name, which crew.py run as a script is not
+    try:
+        path = plan.crossing_path(this.load(), t)
+    except this.Refusal as e:
+        print(f"whether {name} is due an end can't be told: {e}", file=sys.stderr)
+        return False
+    return role in runner.cross_due(path, [role])
 
 
 def branch_now(fleet, name):
@@ -2127,12 +2177,15 @@ def branch_now(fleet, name):
 
 def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
     """Whether a standing agent of this host is due a restart for crew's update, read: (due, why, what its start
-    recorded). A name that is no standing agent's is never due. With the branch it would carry now (branch_now), one
-    whose team's bolt changed under it is due too (branch_due)."""
+    recorded). A name that is no standing agent's is never due. A crossed team's conductor or ops is due an end, its
+    why CROSSED_SAID (end_due). With the branch it would carry now (branch_now), one whose team's bolt changed under it
+    is due too (branch_due)."""
     started = started or start_of(name)
     role = standing_role(fleet, name)
     if started is None or role is None:
         return False, None, started
+    if end_due(fleet, name):
+        return True, CROSSED_SAID, started
     if branch is not UNREAD:
         due, why = branch_due(started, branch)
         if due:

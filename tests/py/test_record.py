@@ -57,6 +57,17 @@ class TestEmit:
         assert (e["Outcome"], e["Submission"], e["Head"], e["Base"]) == ("queued", "412", "a" * 40, "b" * 40)
         assert "Submission" in text.split("%allowed:", 1)[1].splitlines()[0].split()
 
+    def test_a_teams_crossing_names_its_stream_and_its_trace_reads_it_after_the_landing_that_crossed_it(self, here):
+        """team.cross, once crw-4's conductor and ops are ended for its crossing (the change
+        teams-cross-to-flume-as-their-bolts-land, Decision 3): on team/crw-4, its State the stream."""
+        record.emit("madswan", "team.cross", ["team/crw-4"], why="team(crw-4): cross to flume", State="madswan")
+        text = next(here.parent.parent.parent.glob("madswan/runs/mac-studio/*.rec")).read_text()
+        cross, = record.parse(text)
+        assert (cross["Act"], cross["On"], cross["State"]) == ("team.cross", ["team/crw-4"], "madswan")
+        assert record.line(cross).endswith("team/crw-4 → Flume stream madswan")
+        given = entry("20260101T100000Z-deneb-1-1", "2026-01-01T10:00:00Z", "bolt.give", ["bolt/x", "team/crw-4"])
+        assert [e["Act"] for e in record.lineage([cross, given], "team/crw-4")] == ["bolt.give", "team.cross"]
+
     def test_the_users_entry_names_them_at_this_host_with_no_session(self, here):
         import getpass
         record.emit("wldn", "test.user")
