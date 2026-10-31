@@ -121,6 +121,7 @@ import crew  # noqa: E402
 import gather  # noqa: E402
 import kit  # noqa: E402
 import record  # noqa: E402
+import runner  # noqa: E402
 import transcript  # noqa: E402
 import cards  # noqa: E402
 from cards import joined, new_units  # noqa: E402
@@ -898,7 +899,7 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         touched = change(w) or []
         check(w.plan)
         files = {"plan.rec": w.plan.text(), **w.files}
-        seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
+        seen.update(before=before, after=w.plan.teams(), due=due_teams(fleet, w.plan), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
         return files, message(seen["subject"], body, seen["eid"])
     sha = land(repo, ref, None, make)
@@ -937,11 +938,18 @@ def tell_dispatchers(fleet, label, text):
             crew.tell(fleet, d, text)
 
 
+def due_teams(fleet, plan):
+    """The teams a plan leaves due to cross to Flume or back (runner.path_of), whose bolt landed or dropped frees
+    nothing, since each is given no bolt until it has crossed (Decision 2 of teams-cross-to-flume-as-their-bolts-land)."""
+    return {n for n, t in fleet["teams"].items() if runner.path_of(plan, t)[0] == "due"}
+
+
 def notices(teams, seen, me, subject):
     """Who a write tells, as facts (teams.7): each conductor of a team holding a bolt the write touched, before or after
     it, unless it wrote it (me) or the write's own command greets it (seen["quiet"]), sent the subject, nothing more,
     since crew closes a row's card itself; and whether the dispatchers hear of it, a bolt added or one a team held
-    landed or dropped. Returns ([(conductor, text)], [lines shown], whether the dispatchers are told)."""
+    landed or dropped, but for a team the write leaves due (seen["due"]), which is free for nothing. Returns
+    ([(conductor, text)], [lines shown], whether the dispatchers are told)."""
     before, after, touched = seen["before"], seen["after"], seen["touched"]
     tells, shown = [], []
     for t in sorted(x for x in {before.get(b) for b in touched} | {after.get(b) for b in touched}
@@ -949,7 +957,7 @@ def notices(teams, seen, me, subject):
         if f"{t}-conductor" != me:
             tells.append((f"{t}-conductor", subject))
     added = [b for b in touched if b not in before and b in after]
-    freed = [b for b in touched if b not in after and before.get(b)]
+    freed = [b for b in touched if b not in after and before.get(b) and before[b] not in seen["due"]]
     return tells, shown, bool(added or freed)
 
 
@@ -1660,7 +1668,8 @@ def waiting_bolt(plan, team, built):
 def bolt_give(fleet, a):
     """crew bolt give <team> [<bolt>]: bolt/<bolt> made by sluice on GitHub from the kit's main, run on the team's host,
     and no worktree (plan.19, record 0026), then the bolt given to the team in the plan; the conductor and ops start in
-    the kit's main checkout. Refused, with the plan unchanged and no branch made, while a bolt the team holds is not
+    the kit's main checkout. Refused, with the plan unchanged and no branch made, while the team is due to cross to
+    Flume or back, naming each bolt it finishes first (give_due), while a bolt the team holds is not
     proven or it holds two (teams.16, give_refusal), or its host is held (teams.19), since a give starts the team's
     agents again: at once for a team that held no bolt, and at their next stop beside a bolt that waits to land
     (team_handed); when the kit's policy at its main now names no checks or no remote for its bolt branches, since a
@@ -1679,6 +1688,8 @@ def bolt_give(fleet, a):
     tip = fetch(repo, ref)
     tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
     plan = read(repo, ref, tip)
+    why = give_due(plan, t)
+    not why or fail(why)
     # The bolts the team holds, oldest first, read once on its host (plan.12): a give waits only for their proof.
     held = held_by(plan, t["name"])
     if len(held) > 1:
@@ -1714,6 +1725,8 @@ def bolt_give(fleet, a):
         m.returncode == 0 or print(f"git could not mark bolt/{chosen} as crew's", file=sys.stderr)
 
     def change(w):
+        why = give_due(w.plan, t)
+        not why or fail(why)
         # The kit's proof was read only for the bolts held then.
         again = [b.name() for b in held_by(w.plan, t["name"])]
         new = [b for b in again if b not in checked]
@@ -1942,6 +1955,13 @@ def proven_facts(st, plan, bolts):
         work = [(u.name(), kind_of(u), st.of(u.name())["stage"]) for u in plan.work_of(b.name())]
         out.append((b.name(), work, facts.get("head"), facts.get("verdict"), why))
     return out
+
+
+def give_due(plan, t):
+    """Why a give hands a team no bolt while it is due to cross to Flume or back (runner.due_refusal), from its plan:
+    each bolt the plan gives it, with the Path it was given on; None when it is not due (Decision 2 of
+    teams-cross-to-flume-as-their-bolts-land)."""
+    return runner.due_refusal(t["name"], runner.path_of(plan, t), [(b.name(), b.get("Path")) for b in held_by(plan, t["name"])])
 
 
 def give_refusal(team, held):
@@ -3297,12 +3317,13 @@ def team_freed(fleet, t, plan, bolt):
     """What a merge into a bolt frees of its team (teams.16), from one read of its kits: once the bolt reads proven for
     a give and the team holds another that is proven too, the note the kit's landings card changes with, what a yes
     now frees (frees_note), returned, else None; and once the team may take its next bolt and one is planned for it
-    (free_now), the partition's dispatchers that are up told so, as a landing tells them."""
+    (free_now), the partition's dispatchers that are up told so, as a landing tells them; a team due to cross to Flume
+    or back never, its give refused until it has (give_due)."""
     held = held_by(plan, t["name"])
     facts = proven_facts(stages_for(fleet, plan, held), plan, held)
     proven = {f[0]: give_refusal(t["name"], [f]) is None for f in facts}
     planned = next_planned(plan, t)
-    if free_now(give_refusal(t["name"], facts), planned):
+    if free_now(give_due(plan, t) or give_refusal(t["name"], facts), planned):
         tell_dispatchers(fleet, t["label"], f"{t['name']} can take its next bolt: bolt {bolt} reads proven. Give a free team its next bolt.")
     if proven.get(bolt) and any(proven[b] for b in proven if b != bolt):
         return frees_note(t["name"], planned)

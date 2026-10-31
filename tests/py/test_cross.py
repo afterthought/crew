@@ -52,3 +52,41 @@ class TestPath:
         p = plan_with([("x", "crw-5", None), ("y", "crw-4", "flume")])
         assert runner.path_of(p, team("madswan")) == ("crossed", None)
         assert runner.path_of(p, team("madswan", "crw-5")) == ("due", "cross")
+
+
+class TestDue:
+    """A team due to cross is given no new bolt, and no dispatcher is told it can take one (Decision 2)."""
+
+    def test_a_give_to_a_due_team_is_refused_naming_each_bolt_and_the_path_it_was_given_on(self):
+        assert runner.due_refusal("crw-4", ("due", "cross"), [("x", None)]) == (
+            "crw-4 is due to cross to Flume, so it is given no bolt now: it holds x, given on today's path, and is given its next "
+            "bolt once x has landed or been dropped")
+
+    def test_two_bolts_of_todays_path_are_both_named_and_both_finished_first(self):
+        assert runner.due_refusal("crw-4", ("due", "cross"), [("x", None), ("z", None)]).endswith(
+            "it holds x and z, given on today's path, and is given its next bolt once x and z have landed or been dropped")
+
+    def test_due_back_names_the_bolts_given_through_flume_as_the_ones_it_finishes_first(self):
+        assert runner.due_refusal("crw-4", ("due", "back"), [("y", "flume"), ("x", None)]) == (
+            "crw-4 is due back to today's path, so it is given no bolt now: it holds y, given through Flume and x, given on "
+            "today's path, and is given its next bolt once y has landed or been dropped")
+
+    @pytest.mark.parametrize("path", [("today", None), ("crossed", None)])
+    def test_a_team_that_is_not_due_is_not_refused_for_it(self, path):
+        assert runner.due_refusal("crw-4", path, [("x", None)]) is None
+
+    def test_a_proven_bolt_waiting_to_land_on_a_due_team_tells_no_dispatcher_it_is_free(self):
+        p = plan_with([("x", "crw-4", None), ("next", None, None)])
+        assert not plan.free_now(plan.give_due(p, team("madswan")) or plan.give_refusal("crw-4", []), "next")
+        assert plan.free_now(plan.give_due(p, team(False)) or plan.give_refusal("crw-4", []), "next")
+
+    def test_a_bolt_landed_by_a_team_the_write_leaves_due_tells_no_dispatcher(self):
+        teams = {"crw-4": team("madswan"), "crw-5": team(False, "crw-5")}
+        after = plan_with([("z", "crw-4", None), ("w", "crw-5", None)])
+        assert plan.due_teams({"teams": teams}, after) == {"crw-4"}
+
+        def told(freed_by):
+            seen = dict(before={"x": freed_by}, after={}, touched=["x"], quiet=set(), due=plan.due_teams({"teams": teams}, after))
+            return plan.notices(teams, seen, "madswan-ops", "plan(x): land the bolt (madswan-ops)")[2]
+        assert not told("crw-4")
+        assert told("crw-5")

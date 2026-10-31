@@ -150,6 +150,25 @@ class TestGiveRefusal:
         assert plan.give_refusal("swc-1", held) == "swc-1 holds doctor-rows and ssh-fix; doctor-rows waits to land, and its landing frees swc-1"
 
 
+class TestGiveDue:
+    """A team due to cross to Flume or back is given no bolt until those of its old path have landed or been dropped
+    (plan.give_due; Decision 2 of teams-cross-to-flume-as-their-bolts-land)."""
+
+    def test_a_team_whose_setting_names_a_stream_while_it_holds_a_bolt_of_todays_path_is_refused(self):
+        assert plan.give_due(fresh().plan, {"name": "swb-1", "flume": "wldn"}) == (
+            "swb-1 is due to cross to Flume, so it is given no bolt now: it holds tenant-environments, given on today's path, "
+            "and is given its next bolt once tenant-environments has landed or been dropped")
+
+    def test_a_team_on_todays_path_or_crossed_holding_nothing_is_not(self):
+        assert plan.give_due(fresh().plan, {"name": "swb-1", "flume": False}) is None
+        assert plan.give_due(fresh().plan, {"name": "swb-2", "flume": "wldn"}) is None
+
+    def test_a_bolt_given_through_flume_to_a_team_turned_back_holds_it_due_back(self):
+        text = plan_text(bolts=[("tenant-environments", KIT, "swb-1")]).replace("Team: swb-1\n", "Team: swb-1\nPath: flume\n")
+        assert plan.give_due(plan.Plan(text), {"name": "swb-1", "flume": "wldn"}) is None
+        assert plan.give_due(plan.Plan(text), {"name": "swb-1", "flume": False}).startswith("swb-1 is due back to today's path")
+
+
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
 WHERE = "/kit/main/.config/sluice.toml"
 POLICY = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
