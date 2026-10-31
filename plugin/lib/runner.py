@@ -14,6 +14,12 @@ recfix; each runner answers on a branch of its own, <label>/runner/<host>, which
 reads (host_read) and never writes (state.5). A crossed piece's stage is read from its launch, the runner's answer and
 Flume's status of its place as the runner carried it (stage_of, flume_facts).
 
+A give to a crossed team launches its bolt whole, refused only where no runner answers (runnerless), and every plan
+write reaches the places a crossed bolt launched as its own act: added work launched, dropped work dropped, a dependent
+launched again when what it waits on is (reach), an amendment a retry of construct or a launch anew (amending), and a
+move, split or change of After of launched work refused (launched_refusal); each launch's priority follows its bolt's
+place in the plan (priorities).
+
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
 import json
@@ -55,6 +61,16 @@ def due_refusal(team, path, held):
     towards = "due to cross to Flume" if way == "cross" else "due back to today's path"
     return (f"{team} is {towards}, so it is given no bolt now: it holds {holds}, and is given its next bolt once "
             + " and ".join(old) + (" has" if len(old) == 1 else " have") + " landed or been dropped")
+
+
+def runnerless(label, host, tips):
+    """Why a give to a crossed team on a host is refused for want of a runner (Decision 5), or None: tips, the hosts
+    whose runner branch the partition's state repository holds (plan.runner_tips), and a host with none has no runner
+    answering there, so nothing would launch the bolt's work."""
+    if host in tips:
+        return None
+    return (f"no runner answers on {host}: {runner_branch(label, host)} does not exist, so nothing would launch the bolt's "
+            "work there; a give to a team crossed to Flume waits for the runner (flywheel-runner) to serve the partition there")
 
 
 def cross_due(path, up):
@@ -428,3 +444,143 @@ def stage_of(work, launch, answer, place, read, after=()):
     if f["send_backs"] and f["verdict"] in ("failed", "conflict"):
         return dict(res, stage=f["current"], words=f["verdict_words"], sent_back=f["send_backs"], verdict=f["verdict"])
     return dict(res, stage=f["current"])
+
+
+# ------------------------------------------------------------------------------------- a crossed team's launches
+
+def work_of(u):
+    """How a request names a unit or chore of the plan (Decision 4): unit/<unit>, or chore/<chore> for one marked
+    Kind: chore (plan.11)."""
+    return f"{'chore' if u.get('Kind') == 'chore' else 'unit'}/{u.name()}"
+
+
+def brief(u):
+    """A launch's brief for a unit or chore (Decision 5): the work's own words as crew's prompts give them, less what
+    the stage itself is told, which is its kind's: a unit's intent with its sources, as stage_prompt gives construct,
+    and a chore's words, as chore_prompt gives code."""
+    sources = u.all("Source") if u.get("Kind") != "chore" else []
+    return (u.get("Intent") or "") + (" Sources: " + "; ".join(sources) + "." if sources else "")
+
+
+def priority_of(plan, bolt):
+    """A crossed bolt's priority (Decision 6): its place among the plan's bolts given through Flume (Path: flume),
+    counted from the end, so the first in the plan's order has the highest and Flume starts its waiting stages first
+    (flume record 0010); None for a bolt not given through Flume, or gone from the plan."""
+    given = [b.name() for b in plan.bolts() if b.get("Path") == "flume"]
+    return len(given) - given.index(bolt) if bolt in given else None
+
+
+def standing(requests):
+    """The launches no drop names, in requests.rec's order."""
+    dropped = {r.get("Of") for r in requests if r.get("Act") == "drop"}
+    return [r for r in requests if r.get("Act") == "launch" and r.get("Request") not in dropped]
+
+
+def built_order(work):
+    """A bolt's work in the order its launches are numbered (Decision 5): the file's order, but each after the work its
+    After names, so a dependent's After names launches written before it. A cycle, which crew's rules refuse (plan.1),
+    leaves the rest in the file's order."""
+    names, order, placed = {u.name() for u in work}, [], set()
+    while len(order) < len(work):
+        u = next((u for u in work if u.name() not in placed and all(d in placed or d not in names for d in u.all("After"))),
+                 next(u for u in work if u.name() not in placed))
+        order.append(u)
+        placed.add(u.name())
+    return order
+
+
+def reach(plan, requests, bolt, team, again=()):
+    """What a plan write asks of the runner for a bolt given through Flume (Decisions 5 and 7), as the requests to
+    append in order, each (act, host, work, its fields as plan.request takes them), from facts: plan, as the write
+    leaves it; requests, requests.rec's records before them; team, the team holding the bolt as crew.load gives it with
+    the bolt's kit as its kit; again, the work (as requests name it) whose launch is dropped and launched anew, an
+    amendment of a unit whose place is not launched. Each unit and chore of the bolt with no launch standing is
+    launched, as a give launches them: in the file's order, each after the work its After names, cut from the bolt's
+    branch, carrying the team's host and stream, the kit's forge address, the bolt's priority, its intent, the
+    planner as recipient, its brief, and the launches of its After work; a launch standing whose After no longer names
+    its After work's standing launches, one of them dropped, launched anew or gone from its After, is dropped and the
+    work launched again, so no place waits on a launch that will never land; and each unit's or chore's launch on the
+    bolt whose work has left it is dropped, every launch on the bolt's branch, its fixes' too, once the bolt has left
+    the plan. The drops come first, numbered from the next request, then the launches."""
+    base = f"bolt/{bolt}"
+    on = [r for r in standing(requests) if r.get("Base") == base]
+    newest = {r.get("Work"): r for r in on}
+    work = plan.work_of(bolt) if plan.bolt(bolt) is not None else []
+    names = {u.name(): work_of(u) for u in work}
+    order = built_order(work)
+    fresh = set()
+    for u in order:
+        wk, l, deps = names[u.name()], newest.get(names[u.name()]), [d for d in u.all("After") if d in names]
+        if l is None or wk in again or any(names[d] in fresh for d in deps) or \
+                sorted(l.all("After")) != sorted(newest[names[d]].get("Request") for d in deps):
+            fresh.add(wk)
+    left = [r for r in on if r.get("Work") not in names.values()
+            and (plan.bolt(bolt) is None or r.get("Work").startswith(("unit/", "chore/")))]
+    drops = [r for r in on if newest[r.get("Work")] is not r or r.get("Work") in fresh or r in left]
+    out = [("drop", r.get("Host"), r.get("Work"), {"Of": r.get("Request")}) for r in drops]
+    n, num = next_request(requests) + len(out), {}
+    # A team turned back holds its bolts given through Flume until they land (Decision 2): their work runs on in the
+    # stream its launches named.
+    stream = (team["flume"] or next((r.get("Stream") for r in reversed(on)), None)) if team else None
+    for u in order:
+        wk = names[u.name()]
+        if wk not in fresh:
+            num[u.name()] = number(newest[wk].get("Request"))
+            continue
+        num[u.name()], n = n, n + 1
+        out.append(("launch", team["machine"], wk, {
+            "Repo": team["kit"]["repo"], "Kind": "chore" if u.get("Kind") == "chore" else "change", "Name": u.name(), "Base": base,
+            "Stream": stream, "Priority": priority_of(plan, bolt), "Intent": f"{team['label']}/{bolt}",
+            "Recipient": f"{team['label']}/planner", "After": [num[d] for d in u.all("After") if d in num], "Brief": brief(u)}))
+    return out
+
+
+def priorities(plan, requests):
+    """The priority requests a write that launches or reorders bolts appends (Decision 6): [(launch, its priority now)]
+    for each launch standing on a bolt given through Flume whose priority, its bolt's place in the plan now
+    (priority_of), differs from the last its requests set, its launch's or a later priority's; none for a fix of main,
+    or a bolt gone from the plan."""
+    last = {}
+    for r in requests:
+        if r.get("Act") == "launch" or (r.get("Act") == "priority" and r.get("Of") in last):
+            last[r.get("Request") if r.get("Act") == "launch" else r.get("Of")] = r.get("Priority")
+    out = []
+    for r in standing(requests):
+        base = r.get("Base") or ""
+        p = priority_of(plan, base[len("bolt/"):]) if base.startswith("bolt/") else None
+        if p is not None and str(p) != last.get(r.get("Request")):
+            out.append((r, p))
+    return out
+
+
+def amending(work, launch, answer, place, read):
+    """How an approved amendment of a crossed team's unit reaches its place (Decision 7), from the facts stage_of takes:
+    ("again", None) while its launch is held, refused or unanswered, or it has none, its launch dropped and the unit
+    launched anew with the amended intent; ("retry", None) once its place is launched, construct started again with
+    the amendment's words, the place's later stages then running again as Flume runs its kind through (plan.15);
+    ("refused", why) when crew can't tell which, its host's runner or its place unread (read.1), or its place has
+    merged, landed or been dropped, which is not amended (plan.6)."""
+    outcome = answer.get("Outcome") if answer is not None else None
+    if launch is None or (read is True and outcome != "launched"):
+        return "again", None
+    s = stage_of(work, launch, answer, place, read)
+    if s["stage"] == "unknown":
+        return "refused", f"can't tell how far {work}'s place has got, so the amendment can't reach it: {s['why']}"
+    if s["stage"] in ("merged", "landed", "dropped"):
+        how = {"merged": "merged into its bolt", "landed": "landed on main", "dropped": "been dropped"}[s["stage"]]
+        return "refused", f"{work}'s place {s['place']} has {how}, so it is not amended: a defect in it is a fix, and new work is a new unit"
+    return "retry", None
+
+
+def launched_refusal(requests, work, how):
+    """Why a move out of a bolt given through Flume, a split, or a change of After is refused for work whose launch is
+    written (Decision 7), or None while none stands: a place's base and order are fixed at its launch, so the way on is
+    to drop the work and add it again as it should be. how says what the write would do to it."""
+    l = launch_of(requests, work)
+    if l is None:
+        return None
+    kind, name = work.split("/", 1)
+    return (f"{kind} {name} is launched as Flume place {l.get('Name')} on {l.get('Base')} (request {l.get('Request')}), whose "
+            f"base and order are fixed at its launch, so it is not {how}: drop it (crew {kind} drop {name}) and add it "
+            f"again as it should be (crew {kind} add)")
+

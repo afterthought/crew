@@ -22,9 +22,9 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 
 ## 4. A crossed team's bolt launched whole
 
-- [ ] 4.1 A give to a crossed team makes the bolt's branch through sluice, is refused only on a held host, a missing runner branch or the kit's policy, marks the bolt `Path: flume`, starts no agent and appends one launch per unit and chore with its `After` launches (design Decision 5; Task notes 4.1); passes `tests/py/test_cross.py` in `tests:logic`, and verify `tests/suite t-journey-cross` ends with "0 failed".
-- [ ] 4.2 Every write that launches or reorders bolts sends the priorities the plan's order changed (design Decision 6; Task notes 4.2); passes `tests/py/test_runner.py` in `tests:logic`.
-- [ ] 4.3 An added, amended or dropped unit or chore, and a dropped bolt, reach a crossed team's places as launches, retries and drops, and a move, split or `After` change of launched work is refused naming drop and add (design Decision 7; Task notes 4.3); passes `tests/py/test_cross.py` and `tests/py/test_amend.py` in `tests:logic`.
+- [x] 4.1 A give to a crossed team makes the bolt's branch through sluice, is refused only on a held host, a missing runner branch or the kit's policy, marks the bolt `Path: flume`, starts no agent and appends one launch per unit and chore with its `After` launches (design Decision 5; Task notes 4.1); passes `tests/py/test_cross.py` in `tests:logic`, and verify `tests/suite t-journey-cross` ends with "0 failed".
+- [x] 4.2 Every write that launches or reorders bolts sends the priorities the plan's order changed (design Decision 6; Task notes 4.2); passes `tests/py/test_runner.py` in `tests:logic`.
+- [x] 4.3 An added, amended or dropped unit or chore, and a dropped bolt, reach a crossed team's places as launches, retries and drops, and a move, split or `After` change of launched work is refused naming drop and add (design Decision 7; Task notes 4.3); passes `tests/py/test_cross.py` and `tests/py/test_amend.py` in `tests:logic`.
 - [ ] 4.4 A bolt planned for a kit a crossed team builds, held by no team, is told to the partition's dispatchers that are up (design Decisions 3 and 5; Task notes 4.4); passes `tests/py/test_cross.py` in `tests:logic`.
 
 ## 5. Answers and fixes on a crossed team's bolt

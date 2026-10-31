@@ -902,6 +902,10 @@ class Write:
     def replace(self, path, text):
         self.files[path] = text
 
+    def runner_of(self, host):
+        """A host's runner as this command read it beside the plan, at its branch's tip (runners, runner.of_host)."""
+        return runner.of_host(runners(self.repo, self.label), self.label, host)
+
     def bolt(self, name):
         return self.plan.bolt(name) or self.gone("Bolt", name)
 
@@ -1763,7 +1767,13 @@ def bolt_give(fleet, a):
     `branch create`; and in sluice's words when it makes no branch, but for a branch already on its remote at main's
     tip with no commit of its own, as a give that failed after sluice made it leaves it, which the give takes and goes
     on with (made_said). A plan write refused after sluice made the branch, or the give took it, has sluice delete it
-    again (ungiven_said)."""
+    again (ungiven_said).
+
+    A give to a team crossed to Flume (Decision 5 of teams-cross-to-flume-as-their-bolts-land) makes the branch the
+    same way and is refused besides only while no runner answers on the team's host, its branch <label>/runner/<host>
+    missing (runner.runnerless), never for the bolts the team holds, a crossed team holding no bound: its one plan write
+    marks the bolt Path: flume with its Team and appends a launch of each of its units and chores (reach_places), and
+    it starts, restarts and greets no agent."""
     t = crew.team_of(fleet, a.team)
     label, kits = t["label"], [k["name"] for k in crew.kits_of(t)]
     CONTEXT["label"] = label
@@ -1776,8 +1786,13 @@ def bolt_give(fleet, a):
     plan = read(repo, ref, tip)
     why = give_due(plan, t)
     not why or fail(why)
-    # The bolts the team holds, oldest first, read once on its host (plan.12): a give waits only for their proof.
-    held = held_by(plan, t["name"])
+    crossed = runner.path_of(plan, t)[0] == "crossed"
+    if crossed:
+        why = runner.runnerless(label, t["machine"], runner_tips(repo, label))
+        not why or fail(why)
+    # The bolts the team holds, oldest first, read once on its host (plan.12): a give waits only for their proof. A
+    # crossed team waits for none (teams.16 binds today's path).
+    held = held_by(plan, t["name"]) if not crossed else []
     if len(held) > 1:
         built = team_building(fleet, plan, t)
         held = sorted(held, key=lambda b: b.name() == built)
@@ -1813,13 +1828,18 @@ def bolt_give(fleet, a):
     def change(w):
         why = give_due(w.plan, t)
         not why or fail(why)
-        # The kit's proof was read only for the bolts held then.
-        again = [b.name() for b in held_by(w.plan, t["name"])]
-        new = [b for b in again if b not in checked]
-        not new or fail(f"{t['name']} was given {new[0]} since {tip[:7]}")
-        len(again) < 2 or fail(f"{t['name']} holds {again[0]} and {again[1]}")
+        (runner.path_of(w.plan, t)[0] == "crossed") == crossed or fail(f"{t['name']}'s path changed since {tip[:7]}")
+        if not crossed:
+            # The kit's proof was read only for the bolts held then.
+            again = [b.name() for b in held_by(w.plan, t["name"])]
+            new = [b for b in again if b not in checked]
+            not new or fail(f"{t['name']} was given {new[0]} since {tip[:7]}")
+            len(again) < 2 or fail(f"{t['name']} holds {again[0]} and {again[1]}")
         b = to_give(w.plan, w.bolt(chosen), t["name"], [kit_name], label)
         b.set("Team", t["name"])
+        if crossed:
+            b.set("Path", "flume", after="Team")
+            seen["launched"] = reach_places(fleet, w, b.name(), t)
         w.subject = f"plan({b.name()}): give to {t['name']}"
         w.quiet = {t["name"]}  # greeted below once its bolt's branch exists, or at its restart beside a waiting bolt
         seen["bolt"] = b.name()
@@ -1835,6 +1855,9 @@ def bolt_give(fleet, a):
     print(given_said(t["name"], b, kit_name, remote, made, host, adopted))
     record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
                 eid=CONTEXT["eid"])
+    if crossed:
+        print(launched_said(t, b, seen["launched"]))
+        return
     up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
     if checked:
         # The team still holds a proven bolt, its landing card and any carrying fix the conductor waits on, so neither
@@ -2041,6 +2064,51 @@ def proven_facts(st, plan, bolts):
         work = [(u.name(), kind_of(u), st.of(u.name())["stage"]) for u in plan.work_of(b.name())]
         out.append((b.name(), work, facts.get("head"), facts.get("verdict"), why))
     return out
+
+
+def launched_said(t, bolt, launched):
+    """What a give to a team crossed to Flume says once the plan gives the bolt (Decision 5): each piece of work
+    launched by its request, for the runner on the team's host to launch in the team's stream, and that no agent
+    starts, crew bolts showing the places."""
+    work = ", ".join(f"{w} (request {n})" for n, w in launched) or "nothing, the bolt holding no unit or chore yet"
+    return (f"{t['name']} has crossed to Flume, so no agent of it starts: the runner on {t['machine']} launches {work} in "
+            f"stream {t['flume']}, and crew bolts shows their places")
+
+
+def crossed_bolt(plan, bolt):
+    """Whether a bolt of the plan was given through Flume, marked Path: flume (Decision 2)."""
+    b = plan.bolt(bolt) if bolt else None
+    return b is not None and b.get("Path") == "flume"
+
+
+def reach_places(fleet, w, bolt, t=None, again=()):
+    """A plan write's own act on a bolt given through Flume (Decisions 5 to 7 of teams-cross-to-flume-as-their-bolts-
+    land): the requests runner.reach decides, its launches, drops and launches anew, appended in the write's own commit
+    (request), then the priorities the plan's order changed (reprioritise). t is the team holding the bolt with the
+    bolt's kit as its kit, read from the plan when not given, refused when the teams file names no team by it, since
+    crew can't tell where its work runs; again the work launched anew. Returns each launch appended, as (its number,
+    its work)."""
+    b = w.plan.bolt(bolt)
+    if t is None and b is not None:
+        t = bolt_team(fleet, b) or fail(f"bolt {bolt} is given to {b.get('Team')}, which {crew.TEAMS} does not name, so crew can't "
+                                        "tell where its work runs")
+    launched = []
+    for act, host, work, given in runner.reach(w.plan, requests_of(w).recs("Request"), bolt, t, again):
+        n = request(w, act, host, work, **given)
+        if act == "launch":
+            launched.append((n, work))
+    reprioritise(w)
+    return launched
+
+
+def reprioritise(w):
+    """Decision 6: a priority request appended for each launch standing on a bolt given through Flume whose priority
+    the plan's order changed (runner.priorities), in the write's own commit; nothing when the branch holds no
+    requests."""
+    if w.text("requests.rec") is None:
+        return
+    for launch, p in runner.priorities(w.plan, requests_of(w).recs("Request")):
+        request(w, "priority", launch.get("Host"), launch.get("Work"), Of=launch.get("Request"), Priority=p)
 
 
 def give_due(plan, t):
@@ -5365,6 +5433,7 @@ def op_bolt_order(ctx, a):
             o = w.bolt(a.before)
             o is not b or fail("a bolt can't go before itself")
             w.plan.insert(b, before=o)
+        reprioritise(w)
         return [a.bolt]
     where = "first" if a.first else "last" if a.last else f"before {a.before}"
     return Op(label, change, f"plan({a.bolt}): order the bolt {where}", "bolt.order", on=[f"bolt/{a.bolt}"])
@@ -5382,6 +5451,7 @@ def op_bolt_drop(ctx, a):
 
     def change(w):
         b = w.bolt(a.bolt)
+        through = crossed_bolt(w.plan, a.bolt)
         for u in w.plan.work_of(a.bolt):
             if a.requeue:
                 u.drop("Bolt")
@@ -5391,6 +5461,8 @@ def op_bolt_drop(ctx, a):
                 w.plan.remove(u)
                 w.on.append(f"{kind_of(u)}/{u.name()}")
         w.plan.remove(b)
+        if through:  # every place it launched is dropped (Decision 7)
+            reach_places(ctx.fleet, w, a.bolt)
         return [a.bolt]
 
     gone = [] if a.requeue else [u.name() for u in plan.work_of(a.bolt)]
@@ -5439,6 +5511,8 @@ def op_unit_add(ctx, a):
             w.plan.insert(r, before=o)
         else:
             w.plan.place_last(r)
+        if crossed_bolt(w.plan, a.bolt):  # launched as the give launches it (Decision 7)
+            reach_places(ctx.fleet, w, a.bolt)
         return [a.bolt] if a.bolt else []
 
     def after(repo, sha):
@@ -5471,6 +5545,9 @@ def op_unit_split(ctx, a):
 
     def change(w):
         u = w.of(a)
+        if crossed_bolt(w.plan, u.get("Bolt")):
+            why = runner.launched_refusal(requests_of(w).recs("Request"), runner.work_of(u), "split")
+            not why or fail(why)
         u.set("Intent", a.intent)
         prev = u
         for n, intent in a.into:
@@ -5480,6 +5557,8 @@ def op_unit_split(ctx, a):
                     + [("Intent", intent)] + [("Source", x) for x in u.all("Source")])
             w.plan.insert(r, after=prev)
             prev = r
+        if crossed_bolt(w.plan, u.get("Bolt")):  # a unit not launched yet, and what it was split into, launched
+            reach_places(ctx.fleet, w, u.get("Bolt"))
         return [u.get("Bolt")] if u.get("Bolt") else []
     return Op(label, change, f"plan({bolt or 'queue'}): split {a.unit} into " + ", ".join(n for n, _ in a.into), "unit.split",
               on=[f"unit/{a.unit}"] + [f"unit/{n}" for n, _ in a.into], frm=[f"unit/{a.unit}"])
@@ -5499,8 +5578,10 @@ def op_unit_amend(ctx, a):
         + ", so it is not amended: a defect in it is a fix, and new work is a new unit")
     s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
     bolt = plan.unit(a.unit).get("Bolt")
-    team = bolt_team(ctx.fleet, plan.bolt(bolt)) if bolt else None
-    mark = (f"proposal/{ctx.n}" if not ctx.direct else "intent") if s["worktree"] else None
+    # A unit of a bolt given through Flume has no worktree, conductor or construct of crew's: its place is reached by the
+    # write's own requests (amend_place).
+    team = bolt_team(ctx.fleet, plan.bolt(bolt)) if bolt and not crossed_bolt(plan, bolt) else None
+    mark = (f"proposal/{ctx.n}" if not ctx.direct else "intent") if s["worktree"] and team else None
 
     def change(w):
         u = w.of(a)
@@ -5509,6 +5590,8 @@ def op_unit_amend(ctx, a):
             u.set("Amended", mark)
             if team:
                 w.quiet.add(team["name"])  # told below what to do, rather than the write's subject
+        if crossed_bolt(w.plan, u.get("Bolt")):
+            amend_place(ctx.fleet, w, u, "intent" if ctx.direct else f"proposal/{ctx.n}")
         return [bolt] if bolt else []
 
     def after(repo, sha):
@@ -5526,6 +5609,30 @@ def op_unit_amend(ctx, a):
             print(f"construct did not start on unit {a.unit}: {why}")
             amend_tell(ctx.fleet, team["name"], *amend_told(a.unit, by, None, why))
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
+
+
+def amend_place(fleet, w, u, by):
+    """An approved amendment of a unit of a bolt given through Flume, reaching its place as the write's own act
+    (Decision 7 of teams-cross-to-flume-as-their-bolts-land, runner.amending), u already holding its new intent: once
+    its place is launched, a retry of its construct with the amendment's words, as a construct run again on today's
+    path is prompted (again_words), by the user or by proposal <n> with the planner's case; while its launch is held or
+    unanswered, that launch dropped and the unit launched anew carrying the amendment (reach_places). Refused when the
+    runner's records can't tell which, or its place has merged."""
+    requests, work = requests_of(w).recs("Request"), runner.work_of(u)
+    launch = runner.launch_of(requests, work)
+    reading = w.runner_of(launch.get("Host")) if launch is not None else None
+    n = runner.number(launch.get("Request")) if launch is not None else None
+    read = (reading["why"] or True) if reading is not None else True
+    answer, place = ((reading.get("answers") or {}).get(n), (reading.get("places") or {}).get(n)) if reading is not None else (None, None)
+    how, why = runner.amending(work, launch, answer, place, read)
+    not why or fail(why)
+    if how == "again":
+        reach_places(fleet, w, u.get("Bolt"), again={work})
+        return
+    case = next((p.get("Case") for p in Plan(w.text("proposals.rec") or "").recs("Proposal")
+                 if by == f"proposal/{p.get('Proposal')}"), None) if by.startswith("proposal/") else None
+    request(w, "retry", launch.get("Host"), work, Of=launch.get("Request"), Stage="construct",
+            Words=runner.brief(u) + again_words(by, case))
 
 
 def construct_again(team, unit, stage, by):
@@ -5606,6 +5713,7 @@ def op_unit_after(ctx, a):
 
     def change(w):
         u = w.of(a)
+        had = sorted(u.all("After"))
         if a.none:
             u.drop("After")
         for d in a.deps:
@@ -5613,6 +5721,10 @@ def op_unit_after(ctx, a):
             d != a.unit or fail(f"a {k} can't come after itself")
             if d not in u.all("After"):
                 u.add("After", d, after="Intent")
+        if crossed_bolt(w.plan, u.get("Bolt")) and sorted(u.all("After")) != had:
+            why = runner.launched_refusal(requests_of(w).recs("Request"), runner.work_of(u), f"put {what}")
+            not why or fail(why)
+            reach_places(ctx.fleet, w, u.get("Bolt"))
         return [u.get("Bolt")] if u.get("Bolt") else []
     what = "after nothing" if a.none else "after " + ", ".join(a.deps)
     return Op(label, change, f"plan({u0.get('Bolt') or 'queue'}): {called(a)} {what}", f"{k}.after",
@@ -5631,6 +5743,10 @@ def op_unit_move(ctx, a):
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"{k} {a.unit} has merged into {src}, so it can't move")
     s["stage"] != "unknown" or s.get("place_unread") or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
+    # Nothing moves work in flight from one path to the other (Decision 2 of teams-cross-to-flume-as-their-bolts-land).
+    not (s["worktree"] and crossed_bolt(plan, to)) or fail(
+        f"{k} {a.unit} has a place at {s['worktree']} on today's path, and bolt {to} is built through Flume, where nothing "
+        f"of today's path is carried: drop it (crew {k} drop {a.unit}) and add it to {to} again (crew {k} add)")
     prepare = None
     # A place that tracks a bolt crew cannot read is not rebased: it is left on the bolt it tracks, which the work has
     # then left, so the tidy removes it and its next stage cuts its place from bolt/<to> (left_refusal).
@@ -5657,6 +5773,9 @@ def op_unit_move(ctx, a):
     def change(w):
         u = w.of(a)
         u.get("Bolt") == src or fail(f"{k} {a.unit} moved to {u.get('Bolt') or 'the queue'} meanwhile")
+        if crossed_bolt(w.plan, src):
+            why = runner.launched_refusal(requests_of(w).recs("Request"), runner.work_of(u), f"moved to {to or 'the queue'}")
+            not why or fail(why)
         u.drop("After")
         if to:
             w.bolt(to)
@@ -5668,6 +5787,8 @@ def op_unit_move(ctx, a):
             w.plan.insert(u, before=o)
         else:
             w.plan.place_last(u)
+        if crossed_bolt(w.plan, to):  # launched as the give launches it (Decision 7)
+            reach_places(ctx.fleet, w, to)
         return [b for b in (src, to) if b]
     kit = u.get("Repo")
     return Op(label, change, f"plan({to or 'queue'}): move {called(a)} from {src or 'the queue'}", f"{k}.move",
@@ -5691,6 +5812,8 @@ def op_unit_drop(ctx, a):
             if a.unit in o.all("After"):
                 o.fields = [(n, v) for n, v in o.fields if not (n == "After" and v == a.unit)]
         w.plan.remove(u)
+        if crossed_bolt(w.plan, u.get("Bolt")):  # its place dropped, and each dependent's held launch made again without it
+            reach_places(ctx.fleet, w, u.get("Bolt"))
         return [bolt] if bolt else []
 
     def after(repo, sha):

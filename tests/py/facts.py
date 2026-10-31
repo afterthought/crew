@@ -95,11 +95,13 @@ def plan_text(bolts=(), units=()):
 
 
 class FactsWrite:
-    """A plan.Write over a plan in memory: its files given, and a refusal for a missing bolt or unit that reads no
-    git for the commit that removed it."""
+    """A plan.Write over a plan in memory: its files given, each host's runner as given (runners, {host: its reading as
+    runner.host_read gives it}), and a refusal for a missing bolt or unit that reads no git for the commit that
+    removed it."""
 
-    def __new__(cls, text, files=None):
+    def __new__(cls, text, files=None, runners=None, label="wldn"):
         import plan
+        import runner
 
         class W(plan.Write):
             def text(self, path):
@@ -107,12 +109,15 @@ class FactsWrite:
 
             def gone(self, kind, name, word=None):
                 plan.fail(f"no {word or kind.lower()} {name} in {self.label}/main")
-        w = W(None, "wldn", None, plan.Plan(text))
+
+            def runner_of(self, host):
+                return runner.of_host(runners or {}, self.label, host)
+        w = W(None, label, None, plan.Plan(text))
         w.files = dict(files or {})
         return w
 
 
-def known(w, stages=None, taken=(), n=None, chores_taken=()):
+def known(w, stages=None, taken=(), n=None, chores_taken=(), fleet=None):
     """A plan command's reads as a logic case gives them (plan.Reads): each unit's or chore's stage as given, else ready;
     a name free unless the kit's main holds a change (taken) or a chore (chores_taken) by it; work a held bolt needs
     ahead of its first unit or chore not merged."""
@@ -141,9 +146,10 @@ def known(w, stages=None, taken=(), n=None, chores_taken=()):
             return next((u.name() for u in p.work_of(bolt) if self.of(u.name())["stage"] not in ("merged", "landed")), None)
 
         def kit(self, kit):
-            kit in KITS or plan.fail(f"no team of {self.label} builds {kit}, so no plan holds its work")
+            kit in KITS + tuple(k["name"] for t in (fleet or FLEET)["teams"].values() for k in t.get("kits", [])) or plan.fail(
+                f"no team of {self.label} builds {kit}, so no plan holds its work")
             return self.label
-    return Known(FLEET, "wldn", w, n)
+    return Known(fleet or FLEET, w.label, w, n)
 
 
 def apply(w, *dos, ctx=None):
@@ -151,7 +157,7 @@ def apply(w, *dos, ctx=None):
     checked: what plan.apply_all and check_ops do, without recfix's process."""
     import plan
     for do in dos:
-        a = plan.do_args("wldn", do)
+        a = plan.do_args(w.label, do)
         plan.OPS[(a.cmd, a.sub)](ctx or known(w, n=1), a).change(w)
     plan.check(w.plan)
     return w
@@ -160,3 +166,27 @@ def apply(w, *dos, ctx=None):
 def units_of(w, bolt=None, repo=None):
     """The plan's units and chores in a bolt, or in a repo's queue, in order."""
     return [u.name() for u in w.plan.work() if (u.get("Bolt") == bolt if bolt else not u.get("Bolt") and u.get("Repo") == repo)]
+
+
+CREW_KIT = {"name": "crew", "repo": "afterthought/crew"}
+
+
+def crossed_fleet(**settings):
+    """The fleet of madswan's teams on deneb building crew (afterthought/crew), each with its Flume setting: crw-4
+    crossed in stream madswan unless given otherwise, crw-5 on today's path."""
+    settings = dict({"crw-4": "madswan", "crw-5": False}, **settings)
+    return {"partitions": {"madswan": {"label": "madswan", "teams": sorted(settings)}}, "hosts": {},
+            "teams": {n: {"name": n, "flume": f, "label": "madswan", "machine": "deneb", "kit": CREW_KIT, "kits": [CREW_KIT]}
+                      for n, f in settings.items()}}
+
+
+def flume_plan(bolts=(), work=()):
+    """madswan's plan.rec text, every bolt and piece of work in crew: bolts as (name, team or None, Path or None), work as
+    (name, bolt or None, [after], kind, [sources]), kind "chore" or "unit", each in order and intended `Build <name>.`."""
+    out = "%rec: Bolt\n%key: Bolt\n\n" + "".join(
+        f"Bolt: {b}\nRepo: crew\nGoal: Goal of {b}.\n" + (f"Team: {t}\n" if t else "") + (f"Path: {p}\n" if p else "") + "\n"
+        for b, t, p in bolts)
+    return out + "%rec: Unit\n%key: Unit\n\n" + "".join(
+        f"Unit: {u}\nRepo: crew\n" + (f"Bolt: {b}\n" if b else "") + ("Kind: chore\n" if kind == "chore" else "")
+        + f"Intent: Build {u}.\n" + "".join(f"After: {x}\n" for x in after) + "".join(f"Source: {x}\n" for x in sources) + "\n"
+        for u, b, after, kind, sources in work)

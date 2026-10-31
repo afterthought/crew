@@ -11,7 +11,7 @@ import pathlib
 import pytest
 
 from crew import Refusal
-from facts import FactsWrite
+from facts import FactsWrite, crossed_fleet, flume_plan
 import plan
 import runner
 
@@ -364,3 +364,85 @@ def test_a_place_over_as_done_or_in_a_phase_crew_does_not_read_is_unknown_saying
         got = runner.stage_of("unit/a", rec(3, "launch"), plan.Rec("Answer", [("Request", "3"), ("Outcome", "launched")]),
                               {"place": CODE, "status": status, "why": None}, True)
         assert got["stage"] == "unknown" and got["why"] == f"Flume's status of unit/a's place {CODE} {why}"
+
+
+class TestPriorities:
+    """A launch's priority is its bolt's place among the plan's bolts given through Flume, counted from the end, and a
+    write that launches or reorders bolts sends each priority the plan's order changed (Decision 6)."""
+    FLEET = crossed_fleet()
+
+    @staticmethod
+    def write(*bolts):
+        """madswan's plan with each bolt (name, Path or None) holding one unit named after it, every bolt held by crw-4."""
+        return FactsWrite(flume_plan([(b, "crw-4", p) for b, p in bolts], [(f"{b}-unit", b, [], "unit", []) for b, _ in bolts]),
+                          label="madswan")
+
+    @staticmethod
+    def priorities(w):
+        """Each launch's work and the priority its requests last set, in the order launched."""
+        rs = plan.Plan(w.files["requests.rec"]).recs("Request")
+        last = {}
+        for r in rs:
+            if r.get("Act") == "launch":
+                last[r.get("Request")] = [r.get("Work"), r.get("Priority")]
+            elif r.get("Act") == "priority":
+                last[r.get("Of")][1] = r.get("Priority")
+        return [tuple(v) for v in last.values()]
+
+    def give(self, w, bolt):
+        w.plan.bolt(bolt).set("Path", "flume", after="Team")
+        plan.reach_places(self.FLEET, w, bolt, self.FLEET["teams"]["crw-4"])
+
+    def test_the_first_bolt_in_the_plan_has_the_highest(self):
+        p = plan.Plan(flume_plan([("x", "crw-4", "flume"), ("t", "crw-5", None), ("y", "crw-4", "flume"), ("z", None, None)]))
+        assert [runner.priority_of(p, b) for b in ("x", "t", "y", "z", "gone")] == [2, None, 1, None, None]
+
+    def test_two_bolts_given_in_order(self, monkeypatch):
+        """Crossed crw-4 is given x and then y, x above y in the plan: x's launches carry a higher priority than y's,
+        each naming stream madswan, intent madswan/<bolt> and recipient madswan/planner."""
+        monkeypatch.setenv("CREW_AGENT", BY)
+        w = self.write(("x", None), ("y", None))
+        self.give(w, "x")
+        self.give(w, "y")
+        assert self.priorities(w) == [("unit/x-unit", "2"), ("unit/y-unit", "1")]
+        launches = [r for r in plan.Plan(w.files["requests.rec"]).recs("Request") if r.get("Act") == "launch"]
+        assert [(r.get("Stream"), r.get("Intent"), r.get("Recipient")) for r in launches] == [
+            ("madswan", "madswan/x", "madswan/planner"), ("madswan", "madswan/y", "madswan/planner")]
+
+    def test_a_third_given_raises_those_above_it(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", BY)
+        w = self.write(("x", None), ("y", None), ("z", None))
+        for b in ("x", "y", "z"):
+            self.give(w, b)
+        assert self.priorities(w) == [("unit/x-unit", "3"), ("unit/y-unit", "2"), ("unit/z-unit", "1")]
+
+    def test_a_reorder_sends_only_what_changed(self, monkeypatch):
+        """crew bolt order puts z above y: requests.rec gains a priority for each launched place of y and z, whose
+        priorities changed, and none for x's."""
+        from facts import apply, known
+        monkeypatch.setenv("CREW_AGENT", BY)
+        w = self.write(("x", None), ("y", None), ("z", None))
+        for b in ("x", "y", "z"):
+            self.give(w, b)
+        n = len(plan.Plan(w.files["requests.rec"]).recs("Request"))
+        apply(w, "bolt order z --before y", ctx=known(w, fleet=self.FLEET))
+        new = plan.Plan(w.files["requests.rec"]).recs("Request")[n:]
+        assert [(r.get("Act"), r.get("Work"), r.get("Priority")) for r in new] == [
+            ("priority", "unit/y-unit", "1"), ("priority", "unit/z-unit", "2")]
+        apply(w, "bolt order z --before y", ctx=known(w, fleet=self.FLEET))
+        assert len(plan.Plan(w.files["requests.rec"]).recs("Request")) == n + 2
+
+    def test_a_reorder_on_a_branch_with_no_requests_writes_none(self):
+        from facts import apply, known
+        w = self.write(("x", None), ("y", None))
+        apply(w, "bolt order y --first", ctx=known(w, fleet=self.FLEET))
+        assert "requests.rec" not in w.files
+
+    def test_a_dropped_launch_a_fix_of_main_and_a_bolt_gone_take_no_priority(self):
+        p = plan.Plan(flume_plan([("x", "crw-4", "flume"), ("y", "crw-4", "flume")]))
+        fix = dict(Base="main", Intent="madswan/main/crew", Recipient="madswan/ops", Name="main--red", Hold="submission")
+        rs = held(rec(1, "launch", Base="bolt/x"), rec(2, "drop", Of=1), rec(3, "launch", "unit/b", Base="bolt/gone"),
+                  rec(4, "launch", "fix/main/crew/red", **fix), rec(5, "launch", "unit/c", Base="bolt/y", Priority=7),
+                  rec(6, "priority", "unit/c", Of=5, Priority=1))
+        assert runner.priorities(p, rs) == []
+        assert [(r.get("Request"), n) for r, n in runner.priorities(p, rs[:5])] == [("5", 1)]
