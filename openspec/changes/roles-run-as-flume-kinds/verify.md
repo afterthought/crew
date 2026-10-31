@@ -36,7 +36,7 @@ The fix: `kinds_up` brings `roles.rec` to match the teams file whenever `asks.ro
 
 ## Tasks
 
-All 25 tasks, 1.1 to 13.2, are ticked, and the check each names passes. The tasks marked *needs teams-cross* (4.2, 5.4, 6.1, 11.1) rest on `teams-cross-to-flume-as-their-bolts-land`, which is on the bolt at `91bd81f7`: `runner.py`, `requests.rec`, `runner_facts` and the runner's branches are there. Task 10.1's check passes but does not cover finding 1.
+All 24 tasks, 1.1 to 13.2, are ticked, and the check each names passes. The tasks marked *needs teams-cross* (4.2, 5.4, 6.1, 11.1) rest on `teams-cross-to-flume-as-their-bolts-land`, which is on the bolt at `91bd81f7`: `runner.py`, `requests.rec`, `runner_facts` and the runner's branches are there. Task 10.1's check passes but does not cover finding 1.
 
 ## Requirements and scenarios
 
