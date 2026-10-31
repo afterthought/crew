@@ -21,6 +21,9 @@ move, split or change of After of launched work refused (launched_refusal); each
 place in the plan (priorities). A bolt planned in a crossed team's kit is the dispatchers' to give it (takers).
 
 A place that stopped short asking, or waits on its caller, is answered by a retry with the answer's words (answer_retry).
+A fix on a crossed bolt is a launch of Flume's fix kind on the bolt's branch (fix_launch), dropped by a drop
+(fix_drop_refusal), merged and waited on by Flume alone (fix_flume_refusal), and holds the bolt's landing while it is in
+flight (fixes_in_flight).
 
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
@@ -660,3 +663,60 @@ def answer_retry(work, s):
         return "submission", None
     return None, (f"{place} is {stage_said(s)}, with no question and nothing it waits on its caller for, so there is nothing "
                   "to answer: crew bolts shows its stage")
+
+
+def fix_launch(plan, requests, bolt, team, name, words):
+    """The launch crew fix <team> <name> "<words>" appends for a fix on a bolt given through Flume (Decision 10), as
+    (act, host, work, its fields as plan.request takes them), or (None, why): a place of the fix kind named
+    <bolt>--<name>, cut from the bolt's branch, on the team's host and in its stream (or, turned back, the stream the
+    bolt's launches named, as reach has it), with the bolt's priority and intent, the planner as recipient, the fix's
+    words as its brief and nothing held. Refused while a launch of that fix stands on the bolt, merged or not, since
+    the name is in use there (teams.3). team carries the bolt's kit as its kit."""
+    work, base = f"fix/{bolt}/{name}", f"bolt/{bolt}"
+    l = launch_of(requests, work)
+    if l is not None:
+        return None, (f"fix {name} is in use on bolt {bolt}: it is launched as Flume place {l.get('Name')} (request "
+                      f"{l.get('Request')}), so name this fix differently")
+    stream = team["flume"] or next((r.get("Stream") for r in reversed(requests)
+                                    if r.get("Act") == "launch" and r.get("Base") == base and r.get("Stream")), None)
+    return ("launch", team["machine"], work, {
+        "Repo": team["kit"]["repo"], "Kind": "fix", "Name": f"{bolt}--{name}", "Base": base, "Stream": stream,
+        "Priority": priority_of(plan, bolt), "Intent": f"{team['label']}/{bolt}", "Recipient": f"{team['label']}/planner",
+        "Brief": words}), None
+
+
+def fix_drop_refusal(team, work, launch, s):
+    """Why crew fix --drop of a fix on a bolt given through Flume is refused (Decision 10, teams.3), or None to drop the
+    launch standing: none stands, so the team has no such fix; crew can't tell how far its place got (read.1); or its
+    place has merged into the bolt, so what it changed is the bolt's and a new fix undoes it. s, its stage (piece_stage)."""
+    if launch is None:
+        return f"{team} has no fix {work}: no launch of it stands in requests.rec"
+    if s["stage"] == "unknown":
+        return f"can't tell whether {work}'s place has merged into {launch.get('Base')}, so it is not dropped: {s['why']}"
+    if s["stage"] in ("merged", "landed"):
+        return (f"{work} has merged into {launch.get('Base')}, so it is not dropped: what it changed is the bolt's, and a new "
+                "fix undoes it")
+    return None
+
+
+def fix_flume_refusal(mode, team, bolt, name):
+    """What crew fix <team> <name> --merge or --wait says refusing a fix on a bolt given through Flume (Decision 10):
+    Flume submits the fix's place to the bolt through sluice itself and tells its end to the planner, so nothing of
+    crew's merges it or waits on it, and crew bolts shows its stage."""
+    said = f"crew fix {team} {name} --{mode}"
+    return (f"fix/{bolt}/{name} is a Flume place on bolt/{bolt}, which Flume submits to the bolt through sluice itself once its "
+            f"code has delivered, telling the planner its end, so {said} has nothing to do: crew bolts shows its stage")
+
+
+def fixes_in_flight(requests, reads, label, bolt):
+    """The fixes in flight on a bolt given through Flume (Decision 10), {fix/<bolt>/<name>: its brief}: each whose launch
+    stands and whose place has not merged into the bolt, landed or been dropped, its stage read from its host's runner
+    (reads, by host, of_host; piece_stage), one crew can't read counted in flight (read.1). A fix in flight holds the
+    bolt's landing as today's does (plan.landing_unready, landing_rows)."""
+    out = {}
+    for l in standing(requests):
+        work = l.get("Work") or ""
+        if l.get("Base") == f"bolt/{bolt}" and work.startswith(f"fix/{bolt}/"):
+            if piece_stage(requests, of_host(reads, label, l.get("Host")), l)["stage"] not in ("merged", "landed", "dropped"):
+                out[work] = l.get("Brief")
+    return out

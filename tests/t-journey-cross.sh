@@ -6,9 +6,10 @@
 # bolts, with no pane opened. A give to the crossed team is refused while no runner answers on its host, and once one
 # does, sluice makes the bolt's branch, the plan marks the bolt Path: flume and requests.rec on the state branch holds a
 # launch of each of its units and chores, and no agent starts. Once the runner's record shows a's place stopped short
-# asking, crew answer a appends the retry of that stage with the answer's words. A team's path, the give's refusal, who
-# is due an end, the launches, what an answer retries and the refusals' words are logic cases (tests/py/test_cross.py,
-# tests/py/test_hold.py).
+# asking, crew answer a appends the retry of that stage with the answer's words, and crew fix of swb-1 appends a launch
+# of a fix on its bolt. A team's path, the give's refusal, who is due an end, the launches, what an answer retries, a
+# fix's launch and drop and the refusals' words are logic cases (tests/py/test_cross.py, tests/py/test_hold.py,
+# tests/py/test_fix.py).
 # Reads: plugin/hooks/ plugin/roles/ plugin/lib/hold.py tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
@@ -96,3 +97,12 @@ eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Re
   "retry unit/a 1 code wldn's"
 eq "$(field "$HOST" stage.answer On)" "unit/a bolt/next"
 ok "crew answer of a place the runner shows stopped short asking appends the retry of its stage with the answer's words"
+
+: > "$CREW_TEST_CLAUDE_LOG"
+expect_ok crew fix swb-1 tidy "Tidy the rail's words."
+has "$out" "the runner on $box launches fix next--tidy on bolt/next (request 5) in stream wldn"
+eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Request = 5" -P Act,Work,Kind,Name,Base,Brief | grep . | paste -sd ' ' -)" \
+  "launch fix/next/tidy fix next--tidy bolt/next Tidy the rail's words."
+eq "$(field "$HOST" fix.start On)" "fix/next/tidy bolt/next"
+eq "$(launches)" ""
+ok "crew fix of a crossed team appends a launch of a fix on its bolt, starting no agent"

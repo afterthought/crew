@@ -2128,6 +2128,15 @@ def reprioritise(w):
         request(w, "priority", launch.get("Host"), launch.get("Work"), Of=launch.get("Request"), Priority=p)
 
 
+def runner_facts(fleet, label):
+    """What a crossed piece's stage is read from in a partition (runner.piece_stage; Decision 8 of teams-cross-to-flume-
+    as-their-bolts-land): requests.rec's records at the tip of its branch this command reads (fetch), none where the
+    branch is not started, and each host's runner read beside it (runners)."""
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref)
+    return (Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request") if tip else []), runners(repo, label)
+
+
 def launch_label(fleet, work, label):
     """The partition whose requests.rec holds a launch standing for the work a command names (runner.named_launch):
     label when given, else the one partition that holds it; refused naming each partition when none does, or when
@@ -3036,7 +3045,8 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
     landing_facts), the row's facts as cards.landings_card takes them with what the reading's writer needs beside them,
     the team, its conductor, its host and where the bolt last met main (base); (None, why) while it does not. With
     fixes_hold False, a fix in flight on it does not keep it from reading proven, and the facts hold each such fix with
-    the words it started with ({fix: words or None}, fix_words), the bolt's last landing sluice refused ((head, words),
+    the words it started with ({fix: words or None}, fix_words; a bolt given through Flume's, its launch's brief,
+    runner.fixes_in_flight), the bolt's last landing sluice refused ((head, words),
     refusals) or None, for landing_rows to hold its row by, and its last one sluice or its host stopped ((head, words),
     stops) or None, for its row to say. Refused when its kit can't be read (read.1)."""
     bolt = b.name()
@@ -3046,7 +3056,10 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
     of = {u.name(): st.of(u.name()) for u in plan.work_of(bolt)}
     work = [(n, s.get("kind", "unit"), s["stage"]) for n, s in of.items()]
     facts = k["bolts"].get(bolt, {})
-    fixes = fixes_in_flight(k.get("fixes", []), bolt)
+    # A bolt given through Flume holds its fixes as Flume places, read from their launches and the runner's records,
+    # each with its brief for its words (Decision 10 of teams-cross-to-flume-as-their-bolts-land).
+    flume = runner.fixes_in_flight(*runner_facts(fleet, label), label, bolt) if crossed_bolt(plan, bolt) else None
+    fixes = sorted(flume) if flume is not None else fixes_in_flight(k.get("fixes", []), bolt)
     why = landing_unready(work, facts.get("head"), facts.get("verdict"), fixes if fixes_hold else [])
     if why:
         return None, why
@@ -3067,7 +3080,7 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
                          dict(team=t["name"], next=frees[1]) if frees and frees[0] == "frees" else None)
     if not card:
         return None, batch_waits([n for n, kind, _ in work if kind == "unit"], due, unanswered)
-    held = {} if fixes_hold else dict(fixes={f: fix_words(t, f) for f in fixes}, refusal=refusals(entries).get(bolt),
+    held = {} if fixes_hold else dict(fixes={f: flume[f] if flume is not None else fix_words(t, f) for f in fixes}, refusal=refusals(entries).get(bolt),
                                       stop=stops(entries).get(bolt))
     return dict(card, team=t["name"], conductor=f"{t['name']}-conductor", host=t["machine"], base=base, **held), None
 
@@ -11645,6 +11658,8 @@ def fix_run(fleet, a):
     merge stage, a submission of the fix to the bolt through sluice; a wait waits on the stage the fix's slot owes
     (stage_wait). A wait is refused at once for a team crossed to Flume, which has no slots (not_crossed)."""
     t = at_work(fleet, a.team)
+    if flume_fix(fleet, t, a):
+        return
     if a.mode == "wait":
         not_crossed(fleet, t, f"fix {t['name']} {a.name} --wait")
     team = on_team_host(fleet, t, a.force)
@@ -11696,6 +11711,72 @@ def fix_run(fleet, a):
         fix_said(t, fix, a.words)
         print(f"{agent} has {fix}: code, in {place}")
         landing_held(fleet, t, bolt, a.words)
+
+
+def flume_fix(fleet, t, a):
+    """crew fix of a team's bolt given through Flume (Decision 10 of teams-cross-to-flume-as-their-bolts-land), on the
+    asking host, since it is a plan write and starts nothing there: a new fix is a launch of Flume's fix kind on the
+    bolt's branch (runner.fix_launch), its bolt's landing held while it is in flight (land_hand, land_facts); --drop a
+    drop of its launch (runner.fix_drop_refusal); --merge and --wait refused, Flume submitting the place and telling
+    its end itself (runner.fix_flume_refusal). The bolt is found as a fix's is (fix_bolt), a fix in flight by its name
+    among the launches standing. Each is recorded as fix.start, fix.merge or fix.drop, refused or done (teams.3).
+    Returns False, having written nothing, for a fix of a bolt given on today's path, which fix_cmd and its stage run
+    on the team's host."""
+    CONTEXT["label"] = label = t["label"]
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    plan = read(repo, ref, tip)
+    held = held_by(plan, t["name"])
+    if not any(b.get("Path") == "flume" for b in held):
+        return False
+    crew.NAME.match(a.name) or fail("a fix is named with lowercase words and dashes")
+    requests = Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request")
+    bolt = fix_bolt(t["name"], [b.name() for b in held], a.bolt, [r.get("Work") for r in runner.standing(requests)], a.name)
+    if not crossed_bolt(plan, bolt):
+        return False
+    t = crew.with_kit(t, plan.bolt(bolt).get("Repo"))
+    on, act, seen = [f"fix/{bolt}/{a.name}", f"bolt/{bolt}"], {"start": "fix.start", "merge": "fix.merge", "drop": "fix.drop"}.get(a.mode), {}
+    try:
+        a.mode not in ("merge", "wait") or fail(runner.fix_flume_refusal(a.mode, t["name"], bolt, a.name))
+
+        def change(w):
+            seen.update(fix_flume(w, t, bolt, a.mode, a.name, a.words))
+            return []
+        write(fleet, label, change, f"plan({bolt}): fix {a.name}", act=act, on=on)
+    except Refusal as e:
+        if act:
+            record.emit(label, act, on, refused=str(e))
+        raise
+    if a.mode == "drop":
+        print(f"fix/{bolt}/{a.name} is dropped (request {seen['n']}): the runner on {seen['host']} drops its place")
+        return True
+    print(f"the runner on {seen['host']} launches fix {bolt}--{a.name} on bolt/{bolt} (request {seen['n']}) in stream "
+          f"{seen['stream']}, and crew bolts shows its place; {bolt}'s landing waits until it has merged or been dropped")
+    land_hand(fleet, label, t["kit"]["name"], f"{bolt} is held for a fix: {a.words}")
+    return True
+
+
+def fix_flume(w, t, bolt, mode, name, words):
+    """crew fix's change to a write for a fix on a bolt given through Flume (flume_fix), each fact read again at the tip
+    it is applied to (plan.1): the bolt still the team's and given through Flume; then a new fix's launch appended
+    (runner.fix_launch), or for --drop its launch's drop (runner.fix_drop_refusal), its stage read from the runner's
+    records as the write reads them. Returns what it asked, {n, host, stream}."""
+    b = w.bolt(bolt)
+    b.get("Team") == t["name"] or fail(f"bolt {bolt} is held by {b.get('Team') or 'no team'}, not {t['name']}, since the fix was asked")
+    crossed_bolt(w.plan, bolt) or fail(f"bolt {bolt} is not given through Flume, so its fix is not a Flume place")
+    requests, work = requests_of(w).recs("Request"), f"fix/{bolt}/{name}"
+    if mode == "drop":
+        launch = runner.launch_of(requests, work)
+        s = runner.piece_stage(requests, w.runner_of(launch.get("Host")), launch) if launch is not None else None
+        why = runner.fix_drop_refusal(t["name"], work, launch, s)
+        not why or fail(why)
+        w.subject = f"plan({bolt}): drop fix {name}"
+        return dict(n=request(w, "drop", launch.get("Host"), work, Of=launch.get("Request")), host=launch.get("Host"), stream=launch.get("Stream"))
+    launched, why = runner.fix_launch(w.plan, requests, bolt, t, name, words)
+    not why or fail(why)
+    act, host, work, given = launched
+    w.subject = f"plan({bolt}): fix {name}"
+    return dict(n=request(w, act, host, work, **given), host=host, stream=given["Stream"])
 
 
 def fix_drop(fleet, team, said, on):
