@@ -49,7 +49,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 ## 8. Briefs and documentation
 
 - [x] 8.1 The dispatcher's, conductor's, planner's and main-level ops's briefs say what a due and a crossed team are and which commands answer, fix and land their work, each rule pinned by a phrase (design Decisions 2 to 11; Task notes 8.1); verify `tests/suite t-briefs t-roles` (`tests:t-briefs`, `tests:t-roles`) ends with "0 failed".
-- [ ] 8.2 README, `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage header say the same together (`docs.2`; Task notes 8.2); verify `tests/suite t-docs` (`tests:t-docs`) ends with "0 failed".
+- [x] 8.2 README, `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage header say the same together (`docs.2`; Task notes 8.2); verify `tests/suite t-docs` (`tests:t-docs`) ends with "0 failed".
 
 ## 9. The tests' tasks
 

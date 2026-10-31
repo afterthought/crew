@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 # crew: run bolt teams of agents in herdr, and each partition's main level. Teams and partitions are data in
-# ~/.config/crew/teams.json.
+# ~/.config/crew/teams.json, version 2 or 3. Version 3 names each team's flume: false for today's path, or the Flume
+# stream its work runs in on its host; version 2 has no setting, and every team in it is on today's path. A team whose
+# setting names a stream is due to cross to Flume while it holds a bolt given on today's path, and is given no bolt
+# then; the landing or drop of its last one crosses it: its conductor and ops are ended at their next stop, never on a
+# held host, its workspaces closed and team.cross recorded, and the dispatchers told it takes bolts of its kits. A
+# crossed team runs no conductor, ops or slot, its work running in Flume places on its host: up, rebuild, restart,
+# resume, clear, down and revive of it, and unit run, unit wait, unit free, chore run, chore wait, chore free and fix
+# --wait on its work, are refused at once, naming where its work runs and crew bolts; close still closes. A team whose
+# setting is turned off is due back until its Flume bolts land.
 #
-# A team builds one bolt at a time, and may hold one more, proven, that waits to land:
+# A team builds one bolt at a time, and may hold one more, proven, that waits to land; a team crossed to Flume holds
+# as many as it is given:
 #   crew list                          the teams that are defined
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
 #                                      slot with the unit or fix it holds and its stage, a unit carried onto its
@@ -91,7 +100,12 @@
 #                                      each form below takes --bolt too; a fix in flight is found by its name.
 #                                      A place that could not be made ready refuses no fix: its agent starts there,
 #                                      told the step that failed, since a fix is how a bolt is repaired. Its prompt,
-#                                      and its merge's, is taken or sent again as a unit stage's is
+#                                      and its merge's, is taken or sent again as a unit stage's is. On a team crossed
+#                                      to Flume, the planner's or main-level ops's: a launch of a Flume fix place
+#                                      <bolt>--<name> on the bolt, appended to requests.rec for the runner on its
+#                                      host, which Flume builds and submits to the bolt itself; --drop drops its
+#                                      launch, a merged one refused, and --merge and --wait are refused, naming
+#                                      crew bolts, which shows its stage. A fix in flight holds the bolt's landing
 #   crew fix     <team> <name> --merge [--bolt <bolt>]
 #                                      merge the fix into the bolt: a merge stage, its submission to sluice as a
 #                                      unit's is
@@ -118,13 +132,20 @@
 #                                      unit has, every task ticked, that its archive builds on
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
-# repository; a meeting's signals stay in the partition's first blueprints repo:
+# repository, with requests.rec, crew's requests of each host's runner for a crossed team's work, appended in the
+# commit of the plan write that occasions them; each runner answers on <label>/runner/<host> of the same repository,
+# which crew fetches with <label>/main and never writes; a meeting's signals stay in the partition's first blueprints
+# repo:
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
-#                                      each held bolt's verification, sluice's verdict on its last landing, and each
-#                                      merge and landing standing in sluice's queue with its number and state on its
-#                                      line, a queue that can't be read said once on the bolt's head line
+#                                      or, in a bolt given through Flume, from its host's runner's records of Flume's
+#                                      status of its place, a host whose runner can't be read named and its work
+#                                      unknown; each bolt's head line saying its team's path, in Flume stream <s> or
+#                                      due to cross once <bolt> lands; each held bolt's verification, sluice's verdict on
+#                                      its last landing, and each merge and landing standing in sluice's queue with
+#                                      its number and state on its line, a queue that can't be read said once on the
+#                                      bolt's head line
 #   crew bolt  new|give|order|drop|land ...
 #                                      give has sluice make bolt/<bolt> on GitHub from main (sluice branch create, on the
 #                                      team's host), with no worktree, before the plan write; refused, nothing changed,
@@ -133,7 +154,17 @@
 #                                      words when it makes none, and while a bolt the team holds is not proven (every
 #                                      unit and chore merged, sluice green at its head) or it holds two; a branch
 #                                      already on GitHub at main's tip with no commit of its own, as a give that
-#                                      failed after sluice made it leaves it, is taken and the give goes on.
+#                                      failed after sluice made it leaves it, is taken and the give goes on. A team
+#                                      due to cross to Flume or back is refused, naming each bolt it finishes first.
+#                                      To a team crossed to Flume, a give is never refused for the bolts it holds,
+#                                      but while its host is held or no runner answers there (no
+#                                      <label>/runner/<host>); it marks the bolt Path: flume, appends a launch to
+#                                      requests.rec for each unit and chore, a dependent's naming the launches of its
+#                                      After work, which the runner holds it for until that work has landed on the
+#                                      bolt, and starts no agent. Plan writes reach those places: an add, an
+#                                      amendment, a drop and an order of bolts are launches, retries, drops and
+#                                      priorities; a move out, a split or an After change of launched work is
+#                                      refused, naming drop and add
 #                                      land and drop have sluice delete it (sluice branch delete) once its worktrees
 #                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
 #                                      while main lacks its tip, and deleted once main holds it. A bolt made before

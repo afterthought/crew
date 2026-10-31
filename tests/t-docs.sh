@@ -77,6 +77,12 @@ ok "the README, the skill and the usage say a give has sluice make the bolt's br
 for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "one more"; has "${!doc}" "waits to land"; done
 ok "the README, the skill and the usage say a team may hold one more bolt that waits to land, and crew fix names its bolt with --bolt"
 
+for doc in usage readme skill; do
+  for want in "version 2 or 3" "due to cross once <bolt> lands" "in Flume stream" "Path: flume" "team.cross" "still closes" \
+    "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
+done
+ok "the README, the skill and the usage say a team's setting and path, its crossing, what a crossed team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix"
+
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)
 [[ -z $wrapped ]] || fail "these briefs or skills name the shell's wrap, which is CLAUDE.md's to say:"$'\n'"$wrapped"
