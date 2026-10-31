@@ -4,8 +4,8 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 
 ## 1. The teams file names the roles that run as kinds
 
-- [ ] 1.1 crew reads `teams.json` versions 2, 3 and 4, every partition at version 4 carrying its `flume` of five roles, read and refused as the main-level delta says, every role standing below 4, and the test world writes version 4 with every role `false` (design Decision 3; Task notes 1.1); passes `tests/py/test_teams.py`, and the moon tasks `tests:logic` and `tests:t-roles` (`tests/suite logic t-roles`) end with "0 failed".
-- [ ] 1.2 `crew.py` answers whether a partition runs a role as its kind and which role and partition an agent name is (design Decision 3; Task notes 1.2); passes `tests/py/test_teams.py` under the moon task `tests:logic`.
+- [x] 1.1 crew reads `teams.json` versions 2, 3 and 4, every partition at version 4 carrying its `flume` of five roles, read and refused as the main-level delta says, every role standing below 4, and the test world writes version 4 with every role `false` (design Decision 3; Task notes 1.1); passes `tests/py/test_teams.py`, and the moon tasks `tests:logic` and `tests:t-roles` (`tests/suite logic t-roles`) end with "0 failed".
+- [x] 1.2 `crew.py` answers whether a partition runs a role as its kind and which role and partition an agent name is (design Decision 3; Task notes 1.2); passes `tests/py/test_teams.py` under the moon task `tests:logic`.
 
 ## 2. Asks, turns and role records
 
