@@ -1799,6 +1799,14 @@ def main_named(name, label):
     return next((r for r in MAIN_STANDING + ("reviewer",) if name == f"{label}-{r}"), None)
 
 
+def kind_said(label, role):
+    """Why crew-role starts no standing agent of a role its partition runs as its kind (main-level "A role that runs as
+    its kind is not started by crew-role", design Decision 14): its runs are places the host's runner launches, and the
+    user opens one to talk with crew role open."""
+    return (f"{label}'s {role} runs as its kind, so crew starts no standing agent of it: it is opened with crew role open "
+            f"{role} --label {label}")
+
+
 def main_elsewhere_said(name, label, main, here):
     """Why a main level's agent is not started, nor given its identity back, on this host: crew-role's refusal."""
     return f"{label}'s main level runs on {main}, not {here}, and crew starts {name} only there"
@@ -2116,9 +2124,11 @@ def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
     (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
     works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
-    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said)."""
+    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said), and on
+    every host when its partition runs it as its kind (kind_said)."""
     if scope not in fleet["teams"] and role in MAIN_STANDING + ("reviewer",):
         p, here = partition_of(fleet, scope), this_host()
+        p["flume"][role] is False or fail(kind_said(p["label"], role))
         p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]

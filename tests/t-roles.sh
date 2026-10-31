@@ -4,6 +4,7 @@
 # environment is given that same brief back by crew's SessionStart hook at each compaction. A main level's role is
 # started only on its main level's host, and a main level's session herdr resumes on any other host is given no
 # identity, pane name or brief, its record left as it was, and told where the main level runs, or why crew can't tell.
+# A role its partition runs as its kind is started by crew-role on no host, which names crew role open.
 # Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -87,6 +88,14 @@ expect_fail "wldn's main level runs on chuck-herdr-alpha, not mac-studio, and cr
 expect_fail "wldn's main level runs on chuck-herdr-alpha, not mac-studio, and crew starts wldn-design only there" as mac-studio "$CREW/plugin/bin/crew-role" wldn design resume
 eq "$(launches)" ""
 ok "a main level's role, fresh or resumed, is refused off its main level's host, naming that host, and no Claude starts"
+
+role_stream madswan planner madswan-main
+expect_fail "madswan's planner runs as its kind, so crew starts no standing agent of it: it is opened with crew role open planner --label madswan" \
+  as mac-studio "$CREW/plugin/bin/crew-role" madswan planner
+expect_fail "madswan's planner runs as its kind" as mac-studio "$CREW/plugin/bin/crew-role" madswan planner resume
+eq "$(launches)" ""
+role_stream madswan planner false
+ok "a role its partition runs as its kind, fresh or resumed, is refused, naming crew role open, and no Claude starts"
 
 # replayed <source>: what crew's SessionStart hook gives, on mac-studio, the wldn planner's session copied there from the
 # box, as herdr's session restore replays a saved pane on a host that once ran the main level: without crew's environment
