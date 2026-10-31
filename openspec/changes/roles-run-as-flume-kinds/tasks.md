@@ -25,7 +25,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 ## 5. What writes an ask
 
 - [x] 5.1 A tell or a send to a role that runs as its kind, with no standing agent of it up, is an ask, crew's own notices among them, and one still up is typed as today (design Decision 5; Task notes 5.1); passes `tests/py/test_send.py` and a new `tests/py/test_tell_asks.py`, and the moon tasks `tests:logic` and `tests:t-journey-roles` end with "0 failed".
-- [ ] 5.2 A signal captured through crew is an ask of a design agent that runs as its kind, in the capture's commit (design Decision 5; Task notes 5.2); passes `tests/py/test_signals.py`, and the moon task `tests:t-journey-signals` ends with "0 failed".
+- [x] 5.2 A signal captured through crew is an ask of a design agent that runs as its kind, in the capture's commit (design Decision 5; Task notes 5.2); passes `tests/py/test_signals.py`, and the moon task `tests:t-journey-signals` ends with "0 failed".
 - [ ] 5.3 A bolt's landing is an ask of the planner and the design agent, and a landing that did not land one of ops with sluice's words, in the landing's write (design Decision 5; Task notes 5.3); passes `tests/py/test_landing.py` under the moon task `tests:logic`.
 - [ ] 5.4 `crew role open` writes the user's ask, names a live run instead, or refuses when the runner's records can't be read (design Decision 13; Task notes 5.4); *needs teams-cross*; passes `tests/py/test_asks.py`, and the moon task `tests:t-journey-roles` ends with "0 failed".
 

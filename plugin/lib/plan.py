@@ -5734,6 +5734,17 @@ def ask_write(fleet, label, role, what, frm, names=None, key=None, words=None):
         return None
 
 
+def capture_asks(w, fleet, label, ids):
+    """A capture landed through crew, crew signal's or crew signal land's, asks the partition's design agent where it
+    runs as its kind (design Decision 5, role-runs "A capture and a landing are asks"): one `capture` ask per signal, ids,
+    from whoever recorded it, naming the signal and keyed by its id, in the capture's commit, the write w. A design
+    agent that stands is asked nothing: its curation runs at its start and on the user's word, as today (signals.7)."""
+    if crew.role_stream(fleet, label, "design") is False:
+        return
+    for sig in ids:
+        ask_lines(w, fleet, label, "design", "capture", agent(), names=f"signals/{sig}", key=f"signal/{sig}")
+
+
 def asked(label, commit, made, held):
     """Once a write that made asks in its commit is pushed (write): each ask's entry, by the id the commit names, and
     each key found held said."""
@@ -7173,6 +7184,7 @@ def signal(fleet, a):
         w.replace(f"signals/{sig}.md", signal_md(sig, kind, who, a.subject, a.asserts, quote))
         w.subject = f"signals({sig}): {a.slug}"
         w.on.append(f"signals/{sig}")
+        capture_asks(w, fleet, label, [sig])
         seen["id"] = sig
         return []
     try:
@@ -7417,6 +7429,7 @@ def signal_land(fleet, a):
             w.replace(path, text)
         seen["ids"] = [p[8:-3] for p in out if not p.endswith("/capture.md")]
         w.on += [f"signals/{i}" for i in seen["ids"]]
+        capture_asks(w, fleet, label, seen["ids"])
         w.subject = f"signals({cap}): land " + (f"{len(seen['ids'])} signal" + ("" if len(seen["ids"]) == 1 else "s") if seen["ids"] else "the capture")
         return []
     try:
