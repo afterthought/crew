@@ -6715,7 +6715,9 @@ def amendment(fleet, plan, a, alone=False):
 
 def amendment_lines(plan, a, s):
     """What a proposal's page says of a unit amend: the unit's bolt and team, and, given its stage (s, None when the page
-    is drawn alone), its intent as it stands and as proposed and what approval sets in motion."""
+    is drawn alone), its intent as it stands and as proposed and what approval sets in motion: for a unit of a bolt given
+    through Flume, its construct retried with the new intent, or its launch not yet started dropped and launched anew
+    (reach_places), as the approval's own write does."""
     u = plan.unit(a.unit)
     if u is None:
         return [f"**Amend unit `{a.unit}`**, new in this proposal", f"Intent, as proposed:  {a.intent}"]
@@ -6727,10 +6729,15 @@ def amendment_lines(plan, a, s):
     st = s["stage"]
     now = ("" if st == "queued" else f", its stage unknown ({s.get('why')})" if st == "unknown" else
            f", now in {st}" if st in ("construct", "planned", "code", "verify") else f", now {st}")
-    return [f"**Amend unit `{a.unit}`** in {where}{now}", f"Intent, as it stands: {u.get('Intent')}", f"Intent, as proposed:  {a.intent}",
+    flume = s.get("flume")
+    then = ("On approval: its launch, which Flume has not started, is dropped and launched again carrying the new intent."
+            if flume and flume.get("stage") in ("launching", "waiting") else
+            "On approval: Flume runs its construct again with the new intent, and the unit goes on from its tasks with no "
+            "approval asked, its revised change due for the next batch." if flume and st != "unknown" else
             f"On approval: construct runs again at once in {team}'s slot, and once that has committed the unit goes on from "
             "its tasks with no approval asked, its revised change due for the next batch." if s["worktree"] and team else
-            "On approval: its intent is replaced; it has no change written yet, so nothing else changes."]
+            "On approval: its intent is replaced; it has no change written yet, so nothing else changes.")
+    return [f"**Amend unit `{a.unit}`** in {where}{now}", f"Intent, as it stands: {u.get('Intent')}", f"Intent, as proposed:  {a.intent}", then]
 
 
 def describe(fleet, label, plan, p, alone=False, signal_of=None):

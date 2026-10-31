@@ -202,6 +202,19 @@ class TestAmendment:
         assert plan.amendment_lines(write().plan, self.A, {"stage": "ready", "worktree": None})[-1] == (
             "On approval: its intent is replaced; it has no change written yet, so nothing else changes.")
 
+    def test_a_launched_unit_of_a_bolt_given_through_flume_has_its_construct_retried(self):
+        """bolt-teams "Plan writes reach a started bolt's places": the page says what the approval's write does."""
+        s = {"stage": "verify", "worktree": None, "flume": {"stage": "verify", "place": "/flume/places/change--x"}}
+        assert plan.amendment_lines(write().plan, self.A, s)[-1] == (
+            "On approval: Flume runs its construct again with the new intent, and the unit goes on from its tasks with no "
+            "approval asked, its revised change due for the next batch.")
+
+    @pytest.mark.parametrize("stage", ["launching", "waiting"])
+    def test_a_launch_flume_has_not_started_is_dropped_and_launched_again(self, stage):
+        s = {"stage": stage, "worktree": None, "flume": {"stage": stage}}
+        assert plan.amendment_lines(write().plan, self.A, s)[-1] == (
+            "On approval: its launch, which Flume has not started, is dropped and launched again carrying the new intent.")
+
     def test_drawn_alone_it_reads_no_stage(self):
         assert plan.amendment_lines(write().plan, self.A, None) == ["**Amend unit `the-deploy-is-logged`** in bolt `tenant-environments` (swb-1)"]
 
