@@ -23,7 +23,8 @@ place in the plan (priorities). A bolt planned in a crossed team's kit is the di
 A place that stopped short asking, or waits on its caller, is answered by a retry with the answer's words (answer_retry).
 A fix on a crossed bolt is a launch of Flume's fix kind on the bolt's branch (fix_launch), dropped by a drop
 (fix_drop_refusal), merged and waited on by Flume alone (fix_flume_refusal), and holds the bolt's landing while it is in
-flight (fixes_in_flight).
+flight (fixes_in_flight); a crossed bolt whose landing sluice refused for a conflict with main takes main in by one
+(take_main).
 
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
@@ -683,6 +684,21 @@ def fix_launch(plan, requests, bolt, team, name, words):
         "Repo": team["kit"]["repo"], "Kind": "fix", "Name": f"{bolt}--{name}", "Base": base, "Stream": stream,
         "Priority": priority_of(plan, bolt), "Intent": f"{team['label']}/{bolt}", "Recipient": f"{team['label']}/planner",
         "Brief": words}), None
+
+
+def take_main(plan, requests, bolt, team, main, words):
+    """The launch of a crossed bolt's take-main fix (Decision 10, plan.8), once sluice refused its landing for a
+    conflict with main at main (its revision): a fix as fix_launch makes it, named take-main-<main, seven>, its brief
+    saying to take origin/main into the bolt and resolve, with sluice's words of the conflict, and beginning as every
+    take-main fix's does, so the bolt's row says it takes main first (plan.TAKE_MAIN); None while a fix of that name
+    stands on the bolt, so a refusal read twice launches it once."""
+    name = f"take-main-{main[:7]}"
+    if launch_of(requests, f"fix/{bolt}/{name}") is not None:
+        return None
+    return fix_launch(plan, requests, bolt, team, name, (
+        f"Take main into the bolt: merge origin/main, at {main[:7]}, into this place, cut from bolt/{bolt}, resolving each "
+        f"conflicting path keeping both intents, main's and the bolt's; sluice refused the bolt's landing for its conflict "
+        f"with main: {words}"))[0]
 
 
 def fix_drop_refusal(team, work, launch, s):

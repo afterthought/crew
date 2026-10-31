@@ -4425,6 +4425,26 @@ def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, do
             kept_as, True)
 
 
+def landing_conflict(said, doc=None, sub=None):
+    """The conflict with main a landing that did not land was refused for (Decision 10 of teams-cross-to-flume-as-their-
+    bolts-land, plan.8), from what landing_end reads of it (code.7): LANDED's report on the team's host (said); sluice's
+    record of the submission, the one it answered with or its wait printed (doc), or, where sluice itself failed,
+    exiting 3, its record in sluice's listing (sub, its verdict beside it), in conflict and naming no submission queued
+    on main that it meets, which the bolt waits out rather than takes in (teams.21); and main now, as the landing read
+    it after its fetch (kit.main_now). (main's revision, sluice's words of the conflict); None for any other end."""
+    r = landing_report(said)
+    rec = (sub if r[0]["RC"] == "3" else doc) if r is not None else None
+    if not isinstance(rec, dict) or rec.get("state") != "conflict":
+        return None
+    c = rec.get("conflict")
+    if isinstance(c, dict) and c.get("with"):
+        return None
+    _, now, why = kit.main_now(said, "", "")
+    if why or not now:
+        return None
+    return now, verdict_of(rec) or rec.get("verdict") or f"sluice's record has #{rec.get('id')} in conflict with main"
+
+
 def mark_said(code, out, err):
     """What LANDED_MARK said of the landed bolt's branch, for landing_said: MARKED's value, "yes", "no" or why git could
     not set it, or the host's own words when it did not run there (read.2)."""
@@ -4854,7 +4874,7 @@ def landing_close_out(fleet, label, t, bolt, p, rc, said, doc, beside, again=0):
         print(words, flush=True)
         return None, (n, tip)
     if not landed:
-        return landing_not_landed(fleet, label, t, bolt, p, words, refused, stopped), None
+        return landing_not_landed(fleet, label, t, bolt, p, words, refused, stopped, landing_conflict(r.stdout, doc, sub)), None
     m = crew.on_machine(fleet, host, ["bash", "-c", LANDED_MARK, "crew", main, bolt])
     _, words = landing_said(bolt, name, host, r.stdout, p["before"], mark_said(m.returncode, m.stdout, m.stderr))
     now, _ = main_held(name, host, r.stdout)
@@ -4865,20 +4885,56 @@ def landing_close_out(fleet, label, t, bolt, p, rc, said, doc, beside, again=0):
     return True, None
 
 
-def landing_not_landed(fleet, label, t, bolt, p, words, refused, stopped):
+def landing_not_landed(fleet, label, t, bolt, p, words, refused, stopped, conflict=None):
     """A landing that did not land (landing_close_out): its pull request drafted first, so no merge into the bolt lands
     it (landing_unheld); recorded with the head that was submitted, and its submission's number when sluice queued it
     (p's ID), stopped, nothing of the bolt's, with what stopped it as Why and no refusal, so its row keeps its box,
-    saying so (stopped_at), or refused, in the words it holds its row with (refused_at); words printed on standard
-    error, and the kit's landings card raised so (land_hand). False."""
+    saying so (stopped_at), or refused, in the words it holds its row with (refused_at); a bolt given through Flume
+    refused for a conflict with main (conflict, landing_conflict) then launching its take-main fix (take_main_launch);
+    words printed on standard error, and the kit's landings card raised so (land_hand). False."""
     words, refused = landing_unheld(fleet, t, bolt, words, refused)
     if stopped:
         record.emit(label, "bolt.submit", [f"bolt/{bolt}"], why=refused, Outcome="stopped", Submission=p.get("ID"), Head=p["TIP"])
     else:
         record.emit(label, "bolt.submit", [f"bolt/{bolt}"], refused=refused, Submission=p.get("ID"), Head=p["TIP"])
     print(words, file=sys.stderr)
+    if conflict and not stopped:
+        take_main_launch(fleet, label, t, bolt, conflict)
     land_hand(fleet, label, t["kit"]["name"])  # its row held on its kit's landings card at the head submitted, or not
     return False
+
+
+def take_main_launch(fleet, label, t, bolt, conflict):
+    """A crossed bolt's landing that sluice refused for a conflict with main (conflict, landing_conflict: main's revision
+    and sluice's words) takes main in by the act that read the refusal, ops's crew bolt submit or whichever reads it
+    after (Decision 10 of teams-cross-to-flume-as-their-bolts-land, plan.8, plan.21): one plan write appending the
+    launch of its take-main fix (runner.take_main), recorded as fix.start, unless a fix of that name already stands, so
+    a refusal read twice launches it once; nothing for a bolt given on today's path, whose conductor takes main in. What
+    crew could not write is said on standard error, and the landing's outcome stands."""
+    plan = plan_of(fleet, label)
+    if plan is None or not crossed_bolt(plan, bolt):
+        return
+    name = f"take-main-{conflict[0][:7]}"
+    on, seen = [f"fix/{bolt}/{name}", f"bolt/{bolt}"], {}
+    if runner.launch_of(runner_facts(fleet, label)[0], on[0]) is not None:
+        print(f"bolt {bolt} takes main first: {on[0]} stands already, taking main in")
+        return
+
+    def change(w):
+        crossed_bolt(w.plan, bolt) or fail(f"bolt {bolt} is no longer given through Flume")
+        launched = runner.take_main(w.plan, requests_of(w).recs("Request"), bolt, crew.with_kit(t, w.bolt(bolt).get("Repo")), *conflict)
+        launched or fail(f"{on[0]} stands already, taking main in")
+        act, host, work, given = launched
+        seen.update(n=request(w, act, host, work, **given), host=host)
+        w.subject = f"plan({bolt}): fix {name}"
+        return []
+    try:
+        write(fleet, label, change, f"plan({bolt}): fix {name}", act="fix.start", on=on)
+    except Refusal as e:
+        print(f"crew launched no take-main fix for bolt {bolt}: {e}", file=sys.stderr)
+        return
+    print(f"bolt {bolt} takes main first: the runner on {seen['host']} launches fix {bolt}--{name} (request {seen['n']}), "
+          f"taking origin/main at {conflict[0][:7]} into the bolt, and ops submits it again once sluice is green at its new head")
 
 
 def landing_pending(entries, bolt):

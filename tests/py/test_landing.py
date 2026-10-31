@@ -2394,3 +2394,36 @@ class TestAgeAndSplit:
         assert plan.landing_split(self.ENTRIES, self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit",
                                   (None, "sluice status main exited 1: sluice is not running here"), later) == {}
         assert plan.landing_split(self.ENTRIES[1:], self.PLAN, b, "chuck-herdr-alpha", "switchboard-kit", (self.LANDED, None), later) == {}
+
+
+MAIN_AT = "4d3d9be" + "0" * 33  # main's revision a conflicting landing met
+
+
+class TestConflictWithMain:
+    """A landing sluice refused for a conflict with main, read where its end is read (plan.landing_conflict): main's
+    revision and sluice's words, from which a crossed bolt's take-main fix is launched (Decision 10 of
+    teams-cross-to-flume-as-their-bolts-land); its launch and its row are test_landings's."""
+    MAIN = MAIN_AT
+    REFUSED = said(2, new=OLD, github=MAIN, held="no", level="''")
+
+    def test_a_conflict_with_main_names_mains_revision_and_sluices_words(self):
+        """main-level ops's crew bolt submit x reads sluice refusing x for a conflict with main at 4d3d9be."""
+        assert plan.landing_conflict(self.REFUSED, doc=CONFLICT) == (
+            self.MAIN, "#137 conflict: README.md, plugin/bin/crew, plugin/lib/plan.py, plugin/skills/crew/SKILL.md")
+
+    def test_one_read_from_sluices_listing_once_sluice_itself_failed_names_its_verdict(self):
+        sub = {"id": 160, "state": "conflict", "conflict": {"paths": ["README.md"]}, "verdict": "#160 conflict: README.md"}
+        assert plan.landing_conflict(said(3, new=OLD, github=self.MAIN, held="no", level="''", sluice=FAILED), sub=sub) == (
+            self.MAIN, "#160 conflict: README.md")
+
+    def test_a_conflict_with_a_submission_queued_on_main_is_waited_out(self):
+        met = dict(CONFLICT, conflict=dict(CONFLICT["conflict"], **{"with": [{"id": 12, "from": {"worktree": "/c/places/u"}}]}))
+        assert plan.landing_conflict(self.REFUSED, doc=met) is None
+
+    @pytest.mark.parametrize("out, doc", [
+        (said(1, new=OLD, github=MAIN_AT, held="no", level="''"), RAN),
+        (said(0, github=NEW), None),
+        (said(2, new=OLD, github=MAIN_AT, held="no", fetched="fatal: no network"), CONFLICT),
+        ("wt: command not found\n", CONFLICT)])
+    def test_any_other_end_or_a_main_crew_cant_read_is_none(self, out, doc):
+        assert plan.landing_conflict(out, doc=doc) is None
