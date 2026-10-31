@@ -715,8 +715,10 @@ def tip_of(repo, ref, fresh=False):
     held = None if fresh else READ.tip(repo, ref)
     if held is not None:
         return held or None
+    with_it = beside(ref)
     for n in range(LOCK_TRIES):
-        r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
+        r = git(repo, "fetch", "--quiet", "--no-tags", *(["--prune"] if with_it else []), url(repo), f"+refs/heads/{ref}:refs/crew/{ref}",
+                *with_it, check=False)
         if not (r.returncode and "cannot lock ref" in r.stderr):
             break
         time.sleep(0.1 * (n + 1))
@@ -727,6 +729,53 @@ def tip_of(repo, ref, fresh=False):
     tip = tip_here(repo, ref) or git(repo, "rev-parse", f"refs/crew/{ref}")  # the cache's files, else git
     READ.keep_tip(repo, ref, tip)
     return tip
+
+
+def beside(ref):
+    """What a fetch of a branch brings with it, in the same fetch (plan.12): for a flywheel's branch, <label>/main, its
+    runners' branches, <label>/runner/*, which crew reads and never writes (state.5), pruned of a host's branch gone
+    from the repository; nothing for any other branch (Decision 4 of teams-cross-to-flume-as-their-bolts-land)."""
+    m = re.fullmatch(r"([a-z0-9][a-z0-9-]*)/main", ref)
+    return [f"+refs/heads/{m.group(1)}/runner/*:refs/crew/{m.group(1)}/runner/*"] if m and m.group(1) != "plan" else []
+
+
+def runner_tips(repo, label):
+    """Each host's runner branch of the partition as crew's cache of its state repository holds it, as this command's
+    fetch of <label>/main brought it (tip_of, beside): {host: commit}. Read from the cache's files with no process, its
+    loose refs over packed-refs, as tip_here reads a branch; through git for-each-ref only when the files can't say."""
+    tip_of(repo, f"{label}/main")
+    c, prefix = CACHE / f"{repo}.git", f"refs/crew/{label}/runner/"
+    tips = crew.files_refs(c, prefix) if (c / "HEAD").exists() else {}
+    if tips is None:
+        tips = dict(l.split(" ", 1) for l in git(repo, "for-each-ref", "--format=%(refname) %(objectname)", prefix).splitlines())
+    return {name[len(prefix):]: sha for name, sha in tips.items() if crew.NAME.match(name[len(prefix):])}
+
+
+def runners(repo, label):
+    """Each host's runner of the partition, read at the tip of its branch that this command's fetch of <label>/main
+    brought (runner_tips; Decision 4 of teams-cross-to-flume-as-their-bolts-land): {host: runner.host_read's reading},
+    every host's files read in one cat-file (the follower's kept blobs when it reads), each checked by recfix. A host
+    with no branch is not in it, and runner.of_host names it. Kept for the command by the tips it read."""
+    tips = runner_tips(repo, label)
+    name = f"runners-{repo}-{label}-" + ",".join(f"{h}@{t}" for h, t in sorted(tips.items()))
+    if READ.held(name) is not None:
+        return READ.held(name)
+    paths = [(h, f) for h in sorted(tips) for f in runner.FILES]
+    shown = [show(repo, tips[h], f) for h, f in paths] if all(kept_listing(repo, tips[h]) is not None for h in tips) else \
+        cat_file(repo, [f"{tips[h]}:{f}" for h, f in paths])
+    texts, out = dict(zip(paths, shown)), {}
+    for h in sorted(tips):
+        files, refused = {}, {}
+        for f in runner.FILES:
+            text = texts[(h, f)]
+            try:
+                text is None or recfix(text, f)
+            except Refusal as e:
+                refused[f] = str(e)
+            files[f] = Plan(text) if text is not None and f not in refused else None
+        out[h] = runner.host_read(label, h, tips[h], files, refused)
+    READ.keep(name, out)
+    return out
 
 
 def tip_here(repo, ref):

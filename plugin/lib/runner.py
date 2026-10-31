@@ -10,10 +10,12 @@ command of it is refused (crossed_refusal).
 
 crew asks a host's runner for work by requests on the flywheel's branch, requests.rec (REQUESTS), each appended in the
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
-recfix; each runner answers on a branch of its own, <label>/runner/<host>, which crew never writes (state.5).
+recfix; each runner answers on a branch of its own, <label>/runner/<host>, which crew fetches with <label>/main and
+reads (host_read) and never writes (state.5).
 
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
+import json
 import re
 
 # How a bolt was given, by its Path on the plan's Bolt record, as crew says it.
@@ -192,4 +194,88 @@ def append_refusal(before, after):
             return (f"request {n} would be {'removed from' if i >= len(after) else 'changed in'} requests.rec, and a request "
                     "is never changed or removed: a later request retries, drops or reprioritises what it launched")
     return None
+
+
+# ------------------------------------------------------------------------------------------ the runners' branches
+
+def runner_branch(label, host):
+    """The branch a host's runner answers a partition's requests on, in the partition's state repository (Decision 4)."""
+    return f"{label}/runner/{host}"
+
+
+# A runner's branch as crew reads it: each file and the record set it holds, written by the host's runner alone with
+# these descriptors (flywheel-runner core.2), and never by crew (state.5). runner.rec names the host and the runner
+# serving the partition there, so a branch that exists says a runner answers; answers.rec where each request it has
+# read stands; places.rec Flume's status of each place it launched, `flume status --json <place>`'s answer on one line
+# as Flume gave it (flywheel-runner core.1), kept after Flume tidies the place until its work has left crew's plan.
+RUNNER = """\
+%rec: Runner
+%key: Host
+%type: Since date
+%mandatory: Host Version Since
+%allowed: Host Version Since
+"""
+ANSWERS = """\
+%rec: Answer
+%key: Request
+%type: Request int
+%type: Outcome enum held launched done refused
+%type: At date
+%mandatory: Request Outcome At
+%allowed: Request Outcome Place Words At
+"""
+PLACES = """\
+%rec: Place
+%key: Request
+%type: Request int
+%type: At date
+%mandatory: Request Place At Status
+%allowed: Request Place At Status
+"""
+FILES = {"runner.rec": "Runner", "answers.rec": "Answer", "places.rec": "Place"}
+
+
+def host_read(label, host, tip, files, refused):
+    """A host's runner as crew reads it from its branch (Decision 4), from facts: tip, the branch's commit in crew's
+    cache, None when no such branch exists; files, each of FILES parsed at the tip as the plan is (plan.Plan), None
+    for one the tip lacks, answers and places then none; refused, recfix's words for each file it refused. Returns
+    the reading, its host, branch and tip, with either why it could not be read, which hides this host's work alone
+    (read.1, read.3), or the runner's record, each answer by its request's number and each place by its launch's: the
+    place's path, when the runner carried it, and its Status parsed, or with why it could not be."""
+    branch = runner_branch(label, host)
+    out = {"host": host, "branch": branch, "tip": tip, "why": None}
+    if tip is None:
+        return dict(out, why=f"no runner answers on {host}: {branch} does not exist")
+    at = f"{branch} at {tip[:7]}"
+    for name, kind in FILES.items():
+        if name in refused:
+            return dict(out, why=f"{host}'s runner can't be read: {at}: {refused[name]}")
+        if files.get(name) is not None and files[name].recs(None):
+            return dict(out, why=f"{host}'s runner can't be read: {at}: {name} holds a record before its %rec: {kind}")
+    run = files["runner.rec"].recs("Runner") if files.get("runner.rec") is not None else []
+    if len(run) != 1 or run[0].get("Host") != host:
+        return dict(out, why=f"{host}'s runner can't be read: {at}: " + (
+            "it holds no runner.rec" if files.get("runner.rec") is None else
+            f"runner.rec holds {len(run)} Runner records, and names one" if len(run) != 1 else
+            f"runner.rec names host {run[0].get('Host')}"))
+    answers, places = {}, {}
+    for name, kind, into in (("answers.rec", "Answer", answers), ("places.rec", "Place", places)):
+        for r in files[name].recs(kind) if files.get(name) is not None else []:
+            n = number(r.get("Request"))
+            if n is None or n in into:
+                return dict(out, why=f"{host}'s runner can't be read: {at}: {name} holds "
+                            + ("a record with no request's number" if n is None else f"request {n} twice"))
+            into[n] = r
+    for n, r in places.items():
+        try:
+            status, why = json.loads(r.get("Status") or ""), None
+        except ValueError as e:
+            status, why = None, f"{at}: places.rec's status of the place of request {n} is no JSON ({e})"
+        places[n] = {"place": r.get("Place"), "at": r.get("At"), "status": status, "why": why}
+    return dict(out, runner=run[0], answers=answers, places=places)
+
+
+def of_host(reads, label, host):
+    """A host's reading among a partition's (host_read's, by host), or why none is: no runner branch for it exists."""
+    return reads.get(host) or host_read(label, host, None, {}, {})
 

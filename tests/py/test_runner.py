@@ -1,7 +1,10 @@
 """crew's side of the runner's interface (the change teams-cross-to-flume-as-their-bolts-land, Decision 4): the requests
 crew appends to requests.rec on the flywheel's branch, numbered once and never changed or removed, each checked by
 crew's own rules (runner.request_refusal, runner.append_refusal) as well as recfix, and written by a plan write's change
-function (plan.request). recfix's side and the commit are the contract tier's (tests/contract/test_recfix.py)."""
+function (plan.request); and each host's runner as crew reads it from its own branch (runner.host_read). recfix's side,
+the commit and the fetch are the contract tier's (tests/contract/test_recfix.py, tests/contract/test_git.py)."""
+import json
+
 import pytest
 
 from crew import Refusal
@@ -145,3 +148,65 @@ class TestPlanRequest:
         w = FactsWrite("%rec: Bolt\n%key: Bolt\n", files={"requests.rec": old})
         plan.request(w, "drop", "deneb", "unit/a", Of=1)
         assert w.files["requests.rec"].startswith(runner.REQUESTS)
+
+
+TIP = "5e1f0c2a" + "0" * 32
+STATUS = {"status": {"places": [{"place": "/crew/places/change--a", "phase": "live"}], "host": {}}}
+
+
+def branch(host="deneb", runner_rec=None, answers="", places=""):
+    """A runner's branch's files parsed as plan.runners parses them, each given as the records after its descriptor."""
+    run = runner.RUNNER + (f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n" if runner_rec is None else runner_rec)
+    return {"runner.rec": plan.Plan(run), "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)}
+
+
+def answer(n, outcome, place=None, words=None):
+    return f"\nRequest: {n}\nOutcome: {outcome}\n" + (f"Place: {place}\n" if place else "") + (f"Words: {words}\n" if words else "") + "At: 2026-10-31T12:01:00Z\n"
+
+
+def placed(n, status, place="/crew/places/change--a"):
+    return f"\nRequest: {n}\nPlace: {place}\nAt: 2026-10-31T12:02:00Z\nStatus: {status if isinstance(status, str) else json.dumps(status)}\n"
+
+
+class TestHostRead:
+    """A host's runner is read from <label>/runner/<host> at its tip; one that can't be read hides that host's work
+    alone, named (read.1, read.3)."""
+
+    def test_a_runners_answers_and_places_are_read_by_their_requests_numbers(self):
+        r = runner.host_read("madswan", "deneb", TIP, branch(answers=answer(3, "launched", "/crew/places/change--a") + answer(4, "held"),
+                                                            places=placed(3, STATUS)), {})
+        assert (r["host"], r["branch"], r["tip"], r["why"]) == ("deneb", "madswan/runner/deneb", TIP, None)
+        assert r["runner"].get("Version") == "0.1.0"
+        assert {n: a.get("Outcome") for n, a in r["answers"].items()} == {3: "launched", 4: "held"}
+        assert r["places"] == {3: {"place": "/crew/places/change--a", "at": "2026-10-31T12:02:00Z", "status": STATUS, "why": None}}
+
+    def test_a_runner_that_has_answered_nothing_reads_no_answers_and_no_places(self):
+        files = dict(branch(), **{"answers.rec": None, "places.rec": None})
+        r = runner.host_read("madswan", "deneb", TIP, files, {})
+        assert (r["why"], r["answers"], r["places"]) == (None, {}, {})
+
+    def test_a_host_with_no_branch_is_named(self):
+        assert runner.of_host({}, "madswan", "alpha") == {
+            "host": "alpha", "branch": "madswan/runner/alpha", "tip": None, "why": "no runner answers on alpha: madswan/runner/alpha does not exist"}
+
+    def test_a_file_recfix_refused_hides_the_host_naming_the_file(self):
+        r = runner.host_read("madswan", "deneb", TIP, dict(branch(), **{"places.rec": None}),
+                             {"places.rec": "places.rec fails recfix --check: places.rec: 4: error: invalid integer"})
+        assert r["why"] == "deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: places.rec fails recfix --check: places.rec: 4: error: invalid integer"
+        assert "answers" not in r
+
+    @pytest.mark.parametrize("files, why", [
+        (dict(branch(), **{"runner.rec": None}), "it holds no runner.rec"),
+        (branch(runner_rec="\nHost: alpha\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n"), "runner.rec names host alpha"),
+        (branch(runner_rec=""), "runner.rec holds 0 Runner records, and names one"),
+        (dict(branch(), **{"answers.rec": plan.Plan("Request: 3\nOutcome: launched\n")}), "answers.rec holds a record before its %rec: Answer"),
+        (branch(answers=answer(3, "held") + answer(3, "launched")), "answers.rec holds request 3 twice"),
+        (branch(places=placed("x", STATUS)), "places.rec holds a record with no request's number")])
+    def test_a_branch_crew_cant_read_names_what(self, files, why):
+        assert runner.host_read("madswan", "deneb", TIP, files, {})["why"] == f"deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: {why}"
+
+    def test_a_status_that_is_no_json_marks_its_place_alone(self):
+        r = runner.host_read("madswan", "deneb", TIP, branch(places=placed(3, "{not json") + placed(4, STATUS, "/crew/places/chore-b")), {})
+        assert r["why"] is None and r["places"][4]["status"] == STATUS
+        assert r["places"][3]["status"] is None
+        assert r["places"][3]["why"].startswith("madswan/runner/deneb at 5e1f0c2: places.rec's status of the place of request 3 is no JSON (")

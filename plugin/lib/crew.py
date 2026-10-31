@@ -1773,6 +1773,36 @@ def files_ref(common, name):
     return ""
 
 
+def files_refs(common, prefix):
+    """Every ref under a prefix read from a git folder's files, with no process, as files_ref reads one: {name: commit},
+    each loose file over its line in packed-refs; None when the files can't say, a reftable folder, a ref that is not
+    a commit's name or a file that can't be read, for the caller to ask git (read.1)."""
+    common = pathlib.Path(common)
+    if (common / "reftable").exists():
+        return None
+    refs = {}
+    try:
+        lines = (common / "packed-refs").read_text().splitlines()
+    except FileNotFoundError:
+        lines = []
+    except OSError:
+        return None
+    for line in lines:
+        sha, _, ref = line.partition(" ")
+        if ref.startswith(prefix) and SHA.fullmatch(sha):
+            refs[ref] = sha
+    try:
+        for f in (common / prefix).rglob("*"):
+            if f.is_file():
+                text = f.read_text().strip()
+                if not SHA.fullmatch(text):
+                    return None
+                refs[f.relative_to(common).as_posix()] = text
+    except OSError:
+        return None
+    return refs
+
+
 def head_here(root=None):
     """crew's checkout's commit, read from its files with no process (files_ref): its .git, a folder or a linked
     worktree's file naming one, its HEAD, and the branch HEAD names in the folder its worktrees share; through git
