@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # crew: run bolt teams of agents in herdr, and each partition's main level. Teams and partitions are data in
-# ~/.config/crew/teams.json, version 2 or 3. Version 3 names each team's flume: false for today's path, or the Flume
+# ~/.config/crew/teams.json, version 2, 3 or 4. Version 3 names each team's flume: false for today's path, or the Flume
 # stream its work runs in on its host; version 2 has no setting, and every team in it is on today's path. A team whose
 # setting names a stream is due to cross to Flume while it holds a bolt given on today's path, and is given no bolt
 # then; the landing or drop of its last one crosses it: its conductor and ops are ended at their next stop, and once
@@ -9,7 +9,10 @@
 # crossed team runs no conductor, ops or slot, its work running in Flume places on its host: up, rebuild, restart,
 # resume, clear, down and revive of it, and unit run, unit wait, unit free, chore run, chore wait, chore free and fix
 # --wait on its work, are refused at once, naming where its work runs and crew bolts; close still closes. A team whose
-# setting is turned off is due back until its Flume bolts land.
+# setting is turned off is due back until its Flume bolts land. Version 4 also names each partition's flume, an object
+# of its five main-level roles, design, planner, reviewer, ops and operator, each false while it stands or the Flume
+# stream its runs run in on the main level's host: a role that runs as its kind, whose runs are launched by the host's
+# runner while something is pending for it (crew role below); in versions 2 and 3 every role stands.
 #
 # A team builds one bolt at a time, and may hold one more, proven, that waits to land; a team crossed to Flume holds
 # as many as it is given:
@@ -134,9 +137,11 @@
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
 # repository, with requests.rec, crew's requests of each host's runner for a crossed team's work, appended in the
-# commit of the plan write that occasions them; each runner answers on <label>/runner/<host> of the same repository,
-# which crew fetches with <label>/main and never writes; a meeting's signals stay in the partition's first blueprints
-# repo:
+# commit of the plan write that occasions them, and for a role's run's work that lands; asks.rec, each ask of a role
+# that runs as its kind and each turn of its runs; and roles.rec, each such role's record, which its runner launches
+# its run from; each runner answers on <label>/runner/<host> of the same repository, which crew fetches with
+# <label>/main and never writes, a role's run there keyed by the role's address; a meeting's signals stay in the
+# partition's first blueprints repo:
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
@@ -301,7 +306,10 @@
 #                                      of the session each runs in, the main level's unless its partition's roles name
 #                                      another, and a dispatcher on each host the partition's teams run on;
 #                                      each agent up starts is greeted to read where the partition stands and carry on;
-#                                      a pane herdr brought back dead is closed and opened again in its workspace, said
+#                                      a pane herdr brought back dead is closed and opened again in its workspace, said.
+#                                      A role that runs as its kind gets no tab and no agent: up writes its record in
+#                                      roles.rec and ends a standing agent of it once not working, and status says it
+#                                      runs as its kind in its stream, whether a run stands and how many asks wait
 #   crew main     fix <kit> <name> "<the failure's words>" [--team <team>] [--label L]
 #                                      main-level ops's or the user's, on reading the kit's main red after a landing:
 #                                      a Flume fix place on main, its submission held for the user's send and ops its
@@ -322,7 +330,39 @@
 #                                      review tab beside the planner; --wait waits for its summary, records the batch,
 #                                      raises its card with its reading session in the planner's name, and closes the
 #                                      tab; it ends sooner, recording nothing, when the Claude session that started it
-#                                      ends
+#                                      ends. A reviewer that runs as its kind is asked the batch instead, a batch ask
+#                                      with the batch's words, no tab opened, and --wait is refused
+#   crew review   delivered [--label L]
+#                                      run by a reviewer's run once a batch's summary is written: each batch its turn
+#                                      took delivered as --wait delivered it, recorded, its reading session started and
+#                                      its card raised in the planner's name, and the planner asked, naming batch/<n>;
+#                                      a batch whose summary is not written refused by name; refused anywhere but the
+#                                      reviewer's run, on the main level's host
+#   crew role     start                a role's run's first act: every ask of the role and every place that waits on
+#                                      it taken as its turn, in one commit, a lost run's open turn superseded and what
+#                                      it took taken again; the role's brief written to
+#                                      ~/.local/state/crew/<label>/turns/<role>.md, its path printed to read whole
+#                                      first, then each ask, oldest first, each place that waits, and the cards the
+#                                      user answered, read in Pending You in the run's own name; with nothing pending,
+#                                      no turn, said so. The run is the role, <label>-<role>, named from its place,
+#                                      crew-<role>--<label>, with the role's rights
+#   crew role     end --report <path> "<what was done>"
+#                                      a role's run's last act: its turn ended with the words, and the report its
+#                                      stage delivers written at the path, also when it took no turn; what came after
+#                                      its start stays pending for the next run
+#   crew role     open <role> [--label L]
+#                                      the user's, to talk with a role that runs as its kind: an open ask, its run then
+#                                      opening as the place crew-<role>--<label> in herdr on the main level's host and
+#                                      greeting them; where the runner's records show a run of it live, nothing written
+#                                      and that place named; refused where they can't be read, and for a role that
+#                                      stands
+#   crew role     land <repo> <name> --brief-file <file>
+#                                      a role's run's work that lands: a launch of Flume's chore kind <name> in a
+#                                      repository the teams file or the plan names, on its default branch, in the
+#                                      role's stream, the file's text whole its brief and the run its recipient,
+#                                      appended to requests.rec; Flume builds it and submits it through sluice, and
+#                                      its landing reaches the role's next run. start, end and land are refused
+#                                      anywhere but a role's run
 #   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
 #                                      kit's main: the status recorded with its commit; --proposed raises the record's
@@ -350,9 +390,15 @@
 #                                      and following each kit's queue through sluice's overview watch; due restarts
 #                                      handed out once crew's checkout or the teams file moved, the rail's frame, the
 #                                      board's and the agents' views written, a frame stale after three minutes; one
-#                                      follower to a host, holding its lock, a second waiting for it
+#                                      follower to a host, holding its lock, a second waiting for it. While a partition
+#                                      whose main level is on the host runs a role as its kind, it runs Pending You's
+#                                      notice, pendingyou watch -- crew _answered, which makes each change on a card in a
+#                                      role's run's name an ask of the role, reading nothing of the card
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
-#                                      refused, with nothing typed, while the agent waits on a question in its pane
+#                                      refused, with nothing typed, while the agent waits on a question in its pane.
+#                                      To a role that runs as its kind with no standing agent of it up, crew's own
+#                                      notices among them, an ask of the role in asks.rec instead, printing asked
+#                                      <agent>, which its next run takes
 #   crew tell     --board < word.json  a word from a dock of the board, as its listener pipes it ({label, key, to,
 #                                      text}): checked against the agent its item's kind goes to, one line of at most
 #                                      1000 characters, and told it as the user's from the board, naming the item;
@@ -360,12 +406,14 @@
 #   crew send     <team or partition> "<text>"
 #                                      send anything for another team or partition to that partition's operator, its
 #                                      one door, wherever it runs: a team by its partition, a partition by its label;
-#                                      marked with who sent it and whom it was for, and recorded with its length
+#                                      marked with who sent it and whom it was for, and recorded with its length; to
+#                                      an operator that runs as its kind, an ask of it carrying both
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
 #                                      agent in it, or dead, closed and opened again in its layout first, picked up
 #                                      from its last conversation and greeted when it is a conductor or an agent
 #                                      outside a team, or started fresh and greeted when it has none; a team or main
-#                                      level taken down with crew down stays down
+#                                      level taken down with crew down stays down, and a role that runs as its kind is
+#                                      passed over
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
 #
 # A host's hold, and crew's updates reaching its agents (teams.19, lib/hold.py says each in full):
@@ -382,7 +430,9 @@
 #   crew update   [<host>|--all]       every standing agent whose start crew's update, or its brief's, has made due
 #                                      restarted on crew as it now is once it is idle, a conductor fresh and every
 #                                      other with its conversation; crew's Stop hook does the same at the end of a due
-#                                      agent's turn, and the host's follower once crew's checkout moves
+#                                      agent's turn, and the host's follower once crew's checkout moves. A standing
+#                                      agent whose role now runs as its kind is passed over, ended at its next stop by
+#                                      the Stop hook and never restarted
 #
 # Operations on a partition's environments, a deploy being one kind (plan.14), run where the partition's main level
 # runs (lib/ops.py says each in full):
