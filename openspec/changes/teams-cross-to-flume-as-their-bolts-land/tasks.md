@@ -29,7 +29,7 @@ Build the groups in order: each stands on the ones before it, and each ends gree
 
 ## 5. Answers and fixes on a crossed team's bolt
 
-- [ ] 5.1 `crew answer <work> "<words>"` appends the retry of the stage the place stopped short on or waits on, refused otherwise naming its stage (design Decision 9; Task notes 5.1); passes `tests/py/test_cross.py` in `tests:logic`, and verify `tests/suite t-journey-cross` ends with "0 failed".
+- [x] 5.1 `crew answer <work> "<words>"` appends the retry of the stage the place stopped short on or waits on, refused otherwise naming its stage (design Decision 9; Task notes 5.1); passes `tests/py/test_cross.py` in `tests:logic`, and verify `tests/suite t-journey-cross` ends with "0 failed".
 - [ ] 5.2 `crew fix` on a crossed team launches a fix place on its bolt, `--drop` drops it, `--merge` and `--wait` refuse, and a fix in flight holds the bolt's landing (design Decision 10; Task notes 5.2); passes `tests/py/test_fix.py` in `tests:logic`.
 - [ ] 5.3 A crossed team's landing that sluice refuses for a conflict with main launches its take-main fix with sluice's words by the act that reads the refusal, once (design Decision 10; Task notes 5.3); passes `tests/py/test_landings.py` and `tests/py/test_landing.py` in `tests:logic`.
 - [ ] 5.4 The role table lets only the callers Decision 16 names run `crew answer`, `crew fix` on a crossed team and `crew main fix` (design Decision 16; Task notes 5.4); passes `tests/py/test_plan_roles.py` in `tests:logic`.

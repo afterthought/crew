@@ -20,6 +20,8 @@ launched again when what it waits on is (reach), an amendment a retry of constru
 move, split or change of After of launched work refused (launched_refusal); each launch's priority follows its bolt's
 place in the plan (priorities). A bolt planned in a crossed team's kit is the dispatchers' to give it (takers).
 
+A place that stopped short asking, or waits on its caller, is answered by a retry with the answer's words (answer_retry).
+
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
 import json
@@ -603,3 +605,58 @@ def planned_said(bolt, names):
     return (f"bolt {bolt} can be given to {who}, which {'has' if len(names) == 1 else 'have'} crossed to Flume and "
             f"{'takes' if len(names) == 1 else 'take'} each planned bolt of {'its' if len(names) == 1 else 'their'} kits: "
             + " or ".join(f"crew bolt give {n} {bolt}" for n in names))
+
+
+# ------------------------------------------------------------------------------------------ answers and fixes
+
+def piece_stage(requests, reading, launch):
+    """A launch's piece's stage (stage_of), from requests.rec's records and its host's runner as crew read it (host_read,
+    of_host): the runner's answer to the launch and its record of the place launched, read only where the host's branch
+    was."""
+    n, why = number(launch.get("Request")), reading["why"]
+    answer, place = (None, None) if why else (reading["answers"].get(n), reading["places"].get(n))
+    return stage_of(launch.get("Work"), launch, answer, place, why or True, after_work(requests, launch))
+
+
+def named_launch(requests, work):
+    """The launch standing for the work a command names (Decision 9), as (launch, None), or (None, why): named as
+    requests name it (unit/<u>, chore/<c>, fix/<bolt>/<name>, fix/main/<kit>/<name>), by its place's name (<u>,
+    <bolt>--<name>, main--<name>), or a unit or chore by its own name. None stands for work a team crossed to Flume
+    does not build, and a name two works answer to is said with both."""
+    hits = {r.get("Work"): r for r in standing(requests)
+            if work in (r.get("Work"), r.get("Name")) or r.get("Work") in (f"unit/{work}", f"chore/{work}")}
+    if not hits:
+        return None, (f"no launch of {work} stands in requests.rec, so no Flume place of it waits on an answer: crew answer "
+                      "answers a place of work a team crossed to Flume builds, by its unit's, chore's or place's name")
+    if len(hits) > 1:
+        return None, f"{work} names {' and '.join(sorted(hits))}: name the one meant as requests.rec does"
+    return next(iter(hits.values())), None
+
+
+def stage_said(s):
+    """A crossed piece's stage (stage_of) in a few words, for a refusal to name."""
+    st = s["stage"]
+    return {"launching": "launching", "waiting": "held for its After work", "refused": "refused by the runner",
+            "queued": f"queued for room at {s.get('of')}", "submitted": f"submitted to sluice ({s.get('submission')})",
+            "merged": "merged", "landed": "landed", "dropped": "dropped"}.get(st, f"at {st}")
+
+
+def answer_retry(work, s):
+    """What crew answer asks of a crossed piece's place (Decision 9), from its stage as stage_of gives it: ("stage", the
+    stage) to start again with the words, for a place whose stage stopped short asking or that waits on its caller to
+    retry a stage, stalled or not; ("submission", None) to submit again with them, for one whose submission waits on its
+    caller and is not held; else (None, why), naming its stage: crew can't tell it (read.1), its submission waits held
+    for the user's send, which no answer gives (state.3), or it neither stopped short nor waits on its caller."""
+    st, place = s["stage"], f"{work}'s place" + (f" {s['place']}" if s.get("place") else "")
+    if st == "unknown":
+        return None, f"can't tell whether {work}'s place waits on an answer: {s['why']}"
+    if st == "needs" or (st in ("waits", "stalled") and s.get("of")):
+        return "stage", s["of"]
+    if st in ("waits", "stalled") and s.get("held"):
+        send = "crew main fix {} {} --send".format(*work.split("/")[2:]) if work.startswith("fix/main/") else "its send"
+        return None, (f"{place} has delivered, and its submission waits held for the user's send, which no answer gives: "
+                      f"{send}, on the user's word")
+    if st in ("waits", "stalled"):
+        return "submission", None
+    return None, (f"{place} is {stage_said(s)}, with no question and nothing it waits on its caller for, so there is nothing "
+                  "to answer: crew bolts shows its stage")

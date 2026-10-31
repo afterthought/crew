@@ -5,8 +5,10 @@
 # closed and team.cross recorded naming its stream; and crew up of it is then refused at once, naming Flume and crew
 # bolts, with no pane opened. A give to the crossed team is refused while no runner answers on its host, and once one
 # does, sluice makes the bolt's branch, the plan marks the bolt Path: flume and requests.rec on the state branch holds a
-# launch of each of its units and chores, and no agent starts. A team's path, the give's refusal, who is due an end,
-# the launches and the refusals' words are logic cases (tests/py/test_cross.py, tests/py/test_hold.py).
+# launch of each of its units and chores, and no agent starts. Once the runner's record shows a's place stopped short
+# asking, crew answer a appends the retry of that stage with the answer's words. A team's path, the give's refusal, who
+# is due an end, the launches, what an answer retries and the refusals' words are logic cases (tests/py/test_cross.py,
+# tests/py/test_hold.py).
 # Reads: plugin/hooks/ plugin/roles/ plugin/lib/hold.py tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
@@ -77,3 +79,20 @@ eq "$(launches)" ""
 eq "$(herdr_state $box wldn-1 '.agents | length')" "0"
 eq "$(field "$HOST" bolt.give On bolt/next)" "bolt/next team/swb-1"
 ok "a give to a crossed team makes its bolt's branch, marks it Path: flume and launches each unit and chore, b after a, starting no agent"
+
+# The runner launched a, and Flume's status of its place, carried on the runner's branch, shows its code stopped short
+# asking: the branch gains answers.rec and places.rec beside runner.rec.
+answers_rec=$(printf '%%rec: Answer\n%%key: Request\n%%type: Request int\n%%type: Outcome enum held launched done refused\n%%type: At date\n%%mandatory: Request Outcome At\n%%allowed: Request Outcome Place Words At\n\nRequest: 1\nOutcome: launched\nPlace: /flume/places/change--a\nAt: 2026-10-31T12:01:00Z\n')
+status='{"status":{"places":[{"place":"/flume/places/change--a","phase":"live","current":"code","stages":[{"name":"code","state":"ended_short","end":{"needs":"needs_answer","words":"Which partition'"'"'s rail?"}}],"waiting_on":{"act":"retry","stage":"code","why":"answer","words":"Which partition'"'"'s rail?"},"stalled":false}]}}'
+places_rec=$(printf '%%rec: Place\n%%key: Request\n%%type: Request int\n%%type: At date\n%%mandatory: Request Place At Status\n%%allowed: Request Place At Status\n\nRequest: 1\nPlace: /flume/places/change--a\nAt: 2026-10-31T12:02:00Z\nStatus: %s\n' "$status")
+tree=$(for f in runner answers places; do
+  v=${f}_rec; printf '100644 blob %s\t%s.rec\n' "$(printf '%s\n' "${!v}" | git --git-dir "$ws" hash-object -w --stdin)" "$f"
+done | git --git-dir "$ws" mktree)
+git --git-dir "$ws" update-ref "refs/heads/wldn/runner/$box" "$(git --git-dir "$ws" -c user.name=runner -c user.email=runner@example.com \
+  commit-tree "$tree" -p "refs/heads/wldn/runner/$box" -m "runner: a's place stopped short")"
+expect_ok crew answer a "wldn's"
+has "$out" "unit/a's place /flume/places/change--a is asked to run code again with the answer (request 4): the runner on $box retries it"
+eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Request = 4" -P Act,Work,Of,Stage,Words | grep . | paste -sd ' ' -)" \
+  "retry unit/a 1 code wldn's"
+eq "$(field "$HOST" stage.answer On)" "unit/a bolt/next"
+ok "crew answer of a place the runner shows stopped short asking appends the retry of its stage with the answer's words"

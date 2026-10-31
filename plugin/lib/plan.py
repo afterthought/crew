@@ -2128,6 +2128,67 @@ def reprioritise(w):
         request(w, "priority", launch.get("Host"), launch.get("Work"), Of=launch.get("Request"), Priority=p)
 
 
+def launch_label(fleet, work, label):
+    """The partition whose requests.rec holds a launch standing for the work a command names (runner.named_launch):
+    label when given, else the one partition that holds it; refused naming each partition when none does, or when
+    more than one does, which --label settles."""
+    labels, errors, hits, why = [label] if label else sorted(fleet["partitions"]), {}, [], None
+    for l in labels:
+        try:
+            repo, ref = state_of(fleet, l)
+            tip = fetch(repo, ref)
+        except Refusal as e:
+            errors[l] = str(e)
+            continue
+        launch, why = runner.named_launch(Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request") if tip else [], work)
+        if launch is not None:
+            hits.append(l)
+    if len(hits) == 1:
+        return hits[0]
+    hits or fail((why if len(labels) == 1 else f"no launch of {work} stands in the requests of " + ", ".join(labels))
+                 + "".join(f"; {l}/main could not be read: {e}" for l, e in errors.items()))
+    fail(f"{work} has a launch standing in the requests of {' and '.join(hits)}: add --label")
+
+
+def answer(fleet, a):
+    """crew answer <work> "<words>" [--label L]: a retry of the stage the place of a crossed team's work stopped short on,
+    or waits on its caller for, carrying the words, the planner's, the design agent's or main-level ops's answer
+    (Decision 9 of teams-cross-to-flume-as-their-bolts-land, runner.answer_retry); its submission again where that is
+    what waits, unheld. Appended to requests.rec in one plan write, the work's stage read again from the runner's
+    records at the tip it is applied to (plan.1), and recorded as stage.answer, which holds none of the words
+    (record.3). Refused, naming the place's stage, when the place neither stopped short nor waits on its caller, and
+    when no launch of the work stands."""
+    label = launch_label(fleet, a.work, default_label(fleet, a))
+    CONTEXT["label"], seen = label, {}
+
+    def change(w):
+        seen.update(answer_place(w, a.work, a.words))
+        return []
+    write(fleet, label, change, "plan: answer a place", act="stage.answer")
+    print(f"{seen['work']}'s place {seen['place']} is asked to run {seen['what']} again with the answer (request {seen['n']}): "
+          f"the runner on {seen['host']} retries it")
+
+
+def answer_place(w, named, words):
+    """crew answer's change to a write (answer): the retry runner.answer_retry decides for the place of the work named,
+    its stage read from the runner's records as the write reads them, appended to requests.rec with the words, the
+    write's subject and objects set. Returns what it asked, {n, work, host, place, what}: the request's number, the work
+    as requests name it, the host whose runner retries it, its place, and the stage, or the submission, run again."""
+    requests = requests_of(w).recs("Request")
+    launch, why = runner.named_launch(requests, named)
+    not why or fail(why)
+    work, host = launch.get("Work"), launch.get("Host")
+    CONTEXT["work"] = work
+    s = runner.piece_stage(requests, w.runner_of(host), launch)
+    how, stage = runner.answer_retry(work, s)
+    how or fail(stage)
+    n = request(w, "retry", host, work, Of=launch.get("Request"), Stage=stage, Submission=how == "submission", Words=words)
+    what = stage or "submission"
+    w.subject = f"plan({(launch.get('Intent') or '').split('/', 1)[-1]}): answer {work}'s {what}"
+    w.on += [work] + ([launch.get("Base")] if (launch.get("Base") or "").startswith("bolt/") else [])
+    return dict(n=n, work=work, host=host, place=s.get("place") or launch.get("Name"), what=what)
+
+
 def give_due(plan, t):
     """Why a give hands a team no bolt while it is due to cross to Flume or back (runner.due_refusal), from its plan:
     each bolt the plan gives it, with the Path it was given on; None when it is not due (Decision 2 of
@@ -17804,6 +17865,10 @@ def parser(cls=argparse.ArgumentParser, only=None):
     v.add_argument("--json", action="store_true")
     v = sub.add_parser("rail")
     v.add_argument("--label")
+    v = sub.add_parser("answer")
+    v.add_argument("work")
+    v.add_argument("words")
+    v.add_argument("--label")
     ca = sub.add_parser("card").add_subparsers(dest="sub", required=True)
     for c in ("session", "wait", "end"):
         x = ca.add_parser(c)
@@ -18115,7 +18180,7 @@ COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
     ("card", "preview"): card_preview, ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
     ("card", "read"): card_read, ("card", "answer"): batch_answer,
-    ("record", None): record_status,
+    ("record", None): record_status, ("answer", None): answer,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit, ("bolt", "leave"): bolt_leave,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
@@ -18152,7 +18217,7 @@ ACTS = {
     ("signal", None): "capture", ("signal-move", None): "signal.move", ("signal-land", None): "capture",
     ("_needs", None): "stage.end",
     ("plan", "propose"): "plan.propose", ("plan", "agree"): "plan.agree", ("plan", "approve"): "plan.approve",
-    ("plan", "drop"): "plan.drop",
+    ("plan", "drop"): "plan.drop", ("answer", None): "stage.answer",
 }
 
 
@@ -18178,6 +18243,8 @@ def named(a):
         out.append(f"plan/{a.label}")
     if a.cmd == "plan" and getattr(a, "n", None) is not None:
         out.append(f"proposal/{a.n}")
+    if a.cmd == "answer" and CONTEXT.get("work"):  # the work as requests name it, once its launch was found
+        out.append(CONTEXT["work"])
     return out
 
 

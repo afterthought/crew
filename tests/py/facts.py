@@ -190,3 +190,25 @@ def flume_plan(bolts=(), work=()):
         f"Unit: {u}\nRepo: crew\n" + (f"Bolt: {b}\n" if b else "") + ("Kind: chore\n" if kind == "chore" else "")
         + f"Intent: Build {u}.\n" + "".join(f"After: {x}\n" for x in after) + "".join(f"Source: {x}\n" for x in sources) + "\n"
         for u, b, after, kind, sources in work)
+
+
+FLUME = pathlib.Path(__file__).parent / "flume-0.3.6"
+
+
+def ran(launched=None, held=(), host="deneb", label="madswan"):
+    """A host's runner as crew reads it from its branch (runner.host_read): each launch in launched, {request's number:
+    the flume 0.3.6 status fixture its place stands at (tests/py/flume-0.3.6/<name>.json)}, answered launched and
+    carried in places.rec at the fixture's own place, and each in held answered held."""
+    import json
+    import plan
+    import runner
+    answers, places = "", ""
+    for n, name in (launched or {}).items():
+        status = json.loads((FLUME / f"{name}.json").read_text())
+        where = status["status"]["places"][0]["place"].split("@")[0]
+        answers += f"\nRequest: {n}\nOutcome: launched\nPlace: {where}\nAt: 2026-10-31T12:01:00Z\n"
+        places += f"\nRequest: {n}\nPlace: {where}\nAt: 2026-10-31T12:02:00Z\nStatus: {json.dumps(status)}\n"
+    answers += "".join(f"\nRequest: {n}\nOutcome: held\nAt: 2026-10-31T12:01:00Z\n" for n in held)
+    files = {"runner.rec": plan.Plan(runner.RUNNER + f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n"),
+             "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)}
+    return {host: runner.host_read(label, host, "5e1f0c2a" + "0" * 32, files, {})}

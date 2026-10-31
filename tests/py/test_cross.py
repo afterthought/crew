@@ -2,6 +2,8 @@
 teams-cross-to-flume-as-their-bolts-land): a team's path from its setting and the bolts it holds (runner.team_path,
 runner.path_of). The commands that act on it, a give's refusal and a crossed team's end, are the cross journey's
 (t-journey-cross)."""
+import re
+
 import pytest
 
 from facts import crossed_fleet, flume_plan
@@ -371,3 +373,85 @@ class TestPlanned:
         assert plan.planned_takers(other, "madswan", plan.Plan(flume_plan([("next", None, None)])), ["next"]) == {}
         assert plan.dispatch_said("plan(next): add the bolt (madswan-planner)", {}) == (
             "plan(next): add the bolt (madswan-planner). Give a free team its next bolt.")
+
+
+# ------------------------------------------------------------------------------------- a crossed team's place answered
+
+def path_at(name):
+    """The place a flume 0.3.6 status fixture stands at (facts.ran), without a tidied place's @<when>."""
+    import json
+    from facts import FLUME
+    return json.loads((FLUME / f"{name}.json").read_text())["status"]["places"][0]["place"].split("@")[0]
+
+
+class TestAnswer:
+    """crew answer <work> "<words>" is the retry that answers a place that stopped short or waits on its caller
+    (Decision 9), refused naming the place's stage otherwise."""
+
+    def answered(self, at, work=(unit("a"),), named="a", words="madswan's"):
+        """crw-4's x launched with its work, request 1's place standing at the status fixture named, answered."""
+        from facts import ran
+        w = launched("x", work=list(work), runners=ran({1: at}))
+        return w, plan.answer_place(w, named, words)
+
+    def test_a_stage_that_stopped_short_asking_is_retried_with_the_answer(self):
+        """The runner's record shows a's code stopped short asking, and the planner runs crew answer a "madswan's"."""
+        w, got = self.answered("stopped-short")
+        assert requests(w)[1] == {"Request": "2", "Act": "retry", "Host": "deneb", "Work": "unit/a", "Of": "1", "Stage": "code",
+                                  "Words": "madswan's"}
+        assert got == dict(n=2, work="unit/a", host="deneb", place=path_at("stopped-short"), what="code")
+        assert (w.subject, w.on) == ("plan(x): answer unit/a's code", ["unit/a", "bolt/x"])
+
+    @pytest.mark.parametrize("at", ["on-hold", "stalled"])
+    def test_a_place_waiting_on_its_caller_to_retry_a_stage_is_retried_at_that_stage(self, at):
+        """on-hold's code waits on its caller while construct is current; stalled's code was lost past Flume's bound."""
+        w, _ = self.answered(at)
+        assert (requests(w)[1]["Stage"], requests(w)[1]["Words"]) == ("code", "madswan's")
+
+    def test_nothing_to_answer_is_refused_naming_its_stage(self):
+        """a's place is in code with no question, and crew answer a "yes" runs."""
+        with pytest.raises(plan.Refusal, match=rf"^unit/a's place {path_at('code')} is at code, with no question and nothing it "
+                                               r"waits on its caller for, so there is nothing to answer: crew bolts shows its stage$"):
+            self.answered("code", words="yes")
+
+    @pytest.mark.parametrize("at, said", [("submitted", "submitted to sluice (413)"), ("landed", "merged"), ("queued", "queued for room at construct")])
+    def test_a_place_further_on_is_refused_naming_where_it_is(self, at, said):
+        with pytest.raises(plan.Refusal, match=rf"^unit/a's place .* is {re.escape(said)}, with no question"):
+            self.answered(at)
+
+    def test_a_fix_is_answered_by_its_places_name(self):
+        from facts import ran
+        w = launched("x", work=[unit("a")], runners=ran({2: "stopped-short"}))
+        fields = {k: v for k, v in launch(2, "fix/x/rail-word", "x--rail-word").items() if k not in ("Request", "Act", "Host", "Work")}
+        plan.request(w, "launch", "deneb", "fix/x/rail-word", **dict(fields, Kind="fix"))
+        plan.answer_place(w, "x--rail-word", "Say land.")
+        assert (requests(w)[2]["Work"], requests(w)[2]["Of"], requests(w)[2]["Stage"]) == ("fix/x/rail-word", "2", "code")
+
+    def test_work_with_no_launch_standing_is_refused(self):
+        """b is planned on crw-5's bolt, on today's path."""
+        w = given(("t", "crw-5", None), work=[unit("b", bolt="t")])
+        with pytest.raises(plan.Refusal, match=r"^no launch of b stands in requests.rec, so no Flume place of it waits on an answer"):
+            plan.answer_place(w, "b", "yes")
+
+    def test_a_host_whose_runner_cant_be_read_refuses_naming_why(self):
+        w = launched("x", work=[unit("a")])
+        with pytest.raises(plan.Refusal, match=r"^can't tell whether unit/a's place waits on an answer: no runner answers on deneb: "
+                                               r"madswan/runner/deneb does not exist$"):
+            plan.answer_place(w, "a", "yes")
+
+    def test_a_place_held_for_its_after_work_has_nothing_to_answer(self):
+        from facts import ran
+        w = launched("x", work=[unit("a"), unit("b", after=["a"])], runners=ran({1: "code"}, held=[2]))
+        with pytest.raises(plan.Refusal, match=r"^unit/b's place is held for its After work, with no question"):
+            plan.answer_place(w, "b", "yes")
+
+    def test_a_submission_waiting_on_its_caller_is_sent_again_and_one_held_is_the_users_send(self):
+        assert runner.answer_retry("fix/x/rail-word", {"stage": "waits", "of": None, "held": False, "place": "/p"}) == ("submission", None)
+        assert runner.answer_retry("fix/main/crew/red", {"stage": "waits", "of": None, "held": True, "place": "/crew/places/fix--main--red"}) == (
+            None, "fix/main/crew/red's place /crew/places/fix--main--red has delivered, and its submission waits held for the user's "
+                  "send, which no answer gives: crew main fix crew red --send, on the user's word")
+
+    def test_two_works_answering_to_one_name_are_both_named(self):
+        requests_ = [plan.Rec("Request", runner.request_fields(1, "launch", "deneb", "unit/x--n", dict(launch(1, "unit/x--n", "x--n")), "2026-10-31T12:00:00Z", "u")),
+                     plan.Rec("Request", runner.request_fields(2, "launch", "deneb", "fix/x/n", dict(launch(2, "fix/x/n", "x--n"), Kind="fix"), "2026-10-31T12:00:00Z", "u"))]
+        assert runner.named_launch(requests_, "x--n") == (None, "x--n names fix/x/n and unit/x--n: name the one meant as requests.rec does")
