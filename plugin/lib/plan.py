@@ -1380,8 +1380,9 @@ class Stages:
         """A crossed piece's stage (runner.stage_of) from its newest launch not dropped, the runner's answer to it and
         its place's record, read on its host's runner branch: unknown where the bolt's team or its runner can't be read,
         or it has no launch, as stage_of says; merged once its place has landed on its bolt, and landed once main holds
-        it, a unit's change archived there or a chore's trailer, as today's do. It has no worktree in the kit, and
-        flume holds the whole of stage_of's answer, which the views show (runner.piece_said)."""
+        it, a unit's change archived there or a chore's trailer, as today's do. It has no worktree in the kit, flume
+        holds the whole of stage_of's answer, which the views show (runner.piece_said), and carried when the runner
+        carried its place's status, which a batch reads it at (crossed_changes)."""
         try:
             t = bolt_team(self.fleet, bolt)
         except Refusal as e:
@@ -1399,6 +1400,8 @@ class Stages:
             reading = runner.of_host(reads, t["label"], launch.get("Host") if launch is not None else t["machine"])
             s = runner.piece_stage(requests, reading, launch) if launch is not None else \
                 runner.stage_of(work, None, None, None, reading["why"] or True)
+            place = reading["places"].get(runner.number(launch.get("Request"))) if launch is not None and not reading["why"] else None
+            res["carried"] = place["at"] if place else None  # when the runner carried its place's status
         if s["stage"] == "merged":
             k, _ = self.kit(bolt)
             if k and name in (k.get("chores", []) if is_chore(u) else k["main"]):
@@ -3181,7 +3184,8 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
     _, base = kit_git(fleet, t, main, "merge-base", facts["at"], now)  # the bolt where it is read (gather.bolt_read)
     _, moved = kit_git(fleet, t, main, "rev-list", "--count", "--first-parent", f"{base}..{now}")
     _, came = kit_git(fleet, t, main, "log", "-1", "--format=%(trailers:key=Sluice-From,valueonly)", head)
-    due, unanswered = {u for u, *_ in due_changes(plan, entries)}, awaiting_answer(entries)
+    crossed = crossed_changes(plan, st)  # a crossed unit's change, once landed on its bolt (Decision 13)
+    due, unanswered = {u for u, *_ in due_changes(plan, entries, crossed)}, awaiting_answer(entries, crossed)
     frees = frees_of(st, plan, t, bolt)
     card = landing_facts(bolt, t["kit"]["name"], work, head, facts.get("head_at"), due, unanswered, read_in, int(moved),
                          pull_of(came.strip(), t["kit"]["repo"]),
@@ -3793,8 +3797,9 @@ def bolt_land(fleet, a, by=None, close_why=None):
     said = host_run(fleet, t["machine"], MAIN, t["kit"]["main"])
     ref, head, why = kit.main_now(said, t["kit"]["name"], t["machine"])
     not why or fail(why)
+    st = stages_for(fleet, plan, [b]) if held else None
     if held:
-        stage_of = stages_for(fleet, plan, [b]).of
+        stage_of = st.of
     else:
         h = survey(fleet, [(t["name"], None)]).get(t["machine"]) or {"ok": False, "error": "it was not asked"}
         k = h["kits"].get(t["kit"]["main"]) if h["ok"] else None
@@ -3807,7 +3812,7 @@ def bolt_land(fleet, a, by=None, close_why=None):
         if held and b.get("Path") == "flume" else None
     landed = land_refusal(a.bolt, units, stage_of, [], label, hold, t["kit"]["name"]) is None
     entries = partition_entries(fleet, label) if landed else []
-    outside = [u for u, *_ in due_changes(plan, entries) if u in units] if landed else []
+    outside = [u for u, *_ in due_changes(plan, entries, crossed_changes(plan, st) if hold is not None else None) if u in units] if landed else []
     why = land_refusal(a.bolt, units, stage_of, outside, label, hold, t["kit"]["name"])
     not why or fail(why)
     # The user's word to land, when it was given in ops's pane, and their words, kept where it was submitted (plan.16).
@@ -13276,8 +13281,10 @@ def batch_cards(n, units, posts):
     return [(k, card_part(k, units)) for _, k in old] or [(f"batch/{n}", units)]
 
 
-def latest_changes(entries):
-    """Each unit's latest change, the commit its last delivered construct left, and when: {unit: (commit, when)}."""
+def latest_changes(entries, crossed=None):
+    """Each unit's latest change, the commit its last delivered construct left, and when: {unit: (commit, when)}; a unit
+    of a bolt given through Flume, whose construct crew does not run, by the commit its place landed at on its bolt
+    (crossed, crossed_changes)."""
     latest = {}
     for e in entries:
         if e.get("Act") != "stage.end" or e.get("Ended") != "delivered" or e.get("Refused"):
@@ -13287,7 +13294,29 @@ def latest_changes(entries):
         got = e.get("Delivered") or ""
         if unit and got.startswith(f"unit/{unit}@"):
             latest[unit] = (got.rpartition("@")[2], e["At"])
+    latest.update(crossed or {})
     return latest
+
+
+def crossed_changes(plan, st):
+    """Each unit of a bolt given through Flume whose change a review batch reads (Decision 13 of teams-cross-to-flume-
+    as-their-bolts-land; review-batches "A crossed team's unit is batched once its change has landed on its bolt"),
+    {unit: (commit, when)}: a Flume place's commits live in the runner's clone, which crew does not read, so a unit is
+    read once its stage reads merged by the runner's records (st, Stages) and its bolt as the kit was read holds its
+    change archived, at the commit its place landed at on the bolt, when the runner carried that; a unit whose
+    construct has delivered and whose place is still in code is not yet read."""
+    out = {}
+    for b in plan.bolts():
+        if not (b.get("Team") and b.get("Path") == "flume"):
+            continue
+        k, _ = st.kit(b)
+        archived = ((k or {}).get("bolts", {}).get(b.name()) or {}).get("archived", [])
+        for u in plan.units_of(b.name()):
+            s = st.of(u.name())
+            commit = (s.get("flume") or {}).get("commit")
+            if s["stage"] in ("merged", "landed") and commit and u.name() in archived and s.get("carried"):
+                out[u.name()] = (commit, s["carried"])
+    return out
 
 
 def batch_closed(entries):
@@ -13372,11 +13401,12 @@ def batch_settled(entries):
     return out
 
 
-def awaiting_answer(entries):
+def awaiting_answer(entries, crossed=None):
     """Each unit whose latest change has been in a batch whose card the user has not answered (briefs.12), as {unit: the
     batch}: no card of a batch holding the change at its commit (batch_cards) is closed (batch_closed), so its row
-    still waits on the rail. A unit whose latest change no batch has held is due_changes', and a chore is in no batch."""
-    latest, closed, posts, held = latest_changes(entries), batch_closed(entries), batch_posts(entries), {}
+    still waits on the rail. A unit whose latest change no batch has held is due_changes', and a chore is in no batch.
+    crossed, as due_changes takes it."""
+    latest, closed, posts, held = latest_changes(entries, crossed), batch_closed(entries), batch_posts(entries), {}
     for n, _, units in batches(entries):
         for key, part in batch_cards(n, units, posts):
             for u, _, sha in part:
@@ -13385,10 +13415,11 @@ def awaiting_answer(entries):
     return {u: max(n for n, _ in ns) for u, ns in held.items() if not any(answered for _, answered in ns)}
 
 
-def due_changes(plan, entries):
+def due_changes(plan, entries, crossed=None):
     """Each change due for the user's review, in the plan's order: a unit of a bolt a team holds whose last delivered
-    construct left a commit no batch has held it at, as (unit, team, commit, when it was constructed)."""
-    latest = latest_changes(entries)
+    construct left a commit no batch has held it at, as (unit, team, commit, when it was constructed); a unit of a bolt
+    given through Flume once its change has landed on its bolt (crossed, crossed_changes)."""
+    latest = latest_changes(entries, crossed)
     held = {(u, sha) for _, _, us in batches(entries) for u, _, sha in us}
     out = []
     for u in plan.units():
@@ -13500,11 +13531,14 @@ def batch_check(fleet, t, read=None):
         if plan is None:
             return
         entries = partition_entries(fleet, label)
-    due = due_changes(plan, entries)
+    # A crossed unit's change is read once it has landed on its bolt, from the runner's records and its kit (Decision 13
+    # of teams-cross-to-flume-as-their-bolts-land), so every bolt given through Flume is read with the team's own.
+    held, crossing = held_by(plan, t["name"]), [b for b in plan.bolts() if b.get("Team") and b.get("Path") == "flume"]
+    st = (Stages(fleet, plan, read["sv"], read.get("runs")) if read is not None else
+          stages_for(fleet, plan, held + [b for b in crossing if b not in held])) if held or crossing else None
+    due = due_changes(plan, entries, crossed_changes(plan, st) if crossing else None)
     if not due or told_since_last_batch(entries):
         return
-    held = held_by(plan, t["name"])
-    st = (Stages(fleet, plan, read["sv"]) if read is not None else stages_for(fleet, plan, held)) if held else None
     bolts = [(b.name(), bool(plan.work_of(b.name())) and all(st.of(u.name())["stage"] in ("merged", "landed") for u in plan.work_of(b.name())),
               [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]) for b in held]
     why = batch_due(due, entries, setting, datetime.datetime.now(datetime.timezone.utc), bolts)
@@ -13527,13 +13561,19 @@ def batch_due_said(label, due, why):
             "raises the batch's card and its reading session in your name.")
 
 
-def reading_command(fleet, label, team, sha, unit):
+def reading_command(fleet, label, team, sha, unit, archived=False):
     """How the reviewer, on the main level's host, reads a unit's change at a commit in its kit on the team's host, the
-    kit of the unit's bolt (unit_kit_team)."""
+    kit of the unit's bolt (unit_kit_team); a crossed unit's change archived at the commit of its bolt that holds it
+    (archived; Decision 13 of teams-cross-to-flume-as-their-bolts-land), its folder found under the archive first."""
     t, here = unit_kit_team(fleet, label, fleet["teams"][team], unit), fleet["partitions"][label]["machine"]
     pre = "" if t["machine"] == here else f"ssh -o BatchMode=yes {t['ssh']} "
-    return (f"list its files with `{pre}git -C {t['kit']['main']} ls-tree -r --name-only {sha} openspec/changes/{unit}/` and read "
-            f"each with `{pre}git -C {t['kit']['main']} show {sha}:<path>`")
+    folder = f"openspec/changes/{unit}/"
+    if archived:
+        folder = "<folder>/"
+        found = (f"its change is archived at that commit: find its folder with `{pre}git -C {t['kit']['main']} ls-tree -d --name-only "
+                 f"{sha} openspec/changes/archive/`, the one named <date>-{unit}, then ")
+    return ((found if archived else "") + f"list its files with `{pre}git -C {t['kit']['main']} ls-tree -r --name-only {sha} {folder}` "
+            f"and read each with `{pre}git -C {t['kit']['main']} show {sha}:<path>`")
 
 
 def review_start(fleet, a):
@@ -13547,21 +13587,24 @@ def review_start(fleet, a):
     tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
     plan = read(repo, ref, tip)
     entries = partition_entries(fleet, label)
-    due = due_changes(plan, entries)
+    # A crossed unit's change is read on GitHub's bolt after a fetch, at the commit holding it archived (Decision 13).
+    crossing = [b for b in plan.bolts() if b.get("Team") and b.get("Path") == "flume"]
+    crossed = crossed_changes(plan, stages_for(fleet, plan, crossing, fetch=True)) if crossing else {}
+    due = due_changes(plan, entries, crossed)
     due or fail(f"no change of {label} is due for a batch: every unit's latest change has been in one")
     n = 1 + max([int(e["Batch"]) for e in entries if e.get("Act") in ("review.start", "review.batch") and (e.get("Batch") or "").isdigit()] or [0])
     f = batch_file(label, n)
-    prompt = review_prompt(fleet, label, n, f, due)
+    prompt = review_prompt(fleet, label, n, f, due, crossed)
     return dict(N=n, FILE=f, UNITS=" ".join(f"{u}:{team}@{sha}" for u, team, sha, _ in due), NAMES=" ".join(u for u, *_ in due),
                 PROMPT=prompt)
 
 
-def review_prompt(fleet, label, n, f, due):
+def review_prompt(fleet, label, n, f, due, crossed=()):
     """What batch n's reviewer is sent: the changes due, each with its team, kit, host and commit and how to read it
-    there, and the file its summary goes to."""
+    there, a crossed unit's archived at that commit (crossed, by name), and the file its summary goes to."""
     return (f"Review batch {n} of {label}, {len(due)} change{'' if len(due) == 1 else 's'}, and write its summary to {f}. "
             + " ".join(f"{u} ({team}, {unit_kit_team(fleet, label, fleet['teams'][team], u)['kit']['name']} on {fleet['teams'][team]['machine']}, at {sha}): "
-                       f"{reading_command(fleet, label, team, sha, u)}." for u, team, sha, _ in due))
+                       f"{reading_command(fleet, label, team, sha, u, u in crossed)}." for u, team, sha, _ in due))
 
 
 def review_wait(fleet, a):
@@ -13806,7 +13849,7 @@ def opener(fleet, host, here, path):
 CARD_DAYS = 14
 
 
-def rail_record(fleet, found, props):
+def rail_record(fleet, found, props, crossed=None):
     """What the rail reads of the run record, in one read of each partition whose plan was read: from 60 days back, for
     the batches and the constructs they hold, or from the day before its oldest open proposal's Opened when that is
     earlier, since Opened is the writing host's date and the record's files are named by the UTC day. Returns when each
@@ -13823,7 +13866,8 @@ def rail_record(fleet, found, props):
     None for a partition whose branch could not be read, since then they can't be told; the rail's rows for the
     operations; the entries the operations are read from, {label: entries}, the ops entries of the main level's host
     and the landings, oldest first, which the board's Operation lane reads (ops.environments); and every entry read,
-    {label: entries}, oldest first, which the sweep (sweep_cards) and the board's design band read."""
+    {label: entries}, oldest first, which the sweep (sweep_cards) and the board's design band read. crossed, each
+    partition's crossed units' changes, {label: crossed_changes'}, which its due and unanswered units count."""
     times, cards, unread, landings, gives, held, deploys, opses, logs = {}, [], {}, [], {}, {}, [], {}, {}
     today = datetime.datetime.now(datetime.timezone.utc).date()
     fresh = utc(f"{today - datetime.timedelta(days=CARD_DAYS)}T00:00:00Z")
@@ -13834,7 +13878,7 @@ def rail_record(fleet, found, props):
             since = min(since, datetime.date.fromisoformat(min(opened)) - datetime.timedelta(days=1))
         entries, missing = record.gather(fleet, [l], since.isoformat())
         unread[l], logs[l] = missing, entries
-        r = record_reading(l, entries, plan, fresh, missing)
+        r = record_reading(l, entries, plan, fresh, missing, (crossed or {}).get(l))
         times.update(r["times"])
         cards += r["cards"]
         landings += r["landings"]
@@ -13847,7 +13891,7 @@ def rail_record(fleet, found, props):
     return times, cards, unread, landings, gives, held, deploys, opses, logs
 
 
-def record_reading(l, entries, plan, fresh, missing=None):
+def record_reading(l, entries, plan, fresh, missing=None, crossed=None):
     """What the rail reads of one partition's run record entries, as rail_record gives it: when each proposal was
     proposed, the cards open (posted since fresh and not closed, the same owner's newer card under a key replacing its
     older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
@@ -13855,7 +13899,7 @@ def record_reading(l, entries, plan, fresh, missing=None):
     answer to its batch's card (awaiting_answer). A close refused leaves its card open; a card's close as lost to its
     owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed while
     its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row, or once its
-    batch waits on nothing (batch_settled), whose words are held as settled."""
+    batch waits on nothing (batch_settled), whose words are held as settled. crossed, as due_changes takes it."""
     times, posted, closed, landings, gives = {}, {}, set(), [], {}
     for e in entries:
         act = e.get("Act")
@@ -13886,8 +13930,8 @@ def record_reading(l, entries, plan, fresh, missing=None):
     settled = batch_settled(entries)
     closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries) | set(settled)  # a batch card posted again reopens its row
     held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
-                due=None if missing else {u for u, *_ in due_changes(plan, entries)},
-                unanswered=None if missing else awaiting_answer(entries), refused=refusals(entries), stopped=stops(entries),
+                due=None if missing else {u for u, *_ in due_changes(plan, entries, crossed)},
+                unanswered=None if missing else awaiting_answer(entries, crossed), refused=refusals(entries), stopped=stops(entries),
                 forecasts=[e for e in entries if e.get("Act") == "forecast"],
                 left=[e for e in entries if e.get("Act") in ("landing.left", "bolt.leave", "bolt.submit")])
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
@@ -14391,14 +14435,15 @@ def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
 
 
 def rail_runs(found):
-    """What the rail reads of each partition's runners for the fixes of main its landings rows carry (rail_rows,
-    runner.main_fixes_waiting): {label: (requests.rec's records at the tip the read found, its runners as read beside
-    it, runners)}, for each partition whose requests hold a fix of main standing; a partition with none reads no
-    runner."""
+    """What the rail reads of each partition's runners, once for its read, for the stages of its crossed work (Stages)
+    and the fixes of main its landings rows carry (rail_rows, runner.main_fixes_waiting): {label: (requests.rec's
+    records at the tip the read found, its runners as read beside it, runners)}, for each partition whose plan holds a
+    bolt given through Flume or whose requests hold a fix of main standing; a partition with neither reads no runner."""
     out = {}
     for l, repo, tip, p in found:
         rq = Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request") if p and tip else []
-        if any((r.get("Work") or "").startswith("fix/main/") for r in runner.standing(rq)):
+        if any((r.get("Work") or "").startswith("fix/main/") for r in runner.standing(rq)) or (
+                p and any(b.get("Path") == "flume" for b in p.bolts())):
             out[l] = (rq, runners(repo, l))
     return out
 
@@ -14431,7 +14476,8 @@ def rail_read(fleet, labels, board=False, sweep=False):
     proposals the plans read hold (proposals_held), the cards read then being those open once it acted, each kit's
     landings card main moved under is raised again (sweep_moved), and the card sessions whose card is closed or whose row is gone are
     ended on every host of the labels read; what the sweeps did, and which hosts were not checked, are in the read
-    (sweep_sessions). No state is written but by those sweeps' acts."""
+    (sweep_sessions). No state is written but by those sweeps' acts. Each partition's runners are read once beside its
+    plan (runs, rail_runs), for the stages of its crossed work and the changes its batches count (crossed_changes)."""
     errors = {}
     found = plans(fleet, labels, errors)
     held = [(b.get("Team"), b.name(), b.get("Repo")) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")]
@@ -14439,10 +14485,12 @@ def rail_read(fleet, labels, board=False, sweep=False):
         held += [(t, None) for l in labels for t in crew.partition_of(fleet, l)["teams"]]
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
-    times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props)
+    runs = rail_runs(found)  # each partition's runners, read once beside its plan for its crossed work (plan.12)
+    crossed = {l: crossed_changes(p, Stages(fleet, p, sv, runs)) for l, _, _, p in found if p and l in runs}
+    times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props, crossed)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
-                gives=gives, ops=opses, logs=logs, batched=batched,
-                rows=rail_rows(fleet, found, sv, props, times, batched, rail_runs(found)) + deploys)
+                gives=gives, ops=opses, logs=logs, batched=batched, runs=runs,
+                rows=rail_rows(fleet, found, sv, props, times, batched, runs) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
         k = READ.follower
@@ -14916,7 +14964,11 @@ def card_session(fleet, a, acts=None):
     t = unit_kit_team(fleet, label, t, a.unit)
     if t["machine"] != here:
         return forward_card(fleet, t, a, label)
-    folder, name = change_folder(fleet, t, a.unit, d / "change"), f"{a.key}'s session of {a.unit}"
+    # A crossed unit's change is read archived at the commit of its bolt the batch read it at (Decision 13).
+    p = plan_of(fleet, label)
+    u = p.item(a.unit) if p else None
+    at = (row.get("commits") or {}).get(a.unit) if u is not None and crossed_bolt(p, u.get("Bolt")) else None
+    folder, name = change_folder(fleet, t, a.unit, d / "change", at), f"{a.key}'s session of {a.unit}"
     said(*session_open(d, name, lambda: change_files(folder) or fail(
         f"{a.unit}'s change {folder} on {here} holds no Markdown file to read"))[:2])
 
@@ -15213,18 +15265,19 @@ def local_link(url):
     return host in ("localhost", "::1") or host.startswith("127.")
 
 
-def change_folder(fleet, t, unit, into):
+def change_folder(fleet, t, unit, into, at=None):
     """A unit's whole change on its team's host, this one: in its place while it has one, else on its bolt's worktree,
-    else as the kit's main holds it now, open or archived, read by ref after a fetch (MAIN, plan.18), never from the
-    main checkout's files, which the fleet's timer moves minutes behind: its Markdown written into the folder into
-    (change_written)."""
+    else, for a unit of a bolt given through Flume, which has neither, at the commit of its bolt its batch read it at
+    (at; Decision 13 of teams-cross-to-flume-as-their-bolts-land), else as the kit's main holds it now, open or
+    archived, read by ref after a fetch (MAIN, plan.18), never from the main checkout's files, which the fleet's timer
+    moves minutes behind: its Markdown written into the folder into (change_written)."""
     k = survey(fleet, [(t["name"], None)]).get(t["machine"], {})
     kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
     kit.get("ok") or fail(f"{t['kit']['main']} on {t['machine']} could not be read: {kit.get('error') or k.get('error')}")
     pl = kit["places"].get(unit)
     where = [f"{pl['path']}/openspec/changes/{unit}"] if pl else []
     where += [f"{w}/openspec/changes/{unit}" for w in (b["worktree"] for b in kit["bolts"].values()) if w]
-    found = next((w for w in where if os.path.isdir(w)), None)
+    found = next((w for w in where if os.path.isdir(w)), None) or (change_written(t["kit"]["main"], at, unit, into) if at else None)
     if found:
         return found
     r = subprocess.run(["bash", "-c", MAIN, "crew", t["kit"]["main"]], capture_output=True, text=True, env=gitenv())

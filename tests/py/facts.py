@@ -193,8 +193,8 @@ def crossed_fleet_read(**settings):
 def crew_read(main=(), chores=(), bolts=None):
     """A survey of deneb (plan.survey's answer) holding crew's kit as read there: main's changes and chores, and each
     bolt in bolts, {bolt: its facts over a bolt holding nothing yet, its head d…d with no verdict}."""
-    empty = {"exists": True, "at": "origin/bolt/x", "changes": [], "archived": [], "open": {}, "chores": [], "head": "d" * 40,
-             "head_at": "2026-10-31T12:00:00Z", "verdict": ""}
+    empty = {"exists": True, "at": "origin/bolt/x", "changes": [], "archived": [], "open": {}, "chores": [], "worktree": None,
+             "head": "d" * 40, "head_at": "2026-10-31T12:00:00Z", "verdict": ""}
     k = {"ok": True, "main": list(main), "chores": list(chores), "places": {}, "chore_places": {}, "fixes": [],
          "bolts": {b: dict(empty, at=f"origin/bolt/{b}", **facts) for b, facts in (bolts or {}).items()}}
     return {"deneb": {"ok": True, "kits": {"/crew/main": k}}}
