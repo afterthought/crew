@@ -8,7 +8,8 @@ crew.dead_said for a pane herdr lists with no terminal behind it and crew.opens_
 crew.last_conversation for where a role resumes,
 crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
 crew.main_named and crew.identity_withheld for whether a main level's agent herdr resumed gets its identity back on this host,
-plan.amended_said for what a conductor brought back is told, and what crew up, restart, resume, clear and needs decide
+plan.amended_said for what a conductor brought back is told, plan.kind_said for what crew main status says of a role
+that runs as its kind, and what crew up, restart, resume, clear and needs decide
 before they act. Starting, greeting, reviving and taking them down through the command are the teams journey's
 (t-journey-teams, t-journey-main)."""
 import json
@@ -260,6 +261,25 @@ class TestRoleSessions:
         p = dict(crew.partition_of(fleet, "swancloud"))
         p["flume"] = dict(p["flume"], planner="swancloud-main", ops="swancloud-main")
         assert crew.main_sessions(p) == [("swancloud-1", ("design", "operator")), ("swancloud-2", ())]
+
+    NOW = plan.utc("2026-10-31T12:30:00Z")
+    WAITING = [{"Ask": "3", "At": "2026-10-31T12:16:00Z"}, {"Ask": "5", "At": "2026-10-31T12:29:00Z"}]
+
+    @pytest.mark.parametrize("run, said", [
+        ({"live": False, "place": None, "words": None, "why": None}, "no run stands"),
+        ({"live": False, "place": "/flume/places/crew-planner--madswan", "words": "flume refused: no stream madswan-main", "why": None},
+         "no run stands (the runner could not launch its last: flume refused: no stream madswan-main)"),
+        ({"live": True, "place": "/flume/places/crew-planner--madswan", "words": None, "why": None},
+         "a run stands, the place /flume/places/crew-planner--madswan"),
+        ({"live": None, "place": None, "words": None, "why": "no runner answers on mac-studio: madswan/runner/mac-studio does not exist"},
+         "crew can't tell whether a run stands: no runner answers on mac-studio: madswan/runner/mac-studio does not exist")])
+    def test_main_status_says_a_role_runs_as_its_kind_whether_a_run_stands_and_how_many_asks_wait(self, run, said):
+        """main-level, Main status: the planner runs as its kind, its run as the runner's records show it, and two asks
+        wait, with the oldest's age (design Decision 14; plan.kind_said)."""
+        assert plan.kind_said("madswan-main", self.WAITING, run, self.NOW) == \
+            f"runs as its kind in stream madswan-main; {said}; 2 asks wait, the oldest asked 14m ago"
+        assert plan.kind_said("madswan-main", self.WAITING[1:], run, self.NOW).endswith("; 1 ask waits, the oldest asked 1m ago")
+        assert plan.kind_said("madswan-main", [], run, self.NOW).endswith("; no ask waits")
 
     @pytest.mark.parametrize("roles, said", [
         ({"planner": {"session": "madswan-1"}}, "partition swancloud's planner runs in deneb's session madswan-1, which is in partition business, not personal"),

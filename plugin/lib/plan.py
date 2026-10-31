@@ -13047,10 +13047,29 @@ def kinds_up(fleet, label, ms):
         print(f"{label}-{role}'s standing agent is ended: {label}'s {role} runs as its kind")
 
 
+def kind_said(stream, waiting, run, now):
+    """What crew main status says of a role its partition runs as its kind (main-level "A role that runs as its kind is
+    not started by crew-role"), from facts: the stream its partition names for it, the asks of it that wait, oldest
+    first (asks.pending), its latest run as the runner's records show it (runner.role_run) and the time now. That it runs
+    as its kind in that stream; whether a run of it stands, naming its place, with the runner's words where it could
+    launch none, or that crew can't tell, naming why (read.1); and how many asks wait, with the oldest's age."""
+    if run["why"]:
+        ran = f"crew can't tell whether a run stands: {run['why']}"
+    elif run["live"]:
+        ran = f"a run stands, the place {run['place']}"
+    else:
+        ran = "no run stands" + (f" (the runner could not launch its last: {run['words']})" if run["words"] else "")
+    n = len(waiting)
+    waits = (f"{n} ask{'' if n == 1 else 's'} wait{'s' if n == 1 else ''}, the oldest asked {age(utc(waiting[0]['At']), now)} ago"
+             if waiting else "no ask waits")
+    return f"runs as its kind in stream {stream}; {ran}; {waits}"
+
+
 def kinds_said(fleet, label):
-    """What crew main status says of each role the partition runs as its kind (main-level "A role that runs as its kind
-    is not started by crew-role"), {role: words}: that it runs as its kind, in which stream, and how many asks of it
-    wait and since when, read from asks.rec on the flywheel's branch (asks.pending)."""
+    """What crew main status says of each role the partition runs as its kind, {role: words} (kind_said): read from
+    asks.rec on the flywheel's branch (asks.pending) and the runner's records on the main level's host
+    (runner_facts, runner.role_run), a host whose runner can't be read named for each role and the rest still said
+    (read.3)."""
     p = crew.partition_of(fleet, label)
     kinds = [r for r in crew.KIND_ROLES if p["flume"][r] is not False]
     if not kinds:
@@ -13058,13 +13077,10 @@ def kinds_said(fleet, label):
     repo, ref = state_of(fleet, label)
     tip = fetch(repo, ref)
     held, turns = asks.parse(show(repo, tip, "asks.rec") if tip else None)
-    out = {}
-    for role in kinds:
-        waiting, _ = asks.pending(held, [], turns, role)
-        out[role] = (f"runs as its kind in stream {p['flume'][role]}; "
-                     + (f"{len(waiting)} ask{'' if len(waiting) == 1 else 's'} wait{'s' if len(waiting) == 1 else ''}, the oldest since {waiting[0]['At']}"
-                        if waiting else "no ask waits"))
-    return out
+    reading = runner.of_host(runner_facts(fleet, label)[1], label, p["machine"])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return {role: kind_said(p["flume"][role], asks.pending(held, [], turns, role)[0],
+                            runner.role_run(reading, f"{label}/{role}"), now) for role in kinds}
 
 
 def main_cmd(fleet, a):

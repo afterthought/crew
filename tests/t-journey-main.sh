@@ -11,7 +11,7 @@
 # crew revive brings back what a restart left empty, leaving down what was taken down; crew revive and crew main up
 # open again a pane herdr brought back dead; a role its partition names a session for comes up there (record 0035);
 # and a role its partition runs as its kind is started by none of them, its role record written and a standing agent
-# of it left from before ended.
+# of it left from before ended, and main status says whether a run of it stands and what waits.
 # What each agent is greeted with, where it runs and whether a pane is dead are logic cases (tests/py/test_teams.py).
 # Reads: plugin/hooks/ plugin/lib/board.py plugin/roles/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -260,6 +260,16 @@ HOST=$box expect_ok crew revive
 lacks "$out" "wldn-planner"
 [[ $(launches) == *wldn-planner* ]] && fail "a planner that runs as its kind was started"
 HOST=$box expect_ok crew main status wldn
-has "$(grep "^wldn-planner " <<<"$out")" "runs as its kind in stream wldn-main; no ask waits"
-has "$(grep "^wldn-reviewer " <<<"$out")" "runs as its kind in stream wldn-main; no ask waits"
-ok "main up starts no role that runs as its kind, writes their role records and ends a standing agent of one left idle; revive passes them over and main status says how each runs"
+has "$(grep "^wldn-planner " <<<"$out")" "runs as its kind in stream wldn-main; crew can't tell whether a run stands: no runner answers on $box: wldn/runner/$box does not exist; no ask waits"
+has "$(grep "^wldn-reviewer " <<<"$out")" "runs as its kind in stream wldn-main; crew can't tell whether a run stands"
+# Once the box's runner answers with no run of the planner, and the design agent's tell is an ask of it, main status
+# says no run stands and the ask waits.
+runner_rec=$(printf '%%rec: Runner\n%%key: Host\n%%type: Since date\n%%mandatory: Host Version Since\n%%allowed: Host Version Since\n\nHost: %s\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n' "$box")
+tree=$(printf '100644 blob %s\trunner.rec\n' "$(printf '%s\n' "$runner_rec" | git --git-dir "$ws" hash-object -w --stdin)" | git --git-dir "$ws" mktree)
+git --git-dir "$ws" update-ref "refs/heads/wldn/runner/$box" "$(git --git-dir "$ws" -c user.name=runner -c user.email=runner@example.com commit-tree "$tree" -m "runner: serve wldn on $box")"
+CREW_AGENT=wldn-design expect_ok crew tell wldn-planner "Record 0012 is accepted"
+has "$out" "asked wldn-planner"
+HOST=$box expect_ok crew main status wldn
+has "$(grep "^wldn-planner " <<<"$out")" "runs as its kind in stream wldn-main; no run stands; 1 ask waits, the oldest asked"
+has "$(grep "^wldn-reviewer " <<<"$out")" "runs as its kind in stream wldn-main; no run stands; no ask waits"
+ok "main up starts no role that runs as its kind, writes their role records and ends a standing agent of one left idle; revive passes them over and main status says how each runs, whether a run stands and what waits"
