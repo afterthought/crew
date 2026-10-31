@@ -1813,7 +1813,10 @@ def loaded_changed(old, new, root=None):
 
 def launch_digest(l, text):
     """What an agent's start is made of besides crew's plugin, as one short digest: its model, effort, folders and
-    brief (teams.6), so that a change to any of them reads as due (update_due)."""
+    brief (teams.6), so that a change to any of them reads as due (update_due). The brief names crew's own command by
+    the path of the crew that builds it, a host's checkout or its release, so that path is read as one word: two crews of
+    one host, the follower's release and a checkout another host's command ran (crew_at), digest the same start alike."""
+    text = text.replace(str(HOME), "<crew>")
     return hashlib.sha256(json.dumps([l["model"], l["effort"], sorted(l["dirs"]), text]).encode()).hexdigest()[:16]
 
 
