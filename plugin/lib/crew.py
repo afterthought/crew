@@ -1674,8 +1674,9 @@ def team_tokens(fleet, t, role, self_name):
 KIND_TURN = (
     "You run as your kind: no agent of you stands, and each run of you is one turn, a place the host's runner launches "
     "while anything waits for you, one at a time. Your turn starts with `{{TEAM_CMD}} role start`, which takes everything "
-    "asked of you since your last turn and prints this brief's path, each ask and each place that waits on you; act on "
-    "what it took, as this brief says, and end the turn with `{{TEAM_CMD}} role end`, as your turn's prompt says. Wait "
+    "asked of you since your last turn and prints this brief's path, each ask, each place that waits on you and the "
+    "cards the user answered in your name; act on what it took, as this brief says, and end the turn with "
+    "`{{TEAM_CMD}} role end`, as your turn's prompt says. Wait "
     "in your session on nothing: where this brief says to wait for an answer, a submission, a review or a tell, end your "
     "turn instead, and the thing reaches your next run as an ask. What is asked after your start waits for your next "
     "turn. Ask the user only on a card in your own name, {{SELF}}, never by stopping short.")

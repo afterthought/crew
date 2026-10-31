@@ -20,7 +20,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 ## 4. A run's name, start and end
 
 - [x] 4.1 A command run in a role's run takes the role's name and partition from its place, through `agent()`, `may_write` and the label reads, and carries them when forwarded (design Decision 8; Task notes 4.1); passes `tests/py/test_plan_roles.py` under the moon task `tests:logic`.
-- [ ] 4.2 `crew role start` takes everything pending, records the turn, writes the brief's file and prints it and the asks, and `crew role end` answers the turn and always writes the report, each refusing outside a run (design Decisions 7 and 9; Task notes 4.2); *needs teams-cross* for the ends; passes `tests/py/test_asks.py`, and the moon task `tests:t-journey-roles` (`tests/suite t-journey-roles`) ends with "0 failed".
+- [x] 4.2 `crew role start` takes everything pending, records the turn, writes the brief's file and prints it and the asks, and `crew role end` answers the turn and always writes the report, each refusing outside a run (design Decisions 7 and 9; Task notes 4.2); *needs teams-cross* for the ends; passes `tests/py/test_asks.py`, and the moon task `tests:t-journey-roles` (`tests/suite t-journey-roles`) ends with "0 failed".
 
 ## 5. What writes an ask
 

@@ -274,8 +274,8 @@ eq "$(grep "^$box wldn-1 agent prompt swb-1-conductor " "$CREW_TEST_LOG")" "$box
 ok "a write to a held bolt tells its conductor and a bolt added the dispatcher; crew tell marks its sender, types nothing to an agent herdr reads blocked or crew's hook saw open a question, and is delivered once the question is answered"
 
 # wldn's reviewer and planner run as their kinds: crew review asks the reviewer the batch, opening no tab; the
-# reviewer's run hands it back with crew review delivered once its turn took it and its summary is written, which
-# records the batch, raises its card in the planner's name and asks the planner, typing into no pane.
+# reviewer's run takes it with crew role start and hands it back with crew review delivered once its summary is
+# written, which records the batch, raises its card in the planner's name and asks the planner, typing into no pane.
 role_stream wldn reviewer wldn-main; role_stream wldn planner wldn-main
 build swb-1 y1 "$kd"
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
@@ -290,11 +290,8 @@ eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] |
 CREW_AGENT=wldn-planner expect_fail "wldn runs its reviewer as its kind, so crew review --wait waits on nothing" crew review wldn --wait
 reviewer() { HOST=$box FLUME_PLACE=$T/flume/places/crew-reviewer--wldn "$@"; }
 reviewer expect_fail "wldn-reviewer has no open turn: crew role start takes the batches asked of it first" crew review delivered
-# The run's turn, taking the batch, as the run's start records it on the branch.
-git -C "$w" pull -q --rebase origin wldn/main
-printf '\nTurn: 1\nRole: reviewer\nRun: wldn-reviewer\nPlace: crew-reviewer--wldn\nHost: %s\nTook: ask/%s\nBegan: %s\n' \
-  "$box" "$(asks -e "Role = 'reviewer'" -P Id)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$w/asks.rec"
-commit_all "$w" "asks: wldn-reviewer's turn, by hand"; push_state "$w"
+reviewer expect_ok crew role start
+has "$out" "ask $(asks -e "Role = 'reviewer'" -P Id): batch from wldn-planner on batch/4"
 reviewer expect_fail "batch 4's summary $summary4 is not written since its start, so it is not delivered" crew review delivered
 printf '# Batch 4\n\n## y1 (swb-1)\n\ny1 does its part.\n' > "$summary4"
 reviewer expect_ok crew review delivered

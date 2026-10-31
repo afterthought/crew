@@ -251,3 +251,48 @@ def waits_on(address, requests, places):
             if commit is not None:
                 out.append((f"landed/{n}", n, work, where, f"landed at {commit[:7]}" if commit else "landed"))
     return sorted(out, key=lambda w: int(w[1]))
+
+
+def indented(words):
+    """Words a run reads under the line that names them, each of their lines indented two spaces; nothing for none."""
+    return [f"  {l}" for l in (words or "").split("\n")] if words else []
+
+
+def ask_said(ask):
+    """An ask as a run's start prints it (role-runs "A run's start gives its brief and what it took"): its number, what
+    it is, who asked and the record it names, then its words."""
+    return [f"ask {ask['Id']}: {ask.get('What')} from {ask.get('From')}" + (f" on {ask['Names']}" if ask.get("Names") else "")] \
+        + indented(ask.get("Words"))
+
+
+def wait_said(wait):
+    """A place that waits on the role as a run's start prints it (waits_on's tuple): the work it serves, its place and
+    the request that launched it, then its words; a role's own landed work says so."""
+    key, n, work, place, words = wait
+    how = "landed" if key.startswith("landed/") else "waits on you"
+    return [f"{work or f'request {n}'} {how}: the place {place or 'Flume has not named'}, launched by request {n} ({key})"] + indented(words)
+
+
+def took_said(took, held):
+    """What a turn took, one line each, as its report names it: an ask by its number, what it is and who asked, a
+    waiting place by its key."""
+    by = {took_of(a): a for a in held}
+    out = []
+    for t in took:
+        a = by.get(t)
+        out.append(f"- {t}: {a.get('What')} from {a.get('From')}" + (f" on {a['Names']}" if a.get("Names") else "") if a else f"- {t}")
+    return out
+
+
+def report(turn, held, said, ended):
+    """The report a run's end writes at its stage's deliverable (role-runs "A run's end answers what it took"): the turn,
+    when it began and ended, what it took and what the run said it did."""
+    return "\n".join([f"# Turn {turn['Turn']} of {turn['Run']}", "", f"Began {turn['Began']}, ended {ended}, in {turn['Place']} on {turn['Host']}.",
+                      "", "## What it took", ""] + (took_said(turn["Took"], held) or ["- nothing"])
+                     + ["", "## What was done", "", said.strip() or "(nothing said)", ""])
+
+
+def no_turn_report(run, said, ended):
+    """The report of a run that found nothing pending, so took no turn: it says so, and what the run said."""
+    return "\n".join([f"# No turn of {run}", "", f"Ended {ended}: nothing waited for {run} at its start, so it took no turn "
+                      "and nothing is recorded on the branch.", "", "## What was done", "", said.strip() or "(nothing said)", ""])

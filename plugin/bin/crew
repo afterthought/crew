@@ -499,6 +499,9 @@ limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, in `limit
 case $cmd in
   list) teams ;;
   bolts | bolt | signal | state | plan | rail | card | record | answer) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  role)  # crew role start | end --report <path> "<what was done>": a role's run's start and end, in its place on its
+    # main level's host, never forwarded
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   events | trace) exec python3 "$here/../lib/record.py" "${args[@]}" ;;
   page) exec python3 "$here/../lib/page.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;

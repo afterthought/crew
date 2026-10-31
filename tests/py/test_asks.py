@@ -374,3 +374,294 @@ class TestWrite:
         assert record.ask_entry("madswan-planner", "tell", None, "x" * 40) == dict(act="ask", on=["agent/madswan-planner"], why="ask madswan-planner: tell", Chars=40)
         assert record.ask_entry("madswan-design", "capture", "signals/s/01-c")["on"] == ["agent/madswan-design", "signals/s/01-c"]
         assert record.ask_entry("madswan-planner", "open")["Chars"] is None
+
+
+def as_crew_writes(asks_part, turns_part=""):
+    """asks.rec as crew writes it: its header's Ask descriptor, the asks, its Turn descriptor and the turns."""
+    import plan
+    head, turn = plan.ASKS.split("\n%rec: Turn")
+    return head + "\n" + asks_part + "\n%rec: Turn" + turn + turns_part
+
+
+ASKED = """\
+Id: 1
+Role: planner
+From: madswan-design
+What: tell
+Words: record 0053 is accepted
+At: 2026-10-31T10:00:00Z
+
+Id: 2
+Role: planner
+From: crew
+What: card
+Names: card/req_a1
+Key: card/req_a1/3
+Words: the user answered it
+At: 2026-10-31T10:04:00Z
+
+Id: 3
+Role: design
+From: crew
+What: tell
+Words: not the planner's
+At: 2026-10-31T10:05:00Z
+"""
+TAKEN = as_crew_writes(ASKED)
+LOST = as_crew_writes(ASKED, """
+Turn: 1
+Role: planner
+Run: madswan-planner
+Place: crew-planner--madswan
+Host: deneb
+Took: ask/1
+Began: 2026-10-31T10:01:00Z
+""")
+
+
+class Branch:
+    """madswan's flywheel branch as a run's start and end see it: its files, each write applied to them, and the entries
+    each write emitted."""
+
+    def __init__(self, files):
+        self.files, self.writes, self.entries = dict(files), [], []
+
+
+@pytest.fixture
+def in_run(monkeypatch, tmp_path):
+    """A command run in madswan's planner's run on deneb (FLUME_PLACE crew-planner--madswan), its writes applied to a
+    branch in memory, its brief kept under tmp_path and its cards read through run_cards_said, which a case steers."""
+    import crew
+    import plan
+    import record
+    fleet = {"partitions": {"madswan": madswan(planner="madswan-main")}, "teams": {}, "hosts": {}}
+    monkeypatch.setenv("FLUME_PLACE", "/home/u/.local/state/flume/places/crew-planner--madswan")
+    monkeypatch.delenv("CREW_AGENT", raising=False)
+    monkeypatch.setattr(crew, "load", lambda: fleet)
+    monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+    monkeypatch.setattr(crew, "brief", lambda fleet, scope, role, self_name="": f"the {role} brief of {scope} for {self_name}")
+    monkeypatch.setattr(record, "ROOT", tmp_path / "state")
+    b = Branch({"asks.rec": TAKEN})
+    monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("afterthought/madswan-state", f"{label}/main"))
+    monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(""))
+    monkeypatch.setattr(plan, "show", lambda repo, tip, path: b.files.get(path))
+
+    def land(repo, ref, path, make):
+        files, msg = make("t" * 40)
+        b.files.update({k: v for k, v in files.items() if k != "plan.rec"})
+        b.writes.append(msg)
+        return "c" * 40
+    monkeypatch.setattr(plan, "land", land)
+    monkeypatch.setattr(plan, "notify", lambda fleet, seen, subject: None)
+    monkeypatch.setattr(record, "emit", lambda label, act, on=(), frm=(), commit=(), why=None, eid=None, by=None, **f:
+                        b.entries.append((act, list(on), why, f)))
+    monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
+    monkeypatch.setattr(plan, "run_cards_said", lambda fleet, label, run: [f"cards read as {run}"])
+    b.fleet = fleet
+    return b
+
+
+def start(b):
+    import argparse
+    import plan
+    plan.role_start(b.fleet, argparse.Namespace())
+
+
+def end(b, report, words):
+    import argparse
+    import plan
+    plan.role_end(b.fleet, argparse.Namespace(report=str(report), words=words))
+
+
+class TestStart:
+    """crew role start (design Decision 7; role-runs "A run's start takes everything pending", "A run's start gives its
+    brief and what it took" and "A start takes again what a lost run took")."""
+
+    def test_two_asks_waiting_are_one_turn_and_it_prints_the_brief_then_each_ask_then_the_cards(self, in_run, tmp_path, capsys):
+        """role-runs, Two asks waiting and What the planner's run reads."""
+        start(in_run)
+        held, turns = asks.parse(in_run.files["asks.rec"])
+        (t,) = turns
+        assert (t["Turn"], t["Role"], t["Run"], t["Place"], t["Host"], t["Took"]) == ("1", "planner", "madswan-planner", "crew-planner--madswan", "deneb", ["ask/1", "ask/2"])
+        assert "Ended" not in t and len(in_run.writes) == 1
+        assert in_run.writes[0].startswith("turn(madswan-planner): 1 takes 2 (madswan-planner)\n")
+        assert in_run.entries == [("turn.begin", ["agent/madswan-planner"], "turn 1 of madswan-planner", {"Took": "2"})]
+        brief = tmp_path / "state/madswan/turns/planner.md"
+        assert brief.read_text() == "the planner brief of madswan for madswan-planner"
+        out = capsys.readouterr().out.split("\n")
+        at = out.index(f"Read {brief} whole first: it is your brief as madswan-planner, filled for madswan.")
+        assert out[at + 1:at + 7] == ["ask 1: tell from madswan-design", "  record 0053 is accepted",
+                                      "ask 2: card from crew on card/req_a1", "  the user answered it", "cards read as madswan-planner", ""]
+
+    def test_nothing_waiting_records_no_turn_and_says_so(self, in_run, capsys):
+        """role-runs, Nothing waiting."""
+        in_run.files["asks.rec"] = LOST.replace("Began:", "Ended: 2026-10-31T10:20:00Z\nSaid: done\nBegan:").replace("Took: ask/1", "Took: ask/1\nTook: ask/2")
+        before = dict(in_run.files)
+        start(in_run)
+        assert in_run.files == before and in_run.writes == [] and in_run.entries == []
+        assert "Nothing waits for madswan-planner: no turn is taken and nothing is recorded." in capsys.readouterr().out
+
+    def test_a_start_outside_a_run_is_refused_and_writes_nothing(self, in_run, monkeypatch, tmp_path):
+        """role-runs, Not a run: a change's place, and a standing agent's CREW_AGENT, are no run."""
+        import crew
+        for place in ("/kit/places/change--a", None):
+            if place:
+                monkeypatch.setenv("FLUME_PLACE", place)
+            else:
+                monkeypatch.delenv("FLUME_PLACE")
+                monkeypatch.setenv("CREW_AGENT", "madswan-planner")
+            with pytest.raises(crew.Refusal, match="crew role start runs only in a run of a crew role, in the place Flume made for it"):
+                start(in_run)
+        assert in_run.writes == [] and not (tmp_path / "state").exists()
+
+    def test_a_lost_runs_open_turn_is_superseded_and_its_ask_taken_again(self, in_run, capsys):
+        """role-runs, A run that was lost."""
+        in_run.files["asks.rec"] = LOST
+        start(in_run)
+        _, turns = asks.parse(in_run.files["asks.rec"])
+        assert [(t["Turn"], t.get("Superseded"), t["Took"]) for t in turns] == [("1", "2", ["ask/1"]), ("2", None, ["ask/1", "ask/2"])]
+        assert asks.open_turn(turns, "madswan-planner")["Turn"] == "2"
+        assert in_run.writes[0].startswith("turn(madswan-planner): 2 takes 2, superseding 1 (")
+        assert "Turn 2 takes again what turn 1 took, whose run ended before its end: that turn answers nothing." in capsys.readouterr().out
+
+    def test_a_place_that_waits_on_the_role_is_taken_and_a_runner_that_cant_be_read_is_said(self, in_run, monkeypatch, capsys):
+        """role-runs, A stage asks the planner: the run takes it with its work, its place and its words."""
+        import plan
+        import runner
+        rq = plan.Rec("Request", [("Request", "7"), ("Act", "launch"), ("Work", "unit/a"), ("Recipient", "madswan/planner")])
+        stopped = json.loads(status(waiting_on={"why": "answer", "stage": "construct", "since": 1793440000, "words": "which bolt?"}))
+        reads = {"deneb": {"why": None, "places": {7: {"place": "/kit/places/change--a", "at": "t", "status": stopped, "why": None}}},
+                 "mac-studio": runner.host_read("madswan", "mac-studio", "abc1234", {}, {})}
+        monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([rq], reads))
+        in_run.files["asks.rec"] = ""
+        start(in_run)
+        (t,) = asks.parse(in_run.files["asks.rec"])[1]
+        assert t["Took"] == ["place/7@1793440000"]
+        out = capsys.readouterr().out
+        assert "unit/a waits on you: the place /kit/places/change--a, launched by request 7 (place/7@1793440000)\n  which bolt?\n" in out
+        assert "mac-studio's runner can't be read: madswan/runner/mac-studio at abc1234: it holds no runner.rec: what waits on madswan-planner there is left for its next run" in out
+
+
+class TestEnd:
+    """crew role end (design Decision 7; role-runs "A run's end answers what it took")."""
+
+    def test_a_turn_ends_and_what_it_took_is_no_longer_pending_and_the_report_is_written(self, in_run, tmp_path, capsys):
+        """role-runs, A turn ends."""
+        start(in_run)
+        in_run.entries.clear()
+        report = tmp_path / "place/turn.md"
+        end(in_run, report, "proposed the fix bolt")
+        held, turns = asks.parse(in_run.files["asks.rec"])
+        assert turns[0]["Said"] == "proposed the fix bolt" and turns[0]["Ended"]
+        assert asks.pending(held, [], turns, "planner") == ([], []) and not asks.wanted(held, [], turns, "planner")
+        assert in_run.entries == [("turn.end", ["agent/madswan-planner"], "turn 1 of madswan-planner ended", {})]
+        assert in_run.writes[1].startswith("turn(madswan-planner): 1 ends (madswan-planner)\n")
+        text = report.read_text()
+        assert text.startswith("# Turn 1 of madswan-planner\n")
+        assert "- ask/1: tell from madswan-design\n- ask/2: card from crew on card/req_a1\n" in text and "proposed the fix bolt" in text
+        assert f"turn 1 of madswan-planner is ended, and its report is {report}." in capsys.readouterr().out
+
+    def test_an_ask_written_after_the_start_waits_for_the_next_run(self, in_run, tmp_path):
+        """role-runs, An ask during a run."""
+        start(in_run)
+        in_run.files["asks.rec"] = in_run.files["asks.rec"].replace("\n%rec: Turn", "\nId: 4\nRole: planner\nFrom: crew\nWhat: tell\n"
+                                                                    "At: 2026-10-31T10:30:00Z\n\n%rec: Turn")
+        end(in_run, tmp_path / "turn.md", "done")
+        held, turns = asks.parse(in_run.files["asks.rec"])
+        assert [a["Id"] for a in asks.pending(held, [], turns, "planner")[0]] == ["4"]
+
+    def test_no_turn_open_writes_the_report_saying_so_and_records_nothing(self, in_run, tmp_path, capsys):
+        """role-runs, No turn open."""
+        before = dict(in_run.files)
+        report = tmp_path / "turn.md"
+        end(in_run, report, "nothing waited")
+        assert in_run.files == before and in_run.writes == [] and in_run.entries == []
+        assert report.read_text().startswith("# No turn of madswan-planner\n") and "nothing waited" in report.read_text()
+        assert f"madswan-planner took no turn, so nothing is recorded; the report {report} says so." in capsys.readouterr().out
+
+    def test_an_end_outside_a_run_is_refused_and_writes_no_report(self, in_run, monkeypatch, tmp_path):
+        import crew
+        monkeypatch.setenv("FLUME_PLACE", "/kit/places/fix-b--n")
+        with pytest.raises(crew.Refusal, match="crew role end runs only in a run of a crew role"):
+            end(in_run, tmp_path / "turn.md", "done")
+        assert not (tmp_path / "turn.md").exists() and in_run.writes == []
+
+
+class TestRunCards:
+    """A run's answered cards, read in its own Pending You name at its start (design Decision 7, briefs.16)."""
+
+    def test_the_cards_on_the_agents_turn_are_read_from_list_pending_as_the_wake_mod_reads_it(self):
+        import cards
+        listed = {"requests": [{"id": "req_a1", "title": "Approve proposal 12?", "turn": "agent", "status": "answered"},
+                               {"id": "req_b2", "title": "Waits", "turn": "you", "status": "pending"},
+                               {"requestId": "req_c3", "turn": "agent"}, {"id": "nope", "turn": "agent"}, "x",
+                               {"id": "req_d4", "turn": "agent"}], "total": 6}
+        assert cards.run_cards(listed) == [("req_a1", "Approve proposal 12?"), ("req_d4", None)]
+        assert cards.run_cards({}) == [] and cards.run_cards(None) == [] and cards.run_cards({"requests": "x"}) == []
+
+    def test_the_cards_crew_raised_in_a_name_are_those_it_posted_and_has_not_closed(self):
+        import cards
+        entries = [{"Act": "card.post", "By": "madswan-planner", "Card": "req_a1", "Key": "proposal/12"},
+                   {"Act": "card.post", "By": "madswan-planner", "Card": "req_b2", "Key": "batch/4"},
+                   {"Act": "card.post", "By": "madswan-design", "Card": "req_c3", "Key": "record/53"},
+                   {"Act": "card.post", "By": "madswan-planner", "Card": "req_e5", "Key": "proposal/13", "Refused": "no"},
+                   {"Act": "card.close", "Card": "req_b2"}]
+        assert cards.posted_keys(entries, "madswan-planner") == {"req_a1": "proposal/12"}
+
+    @pytest.fixture
+    def bridge(self, monkeypatch):
+        """Pending You's bridge as the run's start opens it: each call kept, answered from `replies`."""
+        import cards
+        calls, replies = [], {}
+
+        class Bridge:
+            def __init__(self, name, later, held=None):
+                calls.append(("open", name))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+            def call(self, tool, args):
+                calls.append((tool, args))
+                got = replies[tool]
+                if isinstance(got, Exception):
+                    raise got
+                return got(args) if callable(got) else got
+        monkeypatch.setattr(cards, "Bridge", Bridge)
+        monkeypatch.setattr(cards, "host_entries", lambda record, label, host: [
+            {"Act": "card.post", "By": "madswan-planner", "Card": "req_a1", "Key": "proposal/12"}])
+        return calls, replies
+
+    @pytest.mark.usefixtures("deneb")
+    def test_each_answered_card_prints_with_its_key_and_answer_read_in_the_runs_own_name(self, bridge):
+        """role-runs, What the planner's run reads: the card's key and the user's answer, read in madswan-planner's name."""
+        import plan
+        calls, replies = bridge
+        replies["list_pending"] = {"requests": [{"id": "req_a1", "title": "Approve proposal 12?", "turn": "agent"},
+                                                {"id": "req_q9", "title": "Which zone?", "turn": "agent"}]}
+        replies["get_request"] = lambda args: {"requestId": args["requestId"], "status": "answered", "turn": "agent", "version": 3,
+                                               "answer": {"approved": True} if args["requestId"] == "req_a1" else {"text": "eu-west-1"}}
+        lines = plan.run_cards_said(None, "madswan", "madswan-planner")
+        assert calls == [("open", "madswan-planner"), ("list_pending", {"name": "madswan-planner"}),
+                         ("get_request", {"requestId": "req_a1", "name": "madswan-planner"}),
+                         ("get_request", {"requestId": "req_q9", "name": "madswan-planner"})]
+        assert lines == ["The cards the user answered, read in Pending You as madswan-planner:",
+                         "card card/req_a1/3 (proposal/12): Approve proposal 12?", "  approved: yes",
+                         "  crew closes it at the act its answer asks for, as your brief says for proposal/12",
+                         "card card/req_q9/3: Which zone?", "  words: eu-west-1",
+                         "  once you have acted on it, ack_answer (requestId req_q9, expectedVersion 3, name madswan-planner) with a one-line outcome"]
+
+    def test_no_card_answered_prints_nothing_and_pending_you_not_read_says_to_call_list_pending(self, bridge):
+        import crew
+        import plan
+        calls, replies = bridge
+        replies["list_pending"] = {"requests": [{"id": "req_b2", "title": "Waits", "turn": "you"}]}
+        assert plan.run_cards_said(None, "madswan", "madswan-planner") == []
+        replies["list_pending"] = crew.Refusal("Pending You refused list_pending: signed out. Call list_pending as madswan-planner yourself, "
+                                               "and act on what the user answered.")
+        assert plan.run_cards_said(None, "madswan", "madswan-planner") == [
+            "Your cards could not be read in Pending You as madswan-planner: Pending You refused list_pending: signed out. Call "
+            "list_pending as madswan-planner yourself, and act on what the user answered."]
