@@ -63,3 +63,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 
 - [x] 9.1 `tests/moon.yml` matches the tests after `tests/moon-tasks`, with no task for a deleted test and no read of a deleted path (`tests.10`; Task notes 9.1); verify `tests/suite t-suite` ends with "0 failed".
 - [x] 9.2 The tests the change affects pass (Task notes 9.2); verify `tests/suite --affected` ends with "0 failed".
+
+## 10. Verify's findings
+
+- [x] 10.1 A session herdr resumes, starts or compacts whose record names an agent crew no longer models, a team's conductor or a dispatcher from before, gets no name, identity, pane name or brief, and its record is left as it was (main-level "A main-level agent resumed off its host is given no identity, and nothing else of crew's is", scenario *A team's agent from before*; verify.md finding 1); verify `tests/suite t-session-hook` ends with "0 failed".

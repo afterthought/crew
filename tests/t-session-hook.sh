@@ -5,8 +5,9 @@
 # compaction keeps them, and herdr's resume records what it loaded anew beside the launch it began with (teams.19).
 # The record names the herdr session and pane the session started in, at herdr's resume the pane it resumed in.
 # Every agent crew starts is a main level's (Decision 10 of the-team-machinery-leaves), so the hook runs here on wldn's
-# main level's host. Any other session, a subagent's, or input the hook can't read is left alone, and the hook always
-# exits 0, a session recorded as a team's agent before teams left among them, whose brief can't be built.
+# main level's host. A session recorded as a team's agent before teams left gets nothing back, crew modelling no such
+# agent (main-level). Any other session, a subagent's, or input the hook can't read is left alone, and the hook always
+# exits 0.
 # crew's PreToolUse hook marks a question or a plan a crew agent opens for the user, and a session's start clears it.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -64,12 +65,22 @@ eq "$(env -i HOME="$HOME" PATH="$PATH" bash -c ". '$T/env'; echo \$CREW_AGENT \$
 calls | grep -q " hint \| report-metadata " && fail "the resume told the pane a branch for sluice"
 ok "a session herdr resumed gets its crew identity back and its pane renamed, and no brief, which its transcript keeps"
 
-printf 'CREW_AGENT=swb-1-conductor\nCREW_LABEL=wldn\nCREW_ROLE=conductor\n' > "$HOME/.local/state/crew/sessions/sid-6"
-expect_ok bash -c "echo '{\"session_id\":\"sid-6\",\"source\":\"compact\"}' | python3 '$CREW/plugin/hooks/session-start'"
-has "$out" "crew session-start: no agent swb-1-conductor: crew starts none by that name"
-lacks "$out" "additionalContext"
+old=$'CREW_AGENT=swb-1-conductor\nCREW_LABEL=wldn\nCREW_ROLE=conductor\nCREW_PANE=w9:p1\n'
+printf '%s' "$old" > "$HOME/.local/state/crew/sessions/sid-6"
+q=$(herdr workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
+herdr stub agent "$q"
+: > "$CREW_TEST_LOG"; : > "$T/env"
+for source in resume startup compact; do
+  expect_ok bash -c "echo '{\"session_id\":\"sid-6\",\"source\":\"$source\"}' | CLAUDE_ENV_FILE='$T/env' HERDR_ENV=1 HERDR_PANE_ID='$q' HERDR_BIN_PATH='$TESTS/stubs/herdr' python3 '$CREW/plugin/hooks/session-start'"
+  eq "$out" ""
+done
+/bin/sleep 1
+eq "$(cat "$T/env")" ""
+calls | grep -q "agent rename" && fail "the hook renamed a team's conductor's pane"
+[[ $(herdr agent get "$q" | jq -r .result.agent.name) != swb-1-conductor ]] || fail "the pane took a team's conductor's name"
+eq "$(cat "$HOME/.local/state/crew/sessions/sid-6")" "${old%$'\n'}"
 rm "$HOME/.local/state/crew/sessions/sid-6"
-ok "a compaction of a session recorded as a team's conductor, whose brief can't be built, says why, gives no context and still exits 0"
+ok "a session herdr resumes, starts or compacts whose record names a team's conductor gets no name, identity or brief, crew modelling no such agent, and its record is left as it was"
 
 : > "$CREW_TEST_LOG"; : > "$T/env"
 echo '{"session_id":"sid-2","source":"startup"}' | CLAUDE_ENV_FILE="$T/env" HERDR_ENV=1 HERDR_PANE_ID="$p" HERDR_BIN_PATH="$TESTS/stubs/herdr" hook

@@ -21,11 +21,13 @@ pane it resumed in, so that a tell finds the agent's session by its pane when he
 variables back, and SLUICE_AGENT, the same name for sluice, as crew-role sets them, through CLAUDE_ENV_FILE, which Claude Code applies to
 each of its Bash commands, and its pane gets its name back. Such a session keeps its brief from the transcript only
 until its first compaction, so at each compaction it is given its brief back as context, built by crew.py as
-crew-role builds it, from the definition the record names (crew.brief_due, crew.brief_role). A main level's agent
-(crew.main_named) gets all this back only on the host the teams file names for its main level: a pane herdr replays on
-another host, a standby that once ran it, gets no identity, pane name or brief, its record is left as it was, and it is
-told at each start that it is no agent of crew's there and where the main level runs, or why crew can't tell
-(crew.identity_withheld, main-level). Any other session costs one file lookup. A start that loads crew's plugin, a new session's or a resume's, records the commit and version of
+crew-role builds it, from the definition the record names (crew.brief_due, crew.brief_role). Every agent crew starts
+is a main level's (crew.main_named), and it gets all this back only on the host the teams file names for its main level:
+a pane herdr replays on another host, a standby that once ran it, gets no identity, pane name or brief, its record is
+left as it was, and it is told at each start that it is no agent of crew's there and where the main level runs, or why
+crew can't tell (crew.identity_withheld, main-level). A session whose record names an agent crew no longer models, a
+team's conductor or a dispatcher from before teams left, gets nothing back and its record is left as it was. Any other
+session costs one file lookup. A start that loads crew's plugin, a new session's or a resume's, records the commit and version of
 crew the session loaded, and a session crew-role started the digest of its launch (CREW_LAUNCH), which tell crew's mod
 the version an agent runs and crew whether an update has made it due a restart (crew.update_due, teams.19); a
 compaction or a /clear loads nothing anew and keeps what the record says. At every start it also removes the session's question mark
@@ -102,11 +104,12 @@ def main():
         return
     sys.path.insert(0, str(LIB))
     import crew
-    if crew.main_named(agent, saved.get("CREW_LABEL")):
-        said = withheld(crew, agent, saved["CREW_LABEL"])
-        if said:
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": said}}))
-            return
+    if not crew.main_named(agent, saved.get("CREW_LABEL")):  # a team's agent from before: crew models none (main-level)
+        return
+    said = withheld(crew, agent, saved["CREW_LABEL"])
+    if said:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": said}}))
+        return
     if hook.get("source") in LOADS:  # herdr's resume loads crew's plugin anew, its launch the one it began with
         record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH",
                                                                                         "CREW_HERDR_SESSION", "CREW_PANE"))

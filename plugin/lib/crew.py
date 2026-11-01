@@ -1518,8 +1518,10 @@ def brief_due(source, launched, saved):
 
 def main_named(name, label):
     """The main-level role a session's recorded agent is, from its record alone: its role when the name is
-    <label>-design, -planner, -ops, -operator or -reviewer, else None, as for a team's agent, a dispatcher or a
-    record with no label. Only such a session's identity is tied to a host, so no other reads the teams file for it."""
+    <label>-design, -planner, -ops, -operator or -reviewer, else None, as for a team's agent or a dispatcher from
+    before teams left, or a record with no label. These are every agent crew starts, so a session whose record names
+    no such role is given nothing of crew's back (main-level), and its identity, tied to its main level's host, is the
+    one that reads the teams file."""
     if not name or not label:
         return None
     return next((r for r in MAIN_STANDING + ("reviewer",) if name == f"{label}-{r}"), None)
