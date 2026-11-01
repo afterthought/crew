@@ -56,7 +56,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 ## 8. The briefs
 
 - [x] 8.1 `conductor.md`, `ops.md`, `dispatcher.md`, `construct.md`, `coder.md` and `verify.md` are gone, with the builder's tokens only they took, and every staying brief's roster and cards section names three askers and no team (design Decision 7; Task notes 8.1); verify `tests/suite t-briefs t-roles` ends with "0 failed".
-- [ ] 8.2 The design agent's, the planner's, main-level ops's, the operator's and the reviewer's briefs name no conductor, team ops, dispatcher, slot, give, `crew fix <team>`, `crew unit run`, `crew unit wait`, `crew needs` or `crew status <team>`, and say what each now hands to whom (design Decision 6; Task notes 8.2); verify `tests/suite t-briefs` ends with "0 failed".
+- [x] 8.2 The design agent's, the planner's, main-level ops's, the operator's and the reviewer's briefs name no conductor, team ops, dispatcher, slot, give, `crew fix <team>`, `crew unit run`, `crew unit wait`, `crew needs` or `crew status <team>`, and say what each now hands to whom (design Decision 6; Task notes 8.2); verify `tests/suite t-briefs` ends with "0 failed".
 - [ ] 8.3 README and the skill keep no team section, roles row, run-record act or needs section of the old path, together with the usage header (`docs.2`; Task notes 8.3); verify `tests/suite t-docs` ends with "0 failed".
 
 ## 9. The suite

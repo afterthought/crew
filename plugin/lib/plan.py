@@ -10026,7 +10026,7 @@ HEADING = re.compile(r"^\s*(?:#{1,6}\s+(.+?)[\s#]*|\*\*([^*]+)\*\*(.{0,60}))$")
 
 def summary_paragraph(summary, unit):
     """The paragraph the reviewer opened a unit's section of a batch's summary with, as its brief has it write one
-    section per unit headed by the unit's name and its team: the first paragraph under the first heading that names the
+    section per unit headed by the unit's name and its bolt: the first paragraph under the first heading that names the
     unit, a Markdown heading or a short line in bold; None when no heading names it, or a heading follows it at once."""
     named = re.compile(rf"(?<![a-z0-9-]){re.escape(unit)}(?![a-z0-9-])")
     out, found = [], False

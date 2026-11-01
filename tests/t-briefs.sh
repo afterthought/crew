@@ -79,22 +79,27 @@ for role in design planner main-ops operator reviewer; do
   echo "$role: $(wc -c <<<"$out" | tr -d ' ') characters"
 done
 expect_ok crewpy brief wldn design
-for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
+for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <agent>" "## Answering a design question" \
+  "a design question the planner, \`wldn-ops\` or a Flume place brings" \
+  "answer <work> \"<the answer, with the pages or commits it rests on>\"\`, \`<work>\` the unit's or chore's name or the fix's place"; do
+  has "$out" "$want"
+done
 for want in "names, in the message that carries it, the documentation page or the reading it rests on" "Read the thing itself" \
   "not the sequence" "Answer linked questions together" "never the mechanism"; do has "$out" "$want"; done
 has "$out" "\`--source\` also names what the signal points at"
 expect_ok crewpy brief wldn planner
 for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "--replaces <n>" "--unblocks <bolt>" \
-  "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none" \
+  "bolt start <bolt>" "It waits on the user alone, and no agent is told of it" "A started bolt is in flight" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none" \
   "A dropped bolt's own branch sluice deletes, on GitHub and the host, or keeps and crew names as the drop's unmerged work, the user's, while main lacks its tip"; do
   has "$out" "$want"
 done
-for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it"; do lacks "$out" "$gone"; done
+for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it" "plan agree" \
+  "bolt give" "it no longer waits on that conductor"; do lacks "$out" "$gone"; done
 has "$out" "and with \`--source\` what the signal points at"
 for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "why the unit changes rather than being replaced" \
   "A unit that has merged is not amended"; do has "$out" "$want"; done
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
-  "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
+  "Corrections to a unit under construction are batched" "blocks the bolt"; do has "$out" "$want"; done
 for want in "Never name a proposal by its number alone" "Recite no command" "which holds the change whole" \
   "say in a sentence what you propose and point to its card"; do has "$out" "$want"; done
 lacks "$out" "plannotator-tui"
@@ -124,7 +129,7 @@ lacks "$out" "Keep <unit>"
 asks_say
 lacks "$out" "Its words are the proposal's case and each of its changes in a line"
 for want in "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\` of the first proposal it was rewritten from" \
-  "or answers your card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
+  "or answers your card" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
   "Pending You gives that card back"; do
   has "$out" "$want"
 done
@@ -146,8 +151,8 @@ expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
 expect_ok crewpy brief wldn operator
 for want in "swancloud's main moves only through sluice (\`state.3\`), so never edit or commit in its main checkout" \
-  "\`sluice submit main --no-wait --json\`" "~/Code/github_afterthought/swancloud/places/crew-teams-<team> origin/main\`" \
-  "you level and push nothing" "When \`sluice wait\` exits 0 your head landed: remove your worktree and its branch with \`wt -C ~/Code/github_afterthought/swancloud/places/crew-teams-<team> remove --foreground\`"; do has "$out" "$want"; done
+  "\`sluice submit main --no-wait --json\`" "~/Code/github_afterthought/swancloud/places/crew-teams-<label> origin/main\`" \
+  "you level and push nothing" "When \`sluice wait\` exits 0 your head landed: remove your worktree and its branch with \`wt -C ~/Code/github_afterthought/swancloud/places/crew-teams-<label> remove --foreground\`"; do has "$out" "$want"; done
 lacks "$out" "wt submit"
 lacks "$out" "read-tree"; lacks "$out" "push swancloud's main"
 expect_ok crewpy brief wldn main-ops
@@ -160,7 +165,7 @@ for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bol
   "and first the bolts a send on an earlier card still lands, whose card closed as the one you read followed it, even while that one waits on the user" \
   "Nothing waits on a host, and no agent is told main moved" \
   "whichever act reads it first once sluice's record has the landing out" "so a landing never waits on your session staying up" \
-  "crew's next read of the bolt closes it once what it named is mended, at its team's next read or at" "bolt land <bolt>\`, which you may run" \
+  "crew's next read of the bolt closes it once what it named is mended, at the rail's next sweep or at" "bolt land <bolt>\`, which you may run" \
   "Submit every bolt the user ticked with one command, in the card's order" "bolt submit <bolt> <bolt>... --label wldn" \
   "keyed \`land/<kit>\`, which crew raises in your name" "card read land/<kit> --label wldn" \
   "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
@@ -219,12 +224,13 @@ expect_ok crewpy brief wldn operator
 has "$out" "the deployer offers that host's deploy under *operations* on swancloud's rail"; has "$out" "never ask \`wldn-ops\` to deploy it"
 has "$out" "never hand the user a deploy command"; has "$out" "deploys by hand only a kit with no deployer"
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/operator.md left ${BASH_REMATCH[0]} unfilled"
-for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
+for want in "bolts --label wldn" "bolts <bolt> --label wldn" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' '`wldn-ops`' "terminal-browser open <url> --split right"; do has "$out" "$want"; done
+for gone in "status <team>" "<team>-conductor" "unit approve"; do lacks "$out" "$gone"; done
 for want in "/crew page wldn\`" "open the file it prints in terminal-browser beside your pane" \
   "on a box, give the user the path and say it opens from a Mac" "say as of when the page is, and name any host whose kits it could not read"; do has "$out" "$want"; done
 for want in "## A batch answered in your pane" "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once" \
   "records the batch answered as a tap on its card does, closes its card, and tells \`wldn-planner\` the words" \
-  "you send nothing to a conductor" "Only when crew says it could not tell the planner, carry the user's words to \`wldn-planner\` yourself" \
+  "which the planner acts on as the batch's notes; you hand them to no one else" "Only when crew says it could not tell the planner, carry the user's words to \`wldn-planner\` yourself" \
   "never record an answer from words that are not the user's own"; do has "$out" "$want"; done
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
@@ -236,9 +242,9 @@ ok "the operator reads the run record on the partition's branch, asking no host 
 # The operator carries what crew send brings it, and sends a teams change from a box to a Mac's partition with crew
 # send, never with a tell to another operator (briefs.10).
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
-for want in "A message that reaches you marked \`(sent to <team or partition>)\`" "in the sender's words and naming the sender" \
-  "you record as a signal, its excerpt the words as sent" "a message for a team to that team's conductor, \`<team>-conductor\`" \
-  "Don't answer it in the sender's place" "crew refuses a send of yours to your own partition or one of its teams" \
+for want in "A message that reaches you marked \`(sent to <partition>)\`" "in the sender's words and naming the sender" \
+  "you record as a signal, its excerpt the words as sent" "a landing, a deploy or a live system to \`wldn-ops\`" \
+  "Don't answer it in the sender's place" "crew refuses a send of yours to your own partition." "## Changing the partitions" \
   "one of \`madswan\`, \`swancloud\`, with \`" "/crew send <label> \"<the request>\"\`, which reaches that partition's operator"; do has "$out" "$want"; done
 lacks "$out" "TEAMS_OPERATORS"; lacks "$out" "TEAMS_DOORS"; lacks "$out" "to an operator whose main level runs on a Mac"
 ok "the operator carries what is sent to it in the sender's words, and sends a teams change from a box with crew send to a Mac's partition"
@@ -280,6 +286,17 @@ for role in design planner main-ops operator reviewer; do
   expect_ok crewpy brief wldn $role; lacks "$out" "herdr agent prompt"
 done
 ok "no brief prompts another agent through herdr"
+
+# No main-level brief names the team machinery (Decisions 6 and 7 of the-team-machinery-leaves): each hands what it
+# hands to the planner, main-level ops, the design agent or a Flume place, and none to a conductor, a team or a slot.
+for role in design planner main-ops operator reviewer; do
+  expect_ok crewpy brief wldn $role
+  for gone in conductor dispatcher "team ops" "a team's ops" slot "bolt give" "fix <team>" "/crew unit run" "/crew unit wait" "/crew needs" \
+    "status <team>" "its team" "team's" "crossed" "drive a team"; do
+    lacks "$out" "$gone"
+  done
+done
+ok "no main-level brief names a conductor, team ops, a dispatcher, a slot, a give, crew fix <team>, crew unit run or wait, crew needs or crew status <team>"
 
 # Every kit's main is an anchor the timer moves, and a host loads crew live or released, never from a checkout on main
 # (plan.18, plan.19): no brief pulls, fast-forwards or levels crew's checkout (tests.6).
@@ -323,13 +340,13 @@ ok "the roles that report results carry one glyph-list section, the same in each
 # send stands for the bolt's work, so a ticked bolt that only took main in lands on that send, read with crew card
 # read with or without a card, and so do the user's words in ops's pane (record 0031 as amended 2026-10-24).
 expect_ok crewpy brief wldn main-ops
-for want in "tell the bolt's conductor and the user sluice's words" "its row has its box again on the kit's landings card once the fix has merged" \
+for want in "tell the user sluice's words, the check that failed or the files in conflict" "its row has its box again on the kit's landings card once the fix has merged" \
   "When it did not land for its own content, a conflict or a check that ran and failed" \
-  "its row keeps its box and the user's word stands for it: tell no conductor" \
+  "its row keeps its box and the user's word stands for it, and no fix is started" \
   "once it is cleared, submit that bolt again with the same command, on the send that still stands" "asking the user nothing" \
   "the user's send that ticked it still lands it, the fix having only taken main in" "land it on that send, as above, with nothing asked" \
   "A send stands for the bolt's work, not its head" \
-  "still lands on that send once its conductor tells you it is proven again, with nothing asked of the user" \
+  "still lands on that send once it reads proven again, as its row and the read show, with nothing asked of the user" \
   "with or without a landings card of the kit open" "a bolt it can't tell of, it names and leaves out of that command" \
   "crew asks for again on a card saying what changed" \
   "The user's words in this pane stand the same way for a bolt they named" \
@@ -349,15 +366,14 @@ for brief in "wldn planner" "wldn main-ops" "wldn design"; do expect_ok crewpy b
 ok "the planner, main-level ops and the design agent carry one question discipline"
 
 # Units are reviewed in batches (briefs.12): the planner runs the reviewer, whose summary has crew raise the batch's one
-# card in the planner's name with one reading session on the batch, posts and closes no batch card, and sends the
-# notes the card's wait prints from the session and the card to each unit they speak of (briefs.9, briefs.12,
-# briefs.13); the reviewer writes its summary and nothing else, as prose opening each unit with the paragraph the card
+# card in the planner's name with one reading session on the batch, posts and closes no batch card, and acts on the
+# notes the card's read prints from the session and the card as fixes on the bolts of the units they speak of, or new
+# work (briefs.9, briefs.12, briefs.13; Decision 6 of the-team-machinery-leaves); the reviewer writes its summary and nothing else, as prose opening each unit with the paragraph the card
 # carries; main-ops checks the landing row before it submits a bolt to main.
 expect_ok crewpy brief wldn planner
 for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
-  "Never propose lifting an \`After\` crew wrote from a forecast: crew lifts its own." \
   "crew records the batch, starts its one reading session, the summary and every unit's whole change as one review, and raises its one card in your name, keyed \`batch/<n>\`" \
-  "naming every unit of the batch with its team and the paragraph the reviewer opened it with, however many" \
+  "naming every unit of the batch with its bolt and the paragraph the reviewer opened it with, however many" \
   "a batch is never split across cards" "\`call get_request (requestId req_…, name wldn-planner)\`" \
   "Start no wait for the batch's answer: nothing of crew's waits on a card or its reading." \
   "When the user sends the card back with a tap, its answer wakes you, as every card you adopted does" \
@@ -369,16 +385,16 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "a card raised without its reading says so and why, and names \`$CREW/plugin/bin/crew card session batch/<n> --label wldn\` as your act, never the user's, which starts the reading and changes the card to carry its link" \
   "crew's rail read tries it again too" \
   "names \`$CREW/plugin/bin/crew card session proposal/<n> --label wldn\` as your act, never the user's" \
-  "at once, word for word, to the conductor of each unit it speaks of" \
-  "go to every unit's conductor, saying they named no unit you could tell" \
+  "is a fix on that unit's bolt you start yourself" "a note that speaks of several goes whole into each one's fix" \
+  "ask the user about on a card of your own, quoting them, saying they named no unit you could tell" \
   "Never split, reword or summarize the user's words" "you never run a stage" \
   "Never answer a batch yourself: only the user's own words in your pane answer it, beside their card and its reading session." \
   "When an agent tells you the user's answer, tell it the user answers on the card or in your pane, and record nothing" \
   "Run the read too once the batch is answered in your pane or the operator's (step 4): it says in whose, without the words, and closes the card you hold." \
-  "Send what the read printed at once, word for word" \
+  "Act on what the read printed at once" \
   "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once, once for each batch they answered" \
   "crew reads the words in your own session's transcript as the user's and records the batch answered, as a tap on its card does" \
-  "When crew tells you a batch was answered in the operator's pane, with the user's words, send those as step 3 does too." \
+  "When crew tells you a batch was answered in the operator's pane, with the user's words, act on those as step 3 does too." \
   "a bolt lands only once each of its changes has been in a batch whose card the user has answered" \
   "posted before crew raised one card per batch, is yours as it was" \
   "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back"; do
@@ -390,7 +406,8 @@ for gone in "of at most five units" "which need notes?" "one in words for the no
   "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
   "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \
   "a decision in it is never the card's answer" "a batch card's summary says first what it is" \
-  "card wait batch/" "ends your wait on it" "the wait starts it first" "Send what the wait printed"; do
+  "card wait batch/" "ends your wait on it" "the wait starts it first" "Send what the wait printed" \
+  "Never propose lifting an \`After\` crew wrote from a forecast" "to the conductor of each unit"; do
   lacks "$out" "$gone"
 done
 lacks "$out" "the user reviews the change written for the new intent"
@@ -467,28 +484,30 @@ expect_ok crewpy brief wldn design
 has "$out" "is queued the same way as a chore: \`$CREW/plugin/bin/crew chore add <chore> \"<what is done>\" --repo <kit>\`"
 ok "the planner and the design agent each carry what a chore is to them"
 
-# Every bolt's work runs through Flume (record 0050, roles.8; teams-cross-to-flume-as-their-bolts-land; Decision 1 of
-# the-team-machinery-leaves): its places' answers and fixes are the planner's, its landing ops's by the one procedure,
-# the read of its refusal for a conflict with main launching its take-main fix, and a red main is a Flume fix place on
+# Every bolt's work runs through Flume (Decisions 1, 6 and 15 of the-team-machinery-leaves): its places' answers and
+# fixes are the planner's, its landing ops's by the one procedure, the read of its refusal for a conflict with main
+# launching its take-main fix, a forecast conflict a take-main fix ops starts, and a red main is a Flume fix place on
 # main, sent on the user's word (state.3).
 expect_ok crewpy brief wldn planner
-for want in "## Teams crossed to Flume" "so \`bolt order\` is how you move one ahead" "keep chains short" \
+for want in "## A bolt's work in Flume" "so \`bolt order\` is how you move one ahead" "keep chains short" \
   "**Plan writes reach its places by their approval.**" "naming drop and add as the way on, so propose the drop and the add" \
   "by your address \`wldn/planner\`" "answer <work> \"<the answer, in the words of whoever gave it>\"\`" \
   "when the place neither stopped short nor waits on its caller" "**Its fixes are yours to start.**" \
-  "fix <team> <name> \"<what is wrong, in the words of whoever found it>\" --bolt <bolt>\`" \
-  "so \`--merge\` and \`--wait\` are refused" "fix <team> <name> --drop --bolt <bolt>\`" \
+  "fix <bolt> <name> \"<what is wrong, in the words of whoever found it>\"\`" "fix <bolt> <name> --drop\`" \
   "is in a batch only once its place has merged into its bolt"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn main-ops
-for want in "A bolt of a team crossed to Flume lands by these same steps" "It has no conductor, so there is none to tell of it" \
+for want in "Every bolt's units, chores and fixes are Flume places, taken by a runner whose configuration names the kit's repository" \
+  "No agent drives a bolt's work, so a landing tells nobody but the user and the planner" \
+  "crew records the forecast once and starts nothing for it" "start that fix yourself" \
+  "take-main-<main's revision, seven characters> \"Take main into the bolt: merge origin/main into this place" \
   "crew's read of that refusal launches its take-main fix itself" "\`<bolt>--take-main-<main's revision>\`" "start nothing yourself" \
-  "the user's send that ticked it still lands it: land it on that send" "fix <team> <name> \"<the note>\" --bolt <bolt>\`" \
+  "the fix having only taken main in: land it on that send" "fix <bolt> <name> \"<the note>\" --label wldn\`" \
   "main fix <kit> <name> \"<the failure's words>\" --label wldn\`" "which you launch on reading main red" \
-  "\`--team <team>\` choosing among crossed teams" "its submission held for the user's word" "\`fixes in flight\`" \
+  "its submission held for the user's word" "\`fixes in flight\`" \
   "answer main--<name> \"<the answer>\" --label wldn\`" "\`fix main--<name>\` with the failure's first line" \
   "main fix <kit> <name> --send --label wldn\`" \
   "with \`--excerpt \"<their words, as they wrote them>\"\`, which crew reads in your own session's transcript as the user's and refuses otherwise, sending nothing" \
   "Send it ahead of the bolts the same word lands" "main fix <kit> <name> --drop --label wldn\`" \
   "who proposes it as a bolt of one chore, first among the planned"; do has "$out" "$want"; done
-lacks "$out" "who decide which team builds it"
+lacks "$out" "who decide which team builds it"; lacks "$out" "--team <team>"
 ok "a bolt's places' answers and fixes are the planner's, its landing ops's by the one procedure, and a red main is a Flume fix place sent on the user's word"
