@@ -27,7 +27,7 @@ while read -r line; do
   done
 done < <(grep -E '^crew ' "$CREW/README.md")
 echo "$n commands checked"
-(( n > 40 )) || fail "too few commands read from the README"
+(( n >= 100 )) || fail "too few commands read from the README"
 ok "every command in the README is in crew's usage"
 
 for gone in assign release opsx fable explorer verifier coder-; do
@@ -35,8 +35,13 @@ for gone in assign release opsx fable explorer verifier coder-; do
 done
 for gone in assign release opsx; do expect_fail "A team holds as many bolts as it is given" crew $gone swb-1; done
 for doc in usage readme skill; do lacks "${!doc}" "unit approve"; lacks "${!doc}" "review/<unit>"; done
-for doc in usage readme skill; do has "${!doc}" "crew review"; has "${!doc}" "settle"; done
-ok "none of the removed commands or roles is in the README, the skill or the usage, and each names crew review and the settle stage"
+for doc in usage readme skill; do has "${!doc}" "crew review"; done
+for gone in "unit run" "unit wait" "unit free" "chore run" "chore wait" "chore free" "crew needs" "fix <team>"; do
+  for doc in usage readme skill; do lacks "${!doc}" "$gone"; done
+done
+for gone in "unit run a code" "unit wait a" "chore free c"; do expect_fail "invalid choice" crew $gone; done
+expect_fail "crew: run bolt teams of agents in herdr" crew needs "what it needs"
+ok "none of the removed commands or roles is in the README, the skill or the usage, crew drives no stage and waits on none, and each names crew review"
 
 for doc in usage readme skill; do has "${!doc}" "crew ops offer <env>"; has "${!doc}" "[--notes <file>] [--steps <file>]"; done
 for doc in usage readme skill; do
@@ -74,8 +79,11 @@ has "$usage" "land and drop have sluice delete it"; has "$skill" "\`crew bolt la
 has "$readme" "for a bolt a team holds, it then has sluice delete the bolt's branch"
 ok "the README, the skill and the usage say a give has sluice make the bolt's branch on GitHub and a land and a drop have sluice delete it, a dropped bolt's kept while main lacks its tip, a give refused below sluice 0.20.0, every place cut from the bolt on GitHub, and a bolt made before local until it lands"
 
-for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "never refused for the bolts"; has "${!doc}" "waits to land"; lacks "${!doc}" "one more"; done
-ok "the README, the skill and the usage say a give is never refused for the bolts a team holds, a proven bolt waits to land, and crew fix names its bolt with --bolt"
+for doc in usage readme skill; do
+  has "${!doc}" '<bolt> <name> "<what is wrong>"'; has "${!doc}" "never refused for the bolts"; has "${!doc}" "waits to land"; lacks "${!doc}" "one more"
+done
+expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge --merge
+ok "the README, the skill and the usage say a give is never refused for the bolts a team holds, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
 
 for doc in usage readme skill; do
   for want in "version 2 or 3" "in Flume stream" "Path: flume" "still closes" \
