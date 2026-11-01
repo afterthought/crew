@@ -14,6 +14,8 @@ Read 2026-10-31 on deneb, at `0e0d6443` on `change/roles-run-as-flume-kinds`, cu
 | `openspec validate roles-run-as-flume-kinds --strict` | valid |
 | `tests/py/test_asks.py` `TestMainUp` (task 10.4) against `plan.py` as it stood at `b779ceba`, before `kinds_up` read `roles.rec` with no role running as its kind | 2 failed (the last kind role moved back; a fetch refused, said), 1 passed (ops still running as its kind): the cases reproduce what they prove, and pass at `0e0d6443` |
 
+The archive merges the deltas into `openspec/specs/`: 33 requirements added, 27 of them in the new `role-runs` spec, and 7 modified, none removed, each reading in its main spec exactly as its delta has it. `openspec validate --specs --strict` fails the same 15 specs before and after the merge, every one on warnings alone (a requirement's text over 500 characters), none on an error; `role-runs` passes.
+
 ## Tasks
 
 All 25 tasks, 1.1 to 13.2, are ticked, and the check each names passes. The tasks marked *needs teams-cross* (4.2, 5.4, 6.1, 11.1) rest on `teams-cross-to-flume-as-their-bolts-land`, which is on the bolt at `91bd81f7`: `runner.py`, `requests.rec`, `runner_facts` and the runner's branches are there.
