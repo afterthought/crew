@@ -11,7 +11,7 @@ import datetime
 
 import pytest
 
-from facts import START, plan_text
+from facts import START, kits_of, plan_text
 
 import cards
 import crew
@@ -87,8 +87,8 @@ def rows(props=(), times=None, held=None, sv=None, at=None):
 
 
 def text(rs, cards=(), sv=None, unread=None, **more):
-    read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], rows=rs, cards=list(cards), sv=sv or survey(),
-                unread=unread or {}, **more)
+    found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+    read = dict(dict(found=found, rows=rs, cards=list(cards), sv=sv or survey(), unread=unread or {}, kits=kits_of(found)), **more)
     return plan.rail_text(FLEET, ["wldn"], read, NOW)
 
 
@@ -325,7 +325,8 @@ class TestText:
         card = dict(label="swancloud", card="req_s7", key="proposal/7", by="swancloud-planner", host=BOX, at=NOW)
         ended = [dict(label="swancloud", host=BOX, key="proposal/7", unit=None, why="its row is gone", said="ended")]
         alone = text(mine)
-        both = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan()), ("swancloud", "afterthought/crew-state", "tip2", the_plan())],
+        found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan()), ("swancloud", "afterthought/crew-state", "tip2", the_plan())]
+        both = dict(found=found, kits=kits_of(found),
                     rows=mine + theirs, cards=[card], sv=survey(), unread={"swancloud": {"swancloud/main": "unread"}}, ended=ended,
                     unchecked=[dict(label="swancloud", host=BOX, why="did not answer")],
                     swept={"done": [], "unswept": [dict(label="swancloud", why="this host can't ask through Pending You")]})
@@ -951,7 +952,8 @@ def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), handed=
     plan holding the proposals numbered proposed; handed, the host's follower's answers from its clock's last ask, and
     herdr, its listing of the askers read on that tick."""
     fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
-    read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=list(rows_), cards=list(cards_),
+    found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+    read = dict(found=found, sv=survey(), rows=list(rows_), cards=list(cards_), kits=kits_of(found),
                 unread=unread or {}, logs={"wldn": list(entries)}, proposed={"wldn": set(proposed)})
     acts = Acts(entries=[{"Act": "card.post", "Key": c["key"], "By": c["by"], "Card": c["card"]} for c in cards_], **kw)
     return plan.sweep_cards(fleet, read, acts, handed, herdr), acts
@@ -1254,7 +1256,8 @@ class TestSweep:
         """plan.cards_asked, the follower's tick's ask: the cards of rows gone, held with their row, and questions."""
         p4, q = card("proposal/4", "req_p4", "wldn-planner"), card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
         fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
-        read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=[], cards=[p4, q], unread={},
+        found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+        read = dict(found=found, sv=survey(), rows=[], cards=[p4, q], unread={}, kits=kits_of(found),
                     logs={"wldn": [did("plan.approve", On=["proposal/4"])]}, proposed={"wldn": {4, 5}})
         assert plan.cards_asked(fleet, read, "mac-studio", NOW) == ["req_p4", "req_q1"]
         assert plan.cards_asked(fleet, dict(read, cards=[]), "mac-studio", NOW) == []
@@ -1526,7 +1529,8 @@ class TestMainMoved:
     def moved(self, acts, cards_=None, machine="mac-studio"):
         fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine=machine)})
         cards_ = cards_ if cards_ is not None else [dict(label="wldn", card="req_k1", key=f"land/{KIT}", by="wldn-ops", host="mac-studio")]
-        read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), cards=cards_)
+        found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+        read = dict(found=found, sv=survey(), cards=cards_, kits=kits_of(found))
         return plan.sweep_moved(fleet, read, acts)
 
     def test_a_card_main_moved_under_is_raised_again_and_said(self):
@@ -1590,7 +1594,8 @@ class TestLandTime:
         sv[BOX]["kits"]["/kit/main"].update(submissions=[], decided=[])
         found, ran = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())], runs()
         return dict(found=found, rows=plan.rail_rows(FLEET, found, sv, [], {}, None, ran), cards=[], sv=sv, unread={}, errors={}, props=[],
-                    landings=[], gives={}, signals={"wldn": ([], {})}, ops={"wldn": []}, logs={"wldn": list(self.LOGS)}, runs=ran)
+                    landings=[], gives={}, signals={"wldn": ([], {})}, ops={"wldn": []}, logs={"wldn": list(self.LOGS)}, runs=ran,
+                    kits=kits_of(found))
 
     def test_a_bolt_waiting_on_the_users_yes_says_its_age_the_users_share_and_that_the_user_holds_it(self):
         said = f"5h 00m: team or kit 30m, user 2h 00m, nobody 2h 30m; user since {self.hm(120)}, land/{KIT}; team or kit: sluice keeps no start of its checks"

@@ -264,7 +264,7 @@ def board_data(fleet, labels, read, now):
         attention += [{"what": "signals", "name": n, "why": why} for n, why in sunread.items()]
 
         explorations = []
-        for kit in dict.fromkeys(k["name"] for t in sorted(p["teams"]) for k in crew.kits_of(fleet["teams"][t])):
+        for kit in read["kits"].get(l, []):  # the kits its plan and its landings name (plan.partition_kits)
             for t in (crew.with_kit(fleet["teams"][x], kit) for x in sorted(p["teams"]) if crew.builds(fleet["teams"][x], kit)):
                 k = (sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}
                 if k.get("ok") and "explorations" in k:
@@ -1833,7 +1833,7 @@ class Follower:
         if todo["cards"]:
             swept = plan.sweep_cards(fleet, read, answers=self.kept.cards, listed=self.kept.listed)
             read = dict(read, cards=plan.swept_cards(read["cards"], swept, crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
-                                                     {l: plan.partition_kits(fleet, l) for l, *_ in read["found"]}))
+                                                     read["kits"]))
             self.left = card_left(swept)
         ended, unchecked = plan.sweep_sessions(fleet, read["found"], read["sv"], read["rows"], read["cards"], read["unread"],
                                                read.get("batched") or {}, todo["sessions"]) if todo["sessions"] else ([], [])

@@ -41,9 +41,13 @@ class TestNew:
         assert bolts(w) == ["tenant-environments", "apex-zones", "console-pages", "board-builds", "last-one"]
         assert w.plan.bolt("last-one").all("Source") == ["books/x.md"]
 
-    def test_refuses_a_name_the_plan_has_and_a_kit_no_team_builds(self):
+    def test_refuses_a_name_the_plan_has(self):
         assert refusal(fresh(), 'bolt new console-pages "again" --repo switchboard-kit') == "wldn/main already has bolt console-pages"
-        assert refusal(fresh(), 'bolt new rocs "x" --repo rocs-kit') == "no team of wldn builds rocs-kit, so no plan holds its work"
+
+    def test_a_kit_the_plan_does_not_name_enters_it_with_its_first_bolt(self):
+        """Decision 3 of the-team-machinery-leaves: there is no registry of repositories in crew."""
+        w = run(fresh(), 'bolt new rocs "x" --repo rocs-kit')
+        assert w.plan.bolt("rocs").get("Repo") == "rocs-kit"
 
 
 class TestOrder:

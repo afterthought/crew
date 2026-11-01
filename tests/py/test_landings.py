@@ -24,6 +24,12 @@ FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-stud
                              "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}}
 
 
+@pytest.fixture(autouse=True)
+def kits(monkeypatch):
+    """swancloud's kits as its plan and landings name them (plan.kits_read), with no branch read."""
+    monkeypatch.setattr(plan, "kits_read", lambda fleet, label: list(KITS))
+
+
 # ------------------------------------------------------------------------------------- what a land/ key names
 
 def test_a_kits_key_is_its_landings_card():
@@ -50,13 +56,9 @@ def test_a_kits_card_is_on_the_kit_and_a_bolts_on_the_bolt_in_the_run_record():
     assert cards.row_object("land/crew") == "bolt/crew"  # no kit named: as before, a bolt's
 
 
-def test_the_partitions_kits_are_read_from_the_teams_file():
-    assert plan.partition_kits(FLEET, "swancloud") == ["crew", "swancloud"]
-
-
 def test_a_bolt_named_as_a_kit_of_its_partition_is_refused():
     assert plan.kit_named("crew", KITS, "swancloud") == (
-        "a bolt of swancloud may not be named crew: that is the name of a kit swancloud's teams build, whose landings "
+        "a bolt of swancloud may not be named crew: that is the name of a kit swancloud's plan or landings name, whose landings "
         "card is land/crew")
     assert plan.kit_named("doctor-rows", KITS, "swancloud") is None
 
@@ -67,6 +69,9 @@ def test_the_plan_write_that_adds_a_bolt_named_as_a_kit_refuses_it_writing_nothi
 
         def kit(self, kit):
             return "swancloud"
+
+        def kits(self, label):
+            return KITS
     a = argparse.Namespace(repo="swancloud", bolt="crew", goal="x", source=[], before=None)
     with pytest.raises(crew.Refusal, match="may not be named crew"):
         plan.op_bolt_new(Ctx(), a)

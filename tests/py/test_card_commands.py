@@ -212,6 +212,13 @@ def test_what_the_reply_leaves_out_is_left_out():
 # refusal, a host not signed in, an unread reply and a card not found are said and recorded and refuse nothing.
 import plan  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def kits(monkeypatch):
+    """Each partition's kits as its plan and landings name them (plan.kits_read), with no branch read."""
+    monkeypatch.setattr(plan, "kits_read", lambda fleet, label: {"swancloud": ["crew"], "wldn": ["switchboard-kit"]}.get(label, []))
+
+
 WHERE = ("/kit/main", "github.com/WilldanGroup/switchboard-kit")
 FACTS = dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches={"v1": 3}, head="abc1234", at=None, moved=0, pr=None)
 

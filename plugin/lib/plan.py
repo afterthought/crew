@@ -1474,23 +1474,44 @@ def locate(fleet, kind, name, label, word=None):
     return hits[0]
 
 
-def kit_teams(fleet, kit, label=None):
-    return [crew.with_kit(t, kit) for n, t in sorted(fleet["teams"].items()) if crew.builds(t, kit) and label in (None, t["label"])]
+def kit_labels(fleet, kit):
+    """The partitions whose kits (partition_kits, the repositories their plans and landings name) name a kit, by its
+    name or forge address (kit_in), sorted; each branch read once for the command, and refused naming one that can't
+    be read (read.1), since crew can't tell then whether it names the kit."""
+    return [l for l in sorted(fleet["partitions"]) if kit_in(kit, kits_read(fleet, l))]
+
+
+def building_team(fleet, label, kit):
+    """A team of the partition building a kit, the first by name, with the kit as its kit, on whose host and main
+    checkout crew reads the kit's changes and records; None for none. From the teams file, until where a kit is kept is
+    read from its runner's record (5.2 of the-team-machinery-leaves)."""
+    return next((crew.with_kit(t, kit) for _, t in sorted(fleet["teams"].items()) if t["label"] == label and crew.builds(t, kit)), None)
+
+
+def kit_in(kit, kits):
+    """Whether kits (partition_kits) name a kit, by its name or its forge address, <owner>/<name>, either way round."""
+    return kit.split("/")[-1] in {k.split("/")[-1] for k in kits}
 
 
 def plan_for(fleet, kit, label):
-    """The plan a kit's work goes in, (label, state repository): the flywheel of the teams that build it."""
-    labels = sorted({t["label"] for t in kit_teams(fleet, kit, label)})
-    labels or fail(f"no team" + (f" of {label}" if label else "") + f" builds {kit}, so no plan holds its work")
-    len(labels) == 1 or fail(f"{kit}'s work could go in the plan of " + ", ".join(labels) + "; add --label")
-    CONTEXT["label"] = labels[0]
-    return labels[0], state_of(fleet, labels[0])[0]
+    """The plan a kit's work goes in, (label, state repository) (Decision 3 of the-team-machinery-leaves): the partition
+    the command runs as (label, --label or the agent's own: default_label), a kit entering a partition with its first
+    bolt or unit; else the one partition whose plan or landings already name the kit (kit_labels), refused when none
+    or several do."""
+    if not label:
+        labels = kit_labels(fleet, kit)
+        labels or fail(f"no partition's plan or landings name {kit}, so crew can't tell which plan its work goes in; add --label")
+        len(labels) == 1 or fail(f"{kit}'s work could go in the plan of " + ", ".join(labels) + "; add --label")
+        label = labels[0]
+    CONTEXT["label"] = label
+    return label, state_of(fleet, label)[0]
 
 
 def name_free(fleet, label, kit, names):
     """A unit's name is its OpenSpec change's, and a name is taken once in a kit, by a unit or a chore (plan.7, plan.11):
-    refused when the kit's main already has that change, open or archived, or holds a chore by it."""
-    t = kit_teams(fleet, kit, label)[0]
+    refused when the kit's main already has that change, open or archived, or holds a chore by it, read on the host
+    and main checkout of a team of the partition building the kit (building_team), and refused when none does."""
+    t = building_team(fleet, label, kit) or fail(f"cannot check {kit}'s changes: no team of {label} builds {kit}, so crew reads no checkout of it")
     sv = survey(fleet, [(t["name"], None)])[t["machine"]]
     sv["ok"] or fail(f"cannot check {kit}'s changes: {t['machine']} did not answer ({sv['error']})")
     k = sv["kits"][t["kit"]["main"]]
@@ -1983,17 +2004,51 @@ def builder(fleet, label, kit):
     return next((crew.with_kit(fleet["teams"][t], kit) for t in sorted(crew.partition_of(fleet, label)["teams"]) if crew.builds(fleet["teams"][t], kit)), None)
 
 
-def partition_kits(fleet, label):
-    """The names of the kits the partition's teams build, from the teams file alone (code.5), sorted."""
-    return sorted({k["name"] for t in crew.partition_of(fleet, label)["teams"] for k in crew.kits_of(fleet["teams"][t])})
+def partition_kits(plan, landings):
+    """A partition's kits (Decision 3 of the-team-machinery-leaves): the repositories its plan's Bolt and Unit records
+    name, with those its run record's landings name, each bolt.land entry not refused (landings, as record.acts_in
+    finds them), by Repo as written, sorted and each once. There is no registry of repositories in crew: a kit enters
+    a partition with its first bolt, and a kit whose last bolt has landed stays one by its landings. plan None, a
+    branch not started, names none."""
+    named = [r.get("Repo") for r in (plan.bolts() + plan.work() if plan is not None else [])]
+    named += [e.get("Repo") for e in landings if e.get("Act") == "bolt.land" and not e.get("Refused")]
+    return sorted({r for r in named if r})
+
+
+def landings_at(repo, tip):
+    """Every bolt.land entry the run record holds at a tip of a flywheel's branch, from each of its files under runs/,
+    found by their act (record.acts_in), read once for the command by the tip."""
+    name = f"landings-{tip}"
+    held = READ.held(name)
+    if held is not None:
+        return held
+    paths = [p for p in paths_at(repo, tip, "runs/") if p.endswith(".rec")]
+    texts = [show(repo, tip, p) for p in paths] if kept_listing(repo, tip) is not None else cat_file(repo, [f"{tip}:{p}" for p in paths])
+    out = [e for t in texts for e in record.acts_in(t or "", "bolt.land")]
+    READ.keep(name, out)
+    return out
+
+
+def kits_at(repo, tip, pl):
+    """A partition's kits (partition_kits) as its branch holds them at a tip: the plan read there (pl) and the landings
+    its run record holds; none for a branch not started (tip None)."""
+    return partition_kits(pl, landings_at(repo, tip) if tip else [])
+
+
+def kits_read(fleet, label):
+    """A partition's kits (partition_kits) read from its branch, fetched once for the command; refused naming the
+    branch when it can't be read (read.1)."""
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref)
+    return kits_at(repo, tip, read(repo, ref, tip) if tip else None)
 
 
 def land_key(key, kits):
-    """What a land/ card key names (rail-cards, record 0031 as amended 2026-10-23), from the names of the kits the
-    partition's teams build (kits): ("kit", <kit>) for land/<kit>, the kit's landings card, main-level ops's; ("bolt",
-    <bolt>) for any other land/<x>, a bolt's reading and preview on its team's host, and an old landing card of the
-    bolt's own, land/<bolt> or land/<bolt>/<head> as a conductor posted one before; None for a key that is no
-    landing's."""
+    """What a land/ card key names (rail-cards, record 0031 as amended 2026-10-23), from the partition's kits
+    (partition_kits, the repositories its plan and its landings name): ("kit", <kit>) for land/<kit>, the kit's
+    landings card, main-level ops's; ("bolt", <bolt>) for any other land/<x>, a bolt's reading and preview, and an old
+    landing card of the bolt's own, land/<bolt> or land/<bolt>/<head> as a conductor posted one before; None for a key
+    that is no landing's."""
     m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)(/[0-9a-f]{7})?", key or "")
     if not m:
         return None
@@ -2002,11 +2057,11 @@ def land_key(key, kits):
 
 def kit_named(bolt, kits, label):
     """Why a bolt may not be added under its name, or None (rail-cards "A bolt's own landing card gives way to its
-    kit's"): it is the name of a kit the partition's teams build (kits), whose landings card is land/<kit>, so land/
-    <bolt> would name the kit's card and not the bolt."""
+    kit's"): it is the name of one of the partition's kits (partition_kits, the repositories its plan and its landings
+    name), whose landings card is land/<kit>, so land/<bolt> would name the kit's card and not the bolt."""
     if bolt in kits:
-        return (f"a bolt of {label} may not be named {bolt}: that is the name of a kit {label}'s teams build, whose "
-                f"landings card is land/{bolt}")
+        return (f"a bolt of {label} may not be named {bolt}: that is the name of a kit {label}'s plan or landings name, "
+                f"whose landings card is land/{bolt}")
     return None
 
 
@@ -3109,7 +3164,7 @@ def raise_landings_row(fleet, row, acts=None):
     """The rail's raise of a kit's landing row, land/<kit>, whose card is missing or lost (sweep_cards), or whose card
     this host's sign-in can't reach, handed that older copy as the row's dead: raise_landings of its kit; a row of a
     bolt's key, the form before a kit's card, is raised by none."""
-    kind = land_key(row.get("key"), partition_kits(fleet, row["label"]))
+    kind = land_key(row.get("key"), kits_read(fleet, row["label"]))
     return raise_landings(fleet, row["label"], kind[1], acts, dead=bool(row.get("dead"))) if kind and kind[0] == "kit" else None
 
 
@@ -5047,6 +5102,10 @@ class Direct(Reads):
     def kit(self, kit):
         return plan_for(self.fleet, kit, self.label)[0]
 
+    def kits(self, label):
+        """The partition's kits (partition_kits) as its branch holds them now."""
+        return kits_read(self.fleet, label)
+
 
 class Proposed(Reads):
     """What a command inside a proposal sees: the proposal's partition and number, in the plan as the commands before
@@ -5062,6 +5121,11 @@ class Proposed(Reads):
 
     def kit(self, kit):
         return plan_for(self.fleet, kit, self.label)[0]
+
+    def kits(self, label):
+        """The partition's kits (partition_kits) in the plan as the commands before this one leave it, with the landings
+        its branch holds at the write's tip."""
+        return kits_at(self.w.repo, self.w.tip, self.w.plan)
 
 
 class Drawn(Proposed):
@@ -5138,7 +5202,7 @@ def called(a):
 def op_bolt_new(ctx, a):
     label = ctx.kit(a.repo)
     crew.NAME.match(a.bolt) or fail(f"a bolt's name is lowercase words with dashes, not {a.bolt}")
-    why = kit_named(a.bolt, partition_kits(ctx.fleet, label), label)
+    why = kit_named(a.bolt, ctx.kits(label), label)
     not why or fail(why)
 
     def change(w):
@@ -6291,9 +6355,9 @@ def record_items(fleet, label, plan, argvs):
         if not sources:
             continue
         kit = r.get("Repo")
-        teams = kit_teams(fleet, kit, label)
-        teams or fail(f"{kind} {name} names a decision record, and no team of {label} builds {kit}, so crew can't tell whose it is")
-        k = next(k for k in crew.kits_of(teams[0]) if kit in (k.get("name"), k.get("repo")))
+        t = building_team(fleet, label, kit)
+        t or fail(f"{kind} {name} names a decision record, and no team of {label} builds {kit}, so crew can't tell whose it is")
+        k = t["kit"]
         for s in sources:
             out += [(kind, name, k["name"] if repo == k["repo"] else repo, repo, n) for repo, n in record_refs(s, k["repo"])]
     return list(dict.fromkeys(out))
@@ -7825,13 +7889,13 @@ def tidy(fleet, t, landed=None):
     removed."""
     main, kdir, kit = os.path.realpath(t["kit"]["main"]), os.path.realpath(t["kit"]["dir"]), t["kit"]["name"]
     trees = gather.worktrees(main)
-    errors, labels = {}, sorted({o["label"] for o in kit_teams(fleet, kit)})
-    found = plans(fleet, labels, errors)
-    errors.update({f"{l}/main of {repo}": f"{repo} has no {l}/main yet" for l, repo, tip, _ in found if not tip})
+    # every partition's plan, since any may hold a bolt of the kit (partition_kits); one not started holds none
+    errors = {}
+    found = plans(fleet, sorted(fleet["partitions"]), errors)
     if errors:
         print(unread_plans(errors))
         return []
-    bolts = {b.name() for *_, p in found for b in p.bolts() if b.get("Repo") == kit}
+    bolts = {b.name() for *_, p in found if p for b in p.bolts() if b.get("Repo") == kit}
     now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as Stages reads it (plan.18)
     marks = bolt_marks(main)
     unmark_gone(main, marks)
@@ -8470,12 +8534,12 @@ def main_fix(fleet, a):
     a.excerpt is None or mode == "send" or fail("--excerpt carries the user's words a fix of main is sent on, with --send")
     crew.NAME.match(a.name) or fail("a fix is named with lowercase words and dashes")
     label = default_label(fleet, a)
-    builders = kit_teams(fleet, a.kit, label)
-    labels = sorted({t["label"] for t in builders})
-    labels or fail(f"no team {f'of {label} ' if label else ''}builds {a.kit}, so crew has no main of it to fix")
-    len(labels) == 1 or fail(f"{a.kit} is built in {' and '.join(labels)}: add --label")
+    labels = [l for l in ([label] if label else sorted(fleet["partitions"])) if kit_in(a.kit, kits_read(fleet, l))]
+    labels or fail((f"{label} plans no work of {a.kit} and records no landing of it" if label else
+                    f"no partition plans work of {a.kit} or records a landing of it") + ", so crew has no main of it to fix")
+    len(labels) == 1 or fail(f"{a.kit} is planned in {' and '.join(labels)}: add --label")
     CONTEXT["label"] = label = labels[0]
-    kit_name = builders[0]["kit"]["name"]
+    kit_name = a.kit.split("/")[-1]
     on, act, seen = [f"fix/main/{kit_name}/{a.name}"], {"start": "fix.start", "drop": "fix.drop", "send": "fix.merge"}[mode], {}
     frm, fields = [], {}
     try:
@@ -10686,7 +10750,8 @@ def landings_moved(cards_, mains, kept):
 def rail_read(fleet, labels, board=False, sweep=False):
     """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
     found and the errors of those that could not be read, the survey, the open proposals, the cards, the branches whose
-    record could not be read, the landings and gives, the operations' entries, every entry read, and the rows. The survey
+    record could not be read, the landings and gives, the operations' entries, every entry read, each partition's kits
+    (kits_at, the repositories its plan and its landings name), and the rows. The survey
     is of each host holding a bolt; with board, of every team of the labels, with the bolt it holds or none, and its
     dev servers, slots and explorations too, for the board (board.py), from which the rail's text is made as well.
     With sweep, once the rows are made, the cards on this host are swept under its sign-in (sweep_cards), against the
@@ -10706,7 +10771,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
     crossed = {l: crossed_changes(p, Stages(fleet, p, sv, runs)) for l, _, _, p in found if p and l in runs}
     times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props, crossed)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
-                gives=gives, ops=opses, logs=logs, batched=batched, runs=runs,
+                gives=gives, ops=opses, logs=logs, batched=batched, runs=runs, kits={l: kits_at(repo, tip, p) for l, repo, tip, p in found},
                 rows=rail_rows(fleet, found, sv, props, times, batched, runs) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
@@ -10717,7 +10782,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
             k.listed = askers_listed(fleet, askers_asked(fleet, read, crew.this_host(), now))
         read["swept"] = sweep_cards(fleet, read, answers=k.cards if k is not None else None, listed=k.listed if k is not None else None)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
-                                    {l: partition_kits(fleet, l) for l, *_ in found})
+                                    read["kits"])
         read["moved"] = sweep_moved(fleet, read)
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
         read["told"] = reckon_batches(fleet, found, read)
@@ -10945,7 +11010,7 @@ def crews_key(key):
     return kind if kind in CREWS else None
 
 
-def card_refusal(fleet, name, label, tool, key):
+def card_refusal(fleet, name, label, tool, key, kits=()):
     """Whether a crew agent's Pending You call may go through (briefs.11, record 0031): None to let it, else the
     refusal's words. The user's own name is never checked. A card's post, change or close is a question's, the agent's
     own, only from the planner, main-level ops or the design agent (ASKERS), and never under crew's own
@@ -10958,8 +11023,10 @@ def card_refusal(fleet, name, label, tool, key):
     answered card under a verify report's key, verify/<unit>/<stamp>, a row form crew no longer raises (teams.17),
     which a conductor posted before it and no event of crew's closes, the same departure: its post, change or
     withdrawal there is refused (signal 2026-10-19-crw-2-conductor-2bec975e/01). An area is made only under
-    create-area:<owner>/<kit> for a kit of any team of the asker's partition, read from the teams file. Everything else passes: a question's form, and its key but crew's, are its
-    asker's. A decision of the role, the call and the key alone (code.7)."""
+    create-area:<owner>/<kit> for one of the asker's partition's kits (kits, partition_kits, the repositories its plan
+    and its landings name, by name or forge address: a kit named in the plan by name alone takes any owner, since crew
+    keeps no registry of repositories). Everything else passes: a question's form, and its key but crew's, are its
+    asker's. A decision of the role, the call, the key and the partition's kits alone (code.7)."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
@@ -10970,12 +11037,12 @@ def card_refusal(fleet, name, label, tool, key):
         return (f"crew refuses {what} from {name}: only the planner, main-level ops and the design agent ask the user on a "
                 f"card. {left}")
     if tool == "create_area":
-        teams = crew.partition_of(fleet, label)["teams"]
-        mine = sorted({f"create-area:{fleet['teams'][t]['kit']['repo']}" for t in teams})
-        if key in mine:
+        m = re.fullmatch(r"create-area:([^/\s]+)/([^/\s]+)", key or "")
+        if m and (m.group(0).split(":", 1)[1] in kits or m.group(2) in kits):
             return None
+        mine = [f"create-area:{k}" if "/" in k else f"create-area:<owner>/{k}" for k in sorted(kits)]
         return (f"crew refuses an area under {key}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine
-                else f"no kit's area is {name}'s to make."))
+                else f"no kit's area is {name}'s to make: {label}'s plan and landings name no kit."))
     crews = crews_key(key)
     old = (kind == "planner" and tool in ("cancel_request", "ack_answer") and old_batch(key)
            or tool == "ack_answer" and old_verify(key))
@@ -11214,7 +11281,7 @@ def land_session(fleet, label, key, acts=None, say=None):
     waits on or why it is held (card-sessions "A bolt that is no row"). As reading_open returns it: its link, whether
     the user decided in it, and whether it was started anew; a refusal of the try, recorded, is raised again."""
     acts = acts or CardActs(fleet)
-    kits = partition_kits(fleet, label)
+    kits = kits_read(fleet, label)
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), None, kits)
     if why and land_key(key, kits)[0] == "kit":
         fail(why)
@@ -12079,7 +12146,7 @@ def card_read(fleet, a):
     proposal's, its reading's decision after the card's answer, a decided one set aside."""
     import cards
     label, who = card_asker(fleet, a)
-    kind = land_key(a.key, partition_kits(fleet, label))
+    kind = land_key(a.key, kits_read(fleet, label))
     if re.fullmatch(r"batch/\d+", a.key):
         return batch_card_read(fleet, label, a.key, who, a.json)
     if (kind and kind[0] == "bolt" and re.fullmatch(r"land/[a-z0-9][a-z0-9-]*", a.key)
@@ -12123,7 +12190,7 @@ def card_read(fleet, a):
         if r["aside"]:
             reading_decided(d, decided)
     if words is not None:
-        record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
+        record.emit(label, "card.close", [cards.row_object(a.key, kits_read(fleet, label)) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words), Answer=cards.answer_said(got))
         print(f"card {a.key}: {card} closed, as the user declined it")
 
@@ -12199,7 +12266,7 @@ def land_reading_read(fleet, label, key, who, as_json=False, acts=None):
     left as it is. Refused for a bolt the plan does not hold or no team holds, off its team's host, and to any agent
     but its conductor."""
     acts = acts or CardActs(fleet)
-    kits, bolt = partition_kits(fleet, label), key.split("/", 1)[1]
+    kits, bolt = kits_read(fleet, label), key.split("/", 1)[1]
     _, b, t = land_held(fleet, label, bolt)
     b or fail(f"{label}'s plan holds no bolt {bolt}, so {key} has no reading")
     t or fail(f"bolt {bolt} is held by no team, so it is no row of its kit's landings card, and it has no reading")
@@ -13219,7 +13286,7 @@ class CardActs:
     def kits(self, label):
         """The names of the kits the partition's teams build, which tell a kit's landings card's key from a bolt's
         (cards.row_object)."""
-        return partition_kits(self.fleet, label)
+        return kits_read(self.fleet, label)
 
     def partition(self, label):
         """The partition's run record from BATCH_DAYS back, read from its branch (partition_entries), refused naming
@@ -14030,8 +14097,8 @@ def sweep_judgments(fleet, read, here, now):
     """The judgments the rail's sweep of the cards acts on, made on this host (here) at now from a read (rail_read):
     each partition's whose plan was read and whose run record was read from its branch, [(label, owners, planner, j)],
     j as sweep_judged gives it, owners each row's owner by its key with each decision record's row the design agent's,
-    planner the batches' owner; and each partition it can't judge with why, [{label, why}], its run record unread. A
-    decision on plain facts (code.7)."""
+    planner the batches' owner, each land/ key told a kit's from a bolt's by the partition's kits the read holds; and
+    each partition it can't judge with why, [{label, why}], its run record unread. A decision on plain facts (code.7)."""
     unswept, judged = [], []
     down = {h for h, v in read["sv"].items() if not v["ok"]}
     for l, _, _, pl in read["found"]:
@@ -14049,7 +14116,7 @@ def sweep_judgments(fleet, read, here, now):
         planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
         design = (f"{l}-design", fleet["partitions"][l]["machine"])
         j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind,
-                         read["proposed"].get(l), now, planner, design, partition_kits(fleet, l),
+                         read["proposed"].get(l), now, planner, design, read["kits"][l],
                          {x["bolt"]: r["key"].split("/", 1)[1] for r in rows if r["group"] == "land" for x in r.get("bolts", [])})
         judged.append((l, dict(owners, **{r["key"]: design for r, _ in j["again"] if r["group"] == "records"}), planner, j))
     return judged, unswept
@@ -14248,7 +14315,7 @@ def sweep_moved(fleet, read, acts=None):
     for l, _, _, pl in read["found"]:
         if not pl or crew.partition_of(fleet, l)["machine"] != here:
             continue
-        kits = partition_kits(fleet, l)
+        kits = read["kits"][l]
         open_ = [(l, kit) for c in read["cards"] if c["label"] == l and c["host"] == here and c["by"] == f"{l}-ops"
                  for kind, kit in [land_key(c["key"], kits) or (None, None)] if kind == "kit"]
         mains = {c: acts.main_at(l, c[1], read["sv"]) for c in dict.fromkeys(open_)}

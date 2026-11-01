@@ -1,8 +1,8 @@
 # A fix of a red main through the crew command on the stubs (Decision 11 of teams-cross-to-flume-as-their-bolts-land;
 # the main-level spec's "A red main's fix is a fix place on main on the kit's host", state.3): with swb-1 building
-# switchboard-kit in Flume's stream wldn, and a runner answering on its host, crew main fix appends to requests.rec on
-# the state branch a launch of Flume's fix kind on main, its submission held and main-level ops its recipient, on
-# swb-1's host and in its stream, and starts no agent. Which team's host, the refusals where no team builds the kit in a
+# switchboard-kit in Flume's stream wldn, wldn's plan naming the kit, and a runner answering on its host, crew main fix
+# appends to requests.rec on the state branch a launch of Flume's fix kind on main, its submission held and main-level
+# ops its recipient, on swb-1's host and in its stream, and starts no agent. Which team's host, the refusals where no team builds the kit in a
 # stream or no runner answers, the drop and the role table are logic cases (tests/py/test_main_fix.py).
 # Reads: plugin/roles/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -26,6 +26,9 @@ runner_writes() {
 }
 runner_rec=$(printf '%%rec: Runner\n%%key: Host\n%%type: Since date\n%%mandatory: Host Version Since\n%%allowed: Host Version Since\n\nHost: %s\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n' "$box")
 runner_writes runner
+
+# wldn's plan names switchboard-kit by a bolt planned on it, so the kit is one of wldn's (plan.partition_kits).
+expect_ok crew bolt new smoke-follow-up "Smoke's follow-up." --repo switchboard-kit
 
 : > "$CREW_TEST_CLAUDE_LOG"
 words="tests:logic failed on main after landing smoke: tests/py/test_rail.py reads a fixture that is gone."

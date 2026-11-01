@@ -11,7 +11,8 @@ update_request, cancel_request, ack_answer) and on an area's making (create_area
 plan.card_refusal: a card is posted, changed or closed only by a conductor, the planner, main-level ops or the design
 agent, and never under crew's own key, the post's idempotencyKey or, for a change or a close, the key this host's run
 record holds the card under, but for the close of an answered card under a key of a row form crew no longer raises,
-which no event of crew's closes; an area is made only under create-area:<owner>/<kit> for a kit of the agent's own.
+which no event of crew's closes; an area is made only under create-area:<owner>/<kit> for a kit of the agent's
+partition, one its plan or its landings name (plan.partition_kits).
 Everything else passes: a question's form is its asker's. A call crew could not check is refused, naming what failed,
 since a card let through can't be taken back (read.1). A refused call never reaches Pending You.
 
@@ -181,7 +182,9 @@ def key_refusal(hook, tool):
             raise ValueError("its input is not an object")
         sys.path.insert(0, str(LIB))
         import plan
-        return plan.card_refusal(plan.crew.load(), agent, label, tool, card_key(label, tool, given))
+        fleet = plan.crew.load()
+        kits = plan.kits_read(fleet, label) if tool == "create_area" else ()  # an area's kit is one the partition names
+        return plan.card_refusal(fleet, agent, label, tool, card_key(label, tool, given), kits)
     except Exception as e:  # a card crew can't check is refused: one let through can't be taken back
         return f"crew could not check this {what}: {str(e).rstrip('.')}. Try it again later."
 

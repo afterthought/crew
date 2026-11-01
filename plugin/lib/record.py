@@ -369,6 +369,19 @@ def parse(text):
     return out
 
 
+def acts_in(text, act):
+    """The entries of one act in run-record text (parse), each found by its Act line before it is parsed, since a
+    partition's record is megabytes and an act like bolt.land a few entries of it."""
+    out, i, line = [], 0, f"\nAct: {act}"
+    while (i := text.find(line, i)) >= 0:
+        j = i + len(line)
+        if j == len(text) or text[j] == "\n":
+            start, end = text.rfind("\n\n", 0, i), text.find("\n\n", i + 1)
+            out += [e for e in parse(text[start + 2 if start >= 0 else 0:end if end >= 0 else len(text)]) if e.get("Act") == act]
+        i = j
+    return out
+
+
 def on_branch(fleet, label, since_day, tips=None):
     """The entries the label's branch of its state repository holds, from since_day on. tips, when given, is told the
     commit they were read at, {label: sha}, None for a branch not started."""

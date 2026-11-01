@@ -88,6 +88,13 @@ FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "revi
 KITS = ("switchboard-kit", "breadboard-kit")
 
 
+def kits_of(found):
+    """Each partition's kits as the rail's read holds them (plan.kits_at), from its plan alone, a read's found as
+    plan.plans gives it: a case that needs a kit its landings name gives it itself."""
+    import plan
+    return {l: plan.partition_kits(p, []) for l, _, _, p in found}
+
+
 def plan_text(bolts=(), units=()):
     """plan.rec text with its descriptors: bolts as (name, repo, started), a team's name read as started (Path:
     flume), units as (name, repo, bolt or None,
@@ -152,9 +159,7 @@ def known(w, stages=None, taken=(), n=None, chores_taken=(), fleet=None):
         def first_open(self, p, bolt):
             return next((u.name() for u in p.work_of(bolt) if self.of(u.name())["stage"] not in ("merged", "landed")), None)
 
-        def kit(self, kit):
-            kit in KITS + tuple(k["name"] for t in (fleet or FLEET)["teams"].values() for k in t.get("kits", [])) or plan.fail(
-                f"no team of {self.label} builds {kit}, so no plan holds its work")
+        def kit(self, kit):  # the partition the command runs as, as plan.plan_for has it given a label
             return self.label
     return Known(fleet or FLEET, w.label, w, n)
 

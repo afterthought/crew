@@ -49,8 +49,18 @@ def previews(monkeypatch, tmp_path):
     return tmp_path / "previews"
 
 
+# Each partition's kits as its plan and landings name them (plan.partition_kits), which an area's key is checked against.
+PARTITION_KITS = {"wldn": ["atlas-kit", "breadboard-kit", "switchboard-kit"], "madswan": ["flywheel-next"]}
+
+
+@pytest.fixture(autouse=True)
+def kits(monkeypatch):
+    """Each partition's kits as its plan and landings name them (plan.kits_read), with no branch read."""
+    monkeypatch.setattr(plan, "kits_read", lambda fleet, label: list(PARTITION_KITS.get(label, [])))
+
+
 def key(name, k, tool="post_request", label="wldn"):
-    return plan.card_refusal(FLEET, name, label, tool, k)
+    return plan.card_refusal(FLEET, name, label, tool, k, PARTITION_KITS.get(label, []))
 
 
 class TestKeys:
@@ -122,13 +132,14 @@ class TestKeys:
             assert key("wldn-ops", k) is None
 
     def test_an_area_is_made_only_under_a_kit_of_the_askers_partition(self):
+        """A kit of the partition is one its plan or its landings name (plan.partition_kits)."""
         assert key("wldn-ops", "create-area:WilldanGroup/switchboard-kit", "create_area") is None
         assert key("wldn-ops", "area:wldn-ops", "create_area") == (
-            "crew refuses an area under area:wldn-ops: wldn-ops makes a kit's area only under create-area:WilldanGroup/atlas-kit, "
-            "create-area:WilldanGroup/breadboard-kit or create-area:WilldanGroup/switchboard-kit.")
+            "crew refuses an area under area:wldn-ops: wldn-ops makes a kit's area only under create-area:<owner>/atlas-kit, "
+            "create-area:<owner>/breadboard-kit or create-area:<owner>/switchboard-kit.")
         assert key("madswan-design", "create-area:agentplot/flywheel-next", "create_area", label="madswan") is None
         assert key("wldn-planner", "create-area:WilldanGroup/atlas-kit", "create_area") is None
-        assert "only under create-area:WilldanGroup/atlas-kit, create-area:WilldanGroup/breadboard-kit or create-area:WilldanGroup/switchboard-kit" in (
+        assert "only under create-area:<owner>/atlas-kit, create-area:<owner>/breadboard-kit or create-area:<owner>/switchboard-kit" in (
             key("wldn-planner", "create-area:agentplot/flywheel-next", "create_area"))
 
 

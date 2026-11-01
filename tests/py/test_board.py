@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from facts import FLUME, plan_text
+from facts import FLUME, kits_of, plan_text
 
 import board
 import crew
@@ -125,7 +125,7 @@ def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, ca
     sv = sv or kits()
     runs = flume_runs(p, PLACED if placed is None else placed)
     ops_rows = [dict(r, at=plan.utc(r["at"]), doc=None) for r in ops.rows(FLEET, "wldn", list(entries))]
-    return dict(found=found, sv=sv, props=list(props), cards=list(cards), unread=unread or {}, errors=errors or {},
+    return dict(found=found, sv=sv, props=list(props), cards=list(cards), unread=unread or {}, errors=errors or {}, kits=kits_of(found),
                 landings=list(landings), gives=gives or {}, signals={"wldn": (signals or [], {})}, ops={"wldn": list(entries)},
                 logs={"wldn": STARTS + (list(logs) or list(entries))}, roles={"wldn": roles} if roles else {}, runs=runs,
                 rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None, runs) if p else []) + ops_rows)
@@ -460,7 +460,7 @@ class TestRefresh:
                 kept.cards = ({}, None)
             print("crew: a word the read said", file=sys.stderr)
             return {"found": list(self.found), "errors": {"wldn/main of o/state": "a plan it could not read"}, "signals": {}, "unchecked": list(self.unchecked),
-                    "sv": {}, "rows": [], "cards": [], "unread": {}, "batched": {}, "served": served is not None}
+                    "sv": {}, "rows": [], "cards": [], "unread": {}, "batched": {}, "served": served is not None, "kits": kits_of(self.found)}
         monkeypatch.setattr(board, "flow_read", flow_read)
         monkeypatch.setattr(board, "board_data", lambda fleet, labels, read, now: {"read_at": board.iso(now), "from": "mac-studio",
                                                                                    "partitions": [{"label": labels[0]}], "unread": {}})
@@ -1798,7 +1798,7 @@ class TestCrossed:
         runs = {"madswan": (requests + [plan.Rec("Request", list(f.items())) for f in extra], runners)}
         found, sv = [("madswan", "afterthought/crew-state", "tip0", p)], crew_read(bolts=bolts or {"x": {}, "y": {}})
         sv["deneb"]["kits"]["/crew/main"].update(kit or {})
-        r = dict(found=found, sv=sv, props=[], cards=[], unread={}, errors={}, landings=[], gives={}, signals={"madswan": ([], {})},
+        r = dict(found=found, sv=sv, props=[], cards=[], unread={}, errors={}, landings=[], gives={}, signals={"madswan": ([], {})}, kits=kits_of(found),
                  ops={"madswan": []}, logs={"madswan": []}, runs=runs, rows=plan.rail_rows(fleet, found, sv, [], {}, None, runs))
         return board.board_data(fleet, ["madswan"], r, NOW)
 
