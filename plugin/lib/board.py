@@ -37,7 +37,7 @@ import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, 
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import crew, gather, ops, plan, record, sites  # noqa: E402
+import asks, crew, gather, ops, plan, record, runner  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 # Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button. An operation's
@@ -45,9 +45,10 @@ from crew import Refusal, fail  # noqa: E402
 GLYPH = {"proposals": "✓", "land": "✓", "operations": "✓"}
 ATTENTION = "!"
 # A unit's stage as one pip, filling as it goes: not begun, being designed, coded, every task ticked, merged; a stage
-# crew could not read is "?". A bolt is its units' pips in the plan's order.
-PIP = {"queued": "○", "waiting": "○", "ready": "○", "amended": "◔", "construct": "◔", "planned": "◔", "code": "◑", "verify": "◕",
-       "merged": "●", "landed": "●"}
+# crew could not read is "?". A bolt is its units' pips in the plan's order; a crossed piece the runner is launching
+# has not begun (pip).
+PIP = {"queued": "○", "waiting": "○", "ready": "○", "launching": "○", "amended": "◔", "construct": "◔", "planned": "◔", "code": "◑",
+       "verify": "◕", "merged": "●", "landed": "●"}
 # How many explorations an agent's view names before it counts the rest.
 SHOWN = 6
 # The frames the host's follower writes for the rail and board tabs and the agents' mods, by label.
@@ -131,12 +132,30 @@ def signals(fleet, label, tip):
 
 def flow_read(fleet, labels, sweep=False):
     """One read of the labels' flow, which makes both the rail and the board: the rail's read with every team of the
-    labels surveyed, its dev servers, slots and explorations too (plan.rail_read), and the signals of each label whose
+    labels surveyed, its dev servers and explorations too (plan.rail_read), and the signals of each label whose
     plan was read; a plan that could not be read leaves its moves unknown, and is named already. With sweep, the rail
     tab's, the read ends the card sessions of closed cards and gone rows, as crew rail's does."""
     read = plan.rail_read(fleet, labels, board=True, sweep=sweep)
     read["signals"] = {l: signals(fleet, l, tip) for l, _, tip, _ in read["found"]}
+    read["roles"] = roles_read(fleet, read["found"])
     return read
+
+
+def roles_read(fleet, found):
+    """What the board reads of each partition's roles that run as their kinds, for their runs' views and the attention
+    line (kind_runs; Decision 15 of roles-run-as-flume-kinds), beside its plan in the same read (plan.12): {label:
+    {"kinds": {role: the stream its partition names}, "asks": asks.rec's text at the tip the read found, None where it
+    holds none, "host": the main level's host, "reading": that host's runner as read beside the branch (plan.runners,
+    runner.of_host)}}, for each partition read whose teams-file entry names a stream for a role; one that runs none as
+    its kind reads nothing more."""
+    out = {}
+    for l, repo, tip, _ in found:
+        p = crew.partition_of(fleet, l)
+        kinds = {r: s for r, s in p["flume"].items() if s is not False}
+        if kinds:
+            out[l] = {"kinds": kinds, "asks": plan.show(repo, tip, "asks.rec") if tip else None, "host": p["machine"],
+                      "reading": runner.of_host(plan.runners(repo, l), l, p["machine"])}
+    return out
 
 
 # ------------------------------------------------------------------------------------------------- the data
@@ -184,48 +203,43 @@ def records_proposed(entries, cards):
     return list(out.values())
 
 
-def environments(fleet, label, teams, entries, rows, cards, since, logs):
+def environments(fleet, label, entries, rows, cards, since, logs):
     """The partition's environments for the Operation lane: each one's deploys that moved since since or are still open,
     and the operations waiting on it, as ops.environments reads them from the run record (plan.14, state.4), each
-    deploy and operation with its rail row's marker; and the teams on that host, which is what the page narrows by."""
-    return [{"env": env, "teams": [t["team"] for t in teams if t["host"] == env],
+    deploy and operation with its rail row's marker."""
+    return [{"env": env,
              "deploys": [dict(d, markers=keyed(rows, cards, label, d["row"], logs)) for d in v["deploys"]],
              "waiting": [dict(w, markers=keyed(rows, cards, label, w["row"], logs)) for w in v["waiting"]]}
             for env, v in ops.environments(entries, iso(since)).items()]
 
 
 def board_data(fleet, labels, read, now):
-    """The board of each label as data, the fields the page reads (`crew board --json`). Each partition lists its teams,
-    and each object of its lanes says the teams it belongs to, which is what the page narrows by: a held bolt and a
-    landing, its team; a signal, the team whose agent captured it; a proposal, the teams holding the bolts it names
-    and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
-    every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind,
-    and each of them its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
-    the queue can't be read on its team's host when it can't (plan.submission_rows, teams.22). Each ledger has its
-    bolt's time to now (plan.held_time, plan.20): {age, shares: {team, kit, team_or_kit, user, hold, nobody}, now:
-    {holder, what, since}, stalled, said}, in minutes, or {unknown: why, said}, with its age once its give is read.
-    Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
-    record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
-    the design agent's band shows (records_proposed)."""
+    """The board of each label as data, the fields the page reads (`crew board --json`); an object's partition and kit
+    say whose it is, and nothing names a team (crew-board). Each partition lists its kits, the repositories its plan and
+    its landings name (plan.partition_kits), which the fleet page lists. Each started bolt is a ledger of its units, chores and fixes,
+    its host and stream where the runner that took its work reported them (plan.bolt_at), each unit or chore with its
+    kind, and each of them with its stage from the runner's records and what goes with it (flume, Stages.crossed,
+    Stages.fixes) and its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
+    the queue can't be read on its kit's host when it can't (plan.submission_rows, teams.22); a runner that could not be
+    read is named for attention. Each ledger has its bolt's time to now (plan.held_time, plan.20): {age, shares: {team,
+    kit, team_or_kit, user, hold, nobody}, now: {holder, what, since}, said}, in minutes, or {unknown: why, said}, with
+    its age once its start is read. Each partition lists too its open cards, oldest first, each with whose it is and what
+    it is, a row's, a decision record's or a question (plan.card_kind), and the decision records proposed and not yet
+    accepted or rejected, which the design agent's band shows (records_proposed); the places that wait on an answer and
+    the fixes of main and take-main fixes in flight (asking and fixing, flume_waits), which the planner's and main-level
+    ops's bands show (crew-board "The planner's and ops's bands show what places wait on them for"); and each role it
+    runs as its kind, for its run's view, with each such run that stopped short or was lost named for attention (runs,
+    kind_runs; Decision 15 of roles-run-as-flume-kinds)."""
     here = crew.this_host()
     rows, cards, sv = read["rows"], read["cards"], read["sv"]
     since = plan.utc(record.when(None)[1])
     parts = []
     for l in labels:
-        p = crew.partition_of(fleet, l)
         found = next(((repo, tip, pl) for x, repo, tip, pl in read["found"] if x == l), None)
         repo, tip, pl = found or (plan.state_of(fleet, l)[0], None, None)
         unread, logs = read["unread"].get(l, {}), read.get("logs", {}).get(l, [])
-        teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "kits": [k["name"] for k in crew.kits_of(fleet["teams"][t])],
-                  "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
-
-        def building(repo):
-            return [t["team"] for t in teams if repo and repo in t["kits"]]
-
-        def ordered(ts):
-            return [t for t in p["teams"] if t in ts]
         hosts = {}  # each host asked for its kits, never for its run record, which is read from the branch (read.5)
-        for h in sorted(crew.partition_hosts(fleet, l)):
+        for h in plan.hosts_of(fleet, l, read.get("runs")):
             v = sv.get(h)
             hosts[h] = f"its kits: {v['error']}" if v and not v["ok"] else True
         attention = [{"what": "host", "name": h, "why": v} for h, v in hosts.items() if v is not True]
@@ -237,102 +251,136 @@ def board_data(fleet, labels, read, now):
         attention += [{"what": "signals", "name": n, "why": why} for n, why in sunread.items()]
 
         explorations = []
-        for kit in dict.fromkeys(k["name"] for t in sorted(p["teams"]) for k in crew.kits_of(fleet["teams"][t])):
-            for t in (crew.with_kit(fleet["teams"][x], kit) for x in sorted(p["teams"]) if crew.builds(fleet["teams"][x], kit)):
-                k = (sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}
-                if k.get("ok") and "explorations" in k:
-                    explorations += [{"kit": kit, "name": e["name"], "first": e["first"], "teams": building(kit)} for e in k["explorations"]]
-                    break
+        for kit in read["kits"].get(l, []):  # the kits its plan and its landings name (plan.partition_kits)
+            t = plan.main_kit_read(fleet, l, kit)  # read in the checkout its main-level host keeps of it
+            k = ((sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}) if t else {}
+            if k.get("ok") and "explorations" in k:
+                explorations += [{"kit": kit, "name": e["name"], "first": e["first"]} for e in k["explorations"]]
 
-        def proposal_teams(d):
-            """The teams of each bolt a proposal's changes name, the team holding it or else those building its
-            repository; and, where a change makes a bolt or names the queue, those building that bolt's repository or
-            the unit's. A change that names no repository adds none."""
-            bolts = {b.name(): (b.get("Team"), b.get("Repo")) for b in pl.bolts()}
-            units = {u.name(): u.get("Repo") for u in pl.work()}
-            out = []
-            for c in d["changes"]:
-                a = plan.do_args(l, c["do"])
-                key = ("unit" if a.cmd == "chore" else a.cmd, a.sub)  # a chore's command reaches teams as the unit's
-                if key == ("bolt", "new"):
-                    bolts.setdefault(a.bolt, (None, a.repo))
-                elif key == ("unit", "add"):
-                    units[a.unit] = a.repo or bolts.get(a.bolt, (None, None))[1]
-                for n, _ in getattr(a, "into", None) or []:
-                    units[n] = units.get(a.unit)
-                for b in c["bolts"]:
-                    team, repo = bolts.get(b, (None, None))
-                    out += [team] if team else building(repo)
-                # a move that touches fewer than two bolts leaves or joins the queue; any other change touching none
-                # is a bolt it makes or a queued unit
-                if len(c["bolts"]) < (2 if key == ("unit", "move") else 1):
-                    out += building(bolts.get(a.bolt, (None, None))[1] if a.cmd == "bolt" else units.get(a.unit))
-            return ordered(out)
-
-        def captured(s):
-            kind, of = plan.role(fleet, s["captured_by"])
-            return [of] if kind in ("conductor", "team") and of in p["teams"] else []
         proposals = [{"proposal": d["proposal"], "by": d["by"], "opened": d["opened"], "case": (d["case"] or "").splitlines()[0] if d["case"] else None,
-                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"]), logs), "teams": proposal_teams(d)}
+                      "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"]), logs)}
                      for d in read["props"] if d["label"] == l]
         planned, queue, construction = [], [], []
+        runs = (read.get("runs") or {}).get(l)
         if pl:
-            st = plan.Stages(fleet, pl, sv)
+            st = plan.Stages(fleet, pl, sv, read.get("runs"), l)
             for b in pl.bolts():
                 units = pl.work_of(b.name())
-                if not b.get("Team"):
-                    planned.append({"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "teams": building(b.get("Repo")),
+                if not plan.started(b):
+                    planned.append({"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"),
                                     "units": [{"unit": u.name(), "kind": plan.kind_of(u), "stage": st.of(u.name())["stage"]} for u in units]})
                     continue
-                t = fleet["teams"].get(b.get("Team"))
+                t = st.at(b)[0]  # where its work runs, as the runner that took it reported (plan.bolt_at)
                 k, _ = st.kit(b) if t else (None, None)
                 k = k or {}
-                held = k.get("slots", {}).get(b.get("Team"), [])
 
-                def url(path):
-                    return sites.url_of(fleet, here, t["machine"], k.get("sites", {}).get(path, {}), k.get("routes"))[0] if path and k else None
-
-                def slot(kind, name):
-                    return next((s["slot"] for s in held if s.get("kind") == kind and s.get("name") == name), None)
                 state = st.bolt_state(b) if t else "unknown"
-                fixes = [f for f in k.get("fixes", []) if f["bolt"] == b.name()]
+                silent = st.unread(b)
+                if silent:
+                    attention.append({"what": "runner", "name": silent[0], "why": silent[1]})
                 unread = k.get("submissions_error")
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
-                                                     [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
+                                                     [(u.name(), plan.kind_of(u)) for u in units])
                 recorded = landing_of(logs, b.name())
-                ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
-                          "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
-                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
+                ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "host": t["machine"] if t else None,
+                          "head": (k.get("bolts", {}).get(b.name()) or {}).get("head"),
+                          "stream": t["stream"] if t else None, "state": state, "url": None,  # its places are Flume's (crew-board, _open.md)
+                          "markers": markers(rows, cards, l, "land", b.name(), logs), "units": [], "fixes": [],
                           "landing": landing, "submissions_error": unread, "record": recorded,
                           "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
-                                            "slot": slot(plan.kind_of(u), u.name()), "submission": subs.get(u.name()),
-                                            "worktree": s["worktree"], "url": url(s["worktree"])})
-                ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "submission": subs.get(f["fix"]),
-                                    "worktree": f["path"], "url": url(f["path"])} for f in fixes]
+                                            "submission": subs.get(u.name()), "worktree": s["worktree"], "url": None, "flume": s.get("flume")})
+                ledger["fixes"] = [{"fix": w, "merged": x["stage"] in ("merged", "landed"), "submission": None, "worktree": None,
+                                    "url": None, "flume": x} for w, _, x in st.fixes(b)]
                 construction.append(ledger)
-                if state == "landed" or (recorded or {}).get("unclosed"):
-                    attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {recorded['unclosed']}"
-                                      if (recorded or {}).get("unclosed") else "every unit has landed on main, and the bolt is still in the plan"})
-            queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))}
-                     for u in pl.queue()]
-        operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
-                      "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
+                if state == "landed" or unclosed(ledger):
+                    attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {unclosed(ledger)}"
+                                      if unclosed(ledger) else "every unit has landed on main, and the bolt is still in the plan"})
+            queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source")} for u in pl.queue()]
+        asking, fixing = flume_waits(construction, runs, l)
+        kinds, waits = kind_runs(l, (read.get("roles") or {}).get(l))
+        attention += waits
+        operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"]}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
-        envs = environments(fleet, l, teams, read.get("ops", {}).get(l, []), rows, cards, since, logs)
+        envs = environments(fleet, l, read.get("ops", {}).get(l, []), rows, cards, since, logs)
         mine = sorted((c for c in cards if c["label"] == l), key=lambda c: (c["at"], c["card"]))
-        parts.append({"label": l, "plan": tip, "hosts": hosts, "teams": teams,
+        parts.append({"label": l, "plan": tip, "hosts": hosts, "kits": list(read["kits"].get(l, [])),
                       "cards": [{"key": c["key"], "card": c["card"], "by": c["by"], "host": c["host"], "at": iso(c["at"]),
                                  "kind": plan.card_kind(c["key"])} for c in mine],
                       "records": records_proposed(logs, mine),
-                      "inception": {"signals": sorted((dict(s, teams=captured(s)) for s in sigs),
+                      "inception": {"signals": sorted(sigs,
                                                       key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
                                     "explorations": explorations},
                       "bolt_plan": {"proposals": proposals, "planned": planned, "queue": queue},
-                      "construction": construction, "operation": operation, "environments": envs, "attention": attention})
+                      "construction": construction, "operation": operation, "environments": envs, "attention": attention,
+                      "asking": asking, "fixing": fixing, "runs": kinds})
     return {"read_at": iso(now), "from": here, "partitions": parts, "unread": read["errors"]}
+
+
+def kind_runs(label, roles):
+    """Each role the partition runs as its kind, for its run's view (crew-board "A role that runs as its kind has its
+    view"), and what the attention line names of their runs ("The attention line names a role's run that waits"), a
+    decision on the board's read of them (roles_read) alone (code.7): (runs, attention). Each run {role, run, stream,
+    turn, waiting, since}: its name, <label>-<role>; the stream its partition names; its turn as asks.run_view gives it,
+    None while it has none; how many asks wait for its next run, and when the oldest was asked. The attention names a
+    run Flume's status shows stopped short, with its words, or lost, with its place and host, and prints no command
+    (crew-board "The board answers nothing"); and each run whose standing crew can't read, those of one why together
+    (read.1). Nothing for a partition that runs no role as its kind."""
+    if not roles:
+        return [], []
+    held, turns = asks.parse(roles["asks"])
+    runs, attention, unread = [], [], {}
+    for role, stream in roles["kinds"].items():
+        turn, waiting = asks.run_view(held, turns, role)
+        runs.append({"role": role, "run": f"{label}-{role}", "stream": stream, "turn": turn, "waiting": len(waiting),
+                     "since": waiting[0]["At"] if waiting else None})
+        address, host = f"{label}/{role}", roles["host"]
+        why = runner.role_run(roles["reading"], address)["why"]
+        if why:
+            unread.setdefault(why, []).append(role)
+            continue
+        w = runner.run_waiting(roles["reading"], address)
+        if w and w[0] in ("answer", "lost"):
+            first = (w[1] or "").strip().splitlines()[0] if (w[1] or "").strip() else "no words"
+            how = "stopped short" if w[0] == "answer" else "lost"
+            attention.append({"what": "run", "name": f"{label}'s {role} run", "run": f"{label}-{role}", "how": how, "place": w[2],
+                              "host": host, "words": w[1],
+                              "why": f"{how}, its place {w[2]} on {host}" + (f": {first}" if how == "stopped short" else "")})
+    for why, rs in unread.items():
+        named = rs[0] if len(rs) == 1 else ", ".join(rs[:-1]) + " and " + rs[-1]
+        attention.append({"what": "run", "name": f"{label}'s {named} {'run' if len(rs) == 1 else 'runs'}", "run": None, "how": "unknown",
+                          "place": None, "host": roles["host"], "words": None,
+                          "why": f"crew can't tell how {'it stands' if len(rs) == 1 else 'they stand'}: {why}"})
+    return runs, attention
+
+
+def flume_waits(construction, runs, label):
+    """What a partition's places wait on its roles for (crew-board "The planner's and ops's bands show what places wait
+    on them for"), a decision of facts alone (code.7): (asking, fixing). asking, for the planner's band, each unit, chore
+    or fix of a started bolt, from its ledger (construction), whose place stopped short asking or waits on its caller,
+    which crew answer answers (runner.answer_retry), {bolt, repo, name, stage, said}; fixing, for main-level ops's band,
+    each fix of a kit's main (runs, the partition's (requests, runners) as the rail read them, runner.fixes_on) and each
+    take-main fix of a started bolt that has not merged, landed or been dropped, the fixes of main first, {fix,
+    repo, host, stage, said}; stage and said, as runner.piece_said says them."""
+    asking, fixing = [], []
+    for l, s in runner.fixes_on(*runs, "main") if runs else []:
+        if s["stage"] not in ("merged", "landed", "dropped"):
+            took = runner.taken(runs[1], runner.number(l.get("Request")))[0]
+            fixing.append(dict(fix=l.get("Name"), repo=(l.get("Work") or "").split("/")[2], host=took["host"] if took else None,
+                               **dict(zip(("stage", "said"), runner.piece_said(s)))))
+    for b in construction:
+        for x in b["units"] + b["fixes"]:
+            s = x.get("flume")
+            if not s:
+                continue
+            name, said = x.get("unit") or runner.bare(x["fix"]), dict(zip(("stage", "said"), runner.piece_said(s)))
+            if runner.answer_retry(name, s)[0]:
+                asking.append(dict(bolt=b["bolt"], repo=b["repo"], name=name, **said))
+            if x.get("fix", "").startswith(f"fix/{b['bolt']}/take-main-") and s["stage"] not in ("merged", "landed", "dropped"):
+                fixing.append(dict(fix=name, repo=b["repo"], host=b["host"], **said))
+    return asking, fixing
 
 
 # ------------------------------------------------------------------------------------------------- the text
@@ -373,9 +421,28 @@ def gutter(ms, attention=False):
 
 
 def stage_of(u):
-    """A unit's stage with its tasks, a chore's with `chore` before it (plan.11), in the board and each agent's view."""
+    """A unit's stage with its tasks, a chore's with `chore` before it (plan.11), in the board and each agent's view; a
+    crossed piece's as the runner's records give it (runner.piece_said)."""
+    if u.get("flume"):
+        return ("chore " if u.get("kind") == "chore" else "") + runner.piece_said(u["flume"])[0]
     return (("chore " if u.get("kind") == "chore" else "") + u["stage"]
             + (f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else ""))
+
+
+def fix_stage(f):
+    """A fix's stage on its line: merged or not, or a crossed fix's as the runner's records give it."""
+    return "fix " + runner.piece_said(f["flume"])[0] if f.get("flume") else "fix merged" if f["merged"] else "fix"
+
+
+def detail_of(x):
+    """What goes with a crossed piece's stage on its line (runner.piece_said), nothing for any other."""
+    return runner.piece_said(x["flume"])[1] if x.get("flume") else ""
+
+
+def stream_of(b):
+    """A started bolt's Flume stream on its head line, as the runner that took its work reported it
+    (runner.stream_said), nothing where none is reported."""
+    return runner.stream_said(b.get("stream"))
 
 
 def local(at):
@@ -464,8 +531,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Bolt plan")
         bp = p["bolt_plan"]
         for d in bp["proposals"]:
-            line(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or "",
-                        "waiting on " + ", ".join(f"{t}-conductor" for t in d["waiting"]) if d["waiting"] else ""), gutter(d["markers"]), 0, d["markers"])
+            line(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or ""), gutter(d["markers"]), 0, d["markers"])
         for b in bp["planned"]:
             line(fields(named(b["repo"], b["bolt"]), b["goal"] or ""), " ")
             for u in b["units"]:
@@ -477,12 +543,12 @@ def board_text(data, width=None, color=False, stale=None):
 
         heading("Construction")
         for b in p["construction"]:
-            line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
+            line(fields(named(b["repo"], b["bolt"]), f"on {b['host']}" if b["host"] else "", stream_of(b),
                         head_said(b), landing_said(b), queue_said(b, True), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
             for u in b["units"]:
-                line(fields(u["unit"], stage_of(u), merge_said(u), u["slot"] or "", u["url"] or ""), " ", 2)
+                line(fields(u["unit"], stage_of(u), detail_of(u), merge_said(u), u["url"] or ""), " ", 2)
             for f in b["fixes"]:
-                line(fields(f["fix"], "fix merged" if f["merged"] else "fix", merge_said(f), f["slot"] or "", f["url"] or ""), " ", 2)
+                line(fields(f["fix"], fix_stage(f), detail_of(f), merge_said(f), f["url"] or ""), " ", 2)
             if b["url"]:
                 line(fields("server", b["url"]), " ", 2)
         if not p["construction"]:
@@ -491,7 +557,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Operation")
         for o in p["operation"]:
             line(gutter=" ", segs=fields(o["bolt"], f"landed {local(o['at'])}" + (f" by {o['by']}" if o["by"] else ""),
-                               o["team"] or "", ", ".join(o["units"])))
+                               ", ".join(o["units"])))
         envs = p.get("environments", [])
         for e in envs:
             for d in e["deploys"]:
@@ -512,7 +578,9 @@ def board_text(data, width=None, color=False, stale=None):
 def attention_text(a):
     """What needs attention, as the board says it."""
     return {"host": f"{a['name']} did not answer ({a['why']})", "plan": f"the plan, {a['name']}: {a['why']}",
-            "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}"}[a["what"]]
+            "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}",
+            "runner": f"{a['name']} can't be read ({a['why']}): the stages of the work crossed to Flume there are unknown",
+            "run": f"{a['name']}: {a['why']}"}[a["what"]]
 
 
 # ------------------------------------------------------------------------------------------------- the agents' views
@@ -521,21 +589,26 @@ def many(n, one, more):
     return f"{n} {one if n == 1 else more}"
 
 
+def pip(u):
+    """A unit's stage as its pip; a crossed piece waiting on its caller as the stage it waits at, and one submitted as
+    every task ticked."""
+    st = u["stage"]
+    if st in ("needs", "waits", "stalled") and (u.get("flume") or {}).get("of"):
+        st = u["flume"]["of"]
+    return PIP.get("verify" if st == "submitted" else st, "?")
+
+
 def pips(units):
     """Units' stages as pips, one to a unit in the plan's order."""
-    return "".join(PIP.get(u["stage"], "?") for u in units)
+    return "".join(pip(u) for u in units)
 
 
 def merged(b):
     return f"{sum(u['stage'] in ('merged', 'landed') for u in b['units'])} of {len(b['units'])} merged"
 
 
-def held(p, team):
-    return [b for b in p["construction"] if b["team"] == team]
-
-
 def state_said(state):
-    """A held bolt's state as a line draws it: nothing while active, "waits to land" once proven (teams.16), else the
+    """A started bolt's state as a line draws it: nothing while active, "waits to land" once proven (teams.16), else the
     state."""
     return "" if state == "active" else "waits to land" if state == "waits" else state
 
@@ -565,10 +638,11 @@ def time_of(b):
 
 
 def landing_of(entries, bolt):
-    """What the run record holds of a held bolt's landing for its head line, its ledger's record (plan.21, Decision 5), from the partition's
-    entries the rail read, oldest first: {"queued": n} while its last bolt.submit has its landing queued as sluice's #n
-    (plan.submit_queued); {"unclosed": words} once its last bolt.submit landed and its last bolt.land since is refused,
-    in that refusal's words; else None. A decision of facts alone (code.7)."""
+    """What the run record holds of a held bolt's landing for its head line, its ledger's record (plan.21, Decision 5),
+    from the partition's entries the rail read, oldest first, each state its own: {state: unclosed, words} once its last
+    bolt.submit landed and its last bolt.land since is refused, in that refusal's words; else its landing queued, landing
+    again or rejected as plan.landing_phase reads it (bolt-teams "A landing queued holds its bolt's work"); else None. A
+    decision of facts alone (code.7)."""
     last, refused = None, None
     for e in entries:
         if f"bolt/{bolt}" not in (e.get("On") or []):
@@ -577,74 +651,67 @@ def landing_of(entries, bolt):
             last, refused = e, None
         elif e.get("Act") == "bolt.land":
             refused = e.get("Refused")  # None once a close went through
-    if last and last.get("Outcome") == "queued":
-        return {"queued": last.get("Submission")}
     if last and last.get("Outcome") == "landed" and refused:
-        return {"unclosed": refused}
-    return None
+        return {"state": "unclosed", "words": refused}
+    return plan.landing_phase(entries, bolt)
+
+
+def unclosed(b):
+    """The words of a held bolt's last refused close, once it landed on main and was not closed (landing_of), or None."""
+    record = b.get("record") or {}
+    return record["words"] if record.get("state") == "unclosed" else None
 
 
 def head_said(b):
     """A held bolt's state as its head line says it, from what the run record holds of its landing (its record,
-    landing_of): landed on main and not closed, in its last refused close's words; its landing queued, with sluice's
-    number, only while sluice's queue was read and shows no landing of it standing, which landing_said says in its
-    stead, a queue that can't be read showing no number (queue_said, read.1); else its state (state_said)."""
-    record = b.get("record") or {}
-    if record.get("unclosed"):
-        return f"landed on main, not closed: {record['unclosed']}"
-    if record.get("queued") and not b.get("landing") and not b.get("submissions_error"):
-        return f"landing queued as #{record['queued']}"
-    return state_said(b["state"])
+    landing_of): landed on main and not closed, in its last refused close's words; its landing queued, landing again or
+    rejected at its head, each in words of its own (plan.phase_said), a queued landing's number only while sluice's queue
+    was read and shows no landing of it standing, which landing_said says in its stead, a queue that can't be read
+    showing no number (queue_said, read.1); else its state (state_said)."""
+    if unclosed(b):
+        return f"landed on main, not closed: {unclosed(b)}"
+    said = plan.phase_said(b.get("record"), b.get("head"), live=bool(b.get("landing") or b.get("submissions_error")))
+    return said or state_said(b["state"])
 
 
 def needs_eye(b):
     """Whether a held bolt's head line has the attention gutter: every unit of it landed, or its close refused."""
-    return b["state"] == "landed" or bool((b.get("record") or {}).get("unclosed"))
+    return b["state"] == "landed" or bool(unclosed(b))
 
 
-def bolt_row(b, team=None):
-    """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
-    dim; then its pips, its name, its state unless active, or what its landing is (head_said), its landing standing in
-    sluice (landing_said), that its submissions can't be read when they can't (queue_said), how many of its units have
-    merged, and its age and who held its time (time_of); its landing's marker in the gutter, or attention once every
-    unit has landed or its close was refused (needs_eye)."""
-    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], head_said(b),
-                      landing_said(b), queue_said(b), merged(b), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
+def bolt_row(b):
+    """A started bolt on one line, led by its product, the repository it builds; then its pips, its name, its stream
+    (stream_of), its state unless active, or what its landing is (head_said), its landing standing in sluice
+    (landing_said), that its submissions can't be read when they can't (queue_said), how many of its units have merged,
+    and its age and who held its time (time_of); its landing's marker in the gutter, or attention once every unit has
+    landed or its close was refused (needs_eye)."""
+    return row(fields(b["repo"] or "", pips(b["units"]), b["bolt"], stream_of(b), head_said(b), landing_said(b), queue_said(b),
+                      merged(b), time_of(b)), gutter(b["markers"], needs_eye(b)), 0, b["markers"])
 
 
 def ledger_rows(b):
-    """A held bolt as its conductor reads it: the bolt, then a unit to a line, its pip, stage, its merge standing in
-    sluice (merge_said) and slot, then each fix with its merge."""
+    """A started bolt as a ledger: the bolt (bolt_row), then a unit or chore to a line, its pip, its stage and what goes
+    with it, and its merge standing in sluice (merge_said), then each fix with its stage and merge; no slot."""
     return ([bolt_row(b)]
-            + [row(fields(PIP.get(u["stage"], "?"), u["unit"], stage_of(u), merge_said(u), u["slot"] or ""), " ", 2) for u in b["units"]]
-            + [row(fields(f["fix"], "fix merged" if f["merged"] else "fix", merge_said(f), f["slot"] or ""), " ", 2) for f in b["fixes"]])
+            + [row(fields(pip(u), u["unit"], stage_of(u), detail_of(u), merge_said(u)), " ", 2) for u in b["units"]]
+            + [row(fields(f["fix"], fix_stage(f), detail_of(f), merge_said(f)), " ", 2) for f in b["fixes"]])
 
 
-def team_rows(p):
-    """Each team of the partition, product by product: the bolt it holds on one line, or its product and that it holds
-    none."""
-    out = []
-    for t in sorted(p["teams"], key=lambda t: t["kit"]):
-        out += [bolt_row(b, t["team"]) for b in held(p, t["team"])] or [row(fields(t["kit"], (t["team"], "dim"), ("holds no bolt", "dim")), " ")]
-    return out
+def in_flight(p):
+    """The partition's started bolts, product by product, each kit's in the plan's order."""
+    return sorted(p["construction"], key=lambda b: b["repo"] or "")
 
 
-def proposal_row(d, team=None):
-    """An open proposal: who made it, its case, and the conductors it waits on, to a conductor whether it waits on
-    its own agreement; its marker in the gutter."""
-    if team:
-        waits = "waits on your agreement" if team in d["waiting"] else ""
-    else:
-        waits = "waiting on " + ", ".join(f"{t}-conductor" for t in d["waiting"]) if d["waiting"] else ""
-    return row(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or "", waits), gutter(d["markers"]), 0, d["markers"])
+def proposal_row(d):
+    """An open proposal: who made it and its case; its marker in the gutter."""
+    return row(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or ""), gutter(d["markers"]), 0, d["markers"])
 
 
-def next_rows(p, team=None):
-    """What comes after the work in hand, for one team or the whole partition: for each product, the repository it
-    builds, its first planned bolt, the rest counted, then the queued units counted by product."""
+def next_rows(p):
+    """What comes after the work in hand: for each product, the repository it builds, its first planned bolt, the rest
+    counted, then the queued units counted by product."""
     bp = p["bolt_plan"]
-    planned = [b for b in bp["planned"] if team is None or team in b["teams"]]
-    queued = [u for u in bp["queue"] if team is None or team in u["teams"]]
+    planned, queued = bp["planned"], bp["queue"]
     out = []
     for repo in dict.fromkeys(b["repo"] for b in planned):
         mine = [b for b in planned if b["repo"] == repo]
@@ -659,25 +726,18 @@ def attention_rows(p, keep=lambda a: True):
     return [row([(attention_text(a), None)], ATTENTION) for a in p["attention"] if keep(a)]
 
 
-def conductor_view(p, team):
-    """A conductor's: the bolt its team holds as a ledger, or that it holds none; the open proposals that name its
-    team; what is planned and queued for it; and what needs attention there: its host not answering, a bolt of its
-    still in the plan once landed, or the plan not read."""
-    host = next(t["host"] for t in p["teams"] if t["team"] == team)
-    mine = held(p, team)
-    out = [r for b in mine for r in ledger_rows(b)] or [row(fields(f"{team} holds no bolt"), " ")]
-    out += [proposal_row(d, team) for d in p["bolt_plan"]["proposals"] if team in d["teams"] or team in d["waiting"]]
-    return out + next_rows(p, team) + attention_rows(p, lambda a: a["what"] in ("plan", "signals") or (a["what"] == "host" and a["name"] == host)
-                                                    or (a["what"] == "landed" and a["name"] in {b["bolt"] for b in mine}))
-
-
 def planner_view(p):
-    """The planner's: the plan in brief, each team's bolt, the open proposals, what is planned next and queued, and
-    what needs attention."""
-    bp = p["bolt_plan"]
-    head = row(fields((f"{p['label']} plan", "bold"), f"{len(p['construction'])} held", f"{len(bp['planned'])} planned",
-                      f"{len(bp['queue'])} queued", many(len(bp["proposals"]), "proposal open", "proposals open")))
-    return [head] + team_rows(p) + [proposal_row(d) for d in bp["proposals"]] + next_rows(p) + attention_rows(p)
+    """The planner's: the plan in brief, counting the places that wait on an answer (asking); each bolt in flight as a
+    ledger (ledger_rows), since ordering within a bolt, batches and amendments are the planner's (Decision 6 of
+    the-team-machinery-leaves), a place that waits on an answer drawn on its line with its question or Flume's words
+    (crew-board "A question in the planner's band"); the open proposals, what is planned next and queued, and what needs
+    attention."""
+    bp, asking = p["bolt_plan"], p.get("asking", [])
+    head = row(fields((f"{p['label']} plan", "bold"), f"{len(p['construction'])} in flight", f"{len(bp['planned'])} planned",
+                      f"{len(bp['queue'])} queued", many(len(bp["proposals"]), "proposal open", "proposals open"),
+                      many(len(asking), "place waits on an answer", "places wait on an answer") if asking else ""))
+    return ([head] + [r for b in in_flight(p) for r in ledger_rows(b)] + [proposal_row(d) for d in bp["proposals"]]
+            + next_rows(p) + attention_rows(p))
 
 
 def record_row(r):
@@ -718,8 +778,8 @@ def environment_row(e):
 
 
 def operator_view(p):
-    """An operator's: the partition's board in brief, a line to each lane with each team's bolt under Construction and
-    each environment with a deploy or an operation waiting under Operation, the rail's rows waiting on the user counted,
+    """An operator's: the partition's board in brief, a line to each lane with each bolt in flight under Construction
+    (bolt_row) and each environment with a deploy or an operation waiting under Operation, the rail's rows waiting on the user counted,
     and what needs attention."""
     inc, bp, lands, envs = p["inception"], p["bolt_plan"], p["operation"], [e for e in p.get("environments", []) if e["deploys"] or e["waiting"]]
     approve = (sum(len(d["markers"]) for d in bp["proposals"]) + len({m["key"] for b in p["construction"] for m in b["markers"]})
@@ -731,7 +791,7 @@ def operator_view(p):
              row(fields(("Bolt plan", "bold"), many(len(bp["proposals"]), "proposal open", "proposals open"), f"{len(bp['planned'])} planned",
                         f"{len(bp['queue'])} queued")),
              row([("Construction", "bold")])]
-            + team_rows(p)
+            + [bolt_row(b) for b in in_flight(p)]
             + [row(fields(("Operation", "bold"), f"{len(lands)} landed in seven days", last))]
             + [environment_row(e) for e in envs]
             + ([row(fields(("waits on the user", "bold"), f"✓ {approve} to approve"))] if approve else [])
@@ -739,9 +799,10 @@ def operator_view(p):
 
 
 def ops_view(p):
-    """Main-level ops's: the partition's operations in brief; each kit's landing row, its landings card ops's, naming
+    """Main-level ops's: the partition's operations in brief; each fix of a kit's main and each take-main fix in flight,
+    with its stage (fixing; crew-board "A fix of main in ops's band"); each kit's landing row, its landings card ops's, naming
     the bolts that wait on its main in the plan's order, each with its landing standing in sluice when one stands
-    (landing_said), with its card, and each held bolt whose landing stands on no such row; then, environment by
+    (landing_said), with its card, and each started bolt whose landing stands on no such row; then, environment by
     environment, each deploy
     waiting on the user's word with its card, each approved and not yet deployed, each running, and each operation step
     waiting, handed or failed, with the deploy it comes after, or whose gate it is, and its doer; the head line of each
@@ -751,9 +812,11 @@ def ops_view(p):
     steps = [(e["env"], w) for e in p.get("environments", []) for w in e["waiting"]]
     word = sum(d["answer"] == "waiting" for _, d in pending)
     running = sum(bool(d["started"]) for _, d in pending)
+    fixing = p.get("fixing", [])
     head = row(fields((f"{p['label']} operations", "bold"), many(word, "deploy waits on the user's word", "deploys wait on the user's word"),
-                      many(running, "deploy running", "deploys running"), many(len(steps), "operation waiting", "operations waiting")))
-    out = [head]
+                      many(running, "deploy running", "deploys running"), many(len(steps), "operation waiting", "operations waiting"),
+                      many(len(fixing), "fix in flight", "fixes in flight") if fixing else ""))
+    out = [head] + [row(fields(f["repo"] or "", f"fix {f['fix']}", f["stage"], f["said"], (f"on {f['host']}", "dim")), " ") for f in fixing]
     lands = {}
     for b in p.get("construction", []):
         for m in b["markers"]:
@@ -766,7 +829,7 @@ def ops_view(p):
     rowed = {x for _, bolts in lands.values() for x in bolts}
     out += [row(fields(b["repo"] or "", b["bolt"], landing_said(b)), " ") for b in p.get("construction", [])
             if b.get("landing") and b["bolt"] not in rowed]
-    out += [bolt_row(b, b["team"]) for b in p.get("construction", []) if (b.get("record") or {}).get("unclosed")]
+    out += [bolt_row(b) for b in p.get("construction", []) if unclosed(b)]
     for e in p.get("environments", []):
         for d in (d for env, d in pending if env == e["env"]):
             out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))
@@ -778,6 +841,22 @@ def ops_view(p):
     return out + attention_rows(p, lambda a: a["what"] in ("host", "plan"))
 
 
+def run_rows(r, now):
+    """A role's run's own lines, at the head of its view (crew-board "A role that runs as its kind has its view"): its
+    name and stream, what its turn took, and how many asks wait for the role's next run and for how long the oldest has,
+    or that nothing waits; then each thing the turn took, an ask by its number with what it is, who asked and the record
+    it names, a waiting place by its key."""
+    t = r["turn"]
+    took = "no turn taken" if t is None else f"turn {t['turn']} took {len(t['took'])}" + (", ended" if t["ended"] else "")
+    n, since = r["waiting"], when(r["since"]) if r["since"] else None
+    old = plan.age(since, now) if since else "a time crew can't read"
+    waits = ("nothing waits" if not n else f"1 ask waits, for {old}" if n == 1 else f"{n} asks wait, the oldest for {old}")
+    head = row(fields((f"{r['run']} run", "bold"), f"in stream {r['stream']}", took, waits))
+    return [head] + [row(fields(f"ask {x['took'][4:]}" if x["took"].startswith("ask/") else x["took"],
+                                f"{x['what']} from {x['from']}" if x["what"] else "", f"on {x['names']}" if x["names"] else ""), " ")
+                     for x in (t["took"] if t else [])]
+
+
 def card_line(c, now):
     """An open card of an agent's own, as its band shows it above its view: its question or the row's card, its key,
     its id, dim, and how long it has been open."""
@@ -787,10 +866,12 @@ def card_line(c, now):
 
 def agent_views(data):
     """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
-    prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
-    the partition's operator's, every line a list of (text, style) segments. With what this host's agents run of crew
-    (data's `here`, here_read), each standing agent here with a recorded start has the crew it started on at the end of
-    its view's first line, or as its one line when it has no view, a team's ops and a dispatcher, with the version it is
+    prompt (plugin/hooks/status.js): the planner's, the design agent's, main-level ops's and the partition's operator's,
+    and no other standing agent's (Decision 11 of the-team-machinery-leaves), every line a list of (text, style)
+    segments; and each role's run the partition runs as its kind, under the run's name, <label>-<role>, its own lines
+    first (run_rows) and then its role's view, the reviewer's its own lines alone (crew-board "A role that runs as its
+    kind has its view"). With what this host's agents run of crew (data's `here`, here_read), each standing agent here
+    with a recorded start has the crew it started on at the end of its view's first line, with the version it is
     restarted on at its next stop once an update made it due; and while this host is held every view opens with the
     hold (teams.19). Any other agent has no view, and its mod draws nothing.
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
@@ -803,16 +884,17 @@ def agent_views(data):
     changes these views and plugin/hooks/status.js with it, each with its cases (code.8)."""
     views, cards, now = {}, {}, plan.utc(data["read_at"])
     for p in data["partitions"]:
-        views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
         views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p), f"{p['label']}-ops": ops_view(p)})
         views[f"{p['label']}-operator"] = operator_view(p)
+        for r in p.get("runs", []):  # a role's run, under the name its standing agent had, its own lines first
+            views[r["run"]] = run_rows(r, now) + views.get(r["run"], [])
         for c in p.get("cards", []):
             cards.setdefault(c["by"], []).append(card_line(c, now))
     here = data.get("here")
     if here:
-        for name, f in here["agents"].items():
-            said = [(crew_said(f, here["version"]), "dim")]
-            views[name] = [views[name][0] + [("  ", None)] + said] + views[name][1:] if views.get(name) else [row(said)]
+        for name, f in here["agents"].items():  # each a main-level role (crew.agents_here), which has a view
+            if views.get(name):
+                views[name] = [views[name][0] + [("  ", None), (crew_said(f, here["version"]), "dim")]] + views[name][1:]
         if here["held"]:
             views = {name: [held_row(here["host"], here["held"])] + v for name, v in views.items()}
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
@@ -837,7 +919,7 @@ def held_row(host, h):
 
 def here_read(fleet, label):
     """What this host's agents of a partition run of crew, for their bands (agent_views): this host, its crew's
-    version, its hold, and each standing agent of the partition here with a recorded start, by name: the version it
+    version, its hold, and each main-level role of the partition here with a recorded start, by name (crew.agents_here): the version it
     started on, and whether an update has made it due a restart (crew.due_of)."""
     commit, version = crew.crew_version()
     started, agents = crew.starts(), {}
@@ -1238,10 +1320,11 @@ def sweeps_after(m, readings, unchecked):
 
 def readings_hosts(fleet, labels):
     """The hosts whose card readings folders the follower stamps, with the partitions of each, {host: [labels]}: each
-    partition's main machine and every host its teams run on, where its card sessions are swept (plan.sweep_sessions)."""
+    partition's main machine and every host its runners answer on, as crew's cache holds their branches with no fetch
+    (plan.partition_hosts, plan.12), where its card sessions are swept (plan.sweep_sessions)."""
     out = {}
     for l in labels:
-        for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
+        for h in plan.partition_hosts(fleet, l, fetch=False):
             out.setdefault(h, []).append(l)
     return out
 
@@ -1294,6 +1377,26 @@ def here_key(head):
 def label_errors(errors, label):
     """The plans' errors of one partition's read: its branch's, named <label>/main of <repo>, or its plan's."""
     return {k: v for k, v in errors.items() if k.startswith(f"{label}/main of ") or k == f"the plan of {label}"}
+
+
+# Pending You's notice for an always-on script, `pendingyou watch -- <command>` (pendingyou 0.39.0, read 2026-10-31):
+# the command run once for each change on a card of the host's sign-in. What it and each crew _answered say, the
+# follower's child's words, are appended here.
+HEARD = FRAMES.parent / "heard.log"
+
+
+def answers_watched(fleet, host):
+    """Whether the host's follower runs Pending You's notice (design Decision 5 of roles-run-as-flume-kinds, role-runs
+    "The follower hears Pending You's notice while a role here runs as its kind"): while a partition whose main level
+    runs on the host names a stream for a role, and only then, since the notice marks each change it hands in the
+    host's Pending You state, which a session's pickup at its start reads."""
+    return any(p["machine"] == host and any(s is not False for s in p["flume"].values()) for p in fleet["partitions"].values())
+
+
+def notice_argv():
+    """The notice the follower runs: Pending You's watch, running crew _answered for each change on a card, which asks
+    a role whose run the card's asker is and reads nothing else of the card (plan.card_answered)."""
+    return ["pendingyou", "watch", "--", "bash", str(crew.HOME / "plugin/bin/crew"), "_answered"]
 
 
 class Watches:
@@ -1443,6 +1546,8 @@ class Follower:
         self.ticks, self.left, self.cards = 0, False, None
         # what handing out the restarts said before the follower started again as the new crew (again)
         self.updated = json.loads(os.environ.pop("CREW_FOLLOWER_UPDATED", "") or "{}")
+        # Pending You's notice while a role here runs as its kind (hear), None while it runs none
+        self.notice = None
 
     def fleet(self):
         """The teams file and the hosts file read afresh, not as this process first read them, and the partitions
@@ -1495,6 +1600,8 @@ class Follower:
         fleet = self.fleet()
         self.fetch(fleet)
         self.ask(fleet)
+        if self.watches is not None and fleet is not None:
+            self.hear(fleet)
         self.refresh(tick=True)
         if self.kept.cards is None:
             self.kept.cards = ({}, None)
@@ -1502,6 +1609,35 @@ class Follower:
     def once(self):
         """One tick, waiting for nothing: crew _follow --once, for the tiers."""
         self.tick()
+
+    def hear(self, fleet):
+        """Pending You's notice (notice_argv) run as a child of the follower's own while a role whose main level is
+        here runs as its kind (answers_watched), started again at a tick when it ended, and let go when none does; its
+        words and crew _answered's appended to HEARD. One a host, as the follower is (design Decision 5)."""
+        if self.notice is not None and self.notice.poll() is not None:
+            self.notice = None
+        if not answers_watched(fleet, crew.this_host()):
+            self.unhear()
+            return
+        if self.notice is not None:
+            return
+        try:
+            HEARD.parent.mkdir(parents=True, exist_ok=True)
+            with open(HEARD, "a") as log:
+                self.notice = subprocess.Popen(notice_argv(), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+        except OSError as e:
+            print(f"crew's follower could not run Pending You's notice, `{shlex.join(notice_argv()[:2])}`: {e.strerror or e}", file=sys.stderr)
+
+    def unhear(self):
+        if self.notice is None:
+            return
+        self.notice.terminate()
+        try:
+            self.notice.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.notice.kill()
+            self.notice.wait()
+        self.notice = None
 
     def look(self, fleet):
         """What the look reads (look), with each kit's queue as its watch last read it, read now without blocking."""
@@ -1637,10 +1773,10 @@ class Follower:
         if todo["cards"]:
             swept = plan.sweep_cards(fleet, read, answers=self.kept.cards, listed=self.kept.listed)
             read = dict(read, cards=plan.swept_cards(read["cards"], swept, crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
-                                                     {l: plan.partition_kits(fleet, l) for l, *_ in read["found"]}))
+                                                     read["kits"]))
             self.left = card_left(swept)
         ended, unchecked = plan.sweep_sessions(fleet, read["found"], read["sv"], read["rows"], read["cards"], read["unread"],
-                                               read.get("batched") or {}, todo["sessions"]) if todo["sessions"] else ([], [])
+                                               read.get("batched") or {}, todo["sessions"], read.get("runs")) if todo["sessions"] else ([], [])
         said = io.StringIO()
         with contextlib.redirect_stderr(said):
             told = plan.reckon_batches(fleet, read["found"], read, plan.batch_told(self.told, read["found"], tick))
@@ -1657,6 +1793,7 @@ class Follower:
                    for l in self.labels}
         if self.watches is not None:
             self.watches.close_all()
+        self.unhear()
         try:
             os.set_inheritable(self.lock.fileno(), True)
             sys.stdout.flush()
@@ -1700,6 +1837,7 @@ class Follower:
     def close(self):
         if self.watches is not None:
             self.watches.close_all()
+        self.unhear()
         self.lock.close()
 
 

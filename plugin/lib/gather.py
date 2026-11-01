@@ -4,11 +4,11 @@
   python3 gather.py '<request>'      or, sent over ssh:  python3 - '<request>' < gather.py
 
 The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
-"slots": {<team>: <its slots file, ~ allowed>}, "queued": <the host's follower's [submissions, why] of the kit's queue,
+"queued": <the host's follower's [submissions, why] of the kit's queue,
 read from its overview watch, in place of running sluice>, "decided": <with queued, the follower's [submissions, why]
 of those it kept of the asked bolts and saw decided>}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
-"board": <true to also read each team's slots file and the explorations on the kit's main>,
+"board": <true to also read the explorations on the kit's main>,
 "fetch": <true to fetch each kit's GitHub, its origin, before reading it>,
 "stamped": <true to also give each kit's stamp, taken before it is read>,
 "stamp": <true to give each kit's stamp alone and read nothing else: the host's follower's check that nothing moved,
@@ -20,18 +20,17 @@ answered {"kits": {<main>: <stamp>}, "readings": <the stamp of the card readings
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
-whether it exists, the changes and chores it holds, those it holds archived, the tasks of each it holds open
-that main does not hold, its worktree, its head and the head's time; each place under
-<dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
-paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
-head, head's time and how many commits of its own it holds beyond the bolt; each fix's place with its branch's facts
-(fix_facts), and, as fix_branches, the same facts of each fix branch no worktree holds, its place gone; the kit's
+whether it exists, the changes and chores it holds, those it holds archived, its worktree, its head and the head's
+time; each place under <dir>/places with its branch, its head and the head's time, its change's tasks and whether
+its planning is complete, read from the change archived there once its merge has archived it; each chore's place,
+<dir>/places/chore-<name> on chore/<name>, with its bolt,
+head, head's time and how many commits of its own it holds beyond the bolt; the kit's
 policy, its main's .config/sluice.toml as text; each bolt's verdict, the Sluice-Result trailer on its head when
 sluice landed it; and, for a kit the request asks bolts of, the submissions standing in sluice's queue (submissions)
 and those its branches' recent events name decided (decided), read from one `sluice overview --json`, or each and
 why it can't be read; with the follower's queue handed in (queued, and its kept decided submissions, decided) it runs
 no sluice, and it never reads sluice's record of a branch's submissions. With sites, each worktree's devurl names and the host's
-portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
+portless routes; with board, each
 folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
 system, devurl, portless and sluice and, for a change whose workflow it does not read itself, openspec, and changes
 nothing.
@@ -75,23 +74,6 @@ def archived(main, ref):
                    if len(n) > 11 and DATED.fullmatch(n[:11])})
 
 
-def opened(main, ref):
-    """The OpenSpec changes a branch holds open, by name: each folder directly under openspec/changes/ but the archive."""
-    out = run(["git", "ls-tree", "-d", "--name-only", ref, "openspec/changes/"], main) or ""
-    return sorted(n for n in (l[len("openspec/changes/"):] for l in out.splitlines()) if n and n != "archive")
-
-
-def carried(main, ref, held):
-    """The tasks, [done, total], of each change a bolt holds open that main does not hold (held, main's changes): a
-    unit's change carried there open inside another unit's merge, since a unit's own merge archives it (teams.17)."""
-    out = {}
-    for name in opened(main, ref):
-        if name not in held:
-            tasks = tasks_of(run(["git", "show", f"{ref}:openspec/changes/{name}/tasks.md"], main) or "")
-            out[name] = [sum(done for done, _ in tasks), len(tasks)]
-    return out
-
-
 # A chore's name, as a commit's `Chore:` trailer gives it (plan.11).
 CHORE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
@@ -131,18 +113,11 @@ def worktrees(main):
 
 def upstreams(main):
     out = {}
-    for line in (run(["git", "for-each-ref", "--format=%(refname:short) %(upstream:short)", "refs/heads/unit/", "refs/heads/fix/",
-                      "refs/heads/chore/"], main) or "").splitlines():
+    for line in (run(["git", "for-each-ref", "--format=%(refname:short) %(upstream:short)", "refs/heads/unit/", "refs/heads/chore/"],
+                     main) or "").splitlines():
         b, _, up = line.partition(" ")
         out[b] = up
     return out
-
-
-def fixes_dropped(main):
-    """The fix branches of a kit checkout their conductor dropped, by the mark crew fix --drop sets in the kit's git
-    config, branch.<fix>.crew dropped (record 0028)."""
-    out = run(["git", "config", "--get-regexp", r"^branch\.fix/.*\.crew$"], main) or ""
-    return {k[len("branch."):-len(".crew")] for k, _, v in (l.partition(" ") for l in out.splitlines()) if v == "dropped"}
 
 
 def bolt_ref(up):
@@ -222,64 +197,9 @@ def short(ref):
     return ref
 
 
-def holds(main, ref, branch):
-    """Whether ref holds a branch's tip."""
-    return subprocess.run(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", ref], cwd=main, capture_output=True).returncode == 0
-
-
-def moved(main, branch):
-    """Whether a branch has moved since it was made: its tip is not its reflog's first entry. False when its reflog is
-    gone."""
-    born = (run(["git", "reflog", "show", "--format=%H", f"refs/heads/{branch}"], main) or "").split()
-    tip = (run(["git", "rev-parse", f"refs/heads/{branch}"], main) or "").strip()
-    return bool(born) and tip != born[-1]
-
-
-def fix_merged(main, branch, bolt, ref=None):
-    """Whether a fix has merged into its bolt: the bolt, at the ref it is read at (ref, else bolt_read), holds the fix's
-    tip, and the fix has moved since it was made (its reflog's first entry)."""
-    ref = ref or (bolt_read(main, bolt)[0] if bolt else None)
-    return bool(ref) and holds(main, ref, branch) and moved(main, branch)
-
-
-def fix_facts(main, branches, ups, now, at=None):
-    """What a fix's stage is read from, of each fix branch named (branches), by branch, with its upstream from ups
-    (upstreams): its bolt (bolt_ref), whether it has merged into it (merged, as fix_merged reads it), at the ref its
-    bolt is read at when at names it ({bolt: ref}, bolt_at; None for a bolt crew can't read), else at the ref it
-    tracks, whether the kit's main now (now, now_ref) holds its tip (on_main), and whether it has moved since it was
-    made (moved; None when neither main nor its bolt holds its tip, so it decides nothing). Read with as few processes as
-    git allows: one listing of the fix branches main holds and one of the bolt refs; a branch's bolt is asked only when
-    its ref exists, and its reflog only when main or its bolt holds its tip."""
-    if not branches:
-        return {}
-    landed = {r[len("refs/heads/"):] for r in (run(["git", "for-each-ref", f"--merged={now}", "--format=%(refname)", "refs/heads/fix/"], main) or "").split()}
-    refs = set((run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/", "refs/remotes/origin/bolt/"], main) or "").split())
-    out = {}
-    for b in branches:
-        bolt, ref = bolt_ref(ups.get(b, ""))
-        ref = at[bolt] if at is not None and bolt in at else ref
-        in_bolt = ref in refs and holds(main, ref, b)
-        went = moved(main, b) if in_bolt or b in landed else None
-        out[b] = {"bolt": bolt, "merged": in_bolt and went, "on_main": b in landed, "moved": went}
-    return out
-
-
-def own_head(cwd, branch, bolt):
-    """The newest commit of a chore's own on its branch beyond its bolt, read at the ref the bolt is read at
-    (bolt_read), its first-parent line with no merges, as (short sha, committer time in ISO 8601); (None, None) when it
-    has none or the bolt can't be read."""
-    ref = bolt_read(cwd, bolt)[0]
-    out = (run(["git", "log", "-1", "--first-parent", "--no-merges", "--format=%h %cI", f"{ref}..refs/heads/{branch}"], cwd)
-           or "").split() if ref else []
-    return (out[0], out[1]) if len(out) == 2 else (None, None)
-
-
 def head_at(cwd, ref):
     """The committer time of a ref, as ISO 8601, or None."""
     return (run(["git", "log", "-1", "--format=%cI", ref], cwd) or "").strip() or None
-
-
-REPORT = re.compile(r"^verify-(.+)-(\d{8}-\d{4})\.md$")
 
 
 # A change's tasks and whether its planning is complete, read from its files by openspec 1.14.1's own rules for its
@@ -391,37 +311,9 @@ def change_tasks(change):
         return []
 
 
-FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
-
-
-def touches(text):
-    """What a proposal declares it touches: the lines of the one fenced block under its `## Touches` heading, each a
-    path or glob relative to the kit's root ({"entries": [...]}), or what is missing ({"missing": ...}): the heading,
-    the block before the next heading, or any line in it."""
-    if text is None:
-        return {"missing": "it has no proposal.md"}
-    lines = text.split("\n")
-    at = next((i for i, l in enumerate(lines) if re.fullmatch(r"##[ \t]+Touches[ \t]*\r?", l)), None)
-    if at is None:
-        return {"missing": "its proposal.md has no `## Touches` heading"}
-    for i in range(at + 1, len(lines)):
-        if re.match(r"^#{1,2}[ \t]", lines[i]):
-            break
-        m = FENCE.match(lines[i])
-        if m:
-            entries = []
-            for l in lines[i + 1:]:
-                if l.strip().startswith(m.group(1)) and not l.strip().strip(m.group(1)[0]):
-                    break
-                if l.strip():
-                    entries.append(l.strip())
-            return {"entries": entries} if entries else {"missing": "the block under its `## Touches` heading is empty"}
-    return {"missing": "its `## Touches` heading holds no fenced block"}
-
-
 def place(path, unit):
-    """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, the open
-    tasks, and what its proposal declares it touches. The tasks and the planning are read from the change's files, or
+    """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, and the open
+    tasks. The tasks and the planning are read from the change's files, or
     through openspec when planned() hands the change to it. A change its merge archived in the place, as a unit's merge
     stage does first (teams.17), is read from the archive, its planning complete, and the place says it is archived."""
     info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None,
@@ -431,11 +323,6 @@ def place(path, unit):
         gone = sorted(d for d in os.listdir(archive) if d[11:] == unit and DATED.fullmatch(d[:11]))
         if gone:
             change, info["archived"] = os.path.join(archive, gone[-1]), True
-    try:
-        with open(os.path.join(change, "proposal.md"), encoding="utf-8", errors="replace", newline="") as f:
-            info["touches"] = touches(f.read())
-    except OSError:
-        info["touches"] = touches(None)
     tasks = change_tasks(change)
     info["open"] = [d for done, d in tasks if not done]
     if info["archived"]:
@@ -482,20 +369,6 @@ def routes():
             name = host.rsplit(".", 1)[0] if host.rsplit(".", 1)[-1] in ("local", "localhost") else host
             found.append({"url": m.group(1) + (m.group(3) or ""), "name": name})
     return found if out is not None else None
-
-
-def slots(files):
-    """Each team's slots, from its slots file: {team: [{slot, kind, name, place}]}, one per non-blank line of four
-    fields; a file that isn't there gives [], and a line of another shape is skipped."""
-    out = {}
-    for team, path in files.items():
-        try:
-            with open(os.path.expanduser(path), encoding="utf-8", errors="replace") as f:
-                lines = f.read().splitlines()
-        except OSError:
-            lines = []
-        out[team] = [dict(zip(("slot", "kind", "name", "place"), l.split())) for l in lines if len(l.split()) == 4]
-    return out
 
 
 def has_origin(main):
@@ -568,8 +441,7 @@ def stamp(req):
     """A kit's stamp, what moves whenever anything kit() reads of it moves, read with os.stat and os.scandir alone so a
     check that nothing moved starts no process (plan.12): the size and time of every file of the kit's git folder the
     gather reads through git (HEAD, packed-refs, config, every loose ref, each worktree's HEAD and gitdir), of every file
-    of each unit's place's change folder and its archive and openspec config, and of each slots file the request names,
-    hashed to one value. It reads nothing under the git folder's sluice/: a kit's queue is its overview's to say (sluice
+    of each unit's place's change folder and its archive and openspec config, hashed to one value. It reads nothing under the git folder's sluice/: a kit's queue is its overview's to say (sluice
     ADR 0023), followed by the host's follower. None when a file it reads can't be read (read.1); a kit with no checkout
     stamps as such, and its gather says so."""
     main, kdir = req["main"], os.path.realpath(req["dir"])
@@ -613,8 +485,6 @@ def stamp(req):
                 pass
             for f in ("config.yaml", "config.yml"):
                 note(os.path.join(path, "openspec", f))
-        for path in sorted(req.get("slots", {}).values()):
-            note(os.path.expanduser(path))
     except OSError:
         return None
     return seen.digest()
@@ -866,7 +736,7 @@ def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False)
     # main_at, the revision of main it was read at, by which the rail's sweep tells main moved under a kit's landings
     # card (plan.landings_moved).
     out = {"ok": True, "main": changes(main, now), "chores": chores(main, now), "main_at": main_at.strip(), "bolts": {},
-           "places": {}, "chore_places": {}, "fixes": []}
+           "places": {}, "chore_places": {}}
     # The kit's policy, as its main holds it: what gates its bolt branches, which crew reads before it gives a bolt.
     out["policy"] = run(["git", "show", f"{now}:.config/sluice.toml"], main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
@@ -883,7 +753,6 @@ def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False)
         wt = os.path.join(kdir, "bolts", b)
         out["bolts"][b] = {"exists": ref is not None, "at": short(ref), "changes": changes(main, ref) if ref else [],
                            "archived": archived(main, ref) if ref else [],
-                           "open": carried(main, ref, out["main"]) if ref else {},
                            "chores": chores(main, ref) if ref else [],
                            "worktree": wt if at.get(wt) == f"bolt/{b}" else None,
                            "head": (run(["git", "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], main) or "").strip() or None if ref else None,
@@ -892,7 +761,7 @@ def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False)
                            "verdict": (run(["git", "log", "-1", "--format=%(trailers:key=Sluice-Result,valueonly)",
                                             ref], main) or "").strip() if ref else None,
                            **({"error": why} if why else {})}
-    places, dropped = os.path.join(kdir, "places"), None
+    places = os.path.join(kdir, "places")
     for path, branch in at.items():
         if os.path.dirname(path) != places or not branch:
             continue
@@ -903,16 +772,6 @@ def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False)
         elif branch.startswith("chore/") and os.path.basename(path) == f"chore-{branch[6:]}":
             bolt = bolt_of(ups.get(branch))
             out["chore_places"][branch[6:]] = dict(chore_place(path, bolt, reads.get(bolt)), branch=branch, bolt=bolt)
-        elif branch.startswith("fix/"):
-            dropped = fixes_dropped(main) if dropped is None else dropped  # read once, and only for a kit with a fix's place
-            out["fixes"].append(dict(fix=branch, path=path, dropped=branch in dropped))
-    # Each fix branch's facts, read together: a fix's place's, and, as fix_branches, those of each fix branch no
-    # worktree holds, whose place is gone, so a slot holding one and the tidy still read it (teams.1, teams.3).
-    worked = {b for b in at.values() if b}
-    facts = fix_facts(main, sorted({b for b in ups if b.startswith("fix/") and b not in worked} | {f["fix"] for f in out["fixes"]}), ups, now, reads)
-    for f in out["fixes"]:
-        f.update(facts[f["fix"]])
-    out["fix_branches"] = {b: f for b, f in facts.items() if b not in worked}
     # What stands in sluice's queue, read once for a kit this host holds a bolt of (teams.22): each submission's number
     # on its bolt's row, a queue that can't be read said there, never read as empty (read.1).
     # The host's follower hands in what its overview watch of the kit last read (queued) and what it kept of each
@@ -939,7 +798,6 @@ def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False)
                         if os.path.dirname(path) in (places, os.path.join(kdir, "bolts")) and branch}
         out["routes"] = running
     if board:
-        out["slots"] = slots(req.get("slots", {}))
         out["explorations"] = explorations(main, now)
     return out
 

@@ -7,7 +7,8 @@ Code brings back the conversation, the brief until the first compaction, the mod
 effort, the permission mode or the added folders (measured on 2.1.296, 2026-10-18), and no hook can give those back.
 The fleet's settings make the mode Bypass Permissions, and in bypass the agent still reads and writes those folders
 by absolute path: it loses only a `cd` into one lasting past its Bash call, their project skills and their listing
-among its working folders. `crew resume` gives back all of them. A planned restart takes the crew agents down first
+among its working folders. A start through crew-role, crew revive's, crew main up's or an update's restart, gives back
+all of them. A planned restart takes the crew agents down first
 and starts them again through crew, so a bare resume is a crash's or a hard reboot's alone (the user, 2026-10-18).
 The pane comes back with no name, so `crew tell` and the greetings miss it, and the agent's crew commands lose who
 is writing and which partition is theirs.
@@ -18,17 +19,16 @@ resumes a role there (crew.py last_conversation). It records too the herdr sessi
 (CREW_HERDR_SESSION and CREW_PANE, from HERDR_SESSION and HERDR_PANE_ID, empty outside herdr), at herdr's resume the
 pane it resumed in, so that a tell finds the agent's session by its pane when herdr names none for it (questions.py --pane). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
 variables back, and SLUICE_AGENT, the same name for sluice, as crew-role sets them, through CLAUDE_ENV_FILE, which Claude Code applies to
-each of its Bash commands, and its pane gets its name back, and a team's conductor's or ops's pane the token naming its bolt's
-branch for sluice's plugins (teams.20); its SLUICE_BRANCH, which sluice's board reads from the Claude process, no hook can give
-back, and it comes with `crew resume` or `crew revive`. Such a session keeps its brief from the transcript only
+each of its Bash commands, and its pane gets its name back. Such a session keeps its brief from the transcript only
 until its first compaction, so at each compaction it is given its brief back as context, built by crew.py as
-crew-role builds it, from the definition the record names (crew.brief_due, crew.brief_role). A main level's agent
-(crew.main_named) gets all this back only on the host the teams file names for its main level: a pane herdr replays on
-another host, a standby that once ran it, gets no identity, pane name or brief, its record is left as it was, and it is
-told at each start that it is no agent of crew's there and where the main level runs, or why crew can't tell
-(crew.identity_withheld, main-level). Any other session costs one file lookup. A start that loads crew's plugin, a new session's or a resume's, records the commit and version of
-crew the session loaded, and a session crew-role started the digest of its launch (CREW_LAUNCH) and the branch it carries
-for sluice (CREW_BRANCH, empty once herdr has resumed it bare), which tell crew's mod
+crew-role builds it, from the definition the record names (crew.brief_due, crew.brief_role). Every agent crew starts
+is a main level's (crew.main_named), and it gets all this back only on the host the teams file names for its main level:
+a pane herdr replays on another host, a standby that once ran it, gets no identity, pane name or brief, its record is
+left as it was, and it is told at each start that it is no agent of crew's there and where the main level runs, or why
+crew can't tell (crew.identity_withheld, main-level). A session whose record names an agent crew no longer models, a
+team's conductor or a dispatcher from before teams left, gets nothing back and its record is left as it was. Any other
+session costs one file lookup. A start that loads crew's plugin, a new session's or a resume's, records the commit and version of
+crew the session loaded, and a session crew-role started the digest of its launch (CREW_LAUNCH), which tell crew's mod
 the version an agent runs and crew whether an update has made it due a restart (crew.update_due, teams.19); a
 compaction or a /clear loads nothing anew and keeps what the record says. At every start it also removes the session's question mark
 (hooks/questions), so a session resumed after its pane died with a question open carries no mark whose answer will
@@ -44,9 +44,8 @@ import sys
 LIB = pathlib.Path(__file__).resolve().parent.parent / "lib"
 
 # herdr knows the agent only once it has started, after this hook: crew's own start retries its rename the same way.
-# The pane then gets back the branch sluice's plugins read, which herdr keeps no more than its name (crew.hint_agent).
-RENAME = ('for _ in $(seq 60); do "$0" agent rename "$1" "$2" >/dev/null 2>&1 && break; sleep 1; done; '
-          'HERDR_BIN_PATH="$0" "$3" "$4" hint "$2" "$1" >/dev/null 2>&1')
+RENAME = 'for _ in $(seq 60); do "$0" agent rename "$1" "$2" >/dev/null 2>&1 && break; sleep 1; done'
+
 
 
 # The starts that load crew's plugin anew: a compaction or a /clear goes on with what the session loaded.
@@ -97,7 +96,7 @@ def main():
         record.parent.mkdir(parents=True, exist_ok=True)
         cwd = hook.get("cwd") if isinstance(hook.get("cwd"), str) else os.getcwd()
         record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\nCREW_CWD={cwd}\n"
-                          f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\nCREW_BRANCH={os.environ.get('SLUICE_BRANCH', '')}\n"
+                          f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\n"
                           + pane_lines() + loaded(hook.get("source"), saved, os.environ.get("CREW_LAUNCH", "")))
         return
     agent = saved.get("CREW_AGENT")
@@ -105,16 +104,16 @@ def main():
         return
     sys.path.insert(0, str(LIB))
     import crew
-    if crew.main_named(agent, saved.get("CREW_LABEL")):
-        said = withheld(crew, agent, saved["CREW_LABEL"])
-        if said:
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": said}}))
-            return
-    if hook.get("source") in LOADS:  # herdr's resume loads crew's plugin anew, its launch the one it began with,
-        # and the process has no SLUICE_BRANCH, crew's environment being gone (teams.20)
-        record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH", "CREW_BRANCH",
+    if not crew.main_named(agent, saved.get("CREW_LABEL")):  # a team's agent from before: crew models none (main-level)
+        return
+    said = withheld(crew, agent, saved["CREW_LABEL"])
+    if said:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": said}}))
+        return
+    if hook.get("source") in LOADS:  # herdr's resume loads crew's plugin anew, its launch the one it began with
+        record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH",
                                                                                         "CREW_HERDR_SESSION", "CREW_PANE"))
-                          + "CREW_BRANCH=\n" + pane_lines() + loaded(hook.get("source"), saved, saved.get("CREW_LAUNCH", "")))
+                          + pane_lines() + loaded(hook.get("source"), saved, saved.get("CREW_LAUNCH", "")))
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:
         with open(env_file, "a") as f:
@@ -123,7 +122,7 @@ def main():
     pane = os.environ.get("HERDR_PANE_ID")
     if os.environ.get("HERDR_ENV") == "1" and pane:
         herdr = os.environ.get("HERDR_BIN_PATH") or "herdr"
-        subprocess.Popen(["bash", "-c", RENAME, herdr, pane, agent, sys.executable, str(LIB / "crew.py")], stdin=subprocess.DEVNULL,
+        subprocess.Popen(["bash", "-c", RENAME, herdr, pane, agent], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     # A resume needs no brief: the transcript holds it. A compaction drops it, so it is given back.
     name = crew.brief_due(hook.get("source"), False, saved)

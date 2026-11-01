@@ -6,7 +6,7 @@ The board view of crew's page: one partition's flow, read by `crew board`, drawn
 ## Requirements
 
 ### Requirement: Operation draws each environment's deploys as records
-The board view's Operation lane SHALL draw, under each environment's name, its deploys and the operations waiting on it as the board reads them, each deploy a record stamped with where it stands, and each with its marker; they SHALL be narrowed to a team as the teams on the environment's host.
+The board view's Operation lane SHALL draw, under each environment's name, its deploys and the operations waiting on it as the board reads them, each deploy a record stamped with where it stands, and each with its marker.
 
 #### Scenario: An offer waiting on the user
 - **WHEN** a deploy of mac-studio is offered and its card is open
@@ -49,21 +49,14 @@ The Inception lane SHALL show each unmoved signal as a quote with a left rule, i
 - **THEN** Inception shows a counter for wldn-planner saying 2 and 3 days, and each signal as a quote under it
 
 ### Requirement: Bolt plan shows sheets, planned ledgers and slips
-The Bolt plan lane SHALL show each open proposal as a sheet with its number, who proposed it, the first line of its case and whose agreement it waits on; each planned bolt as a ledger whose units are all queued; and each queued unit as a slip with its repository greyed before its name.
+The Bolt plan lane SHALL show each open proposal as a sheet with its number, who proposed it and the first line of its case, waiting on the user alone; each planned bolt as a ledger whose units are all queued; and each queued unit as a slip with its repository greyed before its name.
 
 #### Scenario: A queued unit
 - **WHEN** unit zone-two of switchboard-kit is in the queue
 - **THEN** Bolt plan shows a slip naming zone-two with switchboard-kit greyed before it
 
-### Requirement: Construction shows each held bolt as a ledger with its chain
-The Construction lane SHALL show each held bolt as a ledger: its head naming repository, bolt, team and host; its units in plan order as a chain, each marked merged, building or queued, a building unit with its stage, tasks, slot and dev server; its fixes on a row of their own; and its server at the foot.
-
-#### Scenario: A bolt being built
-- **WHEN** bolt tenant-environments is held by swb-1 with unit a in code at 1 of 2 tasks and unit b planned
-- **THEN** Construction shows tenant-environments as a ledger headed by its repository, swb-1 and its host, with a as a building link of its chain saying code 1/2 and b as a queued link
-
 ### Requirement: Operation shows landings as records
-The Operation lane SHALL show each bolt landed in the last seven days as a muted record, newest first, with a stamp saying when and by whom it landed, and its team and units.
+The Operation lane SHALL show each bolt landed in the last seven days as a muted record, newest first, with a stamp saying when and by whom it landed, and its units.
 
 #### Scenario: A landing
 - **WHEN** wldn-ops landed bolt apex-zones two days ago
@@ -106,32 +99,6 @@ With the board view and the dock, the page SHALL still be one file that holds it
 - **WHEN** the served page is opened, a dock is opened, and a word is sent
 - **THEN** the page's only request is one post to its own address's `word`, carrying the partition, key, agent and text
 
-### Requirement: A viewer narrows every lane to one team
-The page's header SHALL offer each team of the partition, as the teams file lists them, and all teams. Choosing a team SHALL narrow every lane to the objects the board's read gives as that team's, and a lane left empty SHALL say there is nothing in it for that team. The attention strip SHALL never be narrowed.
-
-#### Scenario: One team
-- **WHEN** the user chooses crw-3 on swancloud's page
-- **THEN** Construction shows only the bolt crw-3 holds, Inception only the signals crw-3's agents captured, and Bolt plan and Operation only what is crw-3's
-
-#### Scenario: A host down while narrowed
-- **WHEN** the user has chosen crw-3 and a host of another team did not answer
-- **THEN** the attention strip still names that host
-
-### Requirement: The team chosen survives a reload
-The choice of team SHALL survive a reload of the page and a new page written over it: it SHALL be kept in the page's address, and in the browser for that partition when the address names none. A kept team the partition no longer has SHALL be shown as all teams.
-
-#### Scenario: The page is written again
-- **WHEN** the user has chosen crw-3 and reloads after the page was written again
-- **THEN** the page opens narrowed to crw-3
-
-#### Scenario: Opened from a plain link
-- **WHEN** the user chose crw-3 earlier and now opens swancloud's page from a link with no team in it
-- **THEN** the page opens narrowed to crw-3
-
-#### Scenario: A team that is gone
-- **WHEN** the address names a team the partition no longer has
-- **THEN** the page shows all teams
-
 ### Requirement: The header names every partition and links to its page
 The page's header SHALL name every partition in the teams file, in its order, with the page's own partition marked as current. Each other partition SHALL be a link to that partition's page in the layout of this page's own file: `<label>.html` beside it when this page's file is named for its partition, `../<label>/` with the same file name when this page's folder is named for its partition, both when both are. When neither names its partition, the other partitions SHALL be named and not linked, and `crew page` SHALL say so. Before the partitions the header SHALL link to the fleet page in the same layout: `index.html` beside a page whose file alone is named for its partition, as the board is served, and `../page.html` from a page written as `page.html` in a folder named for its partition, as crew writes them; a page in any other layout SHALL have no link to the fleet page, since crew cannot tell where the fleet page is.
 
@@ -152,15 +119,15 @@ The page's header SHALL name every partition in the teams file, in its order, wi
 - **THEN** the header has no link to the fleet page and names madswan and swancloud without linking them, and `crew page` prints a line saying the other partitions are not linked because the page's file and folder are not named for wldn
 
 ### Requirement: Every item on the board opens its dock
-A click on an item of the board view, or Enter on it, SHALL open that item's dock: a signal's quote, a proposal's sheet, a planned or held bolt's ledger, a unit's or chore's link in a chain or its queued slip, a fix's row, a landing's record, a deploy's record, a waiting operation's record and a team's pill. Each deploy of the deploys view SHALL open the same dock as its record on the board. Every item the page draws SHALL have a dock.
+A click on an item of the board view, or Enter on it, SHALL open that item's dock: a signal's quote, a proposal's sheet, a planned or started bolt's ledger, a unit's or chore's link in a chain or its queued slip, a fix's row, a landing's record, a deploy's record and a waiting operation's record. Each deploy of the deploys view SHALL open the same dock as its record on the board. Every item the page draws SHALL have a dock, and no team SHALL have one.
 
 #### Scenario: A unit being built
 - **WHEN** the user clicks unit a in tenant-environments' ledger
-- **THEN** a dock opens titled a, saying it is a unit of bolt tenant-environments in code at 1 of 2 tasks, in its slot
+- **THEN** a dock opens titled a, saying it is a unit of bolt tenant-environments in code at 1 of 2 tasks, naming no slot
 
 #### Scenario: Every item has its dock
-- **WHEN** the page is written for a partition with a signal, a proposal, a planned bolt, a held bolt with a unit and a fix, a queued unit, a landing, a deploy and a waiting operation
-- **THEN** every one of them carries the key of a dock the page holds, and so does each team of the partition
+- **WHEN** the page is written for a partition with a signal, a proposal, a planned bolt, a started bolt with a unit and a fix, a queued unit, a landing, a deploy and a waiting operation
+- **THEN** every one of them carries the key of a dock the page holds, and no dock is a team's
 
 #### Scenario: A deploy from either view
 - **WHEN** the user opens the deploy of mac-studio from the Operation lane, and then from the deploys view
@@ -189,8 +156,8 @@ A dock's head SHALL take its item's form, a proposal's a sheet's, a bolt's a led
 - **THEN** the dock shows its commits from and to, the user's word on it, its steps and checks, and bolt b with proposal 3 and the first line of its case
 
 #### Scenario: A fix
-- **WHEN** the user opens the dock of a fix of tenant-environments that has not merged
-- **THEN** the dock says it has not merged, names its slot and its server, and links its bolt
+- **WHEN** the user opens the dock of a fix of tenant-environments that has not merged, at code as the runner's records give it
+- **THEN** the dock says it has not merged, names its stage, and links its bolt
 
 ### Requirement: A dock links the items it names
 Each item a dock names that the page draws SHALL be a link that opens that item's dock in its place, and the dock SHALL keep a trail: its back control SHALL return to the dock it was opened from. An item named that the page does not draw, such as an agenda item, SHALL be named as text.
@@ -198,20 +165,6 @@ Each item a dock names that the page draws SHALL be a link that opens that item'
 #### Scenario: From a bolt to its unit and back
 - **WHEN** the user opens tenant-environments' dock, follows unit a, then presses back
 - **THEN** unit a's dock replaces the bolt's, and back shows the bolt's dock again
-
-### Requirement: The strip names the partition's teams
-The strip under the header SHALL name each team of the partition, in the teams file's order, as a pill with its host, after the hosts; it SHALL never be narrowed. A team's dock SHALL show its kits, its host and herdr session, the Claude account that session runs on, the bolts it holds, its landings in the board's window, the signals its agents captured and the environment on its host, each a link where the page draws it.
-
-#### Scenario: A team with no bolt
-- **WHEN** crw-4 holds no bolt and the user clicks its pill
-- **THEN** crw-4's dock shows its kits, its host and session and its account, and says it holds no bolt
-
-### Requirement: A subscription's dock lists its sessions
-The Claude account a team's session runs on SHALL be a link in that team's dock opening the account's dock, which SHALL list the partition's sessions on that account, as the hosts file names them: each team and each main-level agent on it, with its host and session. An account the hosts file does not name for a session SHALL be said not to be named, never shown blank.
-
-#### Scenario: Two teams on one account
-- **WHEN** crw-1 and crw-2 run in sessions whose account is madswan-2 and the user opens madswan-2 from crw-1's dock
-- **THEN** madswan-2's dock lists crw-1 and crw-2 with their hosts and sessions, and any main-level agent of the partition on it
 
 ### Requirement: The dock answers nothing
 A dock SHALL hold no control that answers a card or moves anything: it SHALL have no foot, and an item waiting on a decision SHALL carry its marker saying whether its card is open and who asked it, as the board does, the card being answered on the rail.
@@ -221,7 +174,7 @@ A dock SHALL hold no control that answers a card or moves anything: it SHALL hav
 - **THEN** the dock carries ✓ saying its card is open and who asked it, and holds no control that approves it
 
 ### Requirement: The open dock survives a reload
-The dock open SHALL be kept in the page's address beside the team and the view, so a reload, or the page written again over this one, opens the same item's dock. An item the page no longer holds SHALL leave the board shown with no dock open.
+The dock open SHALL be kept in the page's address beside the view, so a reload, or the page written again over this one, opens the same item's dock. An item the page no longer holds SHALL leave the board shown with no dock open.
 
 #### Scenario: The page is written again
 - **WHEN** the user has unit a's dock open and reloads after the page was written again
@@ -235,19 +188,19 @@ The dock open SHALL be kept in the page's address beside the team and the view, 
 Every dock SHALL end with a one-line field for a word to the item's agent, a Send control, and a line naming the agent it goes to and saying that a card is answered on the rail. A word SHALL be at most 1000 characters. A dock opened from a page read from disk SHALL say that a word is sent only from the served board, and SHALL send nothing.
 
 #### Scenario: A unit's dock
-- **WHEN** the user opens unit a's dock, a in bolt tenant-environments held by swb-1
-- **THEN** the dock ends with a field and Send, naming swb-1-conductor as who the word goes to and saying that a card is answered on the rail
+- **WHEN** the user opens unit a's dock, a in started bolt tenant-environments
+- **THEN** the dock ends with a field and Send, naming the partition's planner as who the word goes to and saying that a card is answered on the rail
 
 #### Scenario: Opened from disk
 - **WHEN** the page is opened from a file on disk and the user opens a dock
 - **THEN** the dock says a word is sent only from the served board, and its field sends nothing
 
 ### Requirement: A word goes to the agent its item's kind names
-The agent a dock's word goes to SHALL be decided from the item's kind: a bolt, a unit or chore, or a fix to the conductor of the team holding its bolt; a proposal or a batch to the partition's planner; a signal or a record to its design agent; a landing, a deploy or an operation to its main-level ops; and a team, a subscription, a partition, or a bolt, unit or fix no team holds, to the partition's operator.
+The agent a dock's word goes to SHALL be decided from the item's kind: a bolt, a unit or chore, a fix, a proposal or a batch to the partition's planner; a signal or a record to its design agent; a landing, a deploy or an operation to its main-level ops; and a subscription or a partition to the partition's operator.
 
 #### Scenario: Each kind's agent
-- **WHEN** the page is written for wldn with a held bolt of swb-1 with a unit and a fix, a planned bolt with no team, a proposal, a signal, a landing, a deploy, an operation, a team and a subscription
-- **THEN** the bolt, unit and fix go to swb-1-conductor, the proposal to wldn-planner, the signal to wldn-design, the landing, deploy and operation to wldn-ops, and the planned bolt, the team and the subscription to wldn-operator
+- **WHEN** the page is written for wldn with a bolt in flight with a unit and a fix, a planned bolt, a proposal, a signal, a landing, a deploy, an operation and a subscription
+- **THEN** the bolt, unit, fix, planned bolt and proposal go to wldn-planner, the signal to wldn-design, the landing, deploy and operation to wldn-ops, and the subscription to wldn-operator
 
 ### Requirement: A word reaches its agent as the user's tell from the board, naming the item
 Sending a word SHALL post it, with the partition, the item's key and the agent, to the page's own address, whose listener hands it to `crew tell --board` on its standard input. crew SHALL check it and tell the agent `[crew tell from <user>@board] (on <kind> <name>) <text>`, `<user>` being the user the listener runs as, and record the tell with its length and never its text. On delivery it SHALL print `sent to <agent>` and exit zero.
@@ -307,3 +260,17 @@ Words that reached an agent only in a tell from `<user>@board` SHALL NOT be take
 #### Scenario: Typed in the pane after the board
 - **WHEN** the user sent "Batch 14 is fine" from a dock and then typed the same words in the planner's pane
 - **THEN** `crew card answer batch/14 --excerpt "Batch 14 is fine"` records batch 14 answered
+
+### Requirement: Construction shows each started bolt as a ledger with its chain
+The Construction lane SHALL show each started bolt as a ledger: its head naming repository, bolt, and the host and stream its work runs in, as the runner that took it reported them; its units in plan order as a chain, each marked merged, building or queued, a building unit with its stage and tasks; and its fixes on a row of their own. No ledger SHALL name a team or a slot, nor a dev server until the runner reports a place's addresses.
+
+#### Scenario: A started bolt being built
+- **WHEN** bolt tenant-environments is started, the box's runner keeping its kit in stream wldn, with unit a in code at 1 of 2 tasks and unit b planned
+- **THEN** Construction shows tenant-environments as a ledger headed by its repository, the box and stream wldn, with a as a building link of its chain saying code 1/2 and b as a queued link, and names no team or slot
+
+### Requirement: A subscription's dock lists the main level's sessions on it
+The Claude account a session of the partition's main level runs on SHALL have a dock on the partition's page, opened from the fleet page's subscription by the partition's link, which SHALL list the partition's sessions on that account, as the hosts file names them: each main-level agent on it, with its host and session. A session whose entry names no account SHALL have no such dock.
+
+#### Scenario: One account for three roles
+- **WHEN** wldn's design agent, planner and reviewer run in mac-studio's session wldn on account madswan-2, and its ops in session ops on account willdan
+- **THEN** madswan-2's dock lists wldn-design, wldn-planner and wldn-reviewer with mac-studio and session wldn, and willdan's lists wldn-ops

@@ -46,12 +46,12 @@ class TestDue:
         assert crew.update_due(released, None, "def", None) == (True, "its brief, model, effort or folders changed")
         assert crew.update_due(released, C1, "def", None) == (True, "its brief, model, effort or folders changed")
 
-    def test_one_that_recorded_its_launch_and_no_commit_is_not_due_and_says_a_pin_bump_needs_a_rebuild(self):
+    def test_one_that_recorded_its_launch_and_no_commit_is_not_due_and_says_a_pin_bump_needs_its_main_level_brought_up_again(self):
         released = dict(STARTED, commit=None, version=None)
         for commit in (None, C1):
             due, why = crew.update_due(released, commit, "abc", None)
             assert not due and why == crew.NO_COMMIT_SAID
-        assert "can't tell whether its plugin changed since it started" in why and "crew rebuild" in why
+        assert "can't tell whether its plugin changed since it started" in why and "crew main down and crew main up" in why
         assert "until crew reads its release where it runs" in why
 
     def test_crew_that_cannot_tell_whether_the_plugin_changed_restarts_nothing_and_says_so(self):
@@ -79,23 +79,106 @@ class TestDue:
         assert release != crew.launch_digest(l, "run `/nix/store/abc-crew-0.38.7/plugin/bin/crew status`")
 
 
+class Main:
+    """A main level's session on its host as hold.kind_end reads and acts on it: whether its agent's exit is taken at
+    once, later or never, and what was done."""
+
+    def __init__(self, label, stopped=None, exits=True):
+        self.label, self.stopped, self.exits, self.done = label, stopped, exits, []
+
+    def agent_of(self, role):
+        return f"{self.label}-{role}"
+
+    def stop(self, role, ending=None, waits=False):
+        self.done.append(f"{role} stopped" + (" with its waits" if waits else ""))
+        return self.stopped
+
+    def exited(self, role, looks):
+        self.done.append(f"{role} watched")
+        return self.exits
+
+    def record(self, act, why, roles):
+        self.done.append((act, why, roles))
+
+
+class TestKindEnd:
+    """A main level's standing agent whose partition now runs its role as its kind is due an end, never a restart
+    (design Decision 14; host-holds-and-updates "A standing agent of a role that now runs as its kind is ended at its
+    next stop"): crew.end_due and crew.due_of read it from the teams file alone, crew update passes it over
+    (hold.update_here), and crew _renew ends it once idle, its pane left and nothing started, never on a held host
+    (hold.kind_end). That the Stop hook hands it over and crew _renew ends it through herdr is the hold journey's
+    (t-hold)."""
+    FLEET = {"partitions": {"madswan": {"label": "madswan", "machine": "mac-studio",
+                                                     "flume": dict({r: False for r in crew.KIND_ROLES}, planner="madswan-main", reviewer="madswan-main")}}}
+
+    def test_a_main_level_agent_whose_role_runs_as_its_kind_is_due_an_end_and_one_that_stands_is_not(self):
+        assert crew.end_due(self.FLEET, "madswan-planner") == crew.KIND_SAID
+        assert crew.due_of(self.FLEET, "madswan-planner", STARTED, C1) == (True, crew.KIND_SAID, STARTED)
+        assert crew.end_due(self.FLEET, "madswan-design") is None
+        assert crew.due_of(self.FLEET, "madswan-reviewer", STARTED, C1) == (False, None, STARTED)
+
+    def test_crew_update_passes_it_over_and_hands_any_other_due_agent_its_restart(self, monkeypatch, capsys):
+        handed = []
+        monkeypatch.setattr(crew, "held", lambda: None)
+        monkeypatch.setattr(crew, "crew_version", lambda: (C2, "v0.40.0"))
+        monkeypatch.setattr(crew, "agents_here", lambda fleet, label=None: ["madswan-design", "madswan-planner"])
+        monkeypatch.setattr(crew, "due_of", lambda fleet, name, commit=None: (
+            (True, crew.KIND_SAID, STARTED) if name == "madswan-planner" else (True, "crew's plugin changed", STARTED)))
+        monkeypatch.setattr(hold, "hand", handed.append)
+        hold.update_here(self.FLEET, types.SimpleNamespace(label=None))
+        assert handed == ["madswan-design"]
+        out = capsys.readouterr().out
+        assert ("madswan-planner is passed over, never restarted: its role now runs as its kind, in Flume runs of its own; "
+                "while it is up, the end of its next turn ends it, as crew main up madswan does") in out
+        assert "madswan-design is due (crew's plugin changed): it is restarted on crew v0.40.0 once it is idle" in out
+
+    @pytest.fixture
+    def here(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(crew, "held", lambda: None)
+        monkeypatch.setattr(hold, "RENEW", tmp_path / "renew")
+
+    ENDED = ("agent.end", "main(madswan): end madswan-planner, which runs as its kind", ["planner"])
+
+    def test_an_idle_agent_is_ended_its_pane_left_and_recorded(self, here, capsys):
+        main = Main("madswan")
+        hold.kind_end(self.FLEET, main, "planner")
+        assert main.done == ["planner stopped with its waits", self.ENDED]
+        assert ("madswan-planner is ended: its role now runs as its kind, in Flume runs of its own, so nothing starts it "
+                "again; its pane is left") in capsys.readouterr().out
+
+    def test_one_slow_to_exit_is_watched_and_one_that_never_exits_runs_on_still_due(self, here, capsys):
+        slow = Main("madswan", stopped="madswan-planner did not exit")
+        hold.kind_end(self.FLEET, slow, "planner")
+        assert slow.done == ["planner stopped with its waits", "planner watched", self.ENDED]
+        never = Main("madswan", stopped="madswan-planner did not exit", exits=False)
+        hold.kind_end(self.FLEET, never, "planner")
+        assert never.done == ["planner stopped with its waits", "planner watched"]
+        assert "it runs on as it was, still due its end: the end of its next turn hands it back" in capsys.readouterr().err
+
+    def test_one_gone_to_work_and_any_on_a_held_host_is_left(self, here, monkeypatch, capsys):
+        working = Main("madswan", stopped=crew.working_said("madswan-planner"))
+        hold.kind_end(self.FLEET, working, "planner")
+        assert working.done == ["planner stopped with its waits"]
+        monkeypatch.setattr(crew, "held", lambda: {"by": "chuck@mac-studio", "why": "herdr 0.9.6", "at": "2026-10-31T12:00Z"})
+        held = Main("madswan")
+        hold.kind_end(self.FLEET, held, "planner")
+        assert held.done == []
+        assert "mac-studio is held; crew go mac-studio hands madswan-planner its end" in capsys.readouterr().out
+
+
 class TestStanding:
     @pytest.mark.parametrize("name, role", [
-        ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("wldn-design", ("wldn", "design")),
-        ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "ops")), ("wldn-operator", ("wldn", "operator")),
-        ("wldn-dispatch-chuck-herdr-alpha", ("wldn", "dispatcher")), ("swb-1-unit-2", None), ("wldn-reviewer", None), ("nobody", None)])
-    def test_only_a_standing_agent_is_restarted_for_an_update(self, name, role):
+        ("wldn-design", ("wldn", "design")), ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "ops")),
+        ("wldn-operator", ("wldn", "operator")), ("swb-1-conductor", None), ("swb-1-ops", None),
+        ("wldn-dispatch-chuck-herdr-alpha", None), ("swb-1-unit-2", None), ("wldn-reviewer", None), ("nobody", None)])
+    def test_only_a_main_levels_standing_agent_is_restarted_for_an_update(self, name, role):
         assert crew.standing_role(FLEET, name) == role
 
-    def test_the_agents_on_a_host_are_its_teams_its_main_levels_and_its_dispatchers(self, monkeypatch):
-        fleet = {"teams": {"crw-4": {"machine": "deneb", "label": "swancloud"}, "swc-1": {"machine": "mac-studio", "label": "swancloud"},
-                           "pay-1": {"machine": "deneb", "label": "madswan"}},
-                 "partitions": {"swancloud": {"machine": "deneb", "teams": ["crw-4", "swc-1"]},
-                                "madswan": {"machine": "mac-studio", "teams": ["pay-1"]}}}
+    def test_the_agents_on_a_host_are_its_main_levels(self, monkeypatch):
+        fleet = {"partitions": {"swancloud": {"machine": "deneb"}, "madswan": {"machine": "mac-studio"}}}
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
-        assert crew.agents_here(fleet) == ["pay-1-conductor", "pay-1-ops", "madswan-dispatch-deneb", "crw-4-conductor", "crw-4-ops",
-                                           "swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"]
-        assert crew.agents_here(fleet, "madswan") == ["pay-1-conductor", "pay-1-ops", "madswan-dispatch-deneb"]
+        assert crew.agents_here(fleet) == ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"]
+        assert crew.agents_here(fleet, "madswan") == []
 
 
 class TestStarts:
@@ -106,8 +189,8 @@ class TestStarts:
         (tmp_path / "other").write_text("CREW_AGENT=wldn-design\n")
         import os
         os.utime(tmp_path / "old", (1, 1))
-        assert crew.start_of("wldn-ops") == {"session": "new", "commit": C2, "version": "v0.13.0", "launch": "abc", "branch": None}
-        assert crew.start_of("wldn-design") == {"session": "other", "commit": None, "version": None, "launch": None, "branch": None}
+        assert crew.start_of("wldn-ops") == {"session": "new", "commit": C2, "version": "v0.13.0", "launch": "abc"}
+        assert crew.start_of("wldn-design") == {"session": "other", "commit": None, "version": None, "launch": None}
         assert crew.start_of("wldn-planner") is None
 
 
@@ -128,20 +211,19 @@ class TestHeld:
 
 class TestQuiet:
     def test_a_host_is_quiet_once_nothing_of_crews_works_there(self):
-        assert hold.busy_said([{"name": "crw-4-conductor", "status": "idle", "asking": False, "own": [], "owes": None, "unread": None}], 0) == []
+        assert hold.busy_said([{"name": "swancloud-design", "status": "idle", "asking": False, "own": [], "unread": None}], 0) == []
 
     def test_what_still_works_is_said_each_its_own_way(self):
-        facts = [{"name": "crw-4-conductor", "status": "working", "asking": False, "own": [], "owes": None, "unread": None},
-                 {"name": "crw-4-ops", "status": "blocked", "asking": False, "own": [], "owes": None, "unread": None},
-                 {"name": "swancloud-planner", "status": "idle", "asking": True, "own": [], "owes": None, "unread": None},
-                 {"name": "swancloud-ops", "status": "idle", "asking": False, "own": ["wt submit main"], "owes": None, "unread": None},
-                 {"name": "crw-4-unit-1", "status": "idle", "asking": False, "own": [], "owes": "code of a-unit", "unread": None},
-                 {"name": "crw-4-unit-2", "status": "idle", "asking": False, "own": None, "owes": None, "unread": "herdr names no session for it"}]
+        facts = [{"name": "swancloud-design", "status": "working", "asking": False, "own": [], "unread": None},
+                 {"name": "swancloud-operator", "status": "blocked", "asking": False, "own": [], "unread": None},
+                 {"name": "swancloud-planner", "status": "idle", "asking": True, "own": [], "unread": None},
+                 {"name": "swancloud-ops", "status": "idle", "asking": False, "own": ["wt submit main"], "unread": None},
+                 {"name": "swancloud-reviewer", "status": "idle", "asking": False, "own": None, "unread": "herdr names no session for it"}]
         assert hold.busy_said(facts, 2) == [
-            "crw-4-conductor is working", "crw-4-ops waits on a question to you in its pane",
+            "swancloud-design is working", "swancloud-operator waits on a question to you in its pane",
             "swancloud-planner waits on a question to you in its pane",
-            "swancloud-ops runs 1 background task of its own: wt submit main", "crw-4-unit-1's code of a-unit has not ended",
-            "crew can't tell what crw-4-unit-2 is doing: herdr names no session for it", "2 of crew's tests are running"]
+            "swancloud-ops runs 1 background task of its own: wt submit main",
+            "crew can't tell what swancloud-reviewer is doing: herdr names no session for it", "2 of crew's tests are running"]
 
     @pytest.mark.parametrize("command, wait", [
         ("crew unit wait a-unit --timeout 3600000", True), ("crew chore wait c", True), ("crew card wait batch/3", True),
@@ -182,19 +264,19 @@ class TestRenew:
 
     def test_a_restarts_mark_names_the_session_its_exit_was_typed_into_and_a_stale_one_goes_as_it_is_read(self, tmp_path, monkeypatch):
         monkeypatch.setattr(hold, "RENEW", tmp_path)
-        mark = tmp_path / "swb-1-ops.exiting"
-        assert hold.marked_exit("swb-1-ops", "sid-1") is None
+        mark = tmp_path / "wldn-ops.exiting"
+        assert hold.marked_exit("wldn-ops", "sid-1") is None
         mark.write_text("sid-1\n")
-        assert hold.marked_exit("swb-1-ops", "sid-1") == "sid-1" and mark.exists()
-        assert hold.marked_exit("swb-1-ops", "sid-2") == "sid-1" and not mark.exists()
+        assert hold.marked_exit("wldn-ops", "sid-1") == "sid-1" and mark.exists()
+        assert hold.marked_exit("wldn-ops", "sid-2") == "sid-1" and not mark.exists()
         assert hold.EXITING * 5 == 600
 
     def test_an_agent_taken_down_stays_down(self):
         assert hold.renew_exited(False, None, "sid-1", "sid-1", True) == (False, "it was taken down; it stays down")
 
     def test_a_pane_crew_cannot_read_starts_nothing_and_says_why(self):
-        assert hold.renew_exited(None, "herdr lists no pane w1:p2, which crew keeps for swb-1-ops", "sid-1", "sid-1", False) == (
-            False, "crew can't tell whether its pane holds it: herdr lists no pane w1:p2, which crew keeps for swb-1-ops")
+        assert hold.renew_exited(None, "herdr lists no pane w1:p2, which crew keeps for wldn-ops", "sid-1", "sid-1", False) == (
+            False, "crew can't tell whether its pane holds it: herdr lists no pane w1:p2, which crew keeps for wldn-ops")
 
     def test_a_restarted_agent_is_told_the_crew_it_started_on_the_one_it_runs_now_and_what_changed(self):
         said = hold.renew_notice("v0.12.1", "v0.13.0", ["feat(teams): a host is held", "fix(board): x"])
@@ -214,17 +296,17 @@ class TestRenew:
         # on their landing-card waits and read as blocked (signal 2026-10-22-swancloud-dispatch-deneb-bddc208d/01).
         monkeypatch.setattr(crew, "nap", lambda seconds: None)
         for waits in (True, False):
-            agents = crew.Agents(None, "team", "swc-4", "swancloud", "swancloud", tmp_path / str(waits), None, "/w", None)
+            agents = crew.Agents(None, "main", "swancloud", "swancloud", "swancloud", tmp_path / str(waits), ("ops",), "/w", None)
             agents.herdr = Exiting()
             agents.ensure()
-            agents.put("panes", "conductor", "w8:p1")
-            why = agents.stop("conductor", waits=waits)
+            agents.put("panes", "ops", "w8:p1")
+            why = agents.stop("ops", waits=waits)
             enters = [a for a in agents.herdr.acts if a[:2] == ("agent", "send-keys")]
             if waits:
-                assert why is None and agents.ended == ["conductor"]
+                assert why is None and agents.ended == ["ops"]
                 assert enters == [("agent", "send-keys", "w8:p1", "enter")]
             else:
-                assert why == "swc-4-conductor did not exit (busy or waiting on the user); it was left running"
+                assert why == "swancloud-ops did not exit (busy or waiting on the user); it was left running"
                 assert enters == [] and agents.herdr.state == "blocked"
 
     def lingering(self, tmp_path, monkeypatch, reads):
@@ -312,10 +394,10 @@ class Lingering:
 
 
 class TestHosts:
-    def test_all_is_every_host_crew_runs_agents_on_and_one_named_must_be_a_host(self):
-        fleet = {"teams": {"a": {"machine": "deneb"}, "b": {"machine": "box"}}, "partitions": {"l": {"machine": "mac-studio"}},
+    def test_all_is_every_main_levels_host_and_one_named_must_be_a_host(self):
+        fleet = {"partitions": {"l": {"machine": "mac-studio"}, "m": {"machine": "deneb"}},
                  "hosts": {"deneb": {}, "box": {}, "mac-studio": {}, "macbook-pro": {}}}
-        assert hold.hosts_named(fleet, "--all") == ["box", "deneb", "mac-studio"]
+        assert hold.hosts_named(fleet, "--all") == ["deneb", "mac-studio"]
         assert hold.hosts_named(fleet, "macbook-pro") == ["macbook-pro"]
         with pytest.raises(crew.Refusal, match="nowhere is no host of the fleet's hosts file. hosts: box deneb mac-studio macbook-pro"):
             hold.hosts_named(fleet, "nowhere")
@@ -337,7 +419,7 @@ class TestTranscript:
 
 class TestBands:
     HERE = {"host": "deneb", "version": "v0.13.0", "held": None,
-            "agents": {"wldn-planner": {"version": "v0.12.1", "due": True}, "wldn-dispatch-deneb": {"version": "v0.13.0", "due": False},
+            "agents": {"wldn-planner": {"version": "v0.12.1", "due": True}, "wldn-operator": {"version": "v0.13.0", "due": False},
                        "wldn-ops": {"version": None, "due": True}}}
 
     def test_each_agent_says_the_crew_it_started_on_and_the_one_it_takes_at_its_next_stop(self):
@@ -345,14 +427,17 @@ class TestBands:
         assert board.crew_said({"version": "v0.12.1", "due": True}, "v0.13.0") == "crew v0.12.1 → v0.13.0 at its next stop"
         assert board.crew_said({"version": None, "due": True}, None) == "an older crew → crew as it now is at its next stop"
 
-    def test_a_band_ends_its_first_line_with_its_crew_and_an_agent_with_no_view_has_its_crew_alone(self):
+    def test_a_band_ends_its_first_line_with_its_crew_and_one_with_no_recorded_start_is_drawn_as_it_is(self):
+        """Each main-level role here with a recorded start (crew.agents_here); no team agent or dispatcher has a band
+        (Decision 11 of the-team-machinery-leaves)."""
         from test_board import data
         v = board.agent_views(dict(data(), here=self.HERE))["views"]
         first = "".join(s for s, _ in v["wldn-planner"][0])
         assert first.endswith("  crew v0.12.1 → v0.13.0 at its next stop")
-        assert v["wldn-dispatch-deneb"] == [[("crew v0.13.0", "dim")]]
+        assert v["wldn-operator"][0][-1] == ("crew v0.13.0", "dim")
         assert "".join(s for s, _ in v["wldn-ops"][0]).endswith("an older crew → v0.13.0 at its next stop")
-        assert v["swb-1-conductor"] == board.agent_views(data())["views"]["swb-1-conductor"]
+        assert v["wldn-design"] == board.agent_views(data())["views"]["wldn-design"]
+        assert sorted(v) == ["wldn-design", "wldn-operator", "wldn-ops", "wldn-planner"]
 
     def test_every_band_on_a_held_host_opens_with_the_hold(self):
         from test_board import data

@@ -57,6 +57,17 @@ class TestEmit:
         assert (e["Outcome"], e["Submission"], e["Head"], e["Base"]) == ("queued", "412", "a" * 40, "b" * 40)
         assert "Submission" in text.split("%allowed:", 1)[1].splitlines()[0].split()
 
+    def test_a_teams_crossing_names_its_stream_and_its_trace_reads_it_after_the_landing_that_crossed_it(self, here):
+        """team.cross, once crw-4's conductor and ops are ended for its crossing (the change
+        teams-cross-to-flume-as-their-bolts-land, Decision 3): on team/crw-4, its State the stream."""
+        record.emit("madswan", "team.cross", ["team/crw-4"], why="team(crw-4): cross to flume", State="madswan")
+        text = next(here.parent.parent.parent.glob("madswan/runs/mac-studio/*.rec")).read_text()
+        cross, = record.parse(text)
+        assert (cross["Act"], cross["On"], cross["State"]) == ("team.cross", ["team/crw-4"], "madswan")
+        assert record.line(cross).endswith("team/crw-4 → Flume stream madswan")
+        given = entry("20260101T100000Z-deneb-1-1", "2026-01-01T10:00:00Z", "bolt.give", ["bolt/x", "team/crw-4"])
+        assert [e["Act"] for e in record.lineage([cross, given], "team/crw-4")] == ["bolt.give", "team.cross"]
+
     def test_the_users_entry_names_them_at_this_host_with_no_session(self, here):
         import getpass
         record.emit("wldn", "test.user")
@@ -256,6 +267,46 @@ class TestTrace:
         assert record.line(entry("x", "2026-10-05T10:00:00Z", "bolt.land", ["bolt/b", "unit/a"], Repo="switchboard-kit", Head="c" * 40)).endswith(
             "bolt/b unit/a → switchboard-kit main at ccccccc")
 
+    def test_a_stage_end_and_a_slot_free_from_before_crew_stopped_driving_stages_print_as_written(self):
+        """crew writes no stage.* entry and no slot.free now (design Decision 8 of the-team-machinery-leaves), and crew
+        trace prints the ones on the branch as written, with what each recorded."""
+        end = entry("20261005T120000Z-box-4-1", "2026-10-05T12:00:00Z", "stage.end", ["stage/u/code", "unit/u", "agent/swb-1-unit-1"],
+                    Result="ticked", Tasks="2/2", Head="ccccccc", Ended="delivered", Delivered="unit/u@ccccccc")
+        free = entry("20261005T121000Z-box-5-1", "2026-10-05T12:10:00Z", "slot.free", ["unit/u", "agent/swb-1-unit-1"], Paths="/kit/places/u")
+        assert [e["Act"] for e in record.lineage(E + [end, free], "unit/u")][-3:] == ["stage.end", "stage.end", "slot.free"]
+        assert record.line(end).endswith("stage/u/code unit/u agent/swb-1-unit-1 → ticked 2/2, delivered unit/u@ccccccc")
+        assert record.line(free).endswith("unit/u agent/swb-1-unit-1 (removed /kit/places/u)")
+
+
+class TestRoleRuns:
+    """The run-record spec, An ask and a turn are entries: a role that runs as its kind has an ask entry for each ask
+    of it and a turn.begin and turn.end for each turn, all on its run, none holding an ask's words (record.3)."""
+
+    def test_a_tell_that_is_an_ask_records_its_length_and_never_its_text(self, here):
+        """run-record, A tell that is an ask."""
+        words = "the forty characters of a tell, as typed"
+        record.emit("wldn", **record.ask_entry("wldn-planner", "tell", None, words))
+        text = next(here.glob("*.rec")).read_text()
+        e, = record.parse(text)
+        assert (e["Act"], e["On"], e["Chars"], e["Why"]) == ("ask", ["agent/wldn-planner"], "40", "ask wldn-planner: tell")
+        assert words not in text and "Words" not in e
+
+    def test_a_turn_traced_lists_its_asks_its_begin_taking_them_and_its_end(self, here):
+        """run-record, A turn traced: the planner's run took two asks and ended. The record an ask names keeps the ask
+        in its own trace, and brings nothing of its history into the run's."""
+        for e in (record.ask_entry("wldn-planner", "tell", None, "Go."), record.ask_entry("wldn-planner", "card", "proposal/12"),
+                  record.turn_begin_entry("wldn-planner", 1, 2), record.turn_end_entry("wldn-planner", 1)):
+            record.emit("wldn", **e)
+        found = record.parse(next(here.glob("*.rec")).read_text()) + [
+            entry("20261005T090000Z-mac-9-1", "2026-10-05T09:00:00Z", "plan.propose", ["proposal/12"])]
+        start, _ = record.trace_start(found, "agent/wldn-planner")
+        traced = record.lineage(found, start)
+        assert [(e["Act"], e.get("Took"), e["Why"]) for e in traced] == [
+            ("ask", None, "ask wldn-planner: tell"), ("ask", None, "ask wldn-planner: card"), ("turn.begin", "2", "turn 1 of wldn-planner"),
+            ("turn.end", None, "turn 1 of wldn-planner ended")]
+        assert record.line(traced[2]).endswith(" agent/wldn-planner (took 2)") and record.line(traced[0]).endswith("(3 characters)")
+        assert [e["Act"] for e in record.lineage(found, "proposal/12")] == ["plan.propose", "ask"]
+
 
 class TestEvents:
     def test_events_are_shown_from_a_time_narrowed_to_one_object_and_a_branch_not_read_named(self):
@@ -362,7 +413,7 @@ class TestPlanEntries:
 
     def test_a_refused_command_names_what_its_command_line_names(self):
         assert plan.named(plan.parser().parse_args(["unit", "drop", "a", "Gone."])) == ["unit/a"]
-        assert plan.named(plan.parser().parse_args(["bolt", "give", "swb-1", TE])) == [f"bolt/{TE}", "team/swb-1"]
+        assert plan.named(plan.parser().parse_args(["bolt", "start", TE])) == [f"bolt/{TE}"]
         assert plan.named(plan.parser().parse_args(["state", "init", "wldn"])) == ["plan/wldn"]
 
 

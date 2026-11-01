@@ -6,20 +6,20 @@
 # from a host with no team, by a signal's full id or its short one; curation's move and a route are written to
 # moves.rec, the route in the unit's own commit, each naming the signal by its short id and writing its full one;
 # a meeting's signal in the blueprints is moved and shown as it stands; a proposal shows a signal's excerpt and routes
-# it on approval; crew trace of a signal begins with its capture; and a program's capture lands with crew signal land
-# from the host that banked its raw record, in one commit and once. How an excerpt is graded and who asserted it, how
-# a capture is named and joined, its files, what a program's capture must hold, and what show and a proposal say are
-# logic cases (tests/py/test_signals.py, test_transcript.py, test_proposal_life.py); recfix's checks of a signal and a
-# move, contract cases (tests/contract/test_recfix.py); each step here checks a command's wiring once.
+# it on approval; crew trace of a signal begins with its capture; a program's capture lands with crew signal land
+# from the host that banked its raw record, in one commit and once; and a capture asks a design agent that runs as its
+# kind, in its own commit. How an excerpt is graded and who asserted it, how a capture is named and joined, its files,
+# what a program's capture must hold, what show and a proposal say and a capture's ask are logic cases
+# (tests/py/test_signals.py, test_transcript.py, test_proposal_life.py); recfix's checks of a signal and a move,
+# contract cases (tests/contract/test_recfix.py); each step here checks a command's wiring once.
+# Reads: plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 # The date, read once: the run's zone puts this moment at local noon, so every date crew takes in local time, a move's
 # among them, falls on this day however long the run takes, across the host's own midnight (read.1).
 read -r h today <<<"$(date -u '+%H %F')"; export TZ=NOON$(printf %+d $((10#$h - 12)))
-team_world
+bolt_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
-crew bolt new smoke-2 "Prove the loop." --repo switchboard-kit >/dev/null
-crew bolt give swb-2 smoke-2 >/dev/null 2>&1
 blueprints_refs=$(git --git-dir "$wb" for-each-ref)
 tip() { act_tip; }
 at() { git --git-dir "$ws" show "wldn/main:$1"; }
@@ -27,7 +27,7 @@ changed() { git --git-dir "$ws" diff-tree --no-commit-id --name-only -r "$(act_t
 runs() { cat "$(home_of "$1")"/.local/state/crew/wldn/runs/*/*.rec 2>/dev/null; }
 id_of() { sed -n 's/^signal \([^: ]*\)[: ].*/\1/p' <<<"$1"; }
 short() { local n=${1#*/}; echo "${1%/*}/${n:0:2}"; }  # a signal's short id, <capture>/<NN>
-conductor() { HOST=$box CREW_AGENT=swb-2-conductor CREW_SESSION=$box:s-1 "$@"; }
+planner() { HOST=$box CREW_AGENT=wldn-planner CREW_SESSION=$box:s-1 "$@"; }
 # laptop: a host with crew's files and nothing of any team's
 mkdir -p "$(home_of laptop)"; gitconfig "$(home_of laptop)"; cp -R "$(home_of mac-studio)/.config" "$(home_of laptop)/"
 
@@ -36,15 +36,15 @@ ts=$(ago 1); day=${ts:0:10}; hms=${ts:11:8}
 transcript $box s-1 >/dev/null <<EOF
 {"type":"user","uuid":"9f2c1a7e-5b6d-4c3e-8f00-112233445566","timestamp":"$ts","message":{"role":"user","content":"Could we get a security check on the CloudFormation templates too, beside cfn-lint's validity check?"}}
 EOF
-cap=$day-swb-2-conductor-9f2c1a7e; id=$cap/01-cfn-nag-templates
+cap=$day-wldn-planner-9f2c1a7e; id=$cap/01-cfn-nag-templates
 t0=$(tip)
-conductor expect_ok crew signal cfn-nag-templates "The user wants a security check on Switchboard's CloudFormation templates beside cfn-lint's." \
+planner expect_ok crew signal cfn-nag-templates "The user wants a security check on Switchboard's CloudFormation templates beside cfn-lint's." \
   --excerpt "a security check on the CloudFormation templates" --kind ask --subject "cloudformation, security"
 eq "$(tail -1 <<<"$out")" "signal $id: excerpt verified, asserted by user"
 eq "$(acts_since "$t0")" "1"
-eq "$(git --git-dir "$ws" log -1 --format=%s "$(act_tip)")" "signals($id): cfn-nag-templates (swb-2-conductor)"
+eq "$(git --git-dir "$ws" log -1 --format=%s "$(act_tip)")" "signals($id): cfn-nag-templates (wldn-planner)"
 eq "$(changed)" "signals/$id.md"$'\n'"signals/$cap/capture.md"
-has "$(at "signals/$cap/capture.md")" "where: team swb-2, bolt smoke-2"
+has "$(at "signals/$cap/capture.md")" "where: main level"
 has "$(at "signals/$id.md")" "> \"a security check on the CloudFormation templates\" — ${hms}Z"
 eq "$(git --git-dir "$wb" for-each-ref)" "$blueprints_refs"
 raw=$(home_of $box)/.local/state/crew/wldn/raw/$cap.jsonl
@@ -53,25 +53,25 @@ git --git-dir "$ws" grep -q -F "validity check?" wldn/main && fail "the branch h
 has "$(runs $box)" "Act: capture"$'\n'"On: signals/$id"$'\n'"Commit: WilldanGroup/crew-state@$(tip)"
 ok "an agent's verified capture and its signal are one commit on wldn/main, the source record banked on its host, and nothing in the blueprints"
 
-conductor expect_ok crew signal beside-cfn-lint "The check sits beside cfn-lint's, not in place of it." --excerpt "beside cfn-lint's validity check"
+planner expect_ok crew signal beside-cfn-lint "The check sits beside cfn-lint's, not in place of it." --excerpt "beside cfn-lint's validity check"
 eq "$(tail -1 <<<"$out")" "signal $cap/02-beside-cfn-lint: excerpt verified, asserted by user"
 has "$(at "signals/$cap/capture.md")" "signals: 2"
 t1=$(tip)
-conductor expect_ok crew signal beside-cfn-lint "The check sits beside cfn-lint's, not in place of it." --excerpt "beside cfn-lint's validity check"
+planner expect_ok crew signal beside-cfn-lint "The check sits beside cfn-lint's, not in place of it." --excerpt "beside cfn-lint's validity check"
 eq "$out" "signal $cap/02-beside-cfn-lint is recorded already; nothing was written"
-conductor expect_fail "the excerpt is not in your session's transcript: quote the words as you received them" \
+planner expect_fail "the excerpt is not in your session's transcript: quote the words as you received them" \
   crew signal reworded "The templates want a check ZQX2." --excerpt "the user wants every template checked ZQX3"
 eq "$(tip)" "$t1"
 eq "$(runs $box | grep -c "^Refused: the excerpt is not in your session's transcript")" "1"
 [[ $(runs $box) != *ZQX* ]] || fail "the run record holds typed text"
 ok "a second signal from the record joins its capture, the same signal again writes nothing, and a paraphrase is refused with a refused entry"
 
-p=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-2 | jq -r .result.root_pane.pane_id)
-as $box herdr --session wldn-1 stub agent "$p" swb-2-conductor
+p=$(as $box herdr --session wldn-3 workspace create --cwd / --label wldn-planner | jq -r .result.root_pane.pane_id)
+as $box herdr --session wldn-3 stub agent "$p" wldn-planner
 transcript $box "sid-${p//:/-}" >/dev/null <<EOF
 {"type":"user","uuid":"77aa0011-0000-4000-8000-000000000001","timestamp":"$(ago 1)","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"cfn-lint: 0 errors, 4 warnings"}]}}
 EOF
-HOST=$box CREW_AGENT=swb-2-conductor expect_ok crew signal lint-warns "cfn-lint passes the templates with warnings." --excerpt "0 errors, 4 warnings"
+HOST=$box CREW_AGENT=wldn-planner expect_ok crew signal lint-warns "cfn-lint passes the templates with warnings." --excerpt "0 errors, 4 warnings"
 hc=$(id_of "$out"); has "$out" "excerpt verified, asserted by tool"
 has "$(at "signals/${hc%/*}/capture.md")" "session: sid-${p//:/-}"
 ok "with no session carried, the agent's session is herdr's"
@@ -129,7 +129,7 @@ ok "a proposal shows a signal's assertion and excerpt with its grade, and its ap
 
 expect_ok crew trace "signals/$cap/01"
 first=$(head -1 <<<"$out")
-has "$first" "capture"; has "$first" "swb-2-conductor"; has "$first" "signals/$id"; has "$first" "zoe s-1 on $box"
+has "$first" "capture"; has "$first" "wldn-planner"; has "$first" "signals/$id"; has "$first" "zoe s-1 on $box"
 ok "crew trace of a signal, by its short id, begins with its capture, naming the capturing agent, its host and its session"
 
 # A program's capture, a deployer's failed deploy, landed from the host that ran it and banked its log there.
@@ -150,3 +150,14 @@ CREW_AGENT=swancloud-deployer expect_ok crew signal land "$d" --label wldn
 eq "$out $(tip)" "$dep is already landed on wldn/main; nothing was written $t1"
 HOST=$box expect_fail "$dep/capture.md's raw record is on mac-studio, and a program's capture lands from the host that banked it, not $box" crew signal land "$d" --label wldn
 ok "a program's capture lands from the host that banked its raw record, in one commit on the flywheel's branch, and once"
+
+# Once wldn's design agent runs as its kind, a capture asks it, in the capture's own commit; none did while it stood.
+at asks.rec >/dev/null 2>&1 && fail "a capture asked a design agent that stands"
+role_stream wldn design wldn-main
+t0=$(tip)
+expect_ok crew signal tags-on-stacks "Every stack carries its owner's tags."
+sig=$(id_of "$out")
+eq "$(acts_since "$t0") $(changed | tr '\n' ' ')" "1 asks.rec roles.rec signals/$(dirname "$sig")/01-tags-on-stacks.md signals/$(dirname "$sig")/capture.md "
+eq "$(at asks.rec | recsel -t Ask -P Role,What,Names,Key | tr '\n' ' ')" "design capture signals/$sig signal/$sig "
+has "$out" "asked wldn-design: capture on signals/$sig"
+ok "a capture asks a design agent that runs as its kind, keyed by its signal, in the capture's commit"

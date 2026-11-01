@@ -21,7 +21,7 @@ mkdir -p "$r/.moon" "$r/tests/stubs" "$r/plugin/bin" "$r/plugin/lib" "$r/plugin/
 cp "$CREW/.moon/workspace.yml" "$r/.moon/"; cp "$CREW/tests/suite" "$CREW/tests/moon-tasks" "$r/tests/"
 printf '.moon/cache/\n__pycache__/\n' > "$r/.gitignore"
 touch "$r/devenv.nix" "$r/devenv.lock" "$r/tests/lib.sh" "$r/tests/slot" "$r/tests/stubs/herdr" "$r/README.md"
-touch "$r/plugin/bin/crew" "$r/plugin/lib/"{crew,record,gather,transcript,questions}.py "$r/plugin/roles/coder.md"
+touch "$r/plugin/bin/crew" "$r/plugin/lib/"{crew,record,gather,transcript,questions}.py "$r/plugin/roles/planner.md"
 echo 'print(1)' > "$r/plugin/lib/plan.py"
 # The stand-in tests/run: each run is logged in $T/ran.log. With $T/barrier, each test waits until all three have
 # started, so a run that is not side by side fails.
@@ -84,7 +84,7 @@ eq "$rc" 0; has "$out" "3 passed (0 replayed), 0 failed"
 eq "$(ran)" "t-a t-b t-c"
 ok "an edit to crew's command core reruns every test"
 
-echo "edited" >> "$r/plugin/roles/coder.md"
+echo "edited" >> "$r/plugin/roles/planner.md"
 suite
 eq "$rc" 0; has "$out" "ok    t-a   (replayed)"$'\n'"ok    t-b   (replayed)"$'\n'"ok    t-c"$'\n'"3 passed (2 replayed), 0 failed"
 eq "$(ran)" "t-c"

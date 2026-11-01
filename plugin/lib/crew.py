@@ -1,47 +1,54 @@
 #!/usr/bin/env python3
 """crew.py: read the teams file and answer from it.
 
-  crew.py teams                       every team's name
   crew.py labels                      every partition's label
-  crew.py brief <team|label> <definition> [name]
-                                      a definition's brief for a team or a partition's main level; name is the agent's own
-  crew.py launch <team|label> <role> [stage|resume]
-                                      how crew-role starts the role, as shell assignments
-  crew.py hint <agent> <pane>         tell a team's conductor's or ops's pane again the branch it works for, for
-                                      sluice's plugins, as after herdr resumed it bare
+  crew.py brief <label> <definition> [name]
+                                      a definition's brief for a partition's main level; name is the agent's own
+  crew.py launch <label> <role> [resume]
+                                      how crew-role starts a main level's role, as shell assignments
   crew.py tell <agent> "<text>" [--taken]
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
                                       --taken, read back from its transcript and sent once more when not taken
   crew.py tell --board < word.json    a word posted from a dock, {label, key, to, text}, checked and told its item's
                                       agent, marked [crew tell from <user>@board] (on <kind> <name>)
-  crew.py send <team|label> "<text>"  send the text to the partition's operator, the door of the team's partition or
-                                      the label's, marked [crew tell from <sender>] (sent to <team|label>)
+  crew.py send <label> "<text>"       send the text to the partition's operator, its door, marked
+                                      [crew tell from <sender>] (sent to <label>)
   crew.py found <agent>               an agent of this host as herdr lists it, one JSON object, its name given back in
                                       the pane crew keeps for it when herdr dropped it there from the session crew
                                       started (read_agent from another host)
+  crew.py run-name                    the name and partition of the role's run FLUME_PLACE is, as shell assignments of
+                                      CREW_AGENT and CREW_LABEL; nothing for a place that is no run
 
-The agents themselves, a team's and a main level's, are started, greeted and ended by plan.py's commands, through
-Agents and Team here.
+The agents themselves, a main level's, are started, greeted and ended by plan.py's commands, through Agents here.
 
-Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
-partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
-data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import collections, functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a partition's
+`roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here
+from the partition's data; a token with no builder, or data a builder needs and the partition lacks, is an error, never
+blank text."""
+import functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+# Run as the command, this module is the crew the modules it imports import, so a refusal raised in plan.py, which a
+# tell to a role that runs as its kind writes its ask through, is the Refusal main catches.
+if __name__ == "__main__":
+    sys.modules.setdefault("crew", sys.modules[__name__])
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
 HOSTS = pathlib.Path.home() / ".config/swancloud/herdr-hosts.json"
 TEAMS = pathlib.Path.home() / ".config/crew/teams.json"
-VERSION = 2
+# The version of the teams file crew reads (Decision 2 of the-team-machinery-leaves): 5, its partitions alone, each
+# naming the Flume setting of each of its main-level roles (record 0047 move 6), as version 4 did beside its teams.
+VERSION = 5
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
-# The roles a team's entry may override, and those a partition's entry may: each is a definition in roles/.
-TEAM_ROLES = ("conductor", "ops", "construct", "coder", "verify")
-MAIN_ROLES = ("design", "planner", "main-ops", "dispatcher", "operator", "reviewer")
+# The roles a partition's entry may override: each is a definition in roles/.
+MAIN_ROLES = ("design", "planner", "main-ops", "operator", "reviewer")
 # A main level's standing roles, each in the session its partition names for it (record 0035): the design agent, the
 # planner, ops and the operator, the partition's one door. The reviewer opens beside the planner unless named apart.
 MAIN_STANDING = ("design", "planner", "ops", "operator")
+# A main level's roles that may run as Flume kinds crew's release carries (record 0047 move 6), each by the name its
+# agent takes, <label>-<role>: a partition's `flume` names every one, false while it stands.
+KIND_ROLES = ("design", "planner", "reviewer", "ops", "operator")
 # What tells whether an agent waits on a question crew's own hook saw it open: piped to the agent's host, whose crew may be older.
 QUESTIONS = (LIB / "questions.py").read_text()
 # What reads whether an agent's session received a prompt crew sent: piped to the agent's host the same way.
@@ -109,22 +116,19 @@ def checkout(sess, repo):
     return f"{sess['dir']}/{repo.split('/')[-1]}/main"
 
 
-def roles_of(entry, what, allowed, sessions=False):
-    """A team's or partition's role overrides: a role's model or effort, and for a partition's main-level role the
-    session it runs in (record 0035), checked by load against the hosts file."""
+def roles_of(entry, what):
+    """A partition's role overrides: a main-level role's model, effort or the session it runs in (record 0035), checked
+    by load against the hosts file."""
     roles = entry.get("roles") or {}
-    keys = {"model", "effort"} | ({"session"} if sessions else set())
-    says = "'model', 'effort' or 'session'" if sessions else "'model' or 'effort'"
     if not isinstance(roles, dict):
-        fail(f"{what} in {TEAMS}: 'roles' must map a role to its " + ("model, effort or session" if sessions else "model or effort"))
+        fail(f"{what} in {TEAMS}: 'roles' must map a role to its model, effort or session")
     for role, o in roles.items():
-        if role not in allowed:
-            fail(f"{what} in {TEAMS} overrides role '{role}', which it has no definition for. roles: " + " ".join(allowed))
-        if not isinstance(o, dict) or not o or set(o) - keys:
-            fail(f"{what} in {TEAMS}: roles.{role} sets only {says}, not {json.dumps(o)}")
-        if "session" in o and (role == "dispatcher" or not isinstance(o["session"], str) or not o["session"]):
-            fail(f"{what} in {TEAMS}: roles.{role}.session " + ("can't be named: a dispatcher runs on each host its partition's teams run on"
-                                                                  if role == "dispatcher" else "must name a session of the main level's machine"))
+        if role not in MAIN_ROLES:
+            fail(f"{what} in {TEAMS} overrides role '{role}', which it has no definition for. roles: " + " ".join(MAIN_ROLES))
+        if not isinstance(o, dict) or not o or set(o) - {"model", "effort", "session"}:
+            fail(f"{what} in {TEAMS}: roles.{role} sets only 'model', 'effort' or 'session', not {json.dumps(o)}")
+        if "session" in o and (not isinstance(o["session"], str) or not o["session"]):
+            fail(f"{what} in {TEAMS}: roles.{role}.session must name a session of the main level's machine")
         if "effort" in o and o["effort"] not in EFFORTS:
             fail(f"{what} in {TEAMS}: roles.{role}.effort is '{o['effort']}', which is no effort level. levels: " + " ".join(EFFORTS))
         if "model" in o and (not isinstance(o["model"], str) or not o["model"]):
@@ -132,17 +136,44 @@ def roles_of(entry, what, allowed, sessions=False):
     return roles
 
 
+def role_settings(entry, what):
+    """A partition's `flume`, the Flume setting of each of its main-level roles (record 0047 move 6): every role of
+    KIND_ROLES named, and no other, each False while it stands or the name of the Flume stream its runs run in on the
+    main level's host."""
+    fix = f"regenerate {TEAMS} from the machine's configuration (swancloud's lib/crew-teams.nix)"
+    "flume" in entry or fail(f"{what} in {TEAMS} has no 'flume', which names each of its roles, " + ", ".join(KIND_ROLES)
+                             + f", false or the name of a Flume stream its host declares: {fix}")
+    flume = entry["flume"]
+    isinstance(flume, dict) or fail(f"{what} in {TEAMS}: 'flume' names each of its roles, not {json.dumps(flume)}: {fix}")
+    for role in flume:
+        role in KIND_ROLES or fail(f"{what} in {TEAMS}: 'flume' names {role}, which crew has no kind for. roles: "
+                                   + " ".join(KIND_ROLES) + f": {fix}")
+    for role in KIND_ROLES:
+        role in flume or fail(f"{what} in {TEAMS}: 'flume' leaves out {role}: {fix}")
+        s = flume[role]
+        s is False or isinstance(s, str) and NAME.match(s) or fail(
+            f"{what} in {TEAMS}: flume.{role} is false, or the name of a Flume stream its host declares, not {json.dumps(s)}: {fix}")
+    return dict(flume)
+
+
 @functools.lru_cache(maxsize=None)
 def load():
-    """The partitions and teams, written by the machine's own configuration (swancloud's lib/crew-teams.nix),
-    never by crew. Every entry is checked here, against the hosts file, before any is used, once a process: a later
-    call is answered with the same fleet."""
+    """The partitions, written by the machine's own configuration (swancloud's lib/crew-teams.nix), never by crew: the
+    file at version 5 (Decision 2 of the-team-machinery-leaves), its partitions alone, each with its main level and its
+    `flume`, the Flume setting of each of its main-level roles (record 0047 move 6), False while the role stands or the
+    stream its runs run in on the main level's host, every role of KIND_ROLES and no other. A file at any other
+    version, one that still lists teams among them, was written for a crew that runs them and is refused, as is a
+    `teams` list in a version-5 file, which holds none (code.5). Every entry is checked here, against the hosts file,
+    before any is used, once a process: a later call is answered with the same fleet."""
     if not TEAMS.exists():
         fail(f"{TEAMS} is missing; the machine's configuration writes it")
     data = json.loads(TEAMS.read_text())
-    if data.get("version") != VERSION:
-        fail(f"{TEAMS} is version {data.get('version')}, and crew reads only version {VERSION}. It must be regenerated "
-             f"by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing.")
+    version = data.get("version")
+    if type(version) is not int or version != VERSION:
+        fail(f"{TEAMS} is version {json.dumps(version)}, and crew reads only version {VERSION}. "
+             f"It must be regenerated by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing.")
+    "teams" not in data or fail(f"{TEAMS} lists teams, which version {VERSION} has no place for: crew runs no team. It must be "
+                                f"regenerated by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing.")
     hosts = read_hosts()
     parts = {}
     for p in data.get("partitions") or fail(f"{TEAMS} lists no partitions"):
@@ -175,88 +206,89 @@ def load():
         if sess.get("partition") != name:
             fail(f"{what}'s main level runs in {machine}'s session {session}, which is in partition {sess.get('partition')}, not {name}")
         repo_in(sess, f"{what}'s main level", machine, session, blueprints[0])
-        roles = roles_of(p, what, MAIN_ROLES, sessions=True)
+        roles = roles_of(p, what)
         for defn, o in sorted(roles.items()):
             if "session" in o:
                 _, rs = session_of(hosts, f"{what}'s {defn}", machine, o["session"])
                 rs.get("partition") == name or fail(f"{what}'s {defn} runs in {machine}'s session {o['session']}, which is in "
                                                      f"partition {rs.get('partition')}, not {name}")
         parts[label] = dict(p, label=label, partition=name, ssh=host["ssh"], dir=sess["dir"], checkout=checkout(sess, blueprints[0]),
-                            roles=roles, teams=[])
+                            roles=roles, flume=role_settings(p, what))
         parts[label]["sessions"] = {r: role_session(parts[label], r) for r in MAIN_STANDING + ("reviewer",)}
-    by_name = {p["partition"]: p for p in parts.values()}
-    teams = {}
-    for t in data.get("teams") or []:
-        name = need(t, "a team", "name", str)
-        what = f"team {name}"
-        NAME.match(name) or fail(f"{what}: a team's name is lowercase words with dashes")
-        name not in teams or fail(f"{TEAMS} lists team {name} twice")
-        name not in parts or fail(f"{what} has the name of a partition's label")
-        system, machine, session = (need(t, what, f, str) for f in ("system", "machine", "session"))
-        units = need(t, what, "units", int)
-        units > 0 or fail(f"{what}: 'units' must be at least 1")
-        repos = need(t, what, "repos", list)
-        if len(repos) < 2 or not all(isinstance(r, str) and "/" not in r for r in repos) or len(set(repos)) != len(repos):
-            fail(f"{what}: 'repos' is its kits, one or more, then its partition's blueprints repo, each named once, not {json.dumps(repos)}")
-        for gone in ("coders", "base"):
-            gone not in t or fail(f"{what} in {TEAMS} still has '{gone}', which version {VERSION} has no place for")
-        host, sess = session_of(hosts, what, machine, session)
-        pname = sess.get("partition") or fail(f"{what} runs in {machine}'s session {session}, which {HOSTS} puts in no partition")
-        part = by_name.get(pname) or fail(f"{what} runs in {machine}'s session {session}, of partition {pname}, which {TEAMS} does not list")
-        *held, bp = (repo_in(sess, what, machine, session, r) for r in repos)
-        if bp not in part["blueprints"]:
-            fail(f"{what} names {bp} as its blueprints repo, which is not one of {pname}'s: " + " ".join(part["blueprints"]))
-        # A team holds its kits, one or more (record 0035): a bolt is of one of them, and the team works in that one's
-        # checkout while it holds the bolt (with_kit, held_team); its first is its kit when it holds none.
-        kits = [{"name": k.split("/")[-1], "repo": k, "dir": f"{sess['dir']}/{k.split('/')[-1]}", "main": checkout(sess, k)} for k in held]
-        teams[name] = dict(t, name=name, system=system, machine=machine, session=session, units=units, label=part["label"],
-                           partition=pname, ssh=host["ssh"], kind=host.get("kind", ""), dir=sess["dir"], roles=roles_of(t, what, TEAM_ROLES),
-                           kits=kits, kit=kits[0], blueprints={"name": bp.split("/")[-1], "repo": bp, "main": checkout(sess, bp)})
-        part["teams"].append(name)
-    return {"hosts": hosts, "partitions": parts, "teams": teams}
-
-
-def team_of(fleet, name):
-    return fleet["teams"].get(name) or fail(f"no team '{name}'. teams: " + " ".join(fleet["teams"]))
-
-
-def kits_of(t):
-    """A team's kits, one or more; none for a team crew holds no kit of."""
-    return t.get("kits") or ([t["kit"]] if t.get("kit") else [])
-
-
-def with_kit(t, kit):
-    """A team as it works on a bolt of one of its kits (record 0035): the team with that kit, by name or owner/name, as
-    its kit; refused when it holds several and none by that name. A team of one kit, or none, is as it is, as it was
-    before a team held several."""
-    ks = kits_of(t)
-    if len(ks) < 2:
-        return t
-    k = next((k for k in ks if kit in (k.get("name"), k.get("repo"))), None)
-    k or fail(f"{t['name']} builds " + " and ".join(x.get("name", "?") for x in ks) + f", not {kit}")
-    return t if k == t.get("kit") else dict(t, kit=k)
-
-
-def builds(t, kit):
-    """Whether a team holds a kit, by name or owner/name."""
-    return any(kit in (k.get("name"), k.get("repo")) for k in kits_of(t))
-
-
-def held_team(fleet, t):
-    """A team as it works on the bolt it holds: with that bolt's kit as its kit when it holds several kits; a team of
-    one kit, one holding no bolt, and one whose plan can't be read, as it is."""
-    if len(kits_of(t)) < 2:
-        return t
-    import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
-    try:
-        repo = plan.held_repo(this.load(), t)
-    except this.Refusal:
-        return t
-    return with_kit(t, repo) if repo else t
+    return {"hosts": hosts, "partitions": parts}
 
 
 def partition_of(fleet, label):
     return fleet["partitions"].get(label) or fail(f"no partition '{label}'. partitions: " + " ".join(fleet["partitions"]))
+
+
+def role_stream(fleet, label, role):
+    """The Flume stream a partition's main-level role runs in as its kind (record 0047 move 6), or False while it
+    stands, as the partition's `flume` names it."""
+    role in KIND_ROLES or fail(f"{role} is no main-level role that runs as a kind. roles: " + " ".join(KIND_ROLES))
+    return partition_of(fleet, label)["flume"][role]
+
+
+def kind_role_of(fleet, name):
+    """The partition and role an agent name is, (label, role), where the name is <label>-<role> and its partition
+    runs that role as its kind; None for any other name, a role that stands among them."""
+    for label, p in fleet["partitions"].items():
+        for role in KIND_ROLES:
+            if name == f"{label}-{role}" and p["flume"][role] is not False:
+                return label, role
+    return None
+
+
+# The place a role's run is, as its role record names it: <Kind>--<Name>, crew-<role>--<label>.
+RUN_PLACE = re.compile(r"crew-([a-z]+)--([a-z0-9][a-z0-9-]*)")
+
+
+def run_of(fleet, place):
+    """The role's run a Flume place is (record 0047 move 6), (label, role), from its path alone: its folder is
+    crew-<role>--<label>, the place the role record names, and its partition runs that role as its kind. None for any
+    other place, a change's or a fix's among them, and for one so named whose role stands."""
+    m = RUN_PLACE.fullmatch(pathlib.PurePath(place or "").name)
+    if not m or m[2] not in fleet["partitions"] or m[1] not in KIND_ROLES:
+        return None
+    return (m[2], m[1]) if fleet["partitions"][m[2]]["flume"][m[1]] is not False else None
+
+
+def run_here(fleet=None):
+    """The role's run this command runs in, (label, role), read from FLUME_PLACE, the place Flume started it in; None
+    elsewhere. The teams file is read only for a place named as a run's."""
+    place = os.environ.get("FLUME_PLACE")
+    if not place or not RUN_PLACE.fullmatch(pathlib.PurePath(place).name):
+        return None
+    return run_of(fleet or load(), place)
+
+
+def caller(fleet=None):
+    """The agent a crew command runs as: CREW_AGENT, which crew gives each agent it starts, else the role's run its
+    place is, named as the role, <label>-<role> (run_here); None for the user."""
+    name = os.environ.get("CREW_AGENT")
+    if name:
+        return name
+    run = run_here(fleet)
+    return f"{run[0]}-{run[1]}" if run else None
+
+
+def caller_label(fleet=None):
+    """The partition a crew command runs as: CREW_LABEL, which crew gives each agent it starts, else the label of the
+    role's run its place is (run_here); None for none."""
+    label = os.environ.get("CREW_LABEL")
+    if label:
+        return label
+    run = run_here(fleet)
+    return run[0] if run else None
+
+
+def run_exports(run):
+    """What plugin/bin/crew sets for a role's run before it runs or forwards any command (code.3): its name and
+    partition as a standing agent's CREW_AGENT and CREW_LABEL, and no Claude session, which a run has none of crew's
+    to read, as shell assignments quoted (teams.9); nothing for a place that is no run."""
+    if not run:
+        return ""
+    return "export " + " ".join(f"{k}={shlex.quote(v)}" for k, v in (("CREW_AGENT", f"{run[0]}-{run[1]}"), ("CREW_LABEL", run[0]), ("CREW_SESSION", "")))
 
 
 def role_session(p, role):
@@ -286,75 +318,64 @@ def on_machine(fleet, host, argv, input=None):
                           input=input, capture_output=True, text=True)
 
 
-def team_of_agent(fleet, name):
-    """The team an agent crew starts belongs to, from its name alone: its conductor, ops or a unit slot; else None."""
-    for t in fleet["teams"].values():
-        if name in (f"{t['name']}-conductor", f"{t['name']}-ops") or re.match(rf"^{re.escape(t['name'])}-unit-[1-9][0-9]*$", name):
-            return t
-    return None
-
-
 def place_of_agent(fleet, name):
-    """The host and herdr session an agent crew starts runs in, from its name alone."""
-    t = team_of_agent(fleet, name)
-    if t:
-        return t["machine"], t["session"]
+    """The host and herdr session an agent crew starts runs in, from its name alone: a main level's standing role or
+    its reviewer."""
     for p in fleet["partitions"].values():
         l = p["label"]
         for role in MAIN_STANDING + ("reviewer",):
             if name == f"{l}-{role}":
                 return p["machine"], role_session(p, role)
-        m = re.match(rf"^{re.escape(l)}-dispatch-(.+)$", name)
-        if m:
-            return m.group(1), dispatch_place(fleet, l, m.group(1))
     fail(f"no agent {name}: crew starts none by that name")
 
 
 def label_of_agent(fleet, name):
     """The partition an agent crew starts works for, from its name alone."""
-    t = team_of_agent(fleet, name)
-    if t:
-        return t["label"]
     for l in fleet["partitions"]:
-        if name in (f"{l}-{r}" for r in MAIN_STANDING + ("reviewer",)) or re.match(rf"^{re.escape(l)}-dispatch-.+$", name):
+        if name in (f"{l}-{r}" for r in MAIN_STANDING + ("reviewer",)):
             return l
     return None
 
 
 def send_door(fleet, name, caller):
-    """Where crew send delivers (briefs.10, record 0035): a team's partition, or a partition named by its label, as
-    (label, its operator, the team or None). A name that is neither is refused, never placed by a guess (read.1), and so
-    is the operator sending to its own partition, which it carries on with crew tell."""
-    if name in fleet["teams"]:
-        label, team = fleet["teams"][name]["label"], name
-    elif name in fleet["partitions"]:
-        label, team = name, None
-    else:
-        fail(f"crew send takes a team or a partition, not '{name}': teams {' '.join(sorted(fleet['teams'])) or 'none'}; "
-             f"partitions {' '.join(sorted(fleet['partitions'])) or 'none'}")
-    door = f"{label}-operator"
+    """Where crew send delivers (briefs.10, record 0035): a partition named by its label, as (label, its operator). Any
+    other name, a team's from before teams left among them, is refused naming the partitions, never placed by a guess
+    (read.1), and so is the operator sending to its own partition, which it carries on with crew tell."""
+    name in fleet["partitions"] or fail(f"crew send sends to a partition by its label, not '{name}': partitions "
+                                        f"{' '.join(sorted(fleet['partitions'])) or 'none'}")
+    door = f"{name}-operator"
     if caller == door:
-        fail(f"you are {label}'s door: carry it on with `crew tell <agent>`")
-    return label, door, team
+        fail(f"you are {name}'s door: carry it on with `crew tell <agent>`")
+    return name, door
 
 
-# Whom a word from the board goes to, by the role its item's kind names (record 0038 §3): a bolt's, a unit's or a fix's
-# conductor, of the team holding its bolt; a proposal's or a batch's planner; a signal's or a record's design agent; a
-# landing's, a deploy's or an operation's main-level ops; and any other kind's, the partition's operator.
-ROLE_OF = {"bolt": "conductor", "unit": "conductor", "fix": "conductor", "proposal": "planner", "batch": "planner",
+# Whom a word from the board goes to, by the role its item's kind names (record 0038 §3, board-page "A word goes to the
+# agent its item's kind names"): a bolt's, a unit's or chore's, a fix's, a proposal's or a batch's planner; a signal's or
+# a record's design agent; a landing's, a deploy's or an operation's main-level ops; and any other kind's, the
+# partition's operator.
+ROLE_OF = {"bolt": "planner", "unit": "planner", "fix": "planner", "proposal": "planner", "batch": "planner",
            "signal": "design", "record": "design", "landing": "ops", "deploy": "ops", "operation": "ops"}
 
 
-def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again=""):
+def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again="", ask="tell", reading=None):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
     transcript, never take it for the user's typing. A tell reaches its agent as a prompt or not at all (teams.11):
     an agent that is not up, one waiting on a question in its pane, and one crew can't read that of is reported, with
     nothing typed, and the tell fails. With taken, the text is taken or sent again (send_taken), and a sending not
     taken fails the tell, saying so of what was sent, with again, what to do once it is ready, when it was never
-    taken. A tell is in the run record of the recipient's partition, with its length and never its text."""
+    taken. A tell is in the run record of the recipient's partition, with its length and never its text.
+
+    To a role its partition runs as its kind (record 0047 move 6), with no standing agent of it up, the tell is an ask
+    of the role instead, of the kind ask, from the sender or crew (tell_ask), and does not fail for the agent not being
+    up; a standing agent of it still up is told as today, and one crew can't read is refused (asks_instead). reading,
+    what waits_on_question read of the agent, where the caller already read it."""
     host, session = place_of_agent(fleet, name)
-    why = tell_refusal(name, host, *waits_on_question(fleet, name))
+    status, asking, unread = reading or waits_on_question(fleet, name)
+    run = kind_role_of(fleet, name)
+    if asks_instead(run, status, unread):
+        return tell_ask(fleet, run, text, sender or "crew", ask)
+    why = tell_refusal(name, host, status, asking, unread, run)
     if why:
         print(why, file=sys.stderr)
         return False
@@ -375,21 +396,47 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     return sent
 
 
+def asks_instead(run, status, unread):
+    """Whether a tell is an ask of the role rather than a prompt (role-runs "A tell finds a standing agent of the role
+    first"): the agent is a role its partition runs as its kind, run, and crew read that no standing agent of it is up.
+    One still up is told as today; one crew could not read is refused (tell_refusal), never asked on a guess (read.1)."""
+    return bool(run) and status is None and not unread
+
+
+def tell_ask(fleet, run, text, frm, what="tell"):
+    """A tell to a role that runs as its kind, run (label, role), written as an ask of the role on its partition's
+    flywheel branch (plan.ask_write), from frm, carrying the text, typed into no pane; `asked <label>-<role>` once it is
+    written. Whether it was written: an ask crew could not write is said, as a tell not typed is."""
+    import plan  # plan imports this module
+    name = f"{run[0]}-{run[1]}"
+    try:
+        plan.ask_write(fleet, run[0], run[1], what, frm, words=text)
+    except Refusal as e:
+        print(f"could not ask {name}: {e}; nothing was sent", file=sys.stderr)
+        return False
+    print(f"asked {name}")
+    return True
+
+
 def send(fleet, name, text):
-    """Send the text to the door of the team or partition named (briefs.10): a tell to its operator, marked with who
-    sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
+    """Send the text to the door of the partition named by its label (briefs.10): a tell to its operator, marked with
+    who sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
     the receiving partition's record, with its length and never its text, and no tell entry; one that typed nothing
-    records nothing."""
+    records nothing. To an operator that runs as its kind, with no standing operator up, the send is a `send` ask of it
+    carrying `(sent to <name>)` and the text, its entry the ask's (tell)."""
     import record as rec  # record imports this module
-    label, door, team = send_door(fleet, name, os.environ.get("CREW_AGENT"))
-    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who())
-    if sent:
-        rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
+    label, door = send_door(fleet, name, caller(fleet))
+    run = kind_role_of(fleet, door)
+    reading = waits_on_question(fleet, door) if run else None
+    asked = bool(reading) and asks_instead(run, reading[0], reading[2])
+    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who(), ask="send", reading=reading)
+    if sent and not asked:
+        rec.emit(label, "send", on=[f"agent/{door}"], why=f"send {name}", Chars=len(text))
     return sent
 
 
 # The kinds of item a word from the board is on: a dock's, and a batch, a record and the partition itself.
-KINDS = ("signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation", "team", "subscription", "batch", "record",
+KINDS = ("signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation", "subscription", "batch", "record",
          "partition")
 BOARD_KEY = re.compile(r"^([a-z]+):([A-Za-z0-9._:/+-]{1,200})$")
 WORD_MOST = 1000
@@ -398,8 +445,7 @@ WORD_MOST = 1000
 def board_word(fleet, raw):
     """A word posted from a dock, as the board's listener pipes it (record 0038 §4): one JSON object holding the
     partition, the item's key, the agent and the text, each a string, the agent the one its item's kind goes to in that
-    partition (ROLE_OF), for a bolt's, a unit's or a fix's any conductor of the partition's teams or its operator, since
-    which team holds a bolt is the page's read; the text one line of at most WORD_MOST characters. Returns the agent
+    partition (ROLE_OF); the text one line of at most WORD_MOST characters. Returns the agent
     and the text to tell it, `(on <kind> <name>) <text>`; anything else is refused (read.2)."""
     try:
         w = json.loads(raw)
@@ -414,11 +460,7 @@ def board_word(fleet, raw):
     kind in KINDS or fail(f"a word from the board is on no item of the kind '{kind}': kinds " + " ".join(KINDS))
     role = ROLE_OF.get(kind, "operator")
     a = "an" if kind[0] in "aeio" else "a"
-    if role == "conductor":
-        to in {f"{t['name']}-conductor" for t in fleet["teams"].values() if t["label"] == label} | {f"{label}-operator"} or fail(
-            f"a word on {a} {kind} goes to the conductor of the {label} team holding its bolt, or to {label}-operator, not {to}")
-    else:
-        to == f"{label}-{role}" or fail(f"a word on {a} {kind} goes to {label}-{role}, not {to}")
+    to == f"{label}-{role}" or fail(f"a word on {a} {kind} goes to {label}-{role}, not {to}")
     if "\n" in text or "\r" in text:
         fail("a word from the board is one line")
     text.strip() or fail("a word from the board holds no text")
@@ -437,9 +479,13 @@ def board_tell(fleet, raw):
     return sent
 
 
-def tell_refusal(name, host, status, asking, unread):
+def tell_refusal(name, host, status, asking, unread, run=None):
     """Why a tell types nothing (teams.11), from what crew read of the agent: what it could not read, the agent not
-    up, or waiting on a question in its pane; None when the tell may be typed."""
+    up, or waiting on a question in its pane; None when the tell may be typed. For a role that runs as its kind, run,
+    what crew could not read is whether a standing agent of it is up, so it neither types nor asks."""
+    if unread and run:
+        return (f"could not tell {name} on {host}: {unread}, so crew can't tell whether a standing agent of it is up or "
+                f"its role is to be asked; nothing was sent or asked")
     if unread:
         return f"could not tell {name} on {host}: {unread}, so crew can't tell whether it is waiting on a question; nothing was sent"
     if status is None:
@@ -606,24 +652,18 @@ def pane_holds(name, pane, item, agent):
 
 
 def held_in(fleet, name):
-    """The Agents an agent crew starts is kept in on its host and its role there, from its name alone: a team's for
-    its conductor, ops or a unit slot, a main level's for its roles and its reviewer, or a dispatcher's; None for a
-    name crew starts no agent by."""
-    t = team_of_agent(fleet, name)
-    if t:
-        return Team(fleet, t), name[len(t["name"]) + 1:]
+    """The Agents an agent crew starts is kept in on its host and its role there, from its name alone: a main level's
+    for its roles and its reviewer; None for a name crew starts no agent by."""
     label = label_of_agent(fleet, name)
     if not label:
         return None
     role = name[len(label) + 1:]
-    if role.startswith("dispatch-"):
-        return standing(fleet, "dispatch", label), "dispatcher"
     return main_holding(fleet, label, role), role
 
 
 def holding_of(fleet, name):
-    """The Agents a standing agent's role is kept in and that role, from its name alone: a team's, a main level's or a
-    dispatcher's; None for a name that is no standing agent's (standing_role)."""
+    """The Agents a standing agent's role is kept in and that role, from its name alone, a main level's; None for a
+    name that is no standing agent's (standing_role)."""
     return held_in(fleet, name) if standing_role(fleet, name) else None
 
 
@@ -925,20 +965,6 @@ def taken_within():
     return int(v)
 
 
-def never_started(agent, stage, what, obj, team, how, why):
-    """What crew says of a stage whose prompt its agent never took, sent twice or never ready (how "never"), or of one
-    crew could not tell it took (teams.15, read.1): the stage never started, nothing is left typed, and how to run it
-    again, by the unit's, the chore's or the fix's own command."""
-    name = obj.rsplit("/", 1)[-1]
-    again = (f"crew unit run {what} {stage}" if obj.startswith("unit/") else f"crew chore run {what} {stage}" if obj.startswith("chore/")
-             else f"crew fix {team} {name} --merge" if stage == "merge"
-             else f'crew fix {team} {name} "<what is wrong>"')
-    if how == "never":
-        return f"{agent} never took its {stage} prompt for {what}, {why}; the stage never started and nothing is left typed in its pane: run it again with {again}"
-    return (f"crew could not tell whether {agent} took its {stage} prompt for {what}: {why}; nothing more was sent, and the stage is "
-            f"taken as never started: run it again with {again}")
-
-
 class Pane:
     """An agent's pane as the taken-or-sent-again exchange reads it and types into it (teams.15): herdr on the agent's
     host, and its session's transcript there, read by transcript.py piped to the host; the clock it waits by. A logic
@@ -1061,14 +1087,7 @@ def read_back(pane, sid, size, text):
         pane.sleep(1)
 
 
-GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
-            "start each stage that is ready.")
-
-# A team's ops is told who it is and what its team holds, and set to nothing: its work comes from its conductor or the user.
-OPS_GREETING = ("You are {team}'s ops; {holds}. Nothing is asked of you now: reply in one line, then wait until your "
-                "conductor or I tell you what is needed.")
-
-# The greeting of each agent crew starts outside a team, by role: the reads its brief already teaches, and what is its own.
+# The greeting of each agent crew starts, by role: the reads its brief already teaches, and what is its own.
 GREETINGS = {
     "design": ("Read where {label} stands with `crew bolts` and `crew rail`, and the signals waiting for curation, tell me in "
                "a few lines, then carry on with what is yours: curate the signals that have no move."),
@@ -1076,8 +1095,6 @@ GREETINGS = {
                 "with what is yours: plan what is queued and see each open proposal through."),
     "ops": ("Read where {label} stands with `crew bolts` and `crew rail`, tell me in a few lines, then carry on with what is "
             "yours: a bolt lands only on the user's word, so land nothing until it comes."),
-    "dispatch": ("Read where {label} stands on {host} with `crew bolts` and `crew status` for each team here, tell me in a few "
-                 "lines, then carry on with what is yours: give each team here that holds no bolt its next one."),
     "operator": ("Read where {label} stands with `crew rail` and `crew bolts`, and tell me in a few lines what is moving and "
                  "what waits on me."),
 }
@@ -1127,64 +1144,20 @@ def greet_waits(name, status, asking, asked, out_of_time, hint, text):
     return None, None
 
 
-def greet(fleet, team, first="", wait=90):
-    """Get a team's conductor going: tell it to read where its bolt stands and carry on."""
-    t = team_of(fleet, team)
-    name = f"{t['name']}-conductor"
-    return greet_agent(fleet, name, first + GREETING, [f"agent/{name}", f"team/{t['name']}"], t["label"],
-                       f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
-
-
-def greet_ops(fleet, team, bolt, unread=None, wait=90, waiting=None):
-    """Give a team's ops its first message (teams.7): who it is, what its team holds, and to wait to be told."""
-    t = team_of(fleet, team)
-    name = f"{t['name']}-ops"
-    return greet_agent(fleet, name, ops_greeting(t["name"], bolt, unread, waiting), [f"agent/{name}", f"team/{t['name']}"],
-                       t["label"], f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
-
-
-def ops_greeting(team, bolt, unread=None, waiting=None):
-    """What a team's ops is greeted with (teams.7): who it is, the bolt its team holds or that it holds none, and, when
-    it holds two, the one it builds and the one that waits to land (waiting, teams.16), and that it waits to be told,
-    so it starts nothing of its own; when crew could not read the plan (unread), it says so rather than name no bolt
-    (read.1)."""
-    holds = (f"crew could not read which bolt your team holds ({' '.join(unread.split())})" if unread
-             else f"your team builds the bolt {bolt}. Bolt {waiting} waits to land" if bolt and waiting
-             else f"your team holds the bolt {bolt}" if bolt else "your team holds no bolt")
-    return OPS_GREETING.format(team=team, holds=holds)
-
-
-def greeted_roles(act, started, fresh, greet=True):
-    """The standing roles of a team a command greets once it has started them (teams.7), in the order started: each that
-    began a new conversation (fresh), since Claude Code keeps a conversation only once it has had a message, and a
-    herdr restart's resume of one that never had one leaves its pane a shell (teams.6); and the conductor crew revive
-    brought back with its conversation, to carry on with its bolt. A conductor crew resume brought back with its
-    conversation is sent the units that wait amended instead (plan.15), and ops brought back with its own waits to be
-    told. act is up, rebuild, restart, resume, revive or give; with greet false (restart --no-greet) none is, since the
-    command's caller greets them, as a bolt's give does."""
-    if not greet:
-        return []
-    return [r for r in started if r in fresh or (act == "revive" and r == "conductor")]
-
-
 def greet_standing(fleet, name, wait=90):
-    """Get an agent crew starts outside a team going (a main level's design agent, planner or ops, a dispatcher, an
-    operator agent): tell it to read where its partition stands and carry on with what is its role's. A team's agent,
-    or a name crew starts no agent by, is refused."""
+    """Get an agent crew starts going (a main level's design agent, planner, ops or operator): tell it to read where its
+    partition stands and carry on with what is its role's. A name crew starts no agent by is refused."""
     label, text, why, hint = standing_greeting(fleet, name)
     return greet_agent(fleet, name, text, [f"agent/{name}"], label, why, hint, wait)
 
 
 def standing_greeting(fleet, name):
-    """The greeting of an agent crew starts outside a team, by its role, read from its name alone: its partition, the
-    text, the greet entry's why, and how it is started when it is not up. A team's agent, the reviewer, sent its batch
-    as its prompt, and a name crew starts no agent by are refused."""
-    t = team_of_agent(fleet, name)
-    t is None or fail(f"{name} is one of team {t['name']}'s agents, not one crew starts outside a team; "
-                      f"crew up {t['name']} greets its conductor")
+    """The greeting of an agent crew starts, by its role, read from its name alone: its partition, the text, the greet
+    entry's why, and how it is started when it is not up. The reviewer, sent its batch as its prompt, and a name crew
+    starts no agent by are refused."""
     label = label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
     host, _ = place_of_agent(fleet, name)
-    role = name[len(label) + 1:]  # design, planner, ops, operator, reviewer or dispatch-<host>
+    role = name[len(label) + 1:]  # design, planner, ops, operator or reviewer
     role != "reviewer" or fail(f"{name} is sent its batch as its prompt by crew review, and is not greeted")
     role = role if role in GREETINGS else role.split("-")[0]
     return label, GREETINGS[role].format(label=label, host=host), f"main({label}): greet {name}", f"crew main up {label} starts and greets it"
@@ -1196,6 +1169,23 @@ def kept_on(fleet, host, repo):
         if repo in (sess.get("repos") or []):
             return checkout(sess, repo)
     return None
+
+
+def kit_kept(fleet, host, kit):
+    """A kit as a host keeps it, named as a plan names it, by its forge address, <owner>/<name>, or its name alone: the
+    repository of that address, or of that name, the first of the host's sessions whose space keeps it holds, as
+    kept_on finds a repo, {"name", "repo" (owner/name as the space keeps it), "dir" (its folder), "main" (its main
+    checkout)}; None where no session's space keeps it. Refused for a name alone when the spaces keep two repositories
+    by it, since crew can't tell which is meant (read.1)."""
+    same = (lambda r: r == kit) if "/" in kit else (lambda r: r.split("/")[-1] == kit)
+    found = [(r, s) for s in fleet["hosts"].get(host, {}).get("sessions", {}).values() for r in (s.get("repos") or []) if same(r)]
+    repos = list(dict.fromkeys(r for r, _ in found))
+    len(repos) < 2 or fail(f"{host}'s spaces keep " + " and ".join(repos) + f" by the name {kit}, so crew can't tell which is meant")
+    if not found:
+        return None
+    r, s = found[0]
+    name = r.split("/")[-1]
+    return {"name": name, "repo": r, "dir": f"{s['dir']}/{name}", "main": checkout(s, r)}
 
 
 def crew_at(fleet, host):
@@ -1210,35 +1200,29 @@ def crew_argv(fleet, host, *args):
     """crew on a host, run as the one asking here: their name, partition and Claude session go with it, so what it
     records names them and not the host that did the work."""
     import record as rec  # record imports this module
-    return ["env", f"CREW_AGENT={rec.who()}", f"CREW_LABEL={os.environ.get('CREW_LABEL', '')}",
+    return ["env", f"CREW_AGENT={rec.who()}", f"CREW_LABEL={caller_label(fleet) or ''}",
             f"CREW_SESSION={rec.session() or ''}", "bash", crew_at(fleet, host), *args]
 
 
-def partition_hosts(fleet, label):
-    """The hosts where a partition's teams run, each once, by name."""
-    return sorted({fleet["teams"][t]["machine"] for t in partition_of(fleet, label)["teams"]})
+def kits_on(fleet, label, host, fetch=False):
+    """The main checkouts on a host of a partition's kits, the repositories its plan and its landings name
+    (plan.kits_read), each as the host's spaces keep it (kit_kept), each once, a kit the host keeps no checkout of left
+    out: the kit folders its main level reaches on its host (the user's ruling of 2026-11-01). Read from the partition's
+    branch as crew's cache holds it, with no fetch (plan.12), as a standing agent's due restart reads it at each stop,
+    or fetched first with fetch, as a role's start reads it."""
+    import plan  # plan imports this module
+    return [k["main"] for k in kits_kept(fleet, host, plan.kits_read(fleet, label, fetch))]
 
 
-def dispatch_place(fleet, label, host):
-    """A dispatcher runs in the main level's session when that is on the host, else in the session of the
-    host's first team of the partition by name."""
-    p = partition_of(fleet, label)
-    if p["machine"] == host:
-        return p["session"]
-    here = sorted(t for t in p["teams"] if fleet["teams"][t]["machine"] == host)
-    here or fail(f"no team of {label} runs on {host}, so {host} has no dispatcher. hosts: " + " ".join(partition_hosts(fleet, label)))
-    return fleet["teams"][here[0]]["session"]
-
-
-def kits_on(fleet, label, host):
-    """The main checkouts on a host of the kits the partition's teams build, each once."""
-    out = []
-    for t in sorted(partition_of(fleet, label)["teams"]):
-        for k in kits_of(fleet["teams"][t]):
-            c = kept_on(fleet, host, k["repo"])
-            if c and c not in out:
-                out.append(c)
-    return out
+def kits_kept(fleet, host, kits):
+    """The kits a host keeps of those named (a partition's, plan.partition_kits), each as the host's spaces keep it
+    (kit_kept), each once by its main checkout, a kit the host keeps no checkout of left out."""
+    out = {}
+    for kit in kits:
+        k = kit_kept(fleet, host, kit)
+        if k:
+            out.setdefault(k["main"], k)
+    return list(out.values())
 
 
 def blueprints_on(fleet, label, host):
@@ -1258,107 +1242,20 @@ def definition(role):
     return meta, m.group(2)
 
 
-def slot_of(t, slot):
-    """What a unit slot holds, from the team's state on its host: kind (unit or fix), name, and its place."""
-    path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
-    for line in (path.read_text().splitlines() if path.exists() else []):
-        f = line.split()
-        if f and f[0] == slot:
-            return {"kind": f[1], "name": f[2], "place": f[3]}
-    fail(f"{t['name']}-{slot} holds no unit or fix")
-
-
-def team_bolt(t, then=""):
-    """The bolt a team builds, the one given last when it holds two (plan.team_building, teams.16), from the plan; None
-    when it holds none. A plan that can't be read, or a pair of bolts crew can't tell the newer of, is reported, with
-    what crew does then, and taken as no bolt."""
-    import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
-    try:
-        return plan.bolt_of_team(this.load(), t)
-    except this.Refusal as e:
-        why = str(e).strip()
-        if "holds no bolt" not in why:
-            print(f"{t['name']}'s bolt could not be read ({why}){then}", file=sys.stderr)
-        return None
-
-
-def bolt_place(t, bolt):
-    """The worktree of the bolt a team holds, where its conductor and ops start while a bolt given before bolts were
-    branches alone keeps one (plan.9); None when it holds none or its bolt is a branch, and the role starts in the kit's
-    main checkout."""
-    path = f"{t['kit']['dir']}/bolts/{bolt}"
-    return path if bolt and pathlib.Path(path).is_dir() else None
-
-
-# The pane token sluice's plugins read for the branch an agent works for when its folder names none (sluice ADR 0038).
-HINT = "sluice_branch"
-
-
-def hint_branch(role, bolt):
-    """The branch sluice's plugins are told a team's agent works for (teams.20): its bolt's, bolt/<bolt>, for the
-    conductor and ops of a team that holds one, whose folder, the kit's main checkout or a bolt's detached worktree,
-    names no branch; None when the team holds none, and for a unit slot, which submits from a place on its own branch
-    and whose forecast of what it holds ahead a hint would hide."""
-    return f"bolt/{bolt}" if role in ("conductor", "ops") and bolt else None
-
-
-def hint_args(pane, branch):
-    """herdr's report of the branch on a pane, or of none: the token from crew's source with no time to live, so it
-    stands until crew replaces or clears it, and no sequence number, which herdr would hold a crew started afresh
-    below (read 2026-10-21 on herdr 0.9.5's `pane report-metadata`)."""
-    return ["pane", "report-metadata", pane, "--source", "crew"] + (["--token", f"{HINT}={branch}"] if branch else ["--clear-token", HINT])
-
-
-def hint_agent(fleet, name, pane):
-    """crew.py hint <agent> <pane>: a team's conductor's or ops's pane told again the branch it works for, as the plan
-    has it now (hint_branch), once herdr has resumed it bare: herdr keeps no token across its server's restart, and the
-    session's start is the first crew hears of it (hooks/session-start). Any other agent's pane is left alone."""
-    t = team_of_agent(fleet, name)
-    role = name[len(t["name"]) + 1:] if t else ""
-    if role not in ("conductor", "ops"):
-        return
-    r = subprocess.run([os.environ.get("HERDR_BIN_PATH") or "herdr", *hint_args(pane, hint_branch(role, team_bolt(t)))],
-                       capture_output=True, text=True)
-    r.returncode == 0 or fail(f"herdr did not take {name}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}")
-
-
-# A unit's stages and the definition each is started from.
-STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "settle": "coder", "merge": "coder", "fix": "coder"}
-def launch(fleet, scope, role, extra=None, where=True):
-    """How crew-role starts a role: its folder, agent name, partition, the definition it comes from, the
-    folders it may also reach, the model and effort after the teams file's override, and the branch sluice's plugins
-    are told it works for (hint_branch). With where false, a team's conductor and ops are given the kit's main checkout
-    and no branch without reading the plan for its bolt, as what an agent's start is made of reads them (launch_now)."""
-    if scope in fleet["teams"]:
-        t = held_team(fleet, fleet["teams"][scope])
-        label, roles, kit, bp = t["label"], t["roles"], t["kit"], t["blueprints"]
-        if role in ("conductor", "ops"):
-            bolt = team_bolt(t, f"; starting in {kit['main']}") if where else None
-            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=bolt_place(t, bolt) or kit["main"], dirs=[kit["dir"], bp["main"]],
-                        branch=hint_branch(role, bolt))
-        elif re.match(r"^unit-[1-9][0-9]*$", role):
-            int(role[5:]) <= t["units"] or fail(f"{t['name']} has {t['units']} unit slots, so no {role}")
-            extra in STAGES or fail(f"{t['name']}-{role}: which stage? stages: " + " ".join(STAGES))
-            held = slot_of(t, role)
-            spec = dict(defn=STAGES[extra], name=f"{t['name']}-{role}", cwd=held["place"], dirs=[kit["main"], bp["main"]])
-        else:
-            fail(f"no role '{role}' on team {t['name']}. roles: conductor ops unit-<n>")
+def launch(fleet, label, role, fetch=False):
+    """How crew-role starts a partition's main-level role: its folder, agent name, partition, the definition it comes
+    from, the folders it may also reach, its blueprints' and its kits' on its host (kits_on, fetched first with fetch),
+    and the model and effort after the teams file's override."""
+    p = partition_of(fleet, label)
+    roles = p["roles"]
+    main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"], fetch)])
+    if role in MAIN_STANDING + ("reviewer",):
+        spec = dict(main, defn="main-ops" if role == "ops" else role, name=f"{label}-{role}")
     else:
-        p = partition_of(fleet, scope)
-        label, roles, host = p["label"], p["roles"], this_host()
-        main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"])])
-        if role in MAIN_STANDING + ("reviewer",):
-            spec = dict(main, defn="main-ops" if role == "ops" else role, name=f"{label}-{role}")
-        elif role == "dispatcher":
-            dispatch_place(fleet, label, host)
-            bps = blueprints_on(fleet, label, host)
-            spec = dict(defn="dispatcher", name=f"{label}-dispatch-{host}", cwd=bps[0] if bps else fleet["hosts"][host]["sessions"][dispatch_place(fleet, label, host)]["dir"],
-                        dirs=bps[1:] + kits_on(fleet, label, host))
-        else:
-            fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer dispatcher operator")
+        fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer operator")
     meta, _ = definition(spec["defn"])
     o = roles.get(spec["defn"], {})
-    return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]), branch=spec.get("branch"))
+    return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]))
 
 
 def operator_session(fleet, label, host):
@@ -1400,25 +1297,14 @@ def signal_how(cmd, label, state):
             f"`signals/` on `{label}/main` of {state}.")
 
 
-# How a stage's agent stops short, the same in every brief that runs a stage: work is "stage".
-def needs_how(cmd, work):
-    return (f"When you cannot finish without something only someone else can give (a decision, a fact about a live system, "
-            f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. Post no Pending "
-            "You card and make no area, whatever a Pending You reminder in your session says: your conductor answers what "
-            "you need or asks whoever can, the user last, and crew refuses a card from you. crew ends your "
-            f"{work} there, and this session once your turn ends, and gives your words to the conductor, who gets the "
-            f"answer and starts the {work} again with it in a fresh session. "
-            "Never ask in your pane: nobody watches it. Ending a turn to wait on something you started in the background is "
-            f"fine: crew knows your {work} is over only when what it delivers is there.")
-
-
-# How an agent asks the user a question of its own, the same in the brief of each of the four that ask: a conductor's,
-# the planner's, main-level ops's and the design agent's (record 0031, briefs.11).
+# How an agent asks the user a question of its own, the same in the brief of each of the three that ask: the planner's,
+# main-level ops's and the design agent's (record 0031, briefs.11; Decision 6 of the-team-machinery-leaves).
 def cards_how(cmd, label, kits):
     return ("A question of yours for the user reaches them on a Pending You card you ask yourself; every other card on "
-            "the rail is crew's. Four ask the user: a team's conductor, the planner, main-level ops and the design agent. "
-            f"A stage agent and a team's ops stop short to their conductor, with `{cmd} needs` or a tell; the dispatcher "
-            "asks through the planner; and crew refuses a card from any of them. Before you ask, answer it from the "
+            "the rail is crew's. Three ask the user: the planner, main-level ops and the design agent. A Flume place "
+            "that stops short asks the one of you it names, who gets the answer and gives it to the place with "
+            f"`{cmd} answer`; the operator and the reviewer ask nothing; and crew refuses a card from any other agent. "
+            "Before you ask, answer it from the "
             f"records and the rules already written, or ask the agent whose it is with `{cmd} tell`: `{label}-design` for "
             f"the design, `{label}-ops` for a live system or a deploy, `{label}-planner` for the plan. It is the user's "
             "only when they alone can decide, know or do it, in their name, their money, their plans, public or hard to "
@@ -1460,10 +1346,10 @@ SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sen
            "sent from the board about the item it names, and answers no card; one that begins `[crew]` is crew's own; "
            "anything else typed there is the user.")
 
-# How anything for another team or partition is sent, beside every brief's roster (briefs.10): to that partition's
-# operator, its one door, and to nobody else.
-SENDS = (f"`{HOME}/plugin/bin/crew send <team or partition> \"<text>\"`, which reaches that partition's operator, its "
-         "one door, and to nobody else")
+# How anything for another partition is sent, beside every brief's roster (briefs.10): to that partition's operator,
+# its one door, and to nobody else.
+SENDS = (f"`{HOME}/plugin/bin/crew send <partition> \"<text>\"`, which reaches that partition's operator, its one door, "
+         "and to nobody else")
 
 # How an agent reports results, the same in every brief that reports them.
 RESULTS = ("## Test, check and proof results\n\n"
@@ -1484,48 +1370,50 @@ RESULTS = ("## Test, check and proof results\n\n"
            "agent reported, show its list as it is, first.")
 
 
-def team_tokens(fleet, t, role, self_name):
-    kit, bp, n, label = t["kit"], t["blueprints"], t["name"], t["label"]
-    p = fleet["partitions"][label]
-    slots = [f"`{n}-unit-{i}`" for i in range(1, t["units"] + 1)]
-    tok = {
-        "SELF": self_name or {"conductor": f"{n}-conductor", "ops": f"{n}-ops"}.get(role, f"{n}-unit-<n>"),
-        "OPERATORS": f"`{label}-operator`",
-        "TEAM": n, "SYSTEM": t["system"], "LABEL": label, "KIT": kit["main"], "KIT_NAME": kit["name"], "KIT_DIR": kit["dir"],
-        "BLUEPRINTS": bp["main"], "BLUEPRINTS_NAME": bp["name"], "BLUEPRINTS_REPO": bp["repo"], "SIGNALS_REPO": p["blueprints"][0], "STATE_REPO": p["state"],
-        "CONDUCTOR": f"{n}-conductor", "OPS": f"{n}-ops", "UNITS": str(t["units"]), "SLOTS": ", ".join(slots),
-        "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
-        "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
-        "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
-        "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named(kits_of(t))), "RESULTS": RESULTS,
-        "NEEDS": needs_how(f"{HOME}/plugin/bin/crew", "stage"),
-        "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
-    }
-    tok["ROSTER"] = (
-        f"The team: `{n}-conductor` keeps the bolt's units moving through their stages and tells the user where the bolt stands; "
-        f"`{n}-ops` does everything that touches a live system, the bolt's deploys and tests among it; and the unit slots "
-        f"({', '.join(slots)}), each holding one unit, chore or fix in flight, where every stage of it (construct, code, verify, settle, merge) "
-        f"is a fresh agent in its own worktree, a chore's being code, verify and merge. Above the team, at {label}'s main level: `{label}-design`, the design agent, "
-        f"answers design questions; `{label}-planner` plans the partition's bolts; `{label}-dispatch-{t['machine']}` gives this "
-        f"host's teams their bolts; `{label}-ops` lands a proven bolt on main; and `{label}-operator` is the partition's door "
-        f"to the user. " + (f"The team holds the kits {', '.join(k['name'] for k in kits_of(t))}, and takes a bolt of any of them; "
-                            f"the kit this brief names, {kit['name']}, is its bolt's. " if len(kits_of(t)) > 1 else "")
-        + f"The agents named here are reached with `{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run; "
-        f"anything for another team, of this partition or another, or for another partition, is sent with {SENDS}. {SENDERS}")
-    return tok
+# How a main-level role's work reaches it, the brief's {{TURN}} (design Decision 9, role-runs "A run's brief says how a
+# turn goes"): for a role its partition runs as its kind, how a turn goes, with what is the role's own in a turn
+# (TURN_OWN); for one that stands, that its work reaches it in its pane.
+KIND_TURN = (
+    "You run as your kind: no agent of you stands, and each run of you is one turn, a place the host's runner launches "
+    "while anything waits for you, one at a time. Your turn starts with `{{TEAM_CMD}} role start`, which takes everything "
+    "asked of you since your last turn and prints this brief's path, each ask, each place that waits on you and the "
+    "cards the user answered in your name; act on what it took, as this brief says, and end the turn with "
+    "`{{TEAM_CMD}} role end`, as your turn's prompt says. Wait "
+    "in your session on nothing: where this brief says to wait for an answer, a submission, a review or a tell, end your "
+    "turn instead, and the thing reaches your next run as an ask. What is asked after your start waits for your next "
+    "turn. Ask the user only on a card in your own name, {{SELF}}, never by stopping short.")
+TURN_OWN = {
+    "reviewer": " A batch asked of you names the file its summary goes to; once each batch your turn took has its summary "
+                "written, run `{{TEAM_CMD}} review delivered`, which records it, raises its card in the planner's name and "
+                "asks the planner.",
+    "main-ops": " From your run, `{{TEAM_CMD}} bolt submit` returns once each bolt is queued: how each landing ends "
+                "reaches your next run as an ask when it does not land, and the planner's and the design agent's when it "
+                "does.",
+    "planner": " `{{TEAM_CMD}} review {{LABEL}}` asks the reviewer a batch where it runs as its kind, and its delivery "
+               "reaches you as an ask, with the line that adopts its card.",
+}
+STANDING_TURN = ("You stand in your pane, an agent crew started and keeps up: your work reaches you there, as tells marked "
+                 "`[crew tell from <sender>]` or `[crew]`, and as the answers to the cards you adopted.")
+
+
+def turn_said(p, defn):
+    """The brief's {{TURN}} for a partition's main-level role, by its definition: how a turn goes for a role its
+    partition runs as its kind (KIND_TURN, TURN_OWN), else how a standing role's work reaches it."""
+    role = "ops" if defn == "main-ops" else defn
+    if role in KIND_ROLES and p["flume"][role] is not False:
+        return KIND_TURN + TURN_OWN.get(defn, "")
+    return STANDING_TURN
 
 
 def main_tokens(fleet, p, role, self_name):
+    import plan  # plan imports this module
     label, host, cmd = p["label"], this_host(), f"{HOME}/plugin/bin/crew"
-    teams = [fleet["teams"][n] for n in sorted(p["teams"])]
-    hosts = partition_hosts(fleet, label)
-    here = [t for t in teams if t["machine"] == host]
-    team_line = lambda t: (f"- `{t['name']}` builds {t['system']} in {' and '.join(k['name'] for k in kits_of(t))}, from {t['blueprints']['repo']}'s plan, on "
-                           f"{t['machine']} in session {t['session']} (account {fleet['hosts'][t['machine']]['sessions'][t['session']]['account']}), "
-                           f"with {t['units']} unit slots; its conductor is `{t['name']}-conductor`")
-    kits = sorted({k["name"] for t in teams for k in kits_of(t)})
+    # The partition's kits, the repositories its plan and its landings name, as crew's cache holds its branch (plan.12),
+    # and those its main level's host keeps a checkout of (Decision 3 of the-team-machinery-leaves).
+    named = plan.kits_read(fleet, label, False)
+    kept = kits_kept(fleet, p["machine"], named)
     names = {"design": f"{label}-design", "planner": f"{label}-planner", "main-ops": f"{label}-ops",
-             "dispatcher": f"{label}-dispatch-{host}", "operator": f"{label}-operator", "reviewer": f"{label}-reviewer"}
+             "operator": f"{label}-operator", "reviewer": f"{label}-reviewer"}
     account = lambda s: fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account", "")
     places = "; ".join(f"`{label}-{r}` in session {s}" + (f" (account {account(s)})" if account(s) else "")
                        for r, s in ((r, role_session(p, r)) for r in MAIN_STANDING + ("reviewer",)))
@@ -1537,17 +1425,13 @@ def main_tokens(fleet, p, role, self_name):
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
         "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
-        "CARDS": cards_how(cmd, label, kits_named({k["repo"]: k for t in teams for k in kits_of(t)}.values())), "RESULTS": RESULTS,
+        "CARDS": cards_how(cmd, label, kits_named(kept)), "RESULTS": RESULTS,
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}", "MAIN_SESSIONS": places,
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "REVIEWER": f"{label}-reviewer", "REVIEWS": f"~/.local/state/crew/{label}-main/reports",
-        "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",
-        "KIT_CHECKOUTS": ", ".join(f"`{c}`" for c in kits_on(fleet, label, p["machine"])) or "none on this host",
-        "TEAMS": "\n".join(team_line(t) for t in teams) or "- no team yet",
-        "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
-        "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
-        "OPERATORS": f"`{label}-operator` on {p['machine']}",
-        "TEAMS_DOORS": ", ".join(doors) or "none",
+        "KITS": ", ".join(sorted({k.split("/")[-1] for k in named})) or "none yet",
+        "KIT_CHECKOUTS": ", ".join(f"`{k['main']}`" for k in kept) or "none on this host",
+        "TEAMS_DOORS": ", ".join(doors) or "none", "TURN": turn_said(p, role),
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
                     "`terminal-browser open <url> --split right`." if fleet["hosts"].get(host, {}).get("kind") == "darwin" else
                     f"{host} is a box, which can't open the dev.swancloud.net names: say so, and give the user the URL "
@@ -1558,20 +1442,15 @@ def main_tokens(fleet, p, role, self_name):
         f"`{label}-design`, the design agent, keeps the design true on main and curates signals; `{label}-planner` plans the partition's "
         f"bolts and posts its review batches; `{label}-reviewer`, started fresh for each batch, summarizes its changes; `{label}-ops` lands "
         f"proven bolts on the user's send on each kit's landings card; and `{label}-operator`, the partition's door, works for the user. "
-        f"A dispatcher on each host the partition's teams run on gives that host's teams their bolts: {tok['DISPATCHERS']}. "
-        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
-        f"anything for another partition or one of its teams is sent with {SENDS}. {SENDERS}")
+        f"Any of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
+        f"anything for another partition is sent with {SENDS}. {SENDERS}")
     return tok
 
 
-def brief(fleet, scope, role, self_name=""):
-    """A definition's body, filled from the teams file for a team or for a partition's main level."""
-    if scope in fleet["teams"]:
-        role in TEAM_ROLES or fail(f"no definition '{role}' for a team. definitions: " + " ".join(TEAM_ROLES))
-        tok = team_tokens(fleet, held_team(fleet, fleet["teams"][scope]), role, self_name)
-    else:
-        role in MAIN_ROLES or fail(f"no definition '{role}' for a main level. definitions: " + " ".join(MAIN_ROLES))
-        tok = main_tokens(fleet, partition_of(fleet, scope), role, self_name)
+def brief(fleet, label, role, self_name=""):
+    """A definition's body, filled from the teams file for a partition's main level."""
+    role in MAIN_ROLES or fail(f"no definition '{role}' for a main level. definitions: " + " ".join(MAIN_ROLES))
+    tok = main_tokens(fleet, partition_of(fleet, label), role, self_name)
     def fill(m):
         k = m.group(1)
         if k not in tok:
@@ -1639,11 +1518,21 @@ def brief_due(source, launched, saved):
 
 def main_named(name, label):
     """The main-level role a session's recorded agent is, from its record alone: its role when the name is
-    <label>-design, -planner, -ops, -operator or -reviewer, else None, as for a team's agent, a dispatcher or a
-    record with no label. Only such a session's identity is tied to a host, so no other reads the teams file for it."""
+    <label>-design, -planner, -ops, -operator or -reviewer, else None, as for a team's agent or a dispatcher from
+    before teams left, or a record with no label. These are every agent crew starts, so a session whose record names
+    no such role is given nothing of crew's back (main-level), and its identity, tied to its main level's host, is the
+    one that reads the teams file."""
     if not name or not label:
         return None
     return next((r for r in MAIN_STANDING + ("reviewer",) if name == f"{label}-{r}"), None)
+
+
+def kind_said(label, role):
+    """Why crew-role starts no standing agent of a role its partition runs as its kind (main-level "A role that runs as
+    its kind is not started by crew-role", design Decision 14): its runs are places the host's runner launches, and the
+    user opens one to talk with crew role open."""
+    return (f"{label}'s {role} runs as its kind, so crew starts no standing agent of it: it is opened with crew role open "
+            f"{role} --label {label}")
 
 
 def main_elsewhere_said(name, label, main, here):
@@ -1665,15 +1554,12 @@ def identity_withheld(name, label, here, main, unread=None):
 
 
 def brief_role(fleet, name, recorded):
-    """The scope and definition an agent's brief is built from: the definition crew-role recorded starting it from
-    (recorded), else, for a session recorded before crew-role named it, the one its name gives; a unit slot's name
-    gives none, its definition being its stage's. Refused for a name crew starts no agent by."""
-    t = team_of_agent(fleet, name)
-    scope = t["name"] if t else label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
-    role = name[len(scope) + 1:].split("-")[0]  # conductor, ops, unit; design, planner, ops, reviewer, dispatch, operator
-    named = (role if role in ("conductor", "ops") else None) if t else {"ops": "main-ops", "dispatch": "dispatcher"}.get(role, role)
-    return scope, recorded or named or fail(f"{name}'s session record names no definition, and a unit slot's is its stage's, "
-                                            "so its brief can't be told")
+    """The partition and definition an agent's brief is built from: the definition crew-role recorded starting it from
+    (recorded), else, for a session recorded before crew-role named it, the one its name gives. Refused for a name crew
+    starts no agent by."""
+    label = label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
+    role = name[len(label) + 1:]  # design, planner, ops, reviewer, operator
+    return label, recorded or {"ops": "main-ops"}.get(role, role)
 
 
 def brief_back_said(name, text):
@@ -1763,6 +1649,36 @@ def files_ref(common, name):
     return ""
 
 
+def files_refs(common, prefix):
+    """Every ref under a prefix read from a git folder's files, with no process, as files_ref reads one: {name: commit},
+    each loose file over its line in packed-refs; None when the files can't say, a reftable folder, a ref that is not
+    a commit's name or a file that can't be read, for the caller to ask git (read.1)."""
+    common = pathlib.Path(common)
+    if (common / "reftable").exists():
+        return None
+    refs = {}
+    try:
+        lines = (common / "packed-refs").read_text().splitlines()
+    except FileNotFoundError:
+        lines = []
+    except OSError:
+        return None
+    for line in lines:
+        sha, _, ref = line.partition(" ")
+        if ref.startswith(prefix) and SHA.fullmatch(sha):
+            refs[ref] = sha
+    try:
+        for f in (common / prefix).rglob("*"):
+            if f.is_file():
+                text = f.read_text().strip()
+                if not SHA.fullmatch(text):
+                    return None
+                refs[f.relative_to(common).as_posix()] = text
+    except OSError:
+        return None
+    return refs
+
+
 def head_here(root=None):
     """crew's checkout's commit, read from its files with no process (files_ref): its .git, a folder or a linked
     worktree's file naming one, its HEAD, and the branch HEAD names in the folder its worktrees share; through git
@@ -1821,43 +1737,36 @@ def launch_digest(l, text):
 
 
 def launch_now(fleet, scope, role):
-    """The digest of what crew-role would start a standing role with now (launch_digest), read without the plan."""
-    l = launch(fleet, scope, role, where=False)
+    """The digest of what crew-role would start a standing role with now (launch_digest), its kits read from the
+    partition's branch as crew's cache holds it, with no fetch (kits_on)."""
+    l = launch(fleet, scope, role)
     return launch_digest(l, brief(fleet, scope, l["defn"], l["name"]))
 
 
 def standing_role(fleet, name):
-    """The scope and role crew-role starts a standing agent as, from its name alone: (team, conductor|ops), (label,
-    design|planner|ops|operator) or (label, dispatcher); None for a unit slot, the reviewer, or a name crew starts no
-    agent by. Only a standing agent outlives a stage, so only it is restarted for an update (teams.19)."""
-    t = team_of_agent(fleet, name)
-    if t:
-        role = name[len(t["name"]) + 1:]
-        return (t["name"], role) if role in ("conductor", "ops") else None
+    """The partition and role crew-role starts a standing agent as, from its name alone: (label,
+    design|planner|ops|operator); None for the reviewer, or a name crew starts no agent by. Only a standing agent
+    outlives a batch, so only it is restarted for an update (teams.19)."""
     label = label_of_agent(fleet, name)
     role = name[len(label) + 1:] if label else ""
-    if role in MAIN_STANDING:
-        return label, role
-    return (label, "dispatcher") if role.startswith("dispatch-") else None
+    return (label, role) if role in MAIN_STANDING else None
 
 
 def agents_here(fleet, label=None):
-    """The standing agents crew runs on this host, by name, of one partition or of every one: each team's conductor
-    and ops, the main level's roles whose machine this is, and this host's dispatchers."""
+    """The standing agents crew runs on this host, by name, of one partition or of every one: the main level's roles
+    whose machine this is."""
     host, out = this_host(), []
     for l, p in sorted(fleet["partitions"].items()):
         if label not in (None, l):
             continue
-        out += [f"{t}-{r}" for t in sorted(p["teams"]) if fleet["teams"][t]["machine"] == host for r in ("conductor", "ops")]
         out += [f"{l}-{r}" for r in MAIN_STANDING if p["machine"] == host]
-        out += [f"{l}-dispatch-{host}"] if host in partition_hosts(fleet, l) else []
     return out
 
 
 def starts():
     """What each agent's last start on this host recorded (hooks/session-start), by the agent's name: its session, the
-    commit and version of crew it loaded, the digest of the launch it was started with, and the branch it carries for
-    sluice (teams.20), each None when the start did not record it, as one before crew kept them."""
+    commit and version of crew it loaded and the digest of the launch it was started with, each None when the start did
+    not record it, as one before crew kept them."""
     found = {}
     for p in (SESSIONS.iterdir() if SESSIONS.is_dir() else []):
         try:
@@ -1868,8 +1777,7 @@ def starts():
         name = kv.get("CREW_AGENT")
         if name and (name not in found or (at, p.name) > found[name][0]):
             found[name] = ((at, p.name), {"session": p.name, "commit": kv.get("CREW_COMMIT") or None,
-                                          "version": kv.get("CREW_VERSION") or None, "launch": kv.get("CREW_LAUNCH") or None,
-                                          "branch": kv.get("CREW_BRANCH")})  # "" when it carries none
+                                          "version": kv.get("CREW_VERSION") or None, "launch": kv.get("CREW_LAUNCH") or None})
     return {name: s for name, (_, s) in found.items()}
 
 
@@ -1881,7 +1789,8 @@ def start_of(name):
 # What the update check says of a start that recorded its launch but no crew commit, as one on a host that loads crew
 # from its release, where there is no git to read the commit from (record 0050 as amended 2026-10-30).
 NO_COMMIT_SAID = ("crew can't tell whether its plugin changed since it started, its start having recorded no crew commit: "
-                  "a bump of crew's pin restarts it only by crew rebuild, until crew reads its release where it runs")
+                  "a bump of crew's pin restarts it only by crew main down and crew main up, until crew reads its release "
+                  "where it runs")
 
 
 def update_due(started, commit, launch, loaded):
@@ -1907,44 +1816,30 @@ def update_due(started, commit, launch, loaded):
     return (True, "crew's plugin changed") if loaded else (False, None)
 
 
-def branch_due(started, branch):
-    """Whether a team's conductor or ops is due a restart for the branch it carries for sluice (teams.20), and why, from
-    what its start recorded and the branch it would carry now: sluice's board reads SLUICE_BRANCH once, at the session's
-    start, so a running agent whose team's bolt landed, was dropped or changed shows the old one until it starts again.
-    Never due when it started before crew kept the branch, since it carries none."""
-    if started is None or started.get("branch") is None:
-        return False, None
-    was = started["branch"]
-    if (was or None) == (branch or None):
-        return False, None
-    return True, (f"its team's bolt is now {branch}, which sluice's board names" if branch else
-                  f"its team no longer holds {was}, which sluice's board still named")
+# Why a main level's standing agent is due an end and never a restart once its partition runs its role as its kind
+# (end_due; design Decision 14 of roles-run-as-flume-kinds).
+KIND_SAID = "its role now runs as its kind, in Flume runs of its own"
 
 
-# What due_of compares a start's branch with when it is not given: nothing, since reading it reads the plan.
-UNREAD = object()
+def end_due(fleet, name):
+    """Why a standing agent is due an end rather than a restart, or None: a main level's design agent, planner, ops or
+    operator once its partition runs its role as its kind (kind_role_of; design Decision 14 of
+    roles-run-as-flume-kinds), read from the teams file alone, KIND_SAID; never another agent."""
+    kind = kind_role_of(fleet, name)
+    return KIND_SAID if kind and kind[1] in MAIN_STANDING else None
 
 
-def branch_now(fleet, name):
-    """The branch a standing agent would carry for sluice if it started now (hint_branch), read from the plan; UNREAD
-    for an agent outside a team, which carries none."""
-    t = team_of_agent(fleet, name)
-    role = name[len(t["name"]) + 1:] if t else ""
-    return hint_branch(role, team_bolt(t)) if role in ("conductor", "ops") else UNREAD
-
-
-def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
+def due_of(fleet, name, started=None, commit=None):
     """Whether a standing agent of this host is due a restart for crew's update, read: (due, why, what its start
-    recorded). A name that is no standing agent's is never due. With the branch it would carry now (branch_now), one
-    whose team's bolt changed under it is due too (branch_due)."""
+    recorded). A name that is no standing agent's is never due. A main level's agent whose role now runs as its kind
+    is due an end, its why KIND_SAID (end_due)."""
     started = started or start_of(name)
     role = standing_role(fleet, name)
     if started is None or role is None:
         return False, None, started
-    if branch is not UNREAD:
-        due, why = branch_due(started, branch)
-        if due:
-            return True, why, started
+    ends = end_due(fleet, name)
+    if ends:
+        return True, ends, started
     commit = commit or crew_version()[0]
     try:
         now = launch_now(fleet, *role)
@@ -1954,23 +1849,26 @@ def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
     return (*update_due(started, commit, now, loaded), started)
 
 
-def resolve(fleet, scope, role, extra):
+def resolve(fleet, scope, role, extra, fetch=False):
     """How a role starts, and with "resume" the session it picks up: its last conversation, in the folder that began
-    it, which since a conductor moves into its bolt's worktree need not be where the role starts today."""
-    l = launch(fleet, scope, role, None if extra == "resume" else extra)
+    it, which need not be where the role starts today; its kits read as launch reads them, fetched first with fetch."""
+    l = launch(fleet, scope, role, fetch)
     found = last_conversation(l["name"]) if extra == "resume" else None
     return (dict(l, cwd=found[1]), found[0]) if found else (l, None)
 
 
 def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
-    (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
-    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
-    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said)."""
-    if scope not in fleet["teams"] and role in MAIN_STANDING + ("reviewer",):
+    (what the start is made of besides crew's plugin, launch_digest) and the claude arguments in `args`. A resume with
+    no conversation to pick up starts the role fresh.
+    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said), and on
+    every host when its partition runs it as its kind (kind_said). Its kit folders are the partition's kits as its
+    branch stands on GitHub, fetched once for the start (kits_on), which its brief then reads with no fetch of its own."""
+    if role in MAIN_STANDING + ("reviewer",):
         p, here = partition_of(fleet, scope), this_host()
+        p["flume"][role] is False or fail(kind_said(p["label"], role))
         p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
-    l, session = resolve(fleet, scope, role, extra)
+    l, session = resolve(fleet, scope, role, extra, fetch=True)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
         args += ["--add-dir", d]
@@ -1980,24 +1878,18 @@ def launch_shell(fleet, scope, role, extra):
     text = brief(fleet, scope, l["defn"], l["name"])
     args += ["--append-system-prompt", text]
     return (f"CWD={shlex.quote(l['cwd'])}\nNAME={shlex.quote(l['name'])}\nLABEL={shlex.quote(l['label'])}\n"
-            f"ROLE={shlex.quote(l['defn'])}\nLAUNCH={launch_digest(l, text)}\nBRANCH={shlex.quote(l.get('branch') or '')}\n"
+            f"ROLE={shlex.quote(l['defn'])}\nLAUNCH={launch_digest(l, text)}\n"
             f"args=({' '.join(shlex.quote(a) for a in args)})")
 
 
 def here(fleet):
-    """What crew runs on this host: its teams, the main levels whose machine is here, each of their sessions apart
-    (mains), and the dispatchers of the partitions whose teams run here. A console runs no agent and is not listed."""
-    host, out = this_host(), []
-    out += [("team", n) for n, t in sorted(fleet["teams"].items()) if t["machine"] == host]
-    for label, p in sorted(fleet["partitions"].items()):
-        if p["machine"] == host:
-            out.append(("main", label))
-        if host in partition_hosts(fleet, label):
-            out.append(("dispatch", label))
-    return out
+    """What crew runs on this host: the labels of the main levels whose machine is here, each of whose sessions is one
+    Agents (mains). A console runs no agent and is not listed."""
+    host = this_host()
+    return [label for label, p in sorted(fleet["partitions"].items()) if p["machine"] == host]
 
 
-# ------------------------------------------------------------------------------------------ a team's slots and panes
+# ------------------------------------------------------------------------------------------ a main level's panes
 
 def nap(seconds):
     """A pause between looks at a pane: the host's sleep, which crew's tests stub to return at once."""
@@ -2023,186 +1915,9 @@ def exit_asks(screen):
     return bool(screen) and all(w in screen for w in EXIT_ASKS)
 
 
-def down_said(team):
-    """What a stage refused on a team taken down says: it runs nothing until it is brought up."""
-    return f"{team} is down; crew up {team} brings it back"
-
-
-def slot_for(team, slots, held, name, lent=()):
-    """The slot a unit or fix runs in (teams.1): the one holding it, else the first of the team's slots that holds
-    nothing, as (slot, whether it is newly taken); held is the slots file's lines, split. Refused, naming what each
-    holds, when every slot is in flight; and for work waiting in a slot lent to a fix (lent, the lent file's lines,
-    split), which goes on there once the fix's slot is freed (lent_said)."""
-    for f in held:
-        if f[2:3] == [name]:
-            return f[0], False
-    for f in lent:
-        if f[2:3] == [name]:
-            fail(lent_said(team, f[0], name, next((h[2] for h in held if h[0] == f[0] and len(h) > 2), "a fix")))
-    holding = {f[0] for f in held if len(f) > 2}
-    free = [s for s in slots if s not in holding]
-    free or fail(f"all {len(slots)} of {team}'s slots are in flight: " + "; ".join(f"{f[0]} holds {' '.join(f[2:3])}" for f in held))
-    return free[0], True
-
-
-def reaped(agent, team, name, stage, status, lent=None):
-    """What a team's read does with a slot (teams.1): ("free", what it says) once its work has merged, landed, been
-    dropped from the plan or left the team's bolt and its agent is not working, a slot lent to a fix given back to the
-    work it was lent from (lent, its name); ("keep", what it says, or None) while that agent works; (None, None) while
-    its work goes on."""
-    if stage not in ("merged", "landed", "dropped", "left"):
-        return None, None
-    if status == "working":
-        return "keep", {"dropped": f"{agent} still holds {name}, dropped from the plan: its agent is working; it is freed once that settles",
-                        "left": f"{agent} still holds {name}, which has left {team}'s bolt: its agent is working; it is freed once that "
-                                "settles"}.get(stage)
-    why = {"dropped": f"{name} was dropped from the plan", "landed": f"{name} has landed on main",
-           "left": f"{name} has left {team}'s bolt"}.get(stage, f"{name} has merged into its bolt")
-    return "free", f"{agent} is given back to {lent}: {why}" if lent else f"{agent} is free: {why}"
-
-
-# The states herdr reads of an agent that runs: at work, or stopped on a question with its turn open (Herdr.status).
-RUNNING = ("working", "blocked")
-
-
-def lent_for(team, slots, held, status, owed):
-    """The slot a fix takes lent when every slot is in flight (teams.1, teams.3, record 0045), until crew launches
-    through Flume: the first of the team's slots holding a unit or chore whose agent is not running, herdr reading it
-    neither working nor blocked (status, by slot), and that owes no stage an end (owed, the slots the stages file
-    names), so its work waits and holds no agent; held is the slots file's lines, split. Refused, naming why each slot
-    is not lent, when none is: a slot holding a fix, one whose agent runs and one whose stage is under way are never
-    lent, so a team never runs more agents than it has slots."""
-    lines = {f[0]: f for f in held if len(f) > 2}
-    why = []
-    for s in slots:
-        f = lines.get(s)
-        if not f:
-            continue
-        if f[1] == "fix":
-            why.append(f"{s} holds {f[2]}")
-        elif status.get(s) in RUNNING:
-            why.append(f"{s}'s agent is {status[s]} on {f[2]}")
-        elif s in owed:
-            why.append(f"{s}'s stage on {f[2]} has not ended")
-        else:
-            return s
-    fail(f"all {len(slots)} of {team}'s slots are in flight, and none can be lent to a fix: " + "; ".join(why))
-
-
-def lent_said(team, slot, work, fix):
-    """What crew says of work waiting in a slot lent to a fix (teams.1): it goes on there once the fix's slot is freed."""
-    return f"{work} waits in {team}-{slot}, lent to {fix}: it goes on there once that fix has merged or been dropped"
-
-
-def held_object(kind, name, bolt=""):
-    """What a slot holds, as the run record names it (record.6): unit/<unit>, chore/<chore>, or a fix's
-    fix/<bolt>/<name>, one given as fix/<name> before a fix's name held its bolt taking the bolt its branch tracks
-    (bolt)."""
-    if kind == "chore":
-        return f"chore/{name}"
-    if kind != "fix":
-        return f"unit/{name}"
-    if name.startswith("fix/") and "/" in name[4:]:
-        return name
-    import gather  # standard library only, as every host's crew pipes it
-    return f"fix/{gather.bolt_of(bolt) or bolt}/{name[4:] if name.startswith('fix/') else name}"
-
-
-def slot_pane_at(panes, live):
-    """Where a slot's new pane opens in "<team> units": halving the newest slot pane open, to its right when an odd
-    number are open and below it when an even number are, as (that pane, right or down); (None, None) when none is,
-    and the workspace opens anew. panes is the panes file's (role, pane) in the order they opened; live(pane) whether
-    a pane is there."""
-    open_ = [p for role, p in panes if role.startswith("unit-") and live(p)]
-    return (open_[-1], "right" if len(open_) % 2 else "down") if open_ else (None, None)
-
-
 def started_said(name, pane, stage=None):
     """What crew says of a role it started, fresh at a stage or brought back with its conversation."""
     return f"{name} resumed in {pane}" if stage == "resume" else f"{name} started {stage} in {pane}" if stage else f"{name} started in {pane}"
-
-
-TIMESTAMP = re.compile(r'"timestamp":"([^"]*)"')
-
-
-def context_of(lines, window):
-    """What crew status shows of a standing agent's session, from its transcript's lines: the context its last turn
-    used, in thousands of tokens and as a share of the window; the compactions it has had; and when it began, its
-    month, day and minute. The last turn is the last of the session's own records, not a subagent's, among the last 40
-    that carry a usage."""
-    usage, compactions, began = collections.deque(maxlen=40), 0, ""
-    for line in lines:
-        if '"usage"' in line:
-            usage.append(line)
-        compactions += '"isCompactSummary":true' in line
-        if not began:
-            m = TIMESTAMP.search(line)
-            began = m.group(1)[5:16] if m else ""
-    used = 0
-    for line in usage:
-        try:
-            v = json.loads(line)
-        except ValueError:
-            continue
-        u = v.get("message", {}).get("usage") if isinstance(v, dict) and not v.get("isSidechain") and isinstance(v.get("message"), dict) else None
-        if isinstance(u, dict):
-            used = sum(u.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
-    return f"{used // 1000}k", f"{used * 100 // window}%", str(compactions), began
-
-
-def holds_said(s, line):
-    """What crew status says a slot holds: from slot_stages' answer for it (s), its unit or fix and that work's stage,
-    with its tasks done and total in code or verify, and a unit carried onto its bolt inside another unit's merge named
-    so, its merge owed (teams.17); from the slots file's line alone, its work and that its stage is unknown; "" for a
-    free slot."""
-    if s:
-        return (f"{s['name']}  {s['stage']}" + (f" {s['counts']}" if s.get("counts") and s["stage"] in ("code", "verify") else "")
-                + ("  carried by another's merge, its own merge owed" if s.get("carried") else ""))
-    return f"{line[2]}  unknown" if line and len(line) > 2 else ""
-
-
-def carried_said(unit, bolt, stage):
-    """What crew status says of a unit carried onto its bolt inside another unit's merge that no slot holds: its change
-    is open on the bolt and it has not merged, its own merge owed, which archives the change from its place (teams.17)."""
-    return (f"{unit} is carried onto bolt/{bolt} inside another unit's merge, its change open there: it is in {stage}, "
-            f"its own merge owed (crew unit run {unit} merge)")
-
-
-def status_row(*cells):
-    return "%-26s %-8s %-9s %8s %5s %8s  %-12s %s" % cells
-
-
-def roles_picked(named, standing):
-    """The standing roles a command acts on: those named, each one of the scope's standing roles, else all of them;
-    refused, naming the roles, for any other."""
-    for r in named:
-        r in standing or fail(f"no role '{r}' here; roles: {' '.join(standing)}")
-    return list(named) or list(standing)
-
-
-def already_up_said(agent, team):
-    """What crew up says of a team one of whose agents is already up: it starts none over it (teams.2)."""
-    return f"{agent} is already up; use: crew restart {team}"
-
-
-def clear_refusal(agent, status, force):
-    """Why crew clear sends no /clear to an agent (teams.2), or None: it is not up, or works and is not forced."""
-    if status is None:
-        return f"{agent} is not up."
-    return f"{agent} is working; add --force to clear it anyway." if status == "working" and not force else None
-
-
-def stage_agent(teams, who):
-    """The team and the slot, or ops or conductor, of the agent that runs crew needs, from its name (who) and the
-    teams' names, the last team whose name fits; None for a name crew starts no team's agent by."""
-    found = None
-    for t in teams:
-        if who in (f"{t}-ops", f"{t}-conductor"):
-            found = (t, who[len(t) + 1:])
-        else:
-            m = re.fullmatch(rf"{re.escape(t)}-(unit-[1-9][0-9]*)", who)
-            found = (t, m.group(1)) if m else found
-    return found
 
 
 def moved_said(scope, was, session):
@@ -2220,9 +1935,8 @@ def ws_key(label):
 
 class Agents:
     """The agents crew starts in one herdr session of this host and their panes, as one crew command acts on them there
-    (code.3): a team's (Team), a main level's, a dispatcher's or an operator agent's (standing). The panes, layout and
-    slots files of its state folder change only by writing a new file over the old (teams.9), and its herdr session is
-    read through the command's Herdr. A working agent is ended only when force is given (teams.2); `ended` names each
+    (code.3): a main level's, or a console's (standing). The panes and layout files of its state folder change only by
+    writing a new file over the old (teams.9), and its herdr session is read through the command's Herdr. A working agent is ended only when force is given (teams.2); `ended` names each
     role whose agent this command ended, and `fresh` each it started with a new conversation, none picked up."""
 
     def __init__(self, fleet, kind, scope, label, session, state, standing, cwd, machine, host=None, force=False):
@@ -2249,7 +1963,7 @@ class Agents:
             print(f"{why}; set aside in {stale}", file=sys.stderr)
         if was != self.session:
             where.write_text(self.session + "\n")
-        for f in ("panes", "layout", "slots"):
+        for f in ("panes", "layout"):
             (self.state / f).touch()
 
     def lines(self, f):
@@ -2272,8 +1986,6 @@ class Agents:
         self.write(f, [l for l in self.lines(f) if l[0] != key])
 
     def agent_of(self, role):
-        if self.kind == "dispatch":
-            return f"{self.label}-dispatch-{self.host}"
         return f"{self.scope}-{role}"
 
     def pane(self, role):
@@ -2289,14 +2001,9 @@ class Agents:
     def mark(self, down):
         (self.state / "down").touch() if down else (self.state / "down").unlink(missing_ok=True)
 
-    def owes(self):
-        """Whether its stages file owes any stage an end."""
-        p = self.state / "stages"
-        return p.exists() and p.stat().st_size > 0
-
     def record(self, act, why, roles):
-        """One entry for an act on its agents, naming each, and a team's the team (record.1); none when it names none."""
-        on = ([f"team/{self.scope}"] if self.kind == "team" else []) + [f"agent/{self.agent_of(r)}" for r in roles]
+        """One entry for an act on its agents, naming each (record.1); none when it names none."""
+        on = [f"agent/{self.agent_of(r)}" for r in roles]
         if on:
             import record as rec  # record imports this module
             rec.emit(self.label, act, on, why=why)
@@ -2329,18 +2036,10 @@ class Agents:
     def split(self, pane, way, cwd):
         return self.answer("pane", "split", pane, "--direction", way, "--cwd", cwd, "--no-focus")["pane"]["pane_id"]
 
-    def single(self, workspace, role):
-        """A workspace holding one agent, its pane opened when it is not there, a dead one closed first (mend)."""
-        self.mend((role,))
-        self.herdr.live(self.pane(role)) or self.opened(workspace, role, self.cwd, role)
-
     def panes(self):
         """Each standing role's pane, opened when it is not there, a dead one closed first (mend): a main level's roles
         in this session one tab each in the <label> workspace, in MAIN_STANDING's order, the first opening the workspace
-        when it is not there; a dispatcher's alone in "<label> dispatch". A team's are Team.panes; a console's tabs
-        are crew console up's."""
-        if self.kind == "dispatch":
-            return self.single(f"{self.label} dispatch", self.standing[0])
+        when it is not there. A console's tabs are crew console up's."""
         self.mend(self.standing)
         for role in self.standing:
             if not self.herdr.live(self.pane(role)):
@@ -2372,20 +2071,16 @@ class Agents:
         else:
             self.first_tab(workspace, label, cwd, role)
 
-    def stop(self, role, ending=None, waits=False, over=False):
+    def stop(self, role, waits=False):
         """End a role's agent before anything else starts in its pane (teams.2): None once it is ended, or when none was
-        up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. A slot's
-        stage still owed an end ends with it first, by ending(role). waits says the agent's only background work is
-        crew's own waits (hold.renew_ready), which its exit then ends: Claude Code's question at the exit (exit_asks)
-        answered with its first option, Exit and stop tasks, so the exit never stops there (teams.19). over says the
-        stage the agent worked for has ended short (crew needs, record 0007): it is ended working too, its exit's
-        question answered as with waits, since what it still runs was that stage's."""
+        up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. waits says
+        the agent's only background work is crew's own waits (hold.renew_ready), which its exit then ends: Claude Code's
+        question at the exit (exit_asks) answered with its first option, Exit and stop tasks, so the exit never stops
+        there (teams.19)."""
         pane = self.pane(role)
         st = self.herdr.status(pane)
-        if st == "working" and not (self.force or over):
+        if st == "working" and not self.force:
             return working_said(self.agent_of(role))
-        if ending and (role.startswith("unit-") or role == "ops") and self.owes():
-            ending(role)
         if not st:
             return None
         if self.herdr.run("agent", "prompt", pane, "/exit").returncode:
@@ -2395,7 +2090,7 @@ class Agents:
             if not self.herdr.status(pane, fresh=True):
                 self.ended.append(role)
                 return None
-            if (waits or over) and not asked:
+            if waits and not asked:
                 r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
                 if r.returncode == 0 and exit_asks(r.stdout):
                     self.herdr.run("agent", "send-keys", pane, "enter")
@@ -2423,7 +2118,7 @@ class Agents:
         return False
 
     def start(self, role, stage=None):
-        """Start a role in its pane, fresh, at a stage for a slot, or picking up its last conversation with "resume"
+        """Start a role in its pane, fresh, or picking up its last conversation with "resume"
         (teams.2, teams.6): never over an agent still running. Its shell is cleared and moved to the folder the role
         runs in, which herdr keeps for the pane and Claude finds its conversation from; crew-role starts it there, it is
         given its name, and Claude's folder-trust question alone is answered for it, never the Bypass Permissions
@@ -2459,7 +2154,6 @@ class Agents:
                                             f"{self.scope} {role}" + (f" {stage}" if stage else ""))
         if not self.give_name(pane, name):
             return False
-        self.hint(pane, l.get("branch"))
         for _ in range(15):
             nap(2)
             r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
@@ -2483,27 +2177,6 @@ class Agents:
         print(f"{name} did not come up in {pane}; look at that pane.", file=sys.stderr)
         return False
 
-    def hint(self, pane, branch):
-        """A pane told the branch its agent works for, or that it works for none (hint_args, teams.20), so a slot's pane
-        keeps no conductor's branch; a hint herdr does not take is said, and starts or stops nothing."""
-        r = self.herdr.run(*hint_args(pane, branch))
-        if r.returncode:
-            print(f"herdr did not take {pane}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}", file=sys.stderr)
-
-    def hint_standing(self, bolt):
-        """Each standing role's pane that is up told the branch it works for now, its team holding bolt or none, after
-        a plan write that ends the team's bolt (teams.20): the names of those whose session carries another, which only
-        a restart changes (branch_due)."""
-        due = []
-        for role in self.standing:
-            pane = self.pane(role)
-            if self.herdr.live(pane):
-                branch = hint_branch(role, bolt)
-                self.hint(pane, branch)
-                if branch_due(start_of(self.agent_of(role)), branch)[0]:
-                    due.append(self.agent_of(role))
-        return due
-
     def start_standing(self):
         """Each standing role started that is not up, said when one is: the roles started. One that can't start stops
         the command."""
@@ -2523,11 +2196,11 @@ class Agents:
             self.herdr.run("pane", "close", pane)
         self.drop("panes", role)
 
-    def teardown(self, ending=None):
-        """Every agent of its panes file ended, each pane closed and each workspace of its layout closed; the slots still
-        say what is in flight. An agent that could not be ended is said and left."""
+    def teardown(self):
+        """Every agent of its panes file ended, each pane closed and each workspace of its layout closed. An agent that
+        could not be ended is said and left."""
         for role, *_ in self.lines("panes"):
-            why = self.stop(role, ending)
+            why = self.stop(role)
             if why:
                 print(why, file=sys.stderr)
         for _, pane, *_ in self.lines("panes"):
@@ -2541,10 +2214,12 @@ class Agents:
 
 
 def main_sessions(p):
-    """A main level's sessions, the main level's own first, each with its standing roles in MAIN_STANDING's order."""
+    """A main level's sessions, the main level's own first, each with its standing roles in MAIN_STANDING's order. A
+    role its partition runs as its kind stands in none (design Decision 14), but the session it stood in is still one,
+    so a standing agent of it left there is ended."""
     by = {}
     for role in MAIN_STANDING:
-        by.setdefault(role_session(p, role), []).append(role)
+        by.setdefault(role_session(p, role), []).extend([role] if p["flume"][role] is False else [])
     return [(s, tuple(by[s])) for s in sorted(by, key=lambda s: (s != p["session"], s))]
 
 
@@ -2572,139 +2247,23 @@ def main_holding(fleet, label, role, force=False):
 
 
 def standing(fleet, kind, label, force=False):
-    """This host's dispatcher of a partition (dispatch), or the partition's console on this host (console), as the
-    Agents of its session here: its state folder, standing roles and the folder it runs in. A main level is mains."""
+    """The partition's console on this host (console), as the Agents of its session here: its state folder, standing
+    roles and the folder it runs in. A main level is mains."""
     host = this_host()
     state = pathlib.Path.home() / f".local/state/crew/{label}-{kind}"
-    if kind == "dispatch":
-        session = dispatch_place(fleet, label, host)
-        bps = blueprints_on(fleet, label, host)
-        cwd = bps[0] if bps else fleet["hosts"][host]["sessions"][session]["dir"]
-        return Agents(fleet, "dispatch", label, label, session, state, ("dispatcher",), cwd, host, host, force)
     kind == "console" or fail(f"crew.standing: no kind {kind}")
     sess = operator_session(fleet, label, host)
     return Agents(fleet, "console", label, label, label, state, (), sess["dir"], host, host, force)
 
 
-class Team(Agents):
-    """A team's agents on its host: its conductor and ops, and its unit slots, each holding a unit or fix in flight."""
-
-    def __init__(self, fleet, t, force=False):
-        super().__init__(fleet, "team", t["name"], t["label"], t["session"], pathlib.Path.home() / f".local/state/{t['name']}-team",
-                         ("conductor", "ops"), t["kit"]["main"], t["machine"], force=force)
-        self.t, self.name = t, t["name"]
-        self.slots = [f"unit-{n}" for n in range(1, t["units"] + 1)]
-
-    def holding(self, name):
-        """The slot holding a unit or fix, or None."""
-        return next((l[0] for l in self.lines("slots") if l[2:3] == [name]), None)
-
-    def held(self, slot):
-        """The slots file's line for a slot, split, or None."""
-        return next((l for l in self.lines("slots") if l[0] == slot), None)
-
-    def lent(self, slot):
-        """The work waiting in a slot lent to a fix, its line as the slots file held it, split, or None (teams.1)."""
-        return next((l for l in self.lines("lent") if l[0] == slot and len(l) > 2), None)
-
-    def panes(self):
-        """The team's workspace, "<team>": its conductor tab holding the conductor and ops, and no git tab, on a Mac as
-        on a box; each opened when its pane is not there, a dead one closed first (mend), and the conductor's beside ops
-        when only ops' is there (opened). A git tab an earlier crew opened there is left as it stands, the user's to
-        close."""
-        t, live = self.t, self.herdr.live
-        self.mend(("conductor", "ops"))
-        if not live(self.pane("conductor")):
-            self.opened(self.name, "conductor", t["kit"]["main"], "conductor", beside=self.pane("ops"))
-        if not live(self.pane("ops")):
-            self.put("panes", "ops", self.split(self.pane("conductor"), "right", t["kit"]["main"]))
-
-    def slot_pane(self, slot, path):
-        """The slot's pane, opened in "<team> units" when it is not there (slot_pane_at), a dead one closed first (mend);
-        the workspace exists only while a slot is in flight."""
-        self.mend((slot,))
-        if self.herdr.live(self.pane(slot)):
-            return
-        newest, way = slot_pane_at([(l[0], l[1]) for l in self.lines("panes") if len(l) > 1], self.herdr.live)
-        if newest:
-            p = self.split(newest, way, path)
-        else:
-            tab, p = self.workspace(f"{self.name} units", path)
-            self.herdr.run("tab", "rename", tab, "units")
-        self.put("panes", slot, p)
-
-    def take(self, kind, name, place, owed=None):
-        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken). Given
-        owed, the slots whose stage the stages file owes an end, a fix that finds every slot in flight takes one lent
-        (lent_for), the work it holds kept in the lent file until the fix's slot is given back (give_back)."""
-        held, lent = self.lines("slots"), self.lines("lent")
-        try:
-            slot, new = slot_for(self.name, self.slots, held, name, lent)
-        except Refusal:
-            if owed is None:
-                raise
-            slot = lent_for(self.name, self.slots, held, {s: self.status(s) for s in self.slots}, owed)
-            self.write("lent", [l for l in lent if l[0] != slot] + [l for l in held if l[0] == slot])
-            held, new = [l for l in held if l[0] != slot], True
-        if new:
-            self.write("slots", held + [[slot, kind, name, place]])
-        return slot, new
-
-    def give_back(self, slot):
-        """The slot's line dropped, and the work it was lent from, if any, back in it (teams.1): that work's name, or
-        None."""
-        back = self.lent(slot)
-        self.write("slots", [l for l in self.lines("slots") if l[0] != slot] + ([back] if back else []))
-        if back:
-            self.drop("lent", slot)
-        return back[2] if back else None
-
-    def free(self, slot, ending=None, bolt="", held=None):
-        """End a slot's agent, close its pane and give the slot back, recorded (teams.1), to the work it was lent from
-        when it was lent to a fix (give_back); the units workspace goes with the last slot. None once it is free, else
-        what crew says of the agent it could not end (stop). bolt is the bolt a fix given as fix/<name> is of, read from
-        its branch when not given. With held, a list, the slot.free entry is put there as (label, on, why, place) for
-        the command to write once its tidy has run, naming the place it removed (plan.9)."""
-        why = self.stop(slot, ending)
-        if why:
-            return why
-        line = self.held(slot)
-        self.give_back(slot)
-        if line and len(line) > 2:
-            if line[1] == "fix" and not bolt and not (line[2].startswith("fix/") and "/" in line[2][4:]):
-                bolt = subprocess.run(["git", "-C", self.t["kit"]["main"], "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{line[2]}"],
-                                      capture_output=True, text=True).stdout.strip()
-            entry = (self.label, [f"agent/{self.agent_of(slot)}", held_object(line[1], line[2], bolt)],
-                     f"team({self.name}): free {self.agent_of(slot)}", line[3] if len(line) > 3 else "")
-            if held is not None:
-                held.append(entry)
-            else:
-                import record as rec  # record imports this module
-                rec.emit(entry[0], "slot.free", entry[1], why=entry[2])
-        if self.lines("slots"):
-            self.close_pane(slot)
-            return None
-        w = self.get("layout", ws_key(f"{self.name} units"))
-        if w:
-            self.herdr.run("workspace", "close", w)
-        self.drop("layout", ws_key(f"{self.name} units"))
-        for s in self.slots:
-            self.drop("panes", s)
-        return None
-
-
 def main(a):
     fleet = load()
-    if a[:1] == ["teams"]:
-        print("\n".join(fleet["teams"]))
-    elif a[:1] == ["labels"]:
+    if a[:1] == ["labels"]:
         print("\n".join(fleet["partitions"]))
     elif a[:1] == ["brief"] and len(a) >= 3:
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:
         print(launch_shell(fleet, a[1], a[2], a[3] if len(a) > 3 else None))
-    elif a[:1] == ["hint"] and len(a) == 3:
-        hint_agent(fleet, a[1], a[2])
     elif a == ["tell", "--board"]:
         sys.exit(0 if board_tell(fleet, sys.stdin.read()) else 1)
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
@@ -2714,6 +2273,8 @@ def main(a):
         sys.exit(0 if send(fleet, a[1], a[2]) else 1)
     elif a[:1] == ["found"] and len(a) == 2:
         print(json.dumps(found_here(fleet, a[1])))
+    elif a == ["run-name"]:
+        print(run_exports(run_of(fleet, os.environ.get("FLUME_PLACE"))))
     else:
         sys.exit(__doc__)
 

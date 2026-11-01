@@ -3,8 +3,8 @@
 
 A task for each of the logic and contract tiers (tests/py and tests/contract, record 0022), run by pytest, its
 inputs plugin/lib, plugin/roles (whose definitions name each stage's effort), the tier's folder and crew's toolchain files,
-and for the logic tier the mod it reads keys from (code.8), the card hook it loads and the hooks file whose matchers it
-reads; a task, mod, for crew's mod's own cases, run by tests/mod
+and for the logic tier the mod it reads keys from (code.8), the card hook it loads, the hooks file whose matchers it
+reads and the roles' kinds and their prompt (plugin/flume); a task, mod, for crew's mod's own cases, run by tests/mod
 under Claude Code's test kit, its inputs the mod, the files that load it, its cases and the runner; and one task per end-to-end test, tests/t-*.sh, written
 into tests/moon.yml, the live tests (t-*-live.sh) left out. Each end-to-end task runs its one test through tests/run,
 tagged check-full, and its inputs are everything the test's outcome depends on in crew's tree
@@ -31,16 +31,17 @@ TESTS = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.dirname(TESTS)
 MOON_YML = os.path.join(TESTS, "moon.yml")
 # The command core: what every crew command runs, whichever test runs it.
-CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plugin/lib/record.py", "/plugin/lib/gather.py",
+CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plugin/lib/asks.py", "/plugin/lib/record.py", "/plugin/lib/gather.py",
         "/plugin/lib/transcript.py", "/plugin/lib/questions.py", "/plugin/lib/ops.py", "/plugin/lib/cards.py",
-        "/plugin/lib/picture.py", "/plugin/lib/font.py", "/plugin/lib/kit.py"]
+        "/plugin/lib/picture.py", "/plugin/lib/font.py", "/plugin/lib/kit.py", "/plugin/lib/runner.py"]
 # crew's toolchain: devenv's system tools and inputs, proto's pins, moon's toolchains and the tests' locked dependencies.
 TOOLCHAIN = ["/devenv.nix", "/devenv.yaml", "/devenv.lock", "/.prototools", "/.moon/toolchains.yml", "/tests/pyproject.toml", "/tests/uv.lock"]
 COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*"] + TOOLCHAIN
 # The two pytest tiers: name, folder, and what else of crew's its cases read: the logic tier reads crew's mod for the
-# keys it takes from the agents' views (code.8), and loads the card hook and reads the matcher hooks.json runs it by. Each is one task over its whole folder (tests.5, tests.11), in a
+# keys it takes from the agents' views (code.8), loads the card hook, reads the matcher hooks.json runs it by, and reads
+# the kinds crew's release carries for the roles and their prompt (plugin/flume). Each is one task over its whole folder (tests.5, tests.11), in a
 # checkout that has the folder.
-TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js", "/plugin/hooks/cards", "/plugin/hooks/hooks.json"]))
+TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js", "/plugin/hooks/cards", "/plugin/hooks/hooks.json", "/plugin/flume/**/*"]))
          if os.path.isdir(os.path.join(ROOT, f))]
 TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*"] + TOOLCHAIN
 # The tiers' environment, tests/.venv, synced from tests/uv.lock by the uv moon's toolchain gives, before every run of a

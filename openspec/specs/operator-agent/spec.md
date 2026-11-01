@@ -6,12 +6,11 @@ A standing agent in each operator session that works for the user. It says where
 ## Requirements
 
 ### Requirement: The operator agent works for the user
-The operator agent SHALL answer where the partition's work stands from `crew bolts`, `crew status` and `crew sites`, and what waits on the user from `crew rail`. It SHALL carry a request to the agent whose job it is, in the user's words:
+The operator agent SHALL answer where the partition's work stands from `crew bolts` and `crew sites`, and what waits on the user from `crew rail`. It SHALL carry a request to the agent whose job it is, in the user's words:
 
 - what to build and in what order: the planner;
 - a design question: the design agent;
-- which host runs what: that host's dispatcher;
-- a bolt's progress: its conductor.
+- a bolt's landing, a deploy or an operation: main-level ops.
 
 It SHALL NOT write the plan, a kit or a design itself.
 
@@ -75,7 +74,7 @@ On request, the operator agent SHALL make the partition's lineage page with `cre
 - **THEN** it runs `crew page wldn`, opens the file beside its pane, and says as of when it is
 
 ### Requirement: The operator is a main-level role
-The partition's operator, `<label>-operator`, SHALL be a standing role of its main level: `crew main up <label>` SHALL start it in an `operator` tab of the `<label>` workspace, beside the design agent, the planner and ops, and greet it once it is up as it greets them; `crew main down <label>` SHALL end it; `crew revive` SHALL bring it back as it brings them back. Every brief SHALL name it as the partition's operator, and crew SHALL start no other operator agent for the partition.
+The partition's operator, `<label>-operator`, SHALL be a role of its main level: while it stands, `crew main up <label>` SHALL start it in an `operator` tab of the `<label>` workspace, beside the design agent, the planner and ops, and greet it once it is up as it greets them; `crew main down <label>` SHALL end it; `crew revive` SHALL bring it back as it brings them back. While its partition runs it as its kind, it SHALL run as a role's run does, on an ask, and none of these SHALL start it. Every brief SHALL name it as the partition's operator, and crew SHALL start no other operator agent for the partition.
 
 #### Scenario: The main level comes up with its operator
 - **WHEN** `crew main up wldn` runs
@@ -84,6 +83,10 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 #### Scenario: A conductor waits on the user with no card
 - **WHEN** a conductor of wldn stops on a question asked only in its pane
 - **THEN** its brief has it tell `wldn-operator`, the partition's one operator
+
+#### Scenario: The operator runs as its kind
+- **WHEN** madswan's `flume` names a stream for its operator and `crew main up madswan` runs
+- **THEN** no `operator` tab is opened and no operator is started, and a tell to `madswan-operator` is an ask of its role
 
 ### Requirement: The console follows the run record
 `crew console up <label> flow` SHALL open a `flow` tab in the `console` workspace of the host's `<label>` session that runs `crew events --follow` for the partition, and SHALL start no agent. When the tab is already there it SHALL do nothing. `crew console down <label>` SHALL close the console's tabs. The tab SHALL show an entry written on this host within a few seconds, and one from another host within a minute.
@@ -145,51 +148,6 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 - **WHEN** swancloud's timer runs `crew operator up wldn` on mac-studio
 - **THEN** the console opens, the command says `crew operator up` is `crew console up` now, and no agent is started
 
-### Requirement: Anything sent to another team or partition reaches its operator
-`crew send <team or partition> "<text>"` SHALL deliver the text to the operator of the partition it names, `<label>-operator`, wherever that agent runs: a partition is named by its label, and a team resolves to the partition it belongs to. The text SHALL arrive marked as every tell is, `[crew tell from <sender>]`, the sender being the agent that ran the command or `<user>@<host>`, followed by `(sent to <team or partition>)` as it was named, then the text. A name that is no team and no partition SHALL be refused, naming the teams and partitions there are. A send by the operator to its own partition, or to one of its own partition's teams, SHALL be refused, saying it carries with `crew tell`. An operator that is not up, or waits on a question in its pane, SHALL get nothing typed, and the send SHALL fail saying so, as a tell does.
-
-#### Scenario: A team's agent sends to another partition's team
-- **WHEN** `crw-5-unit-1` runs `crew send swb-1 "The zone check fails on tenants with no region"`
-- **THEN** `wldn-operator` is prompted with `[crew tell from crw-5-unit-1] (sent to swb-1) The zone check fails on tenants with no region`
-
-#### Scenario: A partition by its label
-- **WHEN** the user, at a shell on mac-studio, runs `crew send wldn "<text>"`
-- **THEN** `wldn-operator` is prompted with `[crew tell from <user>@mac-studio] (sent to wldn) <text>`
-
-#### Scenario: A name crew does not know
-- **WHEN** an agent runs `crew send swb-1-conductor "<text>"`
-- **THEN** nothing is sent, and crew says it sends to a team or a partition, naming each
-
-#### Scenario: The door sends to itself
-- **WHEN** `wldn-operator` runs `crew send swb-1 "<text>"` for a team of wldn
-- **THEN** nothing is sent, and crew says it is wldn's door and carries with `crew tell`
-
-#### Scenario: The operator waits on a question
-- **WHEN** an agent sends to wldn while `wldn-operator` waits on a question in its pane
-- **THEN** nothing is typed, and the send fails saying the operator waits on a question and to send again once it is answered
-
-### Requirement: The operator carries what is sent to it
-The operator SHALL carry what reaches it by `crew send` on to the agent whose job it is, in the sender's words and naming the sender: a finding becomes a signal it records, quoting the words as sent; a design question goes to the design agent; work to build to the planner; a message for a team to that team's conductor. It SHALL NOT answer it in the sender's place or reason it out itself. A request to change the teams, from an operator whose main level runs on a box, SHALL be sent with `crew send` to a partition whose main level runs on a Mac that keeps swancloud's checkout.
-
-#### Scenario: A message for a team
-- **WHEN** `wldn-operator` receives `[crew tell from crw-5-unit-1] (sent to swb-1) <text>`
-- **THEN** it tells `swb-1-conductor` the text, saying it is from `crw-5-unit-1`
-
-#### Scenario: A finding
-- **WHEN** what is sent reports a defect, with no request
-- **THEN** the operator records it as a signal, its excerpt the words as sent
-
-### Requirement: Every brief names one way to send to another team or partition
-Every brief SHALL say in one line, beside its roster, that anything for another team or another partition is sent with `crew send <team or partition> "<text>"`, which reaches that partition's operator, and that it is sent nowhere else. A team's brief SHALL count every team but its own as another team; a main level's brief SHALL count every partition but its own, and the teams of those. No brief SHALL tell an agent to send a team's or a partition's business to its conductors, or to tell another partition's operator by name.
-
-#### Scenario: A coder's brief
-- **WHEN** `crew brief swb-1 coder` prints
-- **THEN** it says beside the roster that anything for another team or partition goes with `crew send`, and names no conductor of another team to send to
-
-#### Scenario: The operator's brief on a box
-- **WHEN** the operator's brief prints for a partition whose main level runs on a box
-- **THEN** its request to change the teams goes with `crew send` to a partition named by its label, not with `crew tell` to another operator
-
 ### Requirement: The console opens with its shell alone
 `crew console up <label> [flow] [rail] [board]` SHALL open the `console` workspace of the host's `<label>` session with a `shell` tab, a shell with crew on its path, and SHALL start no agent. It SHALL open the `flow`, `rail` or `board` tab only when named, or the rail tab while no host job runs the host's follower. A name that is no tab SHALL be refused, naming the three.
 
@@ -223,3 +181,52 @@ Every later `crew console up <label>`, a tab named or not, SHALL keep each conso
 #### Scenario: After a restart
 - **WHEN** herdr brings the console's `flow` and `rail` tabs back as their shells alone, and `crew console up wldn` runs
 - **THEN** each runs its command there again, and no tab is opened
+
+### Requirement: Anything sent to another partition reaches its operator
+`crew send <partition> "<text>"` SHALL deliver the text to the operator of the partition it names by its label, `<label>-operator`, wherever that agent runs. The text SHALL arrive marked as every tell is, `[crew tell from <sender>]`, the sender being the agent that ran the command or `<user>@<host>`, followed by `(sent to <partition>)`, then the text. A name that is no partition's label SHALL be refused, naming the partitions there are. A send by the operator to its own partition SHALL be refused, saying it carries with `crew tell`. An operator that is not up, or waits on a question in its pane, SHALL get nothing typed, and the send SHALL fail saying so, as a tell does. To a partition that runs its operator as its kind, with no standing operator up, the send SHALL be written as an ask of the operator from the sender, carrying whom it was sent to and the text, and SHALL not fail for the operator not being up.
+
+#### Scenario: An agent sends to another partition
+- **WHEN** `swancloud-planner` runs `crew send wldn "The zone check fails on tenants with no region"`
+- **THEN** `wldn-operator` is prompted with `[crew tell from swancloud-planner] (sent to wldn) The zone check fails on tenants with no region`
+
+#### Scenario: A partition by its label
+- **WHEN** the user, at a shell on mac-studio, runs `crew send wldn "<text>"`
+- **THEN** `wldn-operator` is prompted with `[crew tell from <user>@mac-studio] (sent to wldn) <text>`
+
+#### Scenario: A name crew does not know
+- **WHEN** an agent runs `crew send swb-1 "<text>"`, a team's name from before teams left
+- **THEN** nothing is sent, and crew says it sends to a partition by its label, naming each
+
+#### Scenario: The door sends to itself
+- **WHEN** `wldn-operator` runs `crew send wldn "<text>"`
+- **THEN** nothing is sent, and crew says it is wldn's door and carries with `crew tell`
+
+#### Scenario: The operator waits on a question
+- **WHEN** an agent sends to wldn while `wldn-operator` waits on a question in its pane
+- **THEN** nothing is typed, and the send fails saying the operator waits on a question and to send again once it is answered
+
+#### Scenario: An operator that runs as its kind
+- **WHEN** madswan runs its operator as its kind, no standing operator of it is up, and swancloud-planner runs `crew send madswan "<text>"`
+- **THEN** an ask of madswan's operator from swancloud-planner holds `(sent to madswan)` and the text, and nothing is typed
+
+### Requirement: The operator carries what is sent to it to the role whose job it is
+The operator SHALL carry what reaches it by `crew send` on to the agent whose job it is, in the sender's words and naming the sender: a finding becomes a signal it records, quoting the words as sent; a design question goes to the design agent; work to build, or a message about a bolt's work, to the planner; a landing, a deploy or an operation to main-level ops. It SHALL NOT answer it in the sender's place or reason it out itself. A request to change the teams file, from an operator whose main level runs on a box, SHALL be sent with `crew send` to a partition whose main level runs on a Mac that keeps swancloud's checkout.
+
+#### Scenario: A message about a bolt's work
+- **WHEN** `wldn-operator` receives `[crew tell from swancloud-planner] (sent to wldn) <text about a wldn bolt>`
+- **THEN** it tells `wldn-planner` the text, saying it is from `swancloud-planner`
+
+#### Scenario: A finding
+- **WHEN** what is sent reports a defect, with no request
+- **THEN** the operator records it as a signal, its excerpt the words as sent
+
+### Requirement: Every brief names one way to send to another partition
+Every brief SHALL say in one line, beside its roster, that anything for another partition is sent with `crew send <partition> "<text>"`, which reaches that partition's operator, and that it is sent nowhere else. A main level's brief SHALL count every partition but its own. No brief SHALL tell an agent to tell another partition's operator by name.
+
+#### Scenario: The planner's brief
+- **WHEN** `crew brief wldn planner` prints
+- **THEN** it says beside the roster that anything for another partition goes with `crew send`, and names no team
+
+#### Scenario: The operator's brief on a box
+- **WHEN** the operator's brief prints for a partition whose main level runs on a box
+- **THEN** its request to change the teams file goes with `crew send` to a partition named by its label, not with `crew tell` to another operator

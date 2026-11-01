@@ -28,7 +28,7 @@ when it names one.
       a deploy's start, one of its steps, or its end, in the run record as it runs; its end closes the deploy's card
       with each step's outcome, or the step that failed and its log
   crew ops step <env> --label L --key <key> --state waiting|handed|done|failed|declined [--to <sha>]
-                [--doer dispatcher|main-ops|user] [--agent <name>] [--when deployed|quiet] [--held] [--text <file>]
+                [--doer main-ops|user] [--agent <name>] [--when deployed|quiet] [--held] [--text <file>]
                 [--changes <a,b>] [--note <text>]
       an operation of its own and its state, after the deploy it names with --to or on its own; one the user is to
       take, or an agent's held for the user's word, that waits is a rail row with a card, which crew raises one at a
@@ -40,8 +40,8 @@ when it names one.
       the latest state of every step on the environment: [{to, key, state, by, at, note}], to empty for a step that
       names no deploy
   crew ops quiet <env> --label L
-      exit 0 when no stage agent of a team on the environment's host is working and no test of crew's runs there;
-      exit 1 saying what is
+      exit 0 when no Flume place of the partition's has a stage working on the environment's host, as its runner there
+      carries Flume's status, and no test of crew's runs there; exit 1 saying what is
 
 Every command acts on the partition's operations where its main level runs, on that host's run record, as ops.*
 entries on env/<env>: run anywhere else, it is run there, as the one asking. An environment is a machine of the fleet,
@@ -53,6 +53,7 @@ LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
 import crew  # noqa: E402
 import record  # noqa: E402
+import runner  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -60,7 +61,7 @@ SHA = re.compile(r"^[0-9a-f]{7,40}$")
 STEP_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/#-]*$")
 ACTS = ("start", "step", "end")
 STATES = ("waiting", "handed", "done", "failed", "declined")
-DOERS = ("dispatcher", "main-ops", "user")
+DOERS = ("main-ops", "user")
 DAYS = 60  # how far back the operations are read: an offer, a word or a step older than this has no row
 
 
@@ -342,7 +343,7 @@ CARRIED = ("ok", "done")  # a deploy's end that left its environment running its
 
 def doer_of(doer, agent, label, env):
     """Who does a step, as a card names them: the user, the agent it is handed to, or its doer's crew name."""
-    return agent or {"main-ops": f"{label}-ops", "dispatcher": f"{label}-dispatch-{env}"}.get(doer, doer)
+    return agent or {"main-ops": f"{label}-ops"}.get(doer, doer)
 
 
 def handed_steps(text, env, label):
@@ -451,8 +452,8 @@ def gate_of(e):
 def step_facts(env, n, e, label, working=None):
     """The facts of a step's card (cards.step_card) from its latest entry: its environment and number, its words and
     fields as its text gives them (step_words), its doer as a card names it, whether it is held, the gate it waits at
-    (gate_of) and the deploy it names, and for a held step what doing it now cuts: working, the stage agents working
-    on its host as the card is raised, or why crew could not tell (a string)."""
+    (gate_of) and the deploy it names, and for a held step what doing it now cuts: working, the Flume places whose stage
+    works on its host as the card is raised (places_working), or why crew could not tell (a string)."""
     words, fields = step_words(e.get("Text"))
     doer = "user" if e.get("Doer") == "user" else doer_of(e.get("Doer"), e.get("Agent"), label, env)
     f = dict(env=env, n=n, text=words or e.get("Key"), doer=doer, held=held(e), why=fields.get("why"), where=fields.get("where"),
@@ -606,18 +607,23 @@ def raise_deploy(fleet, row, acts=None, note=None):
                                 since=since)
 
 
-def stages_working(fleet, env):
-    """The stage agents working on env's host, a list; or why crew could not tell, a string. An environment that is
-    no host of the fleet runs no team."""
-    out = []
-    for t in sorted((t for t in fleet["teams"].values() if t["machine"] == env), key=lambda t: t["name"]):
-        for n in range(1, t["units"] + 1):
-            agent, unread = crew.read_agent(fleet, f"{t['name']}-unit-{n}")
-            if unread:
-                return f"{t['name']}-unit-{n}: {unread}"
-            if agent and agent.get("agent_status") == "working":
-                out.append(f"{t['name']}-unit-{n}")
-    return out
+def places_working(fleet, label, env):
+    """The Flume places of the partition whose stage works on env's host, as the partition's runner there carries
+    Flume's status of them (runner.working), a list, none where no runner of the partition answers there, since none
+    of its places runs there; or why crew could not tell, a string (read.1)."""
+    import plan
+    try:
+        repo, ref = plan.state_of(fleet, label)
+        plan.fetch(repo, ref)
+        reading = runner.of_host(plan.runners(repo, label), label, env)
+    except Refusal as e:
+        return str(e)
+    if reading["tip"] is None:
+        return []
+    if reading["why"]:
+        return reading["why"]
+    names, why = runner.working(reading)
+    return why or names
 
 
 def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
@@ -639,7 +645,7 @@ def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
         print(f"card {key}: {why}")
         return None
     n, _, e = step
-    facts = step_facts(env, n, e, label, stages_working(fleet, env) if held(e) else None)
+    facts = step_facts(env, n, e, label, places_working(fleet, label, env) if held(e) else None)
     facts["follows"] = cards.follows_of("step", {"env": env, "key": key}, mine, f"{label}-ops")
     followed = next((x.get("Key") for x in mine if x.get("Act") == "card.post" and x.get("Card") == facts["follows"]
                      and not x.get("Refused")), None) if facts["follows"] else None
@@ -894,16 +900,12 @@ print(busy)
 
 
 def quiet(fleet, a):
-    """Whether the environment's host is quiet: no stage agent of a team there working, and no test of crew's running."""
+    """Whether the environment's host is quiet: no Flume place of the partition's with a stage working there
+    (places_working), and no test of crew's running."""
     a.env in fleet["hosts"] or fail(f"{a.env} is no host of the fleet's hosts file")
-    said = []
-    for t in sorted((t for t in fleet["teams"].values() if t["machine"] == a.env), key=lambda t: t["name"]):
-        for n in range(1, t["units"] + 1):
-            agent, unread = crew.read_agent(fleet, f"{t['name']}-unit-{n}")
-            if unread:
-                fail(f"crew can't tell whether {t['name']}-unit-{n} is working: {unread}")
-            if agent and agent.get("agent_status") == "working":
-                said.append(f"{t['name']}-unit-{n} is working")
+    working = places_working(fleet, a.label, a.env)
+    not isinstance(working, str) or fail(f"crew can't tell whether a place works on {a.env}: {working}")
+    said = [f"{w} is working" for w in working]
     r = crew.on_machine(fleet, a.env, ["python3", "-c", SLOTS])
     if r.returncode or not r.stdout.strip().isdigit():
         fail(f"crew can't tell whether a test runs on {a.env}: " + (crew.unanswered(a.env, r) or (r.stderr or "").strip() or "no answer"))
@@ -972,7 +974,7 @@ def args_refusal(fleet, a):
     if getattr(a, "key", None) and not STEP_KEY.match(a.key):
         return f"--key {a.key} is no step key crew takes"
     if getattr(a, "held", False) and a.doer in (None, "user"):
-        return "--held marks an agent's step held for the user's word: give its --doer, dispatcher or main-ops"
+        return "--held marks an agent's step held for the user's word: give its --doer, main-ops"
     if getattr(a, "handed", None) and (a.notes or a.steps):
         return "--handed carries the text of the files --notes and --steps name, so it is given in their place"
     return None

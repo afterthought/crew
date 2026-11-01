@@ -1,80 +1,79 @@
-# crew reads teams.json version 2: partitions with their main levels, teams with units and [kit, blueprints],
-# roles overrides, and errors for anything missing or inconsistent. What a team's session resolves its partition, kit
-# and blueprints to is the logic tier's (tests/py/test_teams.py).
+# crew reads teams.json version 5 alone: partitions with their main levels, role overrides, and errors for anything
+# missing or inconsistent; a file at another version, one listing teams among them, is refused naming the machine's
+# configuration (Decision 2 of the-team-machinery-leaves). What a partition's session resolves its main level to is
+# the logic tier's (tests/py/test_teams.py).
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 
-expect_ok crewpy teams; eq "$out" $'swb-1\nswb-2\nbrd-1\natl-1\napk-1'
 expect_ok crewpy labels; eq "$out" $'wldn\nmadswan\nswancloud'
 
-edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'max'}}; $(team swb-1)['roles'] = {'coder': {'model': 'claude-opus-5-5'}}"
-expect_ok crewpy teams
-ok "roles overrides on a team and a partition"
+edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'max'}, 'operator': {'model': 'claude-opus-5-5'}}"
+expect_ok crewpy labels
+ok "roles overrides on a partition"
 
 edit teams "$(part wldn)['roles'] = {'conductor': {'effort': 'max'}}"
-expect_fail "overrides role 'conductor', which it has no definition for" crewpy teams
+expect_fail "overrides role 'conductor', which it has no definition for" crewpy labels
+edit teams "$(part wldn)['roles'] = {'dispatcher': {'effort': 'high'}}"
+expect_fail "overrides role 'dispatcher', which it has no definition for. roles: design planner main-ops operator reviewer" crewpy labels
 edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'extreme'}}"
-expect_fail "roles.planner.effort is 'extreme', which is no effort level" crewpy teams
-edit teams "$(part wldn)['roles'] = {}; $(team swb-1)['roles'] = {'fable': {'effort': 'high'}}"
-expect_fail "overrides role 'fable'" crewpy teams
-edit teams "$(team swb-1)['roles'] = {}"
-ok "an override naming an unknown role or effort is refused"
+expect_fail "roles.planner.effort is 'extreme', which is no effort level" crewpy labels
+edit teams "$(part wldn)['roles'] = {'fable': {'effort': 'high'}}"
+expect_fail "overrides role 'fable'" crewpy labels
+edit teams "$(part wldn)['roles'] = {}"
+ok "an override naming a role crew has no definition for, the dispatcher's or a team's among them, or an unknown effort, is refused"
 
-world_teams() { fixtures 2; }
-edit teams "del $(team brd-1)['units']"
-expect_fail "team brd-1 in" crewpy teams; has "$out" "has no 'units'"
-world_teams
 edit teams "del $(part madswan)['session']"
-expect_fail "partition madswan in" crewpy teams; has "$out" "has no 'session'"
-world_teams
-edit teams "$(team swb-1)['coders'] = 4"
-expect_fail "still has 'coders'" crewpy teams
-world_teams
-ok "a missing or retired field is an error"
+expect_fail "partition madswan in" crewpy labels; has "$out" "has no 'session'"
+fixtures
+ok "a missing field is an error"
 
 edit teams "del $(part wldn)['state']"
-expect_fail "partition wldn in" crewpy teams
+expect_fail "partition wldn in" crewpy labels
 has "$out" "names no state repository ('state')"; has "$out" "swancloud's lib/crew-teams.nix"
-world_teams
+fixtures
 edit teams "$(part madswan)['state'] = 'crew-state'"
-expect_fail "partition madswan: 'state' is its state repository as GitHub owner/name, not \"crew-state\"" crewpy teams
-world_teams
-expect_ok crewpy teams
+expect_fail "partition madswan: 'state' is its state repository as GitHub owner/name, not \"crew-state\"" crewpy labels
+fixtures
+expect_ok crewpy labels
 ok "a partition without a state repository, or with one not named owner/name, is refused, naming the fix"
 
 edit teams "del $(part wldn)['review']"
-expect_fail "partition wldn in" crewpy teams
+expect_fail "partition wldn in" crewpy labels
 has "$out" "has no batch setting ('review', with 'every' and 'hours')"; has "$out" "swancloud's lib/crew-teams.nix"
-world_teams
+fixtures
 edit teams "del $(part madswan)['review']['hours']"
-expect_fail "partition madswan in" crewpy teams; has "$out" "has no batch setting ('review', with 'every' and 'hours')"
-world_teams
+expect_fail "partition madswan in" crewpy labels; has "$out" "has no batch setting ('review', with 'every' and 'hours')"
+fixtures
 edit teams "$(part madswan)['review']['every'] = 0"
-expect_fail "partition madswan: 'review.every' is how many changes make a batch, a whole number of at least 1, not 0" crewpy teams
-world_teams
+expect_fail "partition madswan: 'review.every' is how many changes make a batch, a whole number of at least 1, not 0" crewpy labels
+fixtures
 edit teams "$(part swancloud)['review']['hours'] = '4'"
-expect_fail "partition swancloud: 'review.hours' is how many hours make a batch due, a number above 0, not \"4\"" crewpy teams
-world_teams
-expect_ok crewpy teams
+expect_fail "partition swancloud: 'review.hours' is how many hours make a batch due, a number above 0, not \"4\"" crewpy labels
+fixtures
+expect_ok crewpy labels
 ok "a partition without its batch setting, or with one crew can't read, is refused, naming the field and the fix"
 
-# A team in a clients/willdan session naming afterthought's blueprints: refused, naming wldn's blueprints repos.
-edit hosts "d['hosts']['mac-studio']['sessions']['wldn-5']['repos'].append('afterthought/blueprints')"
-edit teams "$(team atl-1)['repos'] = ['atlas-kit', 'blueprints']"
-expect_fail "names afterthought/blueprints as its blueprints repo, which is not one of clients/willdan's: WilldanGroup/willdan-blueprints" crewpy teams
-world_teams
-ok "a blueprints repo of another partition is refused"
+edit teams "del $(part swancloud)['flume']"
+expect_fail "partition swancloud in" crewpy labels; has "$out" "has no 'flume'"; has "$out" "swancloud's lib/crew-teams.nix"
+fixtures
+ok "a partition without its flume is refused, naming the field and the fix"
 
-edit hosts "d['hosts']['mac-studio']['sessions']['madswan-2']['partition'] = None"
-expect_fail "which $(home_of mac-studio)/.config/swancloud/herdr-hosts.json puts in no partition" crewpy teams
-fixtures 2
-edit teams "$(team swb-1)['repos'] = ['rocs-kit', 'willdan-blueprints']"
-expect_fail "does not keep rocs-kit" crewpy teams
-fixtures 2
-ok "a session with no partition, or a repo its space does not keep, is refused"
+edit hosts "d['hosts']['mac-studio']['sessions']['madswan-1']['partition'] = None"
+expect_fail "partition madswan's main level runs in mac-studio's session madswan-1, which is in partition None, not business" crewpy labels
+fixtures
+edit hosts "d['hosts']['chuck-herdr-alpha']['sessions']['wldn-3']['repos'].remove('WilldanGroup/willdan-blueprints')"
+expect_fail "the space of chuck-herdr-alpha's session wldn-3 does not keep WilldanGroup/willdan-blueprints" crewpy labels
+fixtures
+ok "a main level in a session of no partition, or one whose space does not keep its blueprints, is refused"
 
-fixtures 1
-expect_fail "must be regenerated by the machine's configuration" crewpy teams
-has "$out" "crew reads only version 2"
-expect_fail "must be regenerated" crew status swb-1
-ok "version 1 is refused with the fix named"
+for v in 1 2 3 4; do
+  fixtures $v
+  expect_fail "teams.json is version $v, and crew reads only version 5" crewpy labels
+  has "$out" "It must be regenerated by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing."
+done
+expect_fail "must be regenerated" crew bolts
+fixtures
+edit teams "d['teams'] = []"
+expect_fail "teams.json lists teams, which version 5 has no place for: crew runs no team" crewpy labels
+has "$out" "swancloud's lib/crew-teams.nix"
+ok "a file at version 1 to 4, or one at 5 that lists teams, is refused with the fix named"

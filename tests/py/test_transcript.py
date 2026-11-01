@@ -42,7 +42,6 @@ def test_the_last_record_is_when_the_session_last_wrote(tmp_path):
 def test_a_missing_transcript_is_none_never_an_empty_list(tmp_path):
     assert transcript.pending(tmp_path / "gone.jsonl") is None
     assert transcript.last_at(tmp_path / "gone.jsonl") is None
-    assert transcript.turn_over(tmp_path / "gone.jsonl") is None
 
 
 # Whether the session's turn is over (record 0007): its last message the model's, ending its turn, as Claude Code
@@ -51,27 +50,6 @@ ENDED = [{"type": "user", "timestamp": "2026-10-23T02:46:10.000Z", "message": {"
          {"type": "assistant", "timestamp": "2026-10-23T02:47:13.236Z", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Nothing to do."}]}},
          {"type": "system", "subtype": "stop_hook_summary", "timestamp": "2026-10-23T02:47:13.414Z"},
          {"type": "cost-state", "totalCostUSD": 1}]
-
-
-def test_a_turn_ended_by_the_models_message_is_over_at_its_time(tmp_path):
-    assert transcript.turn_over(write(tmp_path, *ENDED)).isoformat() == "2026-10-23T02:47:13.236000+00:00"
-
-
-def test_a_turn_going_on_is_not_over(tmp_path):
-    working = {"type": "assistant", "timestamp": LONG_AGO, "message": {"stop_reason": "tool_use", "content": [{"type": "tool_use", "name": "Bash"}]}}
-    assert transcript.turn_over(write(tmp_path, ENDED[0], working)) is None
-    assert transcript.turn_over(write(tmp_path, ENDED[0])) is None
-
-
-def test_a_turn_ended_and_then_sent_something_is_not_over(tmp_path):
-    notice = {"type": "user", "timestamp": "2026-10-23T02:50:00.000Z",
-              "message": {"content": "<task-notification>\n<task-id>b8y1gomwj</task-id>\n</task-notification>"}}
-    assert transcript.turn_over(write(tmp_path, *ENDED, notice)) is None
-
-
-def test_a_subagents_message_is_not_the_sessions_turn(tmp_path):
-    sub = {"type": "assistant", "isSidechain": True, "timestamp": LONG_AGO, "message": {"stop_reason": "end_turn"}}
-    assert transcript.turn_over(write(tmp_path, ENDED[0], sub)) is None
 
 
 # What crew reads of a transcript to check a signal's excerpt (signals.2, signals.5), and whether a session received a
@@ -187,32 +165,6 @@ class TestCheck:
         assert said("s-tell", "The deploy left open security groups behind.") == "verified agent:swb-2-conductor 1 u-4"
         assert said("s-tell", "Leave the open security groups for now.") == "verified user 2 u-5"
         assert said("s-tell", "open security groups move to the queue") == "verified crew 3 u-6"
-
-    def test_a_stages_own_prompt_and_its_skill_text_are_its_conductors_elsewhere_or_not_next_the_users(self, put):
-        put("s-stage", user("u-20", "<command-message>opsx:apply</command-message>\n<command-name>/opsx:apply</command-name>\n"
-                                    "<command-args>edge-groups Close the open security groups verify found.</command-args>"),
-            user("u-21", [{"type": "text", "text": "Implement tasks from an OpenSpec change.\n\n\nARGUMENTS: edge-groups Close the open security groups verify found."}],
-                 isMeta=True),
-            user("u-22", "Fix: The deploy leaves open security groups on stack edge."),
-            user("u-23", "Merge fix/smoke-2/edge into bolt/smoke-2: wt merge bolt/smoke-2 --no-squash --no-remove"),
-            user("u-24", "Leave Fix: as it is, the open security groups are mine.\n\nARGUMENTS: edge-groups Close the open security groups verify found."),
-            user("u-25", "Merge fix/smoke-2/rule into bolt/smoke-2: wt submit bolt/smoke-2 --no-remove"))
-        by = "swb-2-conductor"
-        assert said("s-stage", "/opsx:apply", stage_by=by) == "verified agent:swb-2-conductor 1 u-20"
-        assert said("s-stage", "Implement tasks from an OpenSpec change.", stage_by=by) == "verified agent:swb-2-conductor 2 u-21"
-        assert said("s-stage", "open security groups on stack edge", stage_by=by) == "verified agent:swb-2-conductor 3 u-22"
-        assert said("s-stage", "wt merge bolt/smoke-2", stage_by=by) == "verified agent:swb-2-conductor 4 u-23"
-        assert said("s-stage", "wt submit bolt/smoke-2", stage_by=by) == "verified agent:swb-2-conductor 6 u-25"
-        assert said("s-stage", "the open security groups are mine", stage_by=by) == "verified user 5 u-24"
-        assert said("s-stage", "Close the open security groups verify found.", stage_by=by) == "verified user 5 u-24"
-        assert said("s-stage", "open security groups on stack edge") == "verified user 3 u-22"
-        assert said("s-stage", "Implement tasks from an OpenSpec change.") == "verified user 2 u-21"
-
-    def test_the_words_a_stages_command_carries_are_the_conductors_in_the_skill_text_ending_with_them(self, put):
-        put("s-args", user("u-25", "<command-message>opsx:verify</command-message>\n<command-name>/opsx:verify</command-name>\n"
-                                   "<command-args>edge-groups The groups still open?</command-args>"),
-            user("u-26", [{"type": "text", "text": "Verify that an implementation matches the change.\n\n\nARGUMENTS: edge-groups The groups still open?"}], isMeta=True))
-        assert said("s-args", "The groups still open?", stage_by="swb-2-conductor") == "verified agent:swb-2-conductor 2 u-26"
 
     def test_words_only_in_the_agents_own_record_nowhere_or_only_in_a_crew_signal_command_are_refused(self, put):
         put("s-own", user("u-7", "Have a look at the templates."), wrote("a-7", "The templates leave open security groups."), CMD)
