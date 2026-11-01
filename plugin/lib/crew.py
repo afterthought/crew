@@ -436,7 +436,7 @@ def send(fleet, name, text):
 
 
 # The kinds of item a word from the board is on: a dock's, and a batch, a record and the partition itself.
-KINDS = ("signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation", "team", "subscription", "batch", "record",
+KINDS = ("signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation", "subscription", "batch", "record",
          "partition")
 BOARD_KEY = re.compile(r"^([a-z]+):([A-Za-z0-9._:/+-]{1,200})$")
 WORD_MOST = 1000

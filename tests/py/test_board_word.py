@@ -42,7 +42,9 @@ class TestTell:
         key = "deploy:mac-studio/" + "a" * 40 + "/2026-10-12T10:06:00Z"
         assert crew.board_word(FLEET, word(key=key, to="wldn-ops"))[1].startswith(f"(on deploy {key[7:]}) ")
         assert crew.board_word(FLEET, word(key="signal:2026-10-01-planning/01-zones", to="wldn-design"))[0] == "wldn-design"
-        assert crew.board_word(FLEET, word(key="team:swb-1", to="wldn-operator"))[0] == "wldn-operator"
+        assert crew.board_word(FLEET, word(key="subscription:max-1", to="wldn-operator"))[0] == "wldn-operator"
+        with pytest.raises(crew.Refusal, match="no item of the kind 'team'"):
+            crew.board_word(FLEET, word(key="team:swb-1", to="wldn-operator"))  # no team has a dock
 
     def test_a_word_on_a_bolt_or_a_fix_goes_to_the_planner(self, told):
         """board-page "Each kind's agent": a bolt's and a fix's word goes to the planner, as a unit's does."""

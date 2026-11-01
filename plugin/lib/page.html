@@ -474,8 +474,10 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   }
 
   // A bolt's units as a chain, in plan order: merged and landed as done links, a unit being built with its stage and
-  // tasks, and every other one queued with its stage beside its name; all of them queued for a bolt not started.
-  var BUILDING = ["construct", "code", "verify", "settle"], MERGED = ["merged", "landed"];
+  // tasks, and every other one queued with its stage beside its name; all of them queued for a bolt not started. A
+  // place in flight is building at any stage the runner's records give it short of merged, as the text board draws it
+  // (board.pip): a stage running, needing an answer, submitted, waiting on its caller or stalled.
+  var BUILDING = ["construct", "code", "verify", "needs", "submitted", "waits", "stalled"], MERGED = ["merged", "landed"];
   function chain(x, units, queued) {
     if (!units.length) return;
     var c = el("div", "lg-chain");

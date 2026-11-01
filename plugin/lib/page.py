@@ -251,11 +251,12 @@ def where(fleet, label, asked):
 
 
 def agents_in(fleet, label):
-    """Which of a partition's agents crew starts in which session, {(host, session): [agent]}: its main level's standing
-    roles in theirs on its host, the one kind of agent crew starts (the-team-machinery-leaves)."""
+    """Which of a partition's agents crew starts in which session, {(host, session): [agent]}: its main level's roles in
+    theirs on its host, its standing roles and the reviewer crew review starts beside the planner unless named apart,
+    the one kind of agent crew starts (the-team-machinery-leaves), as the partition page's subscription dock lists them."""
     p = fleet["partitions"][label]
     out = {}
-    for r in crew.MAIN_STANDING:
+    for r in crew.MAIN_STANDING + ("reviewer",):
         out.setdefault((p["machine"], p["sessions"][r]), []).append(f"{label}-{r}")
     return out
 

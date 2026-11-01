@@ -119,7 +119,7 @@ class TestWhereItRuns:
         madswan; swancloud-2, the partition's, holds none of its agents."""
         deneb = next(h for h in of(fleet(), "swancloud")["hosts"] if h["host"] == "deneb")
         assert [(s["session"], s["agents"], s["account"]) for s in deneb["sessions"]] == [
-            ("swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops"], "madswan"),
+            ("swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-reviewer"], "madswan"),
             ("swancloud-3", ["swancloud-operator"], None)]
         assert deneb["sessions"][0]["account_said"] == "account madswan"
 
@@ -135,7 +135,7 @@ class TestWhereItRuns:
         hosts = {h["host"]: h for h in of(fleet(), "wldn")["hosts"]}
         assert list(hosts) == ["chuck-herdr-alpha", "mac-studio"]
         assert (hosts["mac-studio"]["answered"], hosts["mac-studio"]["said"]) == (None, "not asked")
-        assert [(s["session"], s["agents"]) for s in hosts["mac-studio"]["sessions"]] == [("wldn", ["wldn-design", "wldn-planner", "wldn-ops", "wldn-operator"])]
+        assert [(s["session"], s["agents"]) for s in hosts["mac-studio"]["sessions"]] == [("wldn", ["wldn-design", "wldn-planner", "wldn-ops", "wldn-operator", "wldn-reviewer"])]
         assert hosts["chuck-herdr-alpha"]["sessions"] == []
 
 
@@ -380,9 +380,10 @@ class TestOnASubscription:
         deneb's madswan, swancloud's but its operator in its swancloud, and agentplot-2 running none."""
         m = subs()["madswan"]
         assert [(s["host"], s["session"], s["agents"], s["said"]) for s in m["sessions"]] == [
-            ("deneb", "madswan", ["madswan-design", "madswan-planner", "madswan-ops", "madswan-operator"],
-             "madswan-design, madswan-planner, madswan-ops, madswan-operator"),
-            ("deneb", "swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops"], "swancloud-design, swancloud-planner, swancloud-ops"),
+            ("deneb", "madswan", ["madswan-design", "madswan-planner", "madswan-ops", "madswan-operator", "madswan-reviewer"],
+             "madswan-design, madswan-planner, madswan-ops, madswan-operator, madswan-reviewer"),
+            ("deneb", "swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-reviewer"],
+             "swancloud-design, swancloud-planner, swancloud-ops, swancloud-reviewer"),
             ("deneb", "agentplot-2", [], "runs no crew agent")]
         assert not any("teams" in s for s in m["sessions"])
         assert (m["partitions"], m["sessions_said"], m["partitions_said"]) == ([{"label": "madswan", "link": None}, {"label": "swancloud", "link": None}], None, None)
@@ -402,7 +403,8 @@ class TestOnASubscription:
 
     def test_where_a_partition_runs_reads_the_same_placement(self):
         assert page.agents_in(FLEET, "swancloud") == {
-            ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops"], ("deneb", "swancloud-3"): ["swancloud-operator"]}
+            ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-reviewer"],
+            ("deneb", "swancloud-3"): ["swancloud-operator"]}
 
 
 class TestTheSection:
