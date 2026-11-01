@@ -222,7 +222,7 @@ class TestSlotsAndPlaces:
     def test_a_chores_place_is_crews_and_over_once_merged_landed_or_planned_no_more(self):
         on = {"main": {"landed-one"}, f"bolt/{TE}": {"merged-one"}}
         over = lambda name, chores=("live",), bolt=TE: plan.tidy_over(
-            f"/kit/places/chore-{name}", f"chore/{name}", "/kit", f"bolt/{TE}", {TE}, {}, set(), lambda b: [], lambda f, b: False,
+            f"/kit/places/chore-{name}", f"chore/{name}", "/kit", f"bolt/{TE}", {TE}, {}, set(), lambda b: [],
             {c: bolt for c in chores}, lambda ref: on.get(ref, set()), made={f"chore/{name}"})  # this host's record started it
         assert over("landed-one") == ("landed-one", "chore landed-one has landed on main")
         assert over("merged-one") == ("merged-one", f"chore merged-one has merged into bolt/{TE}")
@@ -230,7 +230,7 @@ class TestSlotsAndPlaces:
         assert over("gone", ()) == ("gone", "chore gone is in no plan")
         assert over("live", bolt="console-pages") == ("live", f"chore live has left bolt/{TE} for bolt/console-pages")
         assert plan.tidy_over("/kit/places/bump", "chore/bump", "/kit", f"bolt/{TE}", {TE}, set(), set(), lambda b: [],
-                              lambda f, b: False, set(), lambda ref: set()) is None
+                              set(), lambda ref: set()) is None
 
 
 class TestBolts:

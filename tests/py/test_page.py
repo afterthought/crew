@@ -329,6 +329,10 @@ class TestDocks:
         for n in d["nodes"]:
             n["label"] = label if n["id"] == f"signals/{self.SIG}" and label else n.get("label")
         d["board"] = dict(bd["partitions"][0], read_at=bd["read_at"], unread=bd["unread"])
+        # A fix in flight on tenant-environments, a Flume place, as the board draws a started bolt's fix.
+        te = next(b for b in d["board"]["construction"] if b["bolt"] == "tenant-environments")
+        te["fixes"] = [{"fix": "fix/tenant-environments/edge", "merged": False, "slot": None, "submission": None, "worktree": None,
+                        "url": None, "flume": {"stage": "code", "place": "/kit/places/fix--tenant-environments--edge"}}]
         d["deploys"] = page.deploys(d, OPS, "mac-studio")
         d["docks"] = page.docks(d, self.fleet(), "wldn")
         return d
@@ -418,11 +422,11 @@ class TestDocks:
         assert (q["form"], q["tail"]) == ("slip", "unit · queued")
         assert {f[0]: f[1] for f in q["facts"]} == {"repository": "switchboard-kit", "stage": "queued", "sources": "docs/zones.md"}
 
-    def test_a_fix_says_whether_it_merged_and_its_worktree_and_links_its_bolt(self):
+    def test_a_fix_says_whether_it_merged_and_links_its_bolt(self):
         """board-page "A fix"."""
         f = self.paged()["docks"]["fix:tenant-environments/edge"]
         assert (f["title"], f["tail"]) == ("fix/tenant-environments/edge", "fix of tenant-environments")
-        assert {x[0]: x[1] for x in f["facts"]} == {"state": "not merged", "worktree": "/kit/places/fix-edge"}
+        assert {x[0]: x[1] for x in f["facts"]} == {"state": "not merged"}
         assert f["parts"] == [{"title": "bolt", "rows": [{"text": "tenant-environments", "key": "bolt:tenant-environments"}]}]
         assert f["history"] == []
 

@@ -18,8 +18,8 @@ place in the plan (priorities). A bolt planned in a kit a team builds is the dis
 
 A place that stopped short asking, or waits on its caller, is answered by a retry with the answer's words (answer_retry).
 A fix on a crossed bolt is a launch of Flume's fix kind on the bolt's branch (fix_launch), dropped by a drop
-(fix_drop_refusal), merged and waited on by Flume alone (fix_flume_refusal), and holds the bolt's landing while it is in
-flight (fixes_in_flight); a crossed bolt whose landing sluice refused for a conflict with main takes main in by one
+(fix_drop_refusal), merged and waited on by Flume alone, and holds the bolt's landing while it is in flight
+(fixes_in_flight); a crossed bolt whose landing sluice refused for a conflict with main takes main in by one
 (take_main). A red main's fix is a launch of the fix kind on main with its submission held, on the host of a team
 building the kit in a stream (main_fixer, main_fix_launch), a bolt of one chore where none does (state.3); its kit's landings
 row carries it once its code has delivered and its submission waits held (main_fixes_waiting), and the user's send of
@@ -674,7 +674,7 @@ def answer_retry(work, s):
 
 
 def fix_launch(plan, requests, bolt, team, name, words):
-    """The launch crew fix <team> <name> "<words>" appends for a fix on a bolt given through Flume (Decision 10), as
+    """The launch crew fix <bolt> <name> "<words>" appends for a fix on a started bolt (Decision 10), as
     (act, host, work, its fields as plan.request takes them), or (None, why): a place of the fix kind named
     <bolt>--<name>, cut from the bolt's branch, on the team's host and in its stream (or, where it names none, the stream the
     bolt's launches named, as reach has it), with the bolt's priority and intent, the planner as recipient, the fix's
@@ -708,28 +708,19 @@ def take_main(plan, requests, bolt, team, main, words):
         f"with main: {words}"))[0]
 
 
-def fix_drop_refusal(team, work, launch, s):
-    """Why crew fix --drop of a fix on a bolt given through Flume, or crew main fix --drop of a fix of main, is refused
-    (Decisions 10 and 11, teams.3), or None to drop the launch standing: none stands, so the team, or the kit, has no
-    such fix; crew can't tell how far its place got (read.1); or its place has merged into its base, so what it changed
-    is the bolt's, or main's, and a new fix undoes it. s, its stage (piece_stage)."""
+def fix_drop_refusal(of, work, launch, s):
+    """Why crew fix --drop of a fix on a started bolt, or crew main fix --drop of a fix of main, is refused (Decisions
+    10 and 11, teams.3), or None to drop the launch standing: none stands, so what it would fix (of, bolt <bolt> or the
+    kit) has no such fix; crew can't tell how far its place got (read.1); or its place has merged into its base, so
+    what it changed is the bolt's, or main's, and a new fix undoes it. s, its stage (piece_stage)."""
     if launch is None:
-        return f"{team} has no fix {work}: no launch of it stands in requests.rec"
+        return f"{of} has no fix {work}: no launch of it stands in requests.rec"
     if s["stage"] == "unknown":
         return f"can't tell whether {work}'s place has merged into {launch.get('Base')}, so it is not dropped: {s['why']}"
     if s["stage"] in ("merged", "landed"):
         return (f"{work} has merged into {launch.get('Base')}, so it is not dropped: what it changed is "
                 f"{'main' if launch.get('Base') == 'main' else 'the bolt'}'s, and a new fix undoes it")
     return None
-
-
-def fix_flume_refusal(mode, team, bolt, name):
-    """What crew fix <team> <name> --merge or --wait says refusing a fix on a bolt given through Flume (Decision 10):
-    Flume submits the fix's place to the bolt through sluice itself and tells its end to the planner, so nothing of
-    crew's merges it or waits on it, and crew bolts shows its stage."""
-    said = f"crew fix {team} {name} --{mode}"
-    return (f"fix/{bolt}/{name} is a Flume place on bolt/{bolt}, which Flume submits to the bolt through sluice itself once its "
-            f"code has delivered, telling the planner its end, so {said} has nothing to do: crew bolts shows its stage")
 
 
 def unlanded(bolt, kit, work, held):
@@ -775,26 +766,25 @@ def fixes_in_flight(requests, reads, label, bolt):
 
 # ------------------------------------------------------------------------------------------------ a fix of main
 
-def main_fixer(teams, label, kit, team=None):
-    """The team on whose host a fix of a kit's red main runs (Decision 11, state.3), as (its name, None), or (None, why):
-    among the partition's teams that build the kit in a Flume stream (crossed_builders), the one team names, else the
-    first by name while they all run on one host, since the place wants the host and its stream and nothing else of a
-    team. Refused when team names none of them, when they run on several hosts and team names none, and when no team
-    builds the kit in a stream, its red main's fix then being a bolt of one chore, proposed first among the planned, as
-    state.3 has it until one does."""
+def main_fixer(teams, label, kit, main_host):
+    """The team on whose host a fix of a kit's red main runs (Decision 11, state.3; Decision 15 of
+    the-team-machinery-leaves), as (its name, None), or (None, why): among the partition's teams that build the kit in a
+    Flume stream (crossed_builders), the first by name on the one host they run on, or on the partition's main-level
+    host (main_host) where they run on several, since the place wants the host and its stream and nothing else of a
+    team. Refused when they run on several hosts, none of them the main level's, naming them, which the user settles
+    (read.1); and when no team builds the kit in a stream, its red main's fix then being a bolt of one chore, proposed
+    first among the planned, as state.3 has it until one does."""
     names = crossed_builders(teams, label, kit)
     if not names:
         return None, (f"no team of {label} builds {kit} in a Flume stream, so a fix of its red main is no Flume place: it is a bolt "
                       "of one chore, proposed first among the planned, which the dispatcher gives to the next team that frees "
                       f"(state.3); tell {label}-planner, who proposes it")
-    if team is not None:
-        return (team, None) if team in names else (None, (
-            f"{team} is no team of {label} building {kit} in a Flume stream; " + " and ".join(names)
-            + (" is" if len(names) == 1 else " are")))
     hosts = sorted({teams[n]["machine"] for n in names})
     if len(hosts) > 1:
-        return None, (f"{' and '.join(names)} build {kit} through Flume on {' and '.join(hosts)}: name the team on whose host the "
-                      "fix runs, --team <team>")
+        here = [n for n in names if teams[n]["machine"] == main_host]
+        return (here[0], None) if here else (None, (
+            f"{' and '.join(names)} build {kit} through Flume on {' and '.join(hosts)}, none of them {label}'s main-level host "
+            f"{main_host}, so crew can't tell the one host a fix of its main runs on"))
     return names[0], None
 
 

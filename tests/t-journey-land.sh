@@ -241,7 +241,7 @@ ok "ops's --done, on the user's words, releases the preview, and the card carrie
 # A defect noted on the card: a fix launched on the bolt holds its row, ending its reading, and the card, with no row
 # left that can land, is withdrawn naming the fix's words.
 : > "$CREW_TEST_LOG"
-expect_ok crew fix swb-1 gap "The zone list misses one zone."
+expect_ok crew fix tenant-environments gap "The zone list misses one zone."
 has "$out" "the runner on $box launches fix tenant-environments--gap on bolt/tenant-environments (request $(request_of fix/tenant-environments/gap)) in stream wldn"
 has "$out" "card land/switchboard-kit: $card withdrawn"
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid"

@@ -14,7 +14,8 @@ RUNS = [
     ["bolt", "submit", "b", "--label", "wldn"],
     ["bolt", "submit", "b", "--excerpt", "Land crw-5's bolt"],
     ["bolt", "leave", "b", "c", "--excerpt", "Hold the phone bolt", "--label", "wldn"],
-    ["_fix-run", "swb-1", "tidy", "wait", "--timeout", "0"],
+    ["fix", "x", "rail-word", "Say land.", "--label", "madswan"],
+    ["fix", "x", "rail-word", "--drop"],
     ["_console", "up", "wldn"],
     ["_console", "up", "wldn", "rail", "board"],
 ]

@@ -175,7 +175,7 @@ def crossed_fleet(**settings):
     """The fleet of madswan's teams on deneb building crew (afterthought/crew), each with its Flume setting: crw-4
     crossed in stream madswan unless given otherwise, crw-5 on today's path."""
     settings = dict({"crw-4": "madswan", "crw-5": False}, **settings)
-    return {"partitions": {"madswan": {"label": "madswan", "teams": sorted(settings)}}, "hosts": {},
+    return {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "teams": sorted(settings)}}, "hosts": {},
             "teams": {n: {"name": n, "flume": f, "label": "madswan", "machine": "deneb", "kit": CREW_KIT, "kits": [CREW_KIT]}
                       for n, f in settings.items()}}
 

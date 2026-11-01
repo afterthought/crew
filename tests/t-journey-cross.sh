@@ -5,7 +5,7 @@
 # host, the plan unchanged and no branch made; once a runner answers, sluice makes the bolt's branch, the plan marks the
 # bolt Path: flume and requests.rec on the state branch holds a launch of each of its units and chores, and no agent
 # starts. Once the runner's record shows a's place stopped short asking, crew answer a appends the retry of that stage
-# with the answer's words, and crew fix of swb-1 appends a launch of a fix on its bolt. swb-1, holding that bolt, is
+# with the answer's words, and crew fix of the bolt appends a launch of a fix on it. swb-1, holding that bolt, is
 # given two more, neither refused for the bolts it holds. The launches, what an answer retries, a fix's launch and drop
 # and the refusals' words are logic cases (tests/py/test_cross.py, tests/py/test_fix.py).
 # Reads: plugin/hooks/ plugin/roles/ tests/teams.sh
@@ -75,13 +75,13 @@ eq "$(field "$HOST" stage.answer On)" "unit/a bolt/next"
 ok "crew answer of a place the runner shows stopped short asking appends the retry of its stage with the answer's words"
 
 : > "$CREW_TEST_CLAUDE_LOG"
-expect_ok crew fix swb-1 tidy "Tidy the rail's words."
+expect_ok crew fix next tidy "Tidy the rail's words."
 has "$out" "the runner on $box launches fix next--tidy on bolt/next (request 5) in stream wldn"
 eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Request = 5" -P Act,Work,Kind,Name,Base,Brief | grep . | paste -sd ' ' -)" \
   "launch fix/next/tidy fix next--tidy bolt/next Tidy the rail's words."
 eq "$(field "$HOST" fix.start On)" "fix/next/tidy bolt/next"
 eq "$(launches)" ""
-ok "crew fix of a team appends a launch of a fix on its bolt given through Flume, starting no agent"
+ok "crew fix of a started bolt appends a launch of a fix on it, starting no agent"
 
 # swb-1 holds next, none of whose work has merged, and is given two bolts more: a give waits on no bolt the team holds,
 # neither for its proof nor for holding two.

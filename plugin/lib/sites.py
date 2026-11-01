@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """sites.py: crew sites [<label>] [--json]
 
-For each host where a partition's teams run, each bolt and its worktrees (the bolt's own, each unit's and each
-fix's), with the URL of the dev server running in it, if any; a started bolt with none, saying so, since its work
+For each host where a partition's teams run, each bolt and its worktrees (the bolt's own and each unit's), with the
+URL of the dev server running in it, if any; a started bolt with none, saying so, since its work
 runs in Flume's places, until the runner reports a place's addresses (crew-sites, _open.md). Each host is read once.
 A server is found among the host's portless routes and matched to its worktree by the name devurl gives that
 worktree: swancloud's naming, never crew's own. The URL is the one to open from where crew runs: the server's local
@@ -83,9 +83,6 @@ def sites(fleet, labels):
                     pl_ = (k.get("chore_places", {}) if plan.is_chore(u) else k["places"]).get(u.name())
                     if pl_:
                         entry["units"].append(dict(site(pl_["path"]), unit=u.name()))
-                for f in k["fixes"]:
-                    if f["bolt"] == b.name():
-                        entry["fixes"].append(dict(site(f["path"]), fix=f["fix"]))
         out["partitions"].append({"label": l, "hosts": [hosts[h] for h in sorted(hosts)]})
     return out
 

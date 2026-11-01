@@ -69,7 +69,6 @@ def kits(ok=True):
                               "bolt": "tenant-environments"}
     swb = {"ok": True, "main": [], "places": {"a": place("a", (1, 2)), "b": place("b", (0, 2))}, "reports": {},
            "bolts": {"tenant-environments": {"head": "d" * 40, "head_at": ago(200), "changes": [], "worktree": "/kit/bolts/tenant-environments"}},
-           "fixes": [{"fix": "fix/tenant-environments/edge", "merged": False, "bolt": "tenant-environments", "path": "/kit/places/fix-edge"}],
            "sites": {"/kit/places/a": {"here": "http://unit-a--switchboard-kit.localhost", "tailnet": "https://unit-a--switchboard-kit--box.dev"}},
            "routes": [{"name": "unit-a--switchboard-kit", "url": "http://unit-a.localhost"}],
            "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}], "submissions": [], "decided": []}
@@ -163,9 +162,8 @@ class TestText:
 
     def test_construction_shows_a_held_bolt_as_a_ledger(self):
         con = lane(board.board_text(data()), "Construction")
-        assert con[:4] == [f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {TE_TIME}",
-                           "    a  code 1/2  https://unit-a--switchboard-kit--box.dev", "    b  planned",
-                           "    fix/tenant-environments/edge  fix"]
+        assert con[:3] == [f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {TE_TIME}",
+                           "    a  code 1/2  https://unit-a--switchboard-kit--box.dev", "    b  planned"]
         assert f"! breadboard-kit board-done  brd-1 on chuck-herdr-alpha  landed  {DONE_TIME}" in con
 
     def test_a_held_bolt_every_unit_of_which_landed_is_named_for_attention(self):
@@ -1239,7 +1237,7 @@ class TestMore:
         assert sorted(te) == ["bolt", "fixes", "given", "goal", "host", "landing", "markers", "record", "repo", "state", "stream", "submissions_error",
                               "team", "teams", "time", "units", "url"]
         assert sorted(te["units"][0]) == ["flume", "kind", "slot", "stage", "submission", "tasks", "unit", "url", "worktree"]
-        assert sorted(te["fixes"][0]) == ["fix", "flume", "merged", "slot", "submission", "url", "worktree"]
+        assert te["fixes"] == []  # a fix is a started bolt's Flume place alone (TestCrossed)
 
     def test_half_a_frame_or_one_with_no_time_reads_as_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr(board, "FRAMES", tmp_path)
@@ -1264,7 +1262,7 @@ WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-
 class TestViews:
     def test_a_conductor_reads_its_bolt_as_a_ledger_a_pip_to_each_unit_then_what_comes_next(self):
         assert view("swb-1-conductor") == [f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2", "    ◔  b  planned",
-                                           "    fix/tenant-environments/edge  fix", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
+                                           "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
 
     def test_a_team_holding_a_bolt_that_waits_to_land_and_one_it_builds_draws_both(self, monkeypatch):
         """A team builds one bolt and may hold one more, proven, that waits to land (teams.16): its conductor's band and
@@ -1526,11 +1524,9 @@ class TestSubmissions:
     def test_a_merge_standing_in_sluice_is_on_its_line_in_the_lane_and_the_conductors_band(self):
         """crew-board "A merge standing in sluice"."""
         sv = queued(STANDING_SUBS)
-        assert lane(board.board_text(data(sv=sv)), "Construction")[1:4] == [
-            "    a  code 1/2  #41 under test  https://unit-a--switchboard-kit--box.dev", "    b  planned",
-            "    fix/tenant-environments/edge  fix  #43 queued"]
-        assert view("swb-1-conductor", sv=sv)[1:4] == ["    ◑  a  code 1/2  #41 under test", "    ◔  b  planned",
-                                                       "    fix/tenant-environments/edge  fix  #43 queued"]
+        assert lane(board.board_text(data(sv=sv)), "Construction")[1:3] == [
+            "    a  code 1/2  #41 under test  https://unit-a--switchboard-kit--box.dev", "    b  planned"]
+        assert view("swb-1-conductor", sv=sv)[1:3] == ["    ◑  a  code 1/2  #41 under test", "    ◔  b  planned"]
 
     def test_a_landing_standing_in_sluice_is_on_the_bolts_head_line_in_the_lane_and_the_bands(self):
         """crew-board "A landing standing in sluice": the lane, its conductor's band and main-level ops's."""

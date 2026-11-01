@@ -1,7 +1,7 @@
 # A kit merges and lands only through sluice (teams.5, record 0026): crew gives a bolt only in a kit whose
 # .config/sluice.toml on GitHub's main names the checks its bolt branches require, refusing, with the plan unchanged and no
 # branch made, a kit with no policy or one naming no bolt branch checks, naming the file; a unit's and a fix's place on
-# a bolt given through Flume merge into it only as Flume's submissions to sluice, crew fix --merge refused since crew
+# a bolt given through Flume merge into it only as Flume's submissions to sluice, crew fix having no --merge since crew
 # merges nothing, and crew reads each merged from the runner's records and the bolt's verification from sluice's verdict
 # at its head; and crew's own policy requires its check-full tasks of a bolt and of main, run open on the host and taking
 # no replay (tests.5, tests.10). Each scenario of the bolt-teams spec on merging; which table and checks a policy names
@@ -48,9 +48,8 @@ eq "$(held)" "swb-1"
 flume_lands $box unit a tenant-environments
 eq "$(landed)" $'sluice chore(land): #1 unit/a\npassed (stub)'
 eq "$(stage a)" "merged"
-expect_ok crew fix swb-1 edge-sign-in "The edge sign-in answers an object."
-expect_fail "fix/tenant-environments/edge-sign-in is a Flume place on bolt/tenant-environments, which Flume submits to the bolt through sluice itself" \
-  crew fix swb-1 edge-sign-in --merge
+expect_ok crew fix tenant-environments edge-sign-in "The edge sign-in answers an object."
+expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge-sign-in --merge
 fix_lands tenant-environments edge-sign-in sign-in
 eq "$(landed)" $'sluice chore(land): #2 fix/tenant-environments/edge-sign-in\npassed (stub)'
 expect_ok crew bolts tenant-environments --json

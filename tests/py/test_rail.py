@@ -121,17 +121,6 @@ class TestRows:
         land = self.two_bolts(merged=True, planned=False)
         assert land[f"land/{KIT}"]["what"][1] == f"apex-zones, swb-2 on {BOX}: a yes frees swb-2, and nothing is planned for it; can land"
 
-    def test_a_bolt_with_a_fix_in_flight_lands_once_it_has_merged_or_been_dropped(self):
-        sv = survey()
-        sv[BOX]["kits"]["/kit/main"]["fixes"] = [{"fix": "fix/apex-zones/gap", "bolt": "apex-zones", "merged": False},
-                                                {"fix": "fix/apex-zones/done", "bolt": "apex-zones", "merged": True}]
-        land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert (land["what"][1], land["cmds"]) == (f"apex-zones, swb-2 on {BOX}: lands once fix/apex-zones/gap has merged or been dropped", [])
-        assert land["bolts"][0]["can"] is False
-        sv[BOX]["kits"]["/kit/main"]["fixes"][0]["dropped"] = True  # dropped, its place not yet removed
-        land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land" and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
-
     def test_a_landing_sluice_refused_at_the_bolts_head_is_held_in_its_words(self):
         """crew-rail "A refused landing"."""
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {},

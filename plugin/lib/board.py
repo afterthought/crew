@@ -132,7 +132,7 @@ def signals(fleet, label, tip):
 
 def flow_read(fleet, labels, sweep=False):
     """One read of the labels' flow, which makes both the rail and the board: the rail's read with every team of the
-    labels surveyed, its dev servers, slots and explorations too (plan.rail_read), and the signals of each label whose
+    labels surveyed, its dev servers and explorations too (plan.rail_read), and the signals of each label whose
     plan was read; a plan that could not be read leaves its moves unknown, and is named already. With sweep, the rail
     tab's, the read ends the card sessions of closed cards and gone rows, as crew rail's does."""
     read = plan.rail_read(fleet, labels, board=True, sweep=sweep)
@@ -302,13 +302,12 @@ def board_data(fleet, labels, read, now):
                             if path and k and not crossed else None)
                 state = st.bolt_state(b) if t else "unknown"
                 crossed = t is not None and b.get("Path") == "flume"
-                fixes = [f for f in k.get("fixes", []) if f["bolt"] == b.name()] if not crossed else []
                 silent = st.unread(b) if crossed else None
                 if silent:
                     attention.append({"what": "runner", "name": silent[0], "why": silent[1]})
                 unread = k.get("submissions_error")
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
-                                                     [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
+                                                     [(u.name(), plan.kind_of(u)) for u in units])
                 recorded = landing_of(logs, b.name())
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "stream": streams.get(b.get("Team")), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
@@ -320,10 +319,8 @@ def board_data(fleet, labels, read, now):
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
                                             "slot": None, "submission": subs.get(u.name()),
                                             "worktree": s["worktree"], "url": url(s["worktree"]), "flume": s.get("flume")})
-                ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": None, "submission": subs.get(f["fix"]),
-                                    "worktree": f["path"], "url": url(f["path"]), "flume": None} for f in fixes]
-                ledger["fixes"] += [{"fix": w, "merged": x["stage"] in ("merged", "landed"), "slot": None, "submission": None, "worktree": None,
-                                     "url": None, "flume": x} for w, _, x in (st.fixes(b) if crossed else [])]
+                ledger["fixes"] = [{"fix": w, "merged": x["stage"] in ("merged", "landed"), "slot": None, "submission": None, "worktree": None,
+                                    "url": None, "flume": x} for w, _, x in (st.fixes(b) if crossed else [])]
                 construction.append(ledger)
                 if state == "landed" or (recorded or {}).get("unclosed"):
                     attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {recorded['unclosed']}"
