@@ -1,27 +1,25 @@
-# Every brief prints for its team or partition with no token left unfilled.
+# Every brief prints for its partition's main level with no token left unfilled, and none for a team or a dispatcher,
+# which the teams file names none of (Decision 2 of the-team-machinery-leaves).
 # Reads: plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
-for role in conductor ops construct coder verify; do
-  expect_ok crewpy brief swb-1 $role
-  [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/$role.md left ${BASH_REMATCH[0]} unfilled"
-  has "$out" "# You are swb-1-"
-  lacks "$out" "fable"; lacks "$out" "explorer"
-  echo "$role: $(wc -c <<<"$out" | tr -d ' ') characters"
+# wldn's plan names three kits, which its main level's host, the box, keeps (Decision 3 of the-team-machinery-leaves).
+blueprints WilldanGroup/willdan-blueprints >/dev/null; crew state init wldn >/dev/null
+for k in atlas breadboard switchboard; do crew bolt new "$k-work" "Work in $k-kit." --repo "$k-kit" --label wldn >/dev/null; done
+for role in conductor ops construct coder verify dispatcher fable; do
+  expect_fail "no definition '$role' for a main level. definitions: design planner main-ops operator reviewer" crewpy brief wldn $role
 done
-expect_fail "no definition 'fable' for a team" crewpy brief swb-1 fable
-[[ ! -e $CREW/plugin/roles/fable.md && ! -e $CREW/plugin/roles/explorer.md && ! -e $CREW/plugin/roles/verifier.md ]] || fail "a retired role is still there"
-ok "every team brief prints with no unfilled token"
+expect_fail "no partition 'swb-1'. partitions: wldn madswan swancloud" crewpy brief swb-1 planner
+for gone in fable explorer verifier conductor ops dispatcher construct coder verify; do
+  [[ ! -e $CREW/plugin/roles/$gone.md ]] || fail "the retired role $gone is still there"
+done
+ok "no brief prints for a team, a dispatcher or a retired role"
 
 # sluice's verdict can outlast an agent's ten-minute call (teams.5's details; sluice ADR 0041), so every brief that
 # submits by hand submits without waiting and waits a call at a time with sluice wait, never reading a listing; and
 # the wait runs from the harness's background, so a submission never holds the agent's session (teams.5, as amended
 # 2026-10-23), in the foreground only where the harness runs nothing in the background.
-expect_ok crewpy brief swb-1 coder
-has "$out" "sluice submit bolt/<bolt> --no-wait --json"; has "$out" "sluice wait <n> --timeout 9m --json"
-has "$out" "Without the number, \`sluice wait bolt/<bolt> --timeout 9m --json\` from this worktree waits on its last submission"
-lacks "$out" "wt submit"; lacks "$out" "wt merge"; lacks "$out" "--no-hooks"
-for brief in "swb-1 coder" "wldn design" "wldn operator"; do
+for brief in "wldn design" "wldn operator"; do
   expect_ok crewpy brief $brief
   for want in "sluice wait <n> --timeout 9m --json" "for as long as it exits 5, still waiting" "--no-wait --json" \
     "submit again to move" "listing, which a decided submission leaves" \
@@ -32,17 +30,12 @@ for brief in "swb-1 coder" "wldn design" "wldn operator"; do
   done
   lacks "$out" "wait on it a call at a time, giving the command its full ten minutes"
 done
-ok "the coder, the design agent and the operator submit without waiting and wait on the submission with sluice wait from the background, never a listing"
-expect_ok crewpy brief swb-1 coder; has "$out" "if the host was slow, submit the same head again"
-has "$out" "if the fail looks like the host's doing, a time limit or an overloaded host, stop and say so through crew"
-has "$out" "Never change what a test reads only to get it tested again."
-ok "the coder submits the same head again after a slow host's time limit, and takes a flaky fail the host caused to the user, never changing what a test reads"
+ok "the design agent and the operator submit without waiting and wait on the submission with sluice wait from the background, never a listing"
 
 # sluice 0.3.1's `wt submit --help` removes the worktree it ran in as if the submission had landed (teams.5's
 # details), so every brief that names `wt submit` says never to run it, and where the usage is read instead.
 named=()
-for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" \
-  "wldn design" "wldn planner" "wldn dispatcher" "wldn main-ops" "wldn operator"; do
+for brief in "wldn design" "wldn planner" "wldn main-ops" "wldn operator" "wldn reviewer"; do
   expect_ok crewpy brief $brief
   [[ $out == *"wt submit"* ]] || continue
   named+=("${brief#* }")
@@ -51,62 +44,15 @@ done
 [[ ${named[*]} == "main-ops" ]] || fail "the briefs naming wt submit are ${named[*]}"
 ok "every brief that names wt submit says never to run wt submit --help in a worktree, and to read sluice submit --help or wt --help"
 
-expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by hand: sluice runs it."
-has "$out" "run the tests of what you changed, as the kit's CLAUDE.md says"; lacks "$out" "moon run"
-expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it runs only those the change affects"
-has "$out" "never the whole suite, which the merge gate runs"
-ok "the coder and verify run only the tests a change affects, and leave the whole suite to the merge gate"
-
-# A change's content is the kit's (briefs.3, record 0025): the construct brief names no proof list, task shape or
-# design section, points at the kit's openspec/config.yaml, and keeps the Touches block crew reads.
-expect_ok crewpy brief swb-1 construct
-has "$out" "openspec/config.yaml"; has "$out" "## Touches"
-for gone in "Proof in dev" "proof in dev" "Task notes" "one sentence saying what must be true" "ending with the tests its change affects"; do
-  lacks "$out" "$gone"
-done
-ok "the construct brief leaves a change's content to the kit's openspec/config.yaml and keeps only what crew reads"
-
-expect_ok crewpy brief swb-1 conductor
-for want in "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
-  has "$out" "$want"
-done
-lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
-for want in "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
-has "$out" "You raise, pass, post, change and close no landing card"
-has "$out" "tell wldn-ops \"Bolt <bolt> is proven, a row of <kit>'s landings card.\""
-lacks "$out" "Land bolt <bolt>. The user approved it on Pending You."
-# A team builds one bolt and may hold one more that waits to land (teams.16).
-for want in "Your team builds one bolt at a time" "it waits to land on the user's yes, and your team may be given its next bolt beside it" \
-  "name the fix's bolt with \`--bolt <bolt>\`" "\`--bolt <the bolt that waits to land>\`, and goes in the first slot that frees"; do
-  has "$out" "$want"
-done
-for want in "Your bolt's row links its reading, keyed \`land/<bolt>\`" \
-  "crew starts that reading on your team's host when your bolt becomes a row that can land and ends it when the row is held or leaves the card" \
-  "Start no wait on the reading: nothing of crew's waits on it" "crew tells you so at the rail's next refresh" \
-  "crew card read land/<bolt>\`: it prints what the user sent from the reading, word for word, and sets the reading aside, the card left as it is" \
-  "crew card session land/<bolt>\` next, which starts the reading anew and changes the card to carry its new link" \
-  "crew card session land/<bolt>\` prints its link, or starts the reading again" \
-  "Notes the user sends from the reading are notes on your bolt's row" "An approval in the reading lands nothing" \
-  "the row carries what brings it up, the bolt branch and its head, and the preview comes up only on the user's ask on the card, which is \`wldn-ops\`'s to act on, never yours" \
-  "a merge that moves the head releases one up at the old head and asks none at the new" \
-  "the preview lands nothing, and one that failed is said on the card and holds nothing" \
-  "a row raised without its reading says so and why, and names" "crew card session land/<bolt>\` as your act, never the user's" \
-  "and crew's rail read on the main level's host tries it again too, ten minutes after the last try, while the card waits on the user" \
-  "When no reading runs, because the raise could not open it or you read the last one, \`card read\` says so" \
-  "crew card session land/<bolt>\` starts it once what stopped it is mended; when the reading could not be opened, the card says so too" \
-  "A merge stage's agent submits its own merge to sluice and waits on it itself, with \`sluice wait\` from its harness's background: you start no wait on sluice for it" \
-  "read from sluice's own queue, so a restart loses none of them" "\`#41 under test\`" "\`landing #355 queued\`"; do
-  has "$out" "$want"
-done
-for gone in "answeredHere" "plannotator" "card wait land/" "the wait starts one first" "what the wait named" "which crew asks sluice for"; do lacks "$out" "$gone"; done
-ok "a conductor opens nothing, raises and passes no landing card, tells main-level ops its bolt is proven, starts no batch's session, and starts no wait on its bolt's reading, reading it with crew card read once crew tells it the user sent it, whose notes are its row's and whose approval lands nothing, and whose preview comes up only on the user's ask, main-level ops's to act on; it reads each merge's and the landing's number from the rows, and a merge's agent waits on its own"
-# The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
+# The question discipline each of the three that ask carries (record 0031, briefs.11; Decision 6 of
+# the-team-machinery-leaves): who asks and after whom, a Flume place's question answered with crew answer, Pending
 # You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
 # row's card as crew's.
 asks_say() {
   for want in "A question of yours for the user reaches them on a Pending You card you ask yourself; every other card on the rail is crew's." \
-    "Four ask the user: a team's conductor, the planner, main-level ops and the design agent." \
-    "the dispatcher asks through the planner; and crew refuses a card from any of them" \
+    "Three ask the user: the planner, main-level ops and the design agent." \
+    "A Flume place that stops short asks the one of you it names, who gets the answer and gives it to the place with \`$CREW/plugin/bin/crew answer\`" \
+    "the operator and the reviewer ask nothing; and crew refuses a card from any other agent" \
     "\`$CREW/plugin/bin/crew tell\`: \`wldn-design\` for the design, \`wldn-ops\` for a live system or a deploy, \`wldn-planner\` for the plan" \
     "in their name, their money, their plans, public or hard to undo" "when its choices lead to noticeably different products" \
     "decide what a careful product designer would, and say so" "its options, with the one you recommend" \
@@ -121,57 +67,39 @@ asks_say() {
   done
   for gone in "rail row's of your own" "the form its row takes" "plan card" "begins with the link to the card's plannotator session" \
     "No card carries a path" "kind \`image\`" "An older copy of this card is dead" "posted again by nobody" \
+    "Four ask the user" "crew needs" "stop short to their" \
     "The one exception is a lost card" "card session <key>" "answeredHere" "Never open a browser for a card"; do
     lacks "$out" "$gone"
   done
 }
-asks_say
-has "$out" "which crew raises itself in \`wldn-ops\`'s name, one card for every proven bolt waiting on the kit's main"
-lacks "$out" "two or three plain sentences"; lacks "$out" "post its review card"
-ok "a conductor asks the user its own questions under a key of its own, once the chain of command has not answered them"
-for want in "idempotencyKey" "create-area:" "pendingyou hold" \
-  "keyed \`land/<kit>\`, which crew raises itself" "Bolt <bolt> is proven, a row of <kit>'s landings card." \
-  "crew puts it on its kit's landings card, \`wldn-ops\`'s, and you tell \`wldn-ops\` it is proven" \
-  "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." "Pending You gives that card back" \
-  "Starting a fix holds the bolt's row on its kit's landings card with no box" \
-  "start a fix on the bolt in the note's words, which holds its row with no box"; do
-  has "$out" "$want"
-done
-for want in "The card is an approval of the landing alone, risk high" "holds your bolt's row with no box when you start a fix on it" \
-  "gives it its box again once it reads proven again at a new head"; do
-  has "$out" "$want"
-done
-for gone in "highStakes" "land/<bolt>/<head>" "post its landing card" "A row's key changes when what it asks changes"; do lacks "$out" "$gone"; done
-lacks "$out" "offering approval"; lacks "$out" "Looks good"; lacks "$out" "Needs changes"; lacks "$out" "\`review\` card"
-for gone in "verify/<unit>/<stamp>" "post its verify card" "a \`multi\` when the user may pick several findings" "An answer on a verify card"; do
-  lacks "$out" "$gone"
-done
-ok "the conductor posts no verify card, and crew puts its bolt on its kit's landings card, an approval of risk high, holds its row for a fix and gives it its box again"
-ok "the conductor keeps its units moving, asks the design agent, records signals, and writes the plan only through crew"
-
-for role in design planner dispatcher main-ops; do
+for role in design planner main-ops operator reviewer; do
   expect_ok crewpy brief wldn $role
   [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/$role.md left ${BASH_REMATCH[0]} unfilled"
   has "$out" "of wldn"; lacks "$out" "fable"
   echo "$role: $(wc -c <<<"$out" | tr -d ' ') characters"
 done
 expect_ok crewpy brief wldn design
-for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
+for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <agent>" "## Answering a design question" \
+  "a design question the planner, \`wldn-ops\` or a Flume place brings" \
+  "answer <work> \"<the answer, with the pages or commits it rests on>\"\`, \`<work>\` the unit's or chore's name or the fix's place"; do
+  has "$out" "$want"
+done
 for want in "names, in the message that carries it, the documentation page or the reading it rests on" "Read the thing itself" \
   "not the sequence" "Answer linked questions together" "never the mechanism"; do has "$out" "$want"; done
 has "$out" "\`--source\` also names what the signal points at"
 expect_ok crewpy brief wldn planner
 for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "--replaces <n>" "--unblocks <bolt>" \
-  "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none" \
+  "bolt start <bolt>" "It waits on the user alone, and no agent is told of it" "A started bolt is in flight" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none" \
   "A dropped bolt's own branch sluice deletes, on GitHub and the host, or keeps and crew names as the drop's unmerged work, the user's, while main lacks its tip"; do
   has "$out" "$want"
 done
-for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it"; do lacks "$out" "$gone"; done
+for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it" "plan agree" \
+  "bolt give" "it no longer waits on that conductor"; do lacks "$out" "$gone"; done
 has "$out" "and with \`--source\` what the signal points at"
 for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "why the unit changes rather than being replaced" \
   "A unit that has merged is not amended"; do has "$out" "$want"; done
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
-  "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
+  "Corrections to a unit under construction are batched" "blocks the bolt"; do has "$out" "$want"; done
 for want in "Never name a proposal by its number alone" "Recite no command" "which holds the change whole" \
   "say in a sentence what you propose and point to its card"; do has "$out" "$want"; done
 lacks "$out" "plannotator-tui"
@@ -201,29 +129,11 @@ lacks "$out" "Keep <unit>"
 asks_say
 lacks "$out" "Its words are the proposal's case and each of its changes in a line"
 for want in "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\` of the first proposal it was rewritten from" \
-  "or answers your card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
+  "or answers your card" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
   "Pending You gives that card back"; do
   has "$out" "$want"
 done
-has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
-expect_ok crewpy brief swb-1 conductor
-for want in "plan proposed <n>" "plan agree <n>" "plan approve <n>\`, never on your own judgment" "crew refuses it from you" \
-  "crew status swb-1\` once that agent settles" "tell the user once which worktree it is and what its work was" \
-  "tell the user once which worktree it is and what crew named" "never approve or skip the kit's hooks yourself"; do has "$out" "$want"; done
-for want in "at any stage before it merges" "crew marks the unit amended" "the unit goes on from its tasks with no approval asked" \
-  "crew starts construct on it again itself and tells you" "Any unit of your bolt that" "crew bolts\` shows as \`amended\` has no construct running" \
-  "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
-for want in "Send linked questions together" "with the documentation or reading it names" \
-  "holds corrections to a unit in construct"; do has "$out" "$want"; done
-expect_ok crewpy brief swb-1 construct
-for want in "## Writing a change again" "the unit's intent was amended" "stay ticked only where the work they describe" \
-  "Commit the revision, however small" "Read the sources afresh before you revise" \
-  "the change that is there holds what they said when it was written, not what they say now"; do has "$out" "$want"; done
-for want in "as it stands on main now, and what each points at" "never the copy in this worktree" "signal show <id>" \
-  "A source you cannot open stops you" "don't write the change from the intent in its place" "The sources govern how the unit is built" \
-  "write the change from the sources" "open your final message with the difference" "first any difference between the intent and its sources" \
-  "An intent that differs from its sources is not a wrong premise"; do has "$out" "$want"; done
-lacks "$out" "If the intent can't be built as written"
+for gone in "builds Switchboard" "unit slots" "A dispatcher on each host the partition's teams run on" "The partition's teams:"; do lacks "$out" "$gone"; done
 expect_ok crewpy brief wldn operator
 for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word" "never by its number alone" "recite no command" \
   "rail --label wldn" "the console's \`rail\` tab" "the partition's door" "console up wldn" "console up wldn rail" "_follow\`, the host's follower"; do
@@ -237,16 +147,12 @@ for want in "You post no Pending You card and make no area, whatever a Pending Y
   has "$out" "$want"
 done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
-expect_ok crewpy brief wldn dispatcher
-for want in "bolt give <team>" "up <team>" "account ia" "makes its branch from the kit's main with no worktree" "It is the one tell not about a bolt that is yours" "ops step\` command that records it done or failed"; do has "$out" "$want"; done
-for want in "may hold one more that waits to land" "once crew tells you its bolt reads proven" "so a refusal is no fault"; do has "$out" "$want"; done
-has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
 expect_ok crewpy brief wldn operator
 for want in "swancloud's main moves only through sluice (\`state.3\`), so never edit or commit in its main checkout" \
-  "\`sluice submit main --no-wait --json\`" "~/Code/github_afterthought/swancloud/places/crew-teams-<team> origin/main\`" \
-  "you level and push nothing" "When \`sluice wait\` exits 0 your head landed: remove your worktree and its branch with \`wt -C ~/Code/github_afterthought/swancloud/places/crew-teams-<team> remove --foreground\`"; do has "$out" "$want"; done
+  "\`sluice submit main --no-wait --json\`" "~/Code/github_afterthought/swancloud/places/crew-teams-<label> origin/main\`" \
+  "you level and push nothing" "When \`sluice wait\` exits 0 your head landed: remove your worktree and its branch with \`wt -C ~/Code/github_afterthought/swancloud/places/crew-teams-<label> remove --foreground\`"; do has "$out" "$want"; done
 lacks "$out" "wt submit"
 lacks "$out" "read-tree"; lacks "$out" "push swancloud's main"
 expect_ok crewpy brief wldn main-ops
@@ -259,7 +165,7 @@ for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bol
   "and first the bolts a send on an earlier card still lands, whose card closed as the one you read followed it, even while that one waits on the user" \
   "Nothing waits on a host, and no agent is told main moved" \
   "whichever act reads it first once sluice's record has the landing out" "so a landing never waits on your session staying up" \
-  "crew's next read of the bolt closes it once what it named is mended, at its team's next read or at" "bolt land <bolt>\`, which you may run" \
+  "crew's next read of the bolt closes it once what it named is mended, at the rail's next sweep or at" "bolt land <bolt>\`, which you may run" \
   "Submit every bolt the user ticked with one command, in the card's order" "bolt submit <bolt> <bolt>... --label wldn" \
   "keyed \`land/<kit>\`, which crew raises in your name" "card read land/<kit> --label wldn" \
   "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
@@ -298,10 +204,9 @@ for role in design planner reviewer main-ops operator; do
   lacks "$out" "You run as your kind"
 done
 for r in design planner reviewer ops operator; do role_stream wldn $r wldn-main; done
-for role in design planner reviewer main-ops operator dispatcher; do
+for role in design planner reviewer main-ops operator; do
   expect_ok crewpy brief wldn $role
   [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/$role.md left ${BASH_REMATCH[0]} unfilled for a partition running all five as their kinds"
-  [[ $role == dispatcher ]] && continue
   for want in "You run as your kind: no agent of you stands" "Your turn starts with \`$CREW/plugin/bin/crew role start\`" \
     "end the turn with \`$CREW/plugin/bin/crew role end\`" "Wait in your session on nothing" \
     "end your turn instead, and the thing reaches your next run as an ask" "Ask the user only on a card in your own name, wldn-"; do
@@ -319,12 +224,13 @@ expect_ok crewpy brief wldn operator
 has "$out" "the deployer offers that host's deploy under *operations* on swancloud's rail"; has "$out" "never ask \`wldn-ops\` to deploy it"
 has "$out" "never hand the user a deploy command"; has "$out" "deploys by hand only a kit with no deployer"
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/operator.md left ${BASH_REMATCH[0]} unfilled"
-for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
+for want in "bolts --label wldn" "bolts <bolt> --label wldn" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' '`wldn-ops`' "terminal-browser open <url> --split right"; do has "$out" "$want"; done
+for gone in "status <team>" "<team>-conductor" "unit approve"; do lacks "$out" "$gone"; done
 for want in "/crew page wldn\`" "open the file it prints in terminal-browser beside your pane" \
   "on a box, give the user the path and say it opens from a Mac" "say as of when the page is, and name any host whose kits it could not read"; do has "$out" "$want"; done
 for want in "## A batch answered in your pane" "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once" \
   "records the batch answered as a tap on its card does, closes its card, and tells \`wldn-planner\` the words" \
-  "you send nothing to a conductor" "Only when crew says it could not tell the planner, carry the user's words to \`wldn-planner\` yourself" \
+  "which the planner acts on as the batch's notes; you hand them to no one else" "Only when crew says it could not tell the planner, carry the user's words to \`wldn-planner\` yourself" \
   "never record an answer from words that are not the user's own"; do has "$out" "$want"; done
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
@@ -336,25 +242,21 @@ ok "the operator reads the run record on the partition's branch, asking no host 
 # The operator carries what crew send brings it, and sends a teams change from a box to a Mac's partition with crew
 # send, never with a tell to another operator (briefs.10).
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
-for want in "A message that reaches you marked \`(sent to <team or partition>)\`" "in the sender's words and naming the sender" \
-  "you record as a signal, its excerpt the words as sent" "a message for a team to that team's conductor, \`<team>-conductor\`" \
-  "Don't answer it in the sender's place" "crew refuses a send of yours to your own partition or one of its teams" \
+for want in "A message that reaches you marked \`(sent to <partition>)\`" "in the sender's words and naming the sender" \
+  "you record as a signal, its excerpt the words as sent" "a landing, a deploy or a live system to \`wldn-ops\`" \
+  "Don't answer it in the sender's place" "crew refuses a send of yours to your own partition." "## Changing the partitions" \
   "one of \`madswan\`, \`swancloud\`, with \`" "/crew send <label> \"<the request>\"\`, which reaches that partition's operator"; do has "$out" "$want"; done
 lacks "$out" "TEAMS_OPERATORS"; lacks "$out" "TEAMS_DOORS"; lacks "$out" "to an operator whose main level runs on a Mac"
 ok "the operator carries what is sent to it in the sender's words, and sends a teams change from a box with crew send to a Mac's partition"
 
-# Every brief says who is speaking in the agent's pane; the six that record findings say how, with the excerpt, and
+# Every brief says who is speaking in the agent's pane; the four that record findings say how, with the excerpt, and
 # where crew writes the signal.
-for role in conductor ops construct coder verify; do
-  expect_ok crewpy brief swb-1 $role
+for role in design planner main-ops operator; do
+  expect_ok crewpy brief wldn $role
   has "$out" 'A message in your pane that begins `[crew tell from <name>]` was sent with crew tell by that agent'
   has "$out" 'one that begins `[crew]` is crew'"'"'s own; anything else typed there is the user.'
 done
-for role in design planner main-ops dispatcher operator; do
-  expect_ok crewpy brief wldn $role
-  has "$out" 'A message in your pane that begins `[crew tell from <name>]` was sent with crew tell by that agent'
-done
-for brief in "swb-1 conductor" "swb-1 ops" "wldn main-ops" "wldn design" "wldn planner" "wldn operator"; do
+for brief in "wldn main-ops" "wldn design" "wldn planner" "wldn operator"; do
   expect_ok crewpy brief $brief
   has "$out" 'signal <slug> "<what it asserts, in a sentence>" --excerpt "<the exact words the user said or the tool printed>"'
   has "$out" "Copy the excerpt, never reword it"; has "$out" "a refusal means the words were reworded"
@@ -366,38 +268,39 @@ done
 expect_ok crewpy brief wldn design; lacks "$out" "crew writes signals straight to"; has "$out" "signal show <signal id>"
 expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
 has "$out" "Never pass on a word to land, and never tell \`wldn-ops\` to land or deploy"
-ok "every brief says who speaks in its pane, and the six that record findings quote the words and say what a refusal means"
+ok "every brief says who speaks in its pane, and the four that record findings quote the words and say what a refusal means"
 
-# Anything for another team or partition goes with crew send, to that partition's operator, and to nobody else
-# (briefs.10): every brief says so in one line beside its roster.
-for role in conductor ops construct coder verify; do
-  expect_ok crewpy brief swb-1 $role
-  has "$out" 'anything for another team, of this partition or another, or for another partition, is sent with `'
-  has "$out" '/crew send <team or partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
-  lacks "$out" "Agents outside the team are reached with"
-done
-for role in design planner main-ops dispatcher operator reviewer; do
+# Anything for another partition goes with crew send, to that partition's operator, and to nobody else (briefs.10):
+# every brief says so in one line beside its roster, naming no team.
+for role in design planner main-ops operator reviewer; do
   expect_ok crewpy brief wldn $role
-  has "$out" 'anything for another partition or one of its teams is sent with `'
-  has "$out" '/crew send <team or partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+  has "$out" 'anything for another partition is sent with `'
+  has "$out" '/crew send <partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+  lacks "$out" "or one of its teams is sent"; lacks "$out" "crew send <team or partition>"
 done
-ok "every brief sends anything for another team or partition with crew send, to that partition's operator and to nobody else"
+ok "every brief sends anything for another partition with crew send, to that partition's operator and to nobody else"
 ok "a signal names where what it points at lives, a unit carries it as a source, and the construct reads it, stops when it can't, and builds from its sources over its intent"
 
 # Every message an agent sends another goes through crew tell, marked: no brief prompts an agent through herdr.
-for role in conductor ops construct coder verify; do
-  expect_ok crewpy brief swb-1 $role; lacks "$out" "herdr agent prompt"
-done
-for role in design planner main-ops dispatcher operator; do
+for role in design planner main-ops operator reviewer; do
   expect_ok crewpy brief wldn $role; lacks "$out" "herdr agent prompt"
 done
-expect_ok crewpy brief swb-1 conductor; lacks "$out" "prove swb-1"
 ok "no brief prompts another agent through herdr"
+
+# No main-level brief names the team machinery (Decisions 6 and 7 of the-team-machinery-leaves): each hands what it
+# hands to the planner, main-level ops, the design agent or a Flume place, and none to a conductor, a team or a slot.
+for role in design planner main-ops operator reviewer; do
+  expect_ok crewpy brief wldn $role
+  for gone in conductor dispatcher "team ops" "a team's ops" slot "bolt give" "fix <team>" "/crew unit run" "/crew unit wait" "/crew needs" \
+    "status <team>" "its team" "team's" "crossed" "drive a team"; do
+    lacks "$out" "$gone"
+  done
+done
+ok "no main-level brief names a conductor, team ops, a dispatcher, a slot, a give, crew fix <team>, crew unit run or wait, crew needs or crew status <team>"
 
 # Every kit's main is an anchor the timer moves, and a host loads crew live or released, never from a checkout on main
 # (plan.18, plan.19): no brief pulls, fast-forwards or levels crew's checkout (tests.6).
-for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" \
-  "wldn design" "wldn planner" "wldn main-ops" "wldn dispatcher" "wldn operator" "wldn reviewer"; do
+for brief in "wldn design" "wldn planner" "wldn main-ops" "wldn operator" "wldn reviewer"; do
   expect_ok crewpy brief $brief
   for gone in "/workspace/crew/main" "crew/main/plugin" "merge --ff-only" "read-tree"; do lacks "$out" "$gone"; done
 done
@@ -405,10 +308,7 @@ ok "no brief pulls, fast-forwards or levels crew's checkout"
 
 # The plan and the moves live on the flywheel's branch of its state repository: no brief names a plan/<label>
 # branch or a moves.rec in the blueprints, and the design agent and the planner name the state repository.
-for role in conductor ops construct coder verify; do
-  expect_ok crewpy brief swb-1 $role; lacks "$out" "plan/wldn"; lacks "$out" "signals/moves.rec"
-done
-for role in design planner main-ops dispatcher operator; do
+for role in design planner main-ops operator reviewer; do
   expect_ok crewpy brief wldn $role; lacks "$out" "plan/wldn"; lacks "$out" "signals/moves.rec"
 done
 expect_ok crewpy brief wldn design; has "$out" "\`moves.rec\` on \`wldn/main\` of WilldanGroup/crew-state"
@@ -416,10 +316,10 @@ lacks "$out" "route moves straight to"
 expect_ok crewpy brief wldn planner; has "$out" "\`wldn/main\` of WilldanGroup/crew-state"
 ok "every brief names the flywheel's branch for the plan and the moves, and none names plan/<label>"
 
-# Test, check and proof results reach the user as a glyph list (briefs.7): the six roles that report results carry
-# one section, built once in crew, word for word the same in each, which names no proof list (briefs.3).
+# Test, check and proof results reach the user as a glyph list (briefs.7): the roles that report results carry one
+# section, built once in crew, word for word the same in each, which names no proof list (briefs.3).
 first=""
-for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" "wldn main-ops"; do
+for brief in "wldn main-ops" "wldn reviewer"; do
   expect_ok crewpy brief $brief
   n=$(grep -c '^## Test, check and proof results$' <<<"$out")
   [[ $n == 1 ]] || fail "the $brief brief holds the results heading $n times"
@@ -429,57 +329,24 @@ for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-
   done
   lacks "$cut" "Proof in dev"
   [[ -z $first ]] && first=$cut
-  [[ $cut == "$first" ]] || fail "the $brief brief's results section differs from the swb-1 conductor's:"$'\n'"$cut"
+  [[ $cut == "$first" ]] || fail "the $brief brief's results section differs from main-ops's:"$'\n'"$cut"
 done
-ok "the six roles that report results carry one glyph-list section, the same in each, naming no proof list"
-expect_ok crewpy brief swb-1 coder; has "$out" "Every task is yours."; lacks "$out" "what needs dev"
-ok "the coder's brief names no work that needs dev"
+ok "the roles that report results carry one glyph-list section, the same in each, naming no proof list"
 
-# A stage ends at its deliverable (teams.4): the conductor waits for every stage and fix through crew and reads no pane
-# for an outcome, takes a stuck stage to the user and runs a stopped-short one again with the answer; the stage agents
-# say what they need with crew needs, and ops, which runs no stage, tells the conductor; verify's report is written once,
-# whole, every run, one with nothing to do as well, and a verify with no report has not ended (record 0007).
-expect_ok crewpy brief swb-1 conductor
-for want in "unit wait <unit>\` as a background command" "you never read a pane for one" "**Stuck**" \
-  "run the stage again or wait again only on the user's word" "fix swb-1 <name> --wait\`" \
-  "run the stage again with the answer as its words" "**Not ended**: a verify's agent ended its turn with no report saved" \
-  "run the verify again only on the user's word"; do
-  has "$out" "$want"
-done
-for gone in "If it is waiting on a question for the user, leave it for the user" "When its agent settles, merge it" "tell swb-1-ops \"Deploy"; do
-  lacks "$out" "$gone"
-done
-has "$out" "a wait may also say what sluice recorded of the stage's submission: \`<stage> on <unit>: sluice says of <agent>'s submission to <branch>: conflict #<n> on <its paths>; the wait goes on until the stage ends\`"
-has "$out" "It is no answer: the stage's agent has sluice's outcome too and takes it in the stage"
-for role in construct coder verify; do
-  expect_ok crewpy brief swb-1 $role
-  has "$out" 'needs "<what you tried and what you need>"` and end your turn'
-  has "$out" "Never ask in your pane: nobody watches it."
-  has "$out" "Ending a turn to wait on something you started in the background is fine"
-done
-expect_ok crewpy brief swb-1 ops
-has "$out" 'tell swb-1-conductor "<what you wait on, and why>"`'; lacks "$out" "needs \"<what you tried"; lacks "$out" "proof-<bolt>"
-has "$out" "may hold one more, proven, that waits to land beside it"
-expect_ok crewpy brief swb-1 verify
-has "$out" "unchanged and whole"; has "$out" "crew ends the stage once it is there"
-has "$out" "Save the report every run, one that found nothing to do as well"; has "$out" "A verify that ends with no report there has not ended"
-ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor; verify saves its report every run, and a verify with none has not ended"
-
-# A landing that conflicts lands nothing and goes back to the team as a fix that takes main into the bolt (plan.8,
-# teams.5, record 0026), and one sluice or its host stopped is submitted again on the word that stands (plan.16 as
-# read 2026-10-24): main-ops submits the bolt with crew bolt submit and passes on sluice's words, the conductor
-# starts the fix and merges it as any fix, its agent merges main in, and nothing but sluice moves a bolt's branch or
-# main; the bolt's proof is its verification (record 0025), and ops proves and deploys nothing. The user's send stands
-# for the bolt's work, so a ticked bolt that only took main in lands on that send, read with crew card read with or
-# without a card, and so do the user's words in ops's pane (record 0031 as amended 2026-10-24).
+# A landing that conflicts lands nothing and is answered by a fix that takes main into the bolt (plan.8, record 0026),
+# and one sluice or its host stopped is submitted again on the word that stands (plan.16 as read 2026-10-24):
+# main-ops submits the bolt with crew bolt submit and passes on sluice's words, and nothing but sluice moves a bolt's
+# branch or main; the bolt's proof is its verification (record 0025), and ops proves and deploys nothing. The user's
+# send stands for the bolt's work, so a ticked bolt that only took main in lands on that send, read with crew card
+# read with or without a card, and so do the user's words in ops's pane (record 0031 as amended 2026-10-24).
 expect_ok crewpy brief wldn main-ops
-for want in "tell the bolt's conductor and the user sluice's words" "its row has its box again on the kit's landings card once the fix has merged" \
+for want in "tell the user sluice's words, the check that failed or the files in conflict" "its row has its box again on the kit's landings card once the fix has merged" \
   "When it did not land for its own content, a conflict or a check that ran and failed" \
-  "its row keeps its box and the user's word stands for it: tell no conductor" \
+  "its row keeps its box and the user's word stands for it, and no fix is started" \
   "once it is cleared, submit that bolt again with the same command, on the send that still stands" "asking the user nothing" \
   "the user's send that ticked it still lands it, the fix having only taken main in" "land it on that send, as above, with nothing asked" \
   "A send stands for the bolt's work, not its head" \
-  "still lands on that send once its conductor tells you it is proven again, with nothing asked of the user" \
+  "still lands on that send once it reads proven again, as its row and the read show, with nothing asked of the user" \
   "with or without a landings card of the kit open" "a bolt it can't tell of, it names and leaves out of that command" \
   "crew asks for again on a card saying what changed" \
   "The user's words in this pane stand the same way for a bolt they named" \
@@ -491,89 +358,22 @@ for want in "tell the bolt's conductor and the user sluice's words" "its row has
   has "$out" "$want"
 done
 lacks "$out" "git rebase --abort"; lacks "$out" "proof in dev"; lacks "$out" "read-tree"; lacks "$out" "behind GitHub's, crew refuses"
-expect_ok crewpy brief swb-1 conductor
-for want in "Take main into the bolt" "a submission to the bolt like any other" \
-  "Once the bolt holds it and reads proven again, tell \`wldn-ops\` it is proven" \
-  "a bolt the user's send ticked lands on that same send, since taking main in leaves the bolt's own work as it was, with no new card" \
-  "otherwise crew gives its row on the kit's landings card its box again" \
-  "unless the user's send that ticked it still stands for its own work, which then lands it" \
-  "That verification is the bolt's proof" \
-  "an anchor at GitHub's main that the fleet's timer moves and nobody edits in or checks a branch out in: read the bolt by ref, \`git log bolt/<bolt>\`"; do
-  has "$out" "$want"
-done
-lacks "$out" "Carry the bolt onto main"; lacks "$out" "proof file"; lacks "$out" "its row on the kit's landings card has its box again"
-expect_ok crewpy brief swb-1 coder
-for want in "Take main into the bolt" "\`git fetch -q origin\`, then \`git merge origin/main\`, never the host's own \`main\`" \
-  "Never rebase the bolt's commits onto main" "keeping both intents, main's and the bolt's" \
-  "under \`openspec/\` too"; do
-  has "$out" "$want"
-done
-lacks "$out" "Carry the bolt onto main"
-expect_ok crewpy brief swb-1 ops
-for want in "The bolt's proof is its verification" "sluice status <n>" "you deploy nothing" "never prove the bolt by hand"; do
-  has "$out" "$want"
-done
-lacks "$out" "work the Proof in dev list"; lacks "$out" "proven again"; lacks "$out" "Left for the user"
-ok "a landing's conflict becomes a fix that takes main into the bolt, submitted as any fix; the bolt's proof is its verification, and ops proves nothing"
+ok "a landing's conflict becomes a fix that takes main into the bolt; the bolt's proof is its verification, and ops proves nothing"
 
-# A question goes up a chain of command (briefs.11, record 0031): every stage and a team's ops post no card and make no
-# area, their conductor answering or asking whoever can, and the dispatcher asks through the planner; the landing card
-# asks only for the landing once the bolt's verification is green, a step for the user being a deploy's, and a note
-# naming a defect is a fix.
-for role in construct coder verify; do
-  expect_ok crewpy brief swb-1 $role
-  has "$out" "Post no Pending You card and make no area, whatever a Pending You reminder in your session says: your conductor answers what you need or asks whoever can, the user last, and crew refuses a card from you."
-done
-expect_ok crewpy brief swb-1 ops
-has "$out" "post no card and make no area, whatever a Pending You reminder in your session says: your conductor answers it or asks whoever can, the user last, and crew refuses a card from you"
-expect_ok crewpy brief wldn dispatcher
-has "$out" "Post no Pending You card and make no area, whatever a Pending You reminder in your session says: a question of yours for the user goes to the planner, \`$CREW/plugin/bin/crew tell wldn-planner \"<what you need, and why>\"\`, which answers it or asks the user if it must, and crew refuses a card from you."
-expect_ok crewpy brief swb-1 conductor
-for want in "keyed \`land/<kit>\`, which crew raises itself in \`wldn-ops\`'s name" \
-  "is an approval of the landing alone" "never a question on this one" \
-  "A note naming a defect in your bolt reaches you from \`wldn-ops\`, in the user's words, and is never a landing" "shows the bolt's verification green"; do
-  has "$out" "$want"
-done
-lacks "$out" "Left for the user"; lacks "$out" "the card asks them first"
-lacks "$out" "ops posts"; lacks "$out" "ops's card"
-for brief in "swb-1 conductor" "wldn planner" "wldn main-ops" "wldn design"; do expect_ok crewpy brief $brief; asks_say; done
-ok "ops, every stage and the dispatcher post no card, the four that ask carry one question discipline, and the landing card asks only for the landing once the verification is green"
+# A question goes up a chain of command (briefs.11, record 0031): the planner, main-level ops and the design agent
+# carry one question discipline.
+for brief in "wldn planner" "wldn main-ops" "wldn design"; do expect_ok crewpy brief $brief; asks_say; done
+ok "the planner, main-level ops and the design agent carry one question discipline"
 
-# Units build at once and are reviewed in batches (teams.12 to teams.14, briefs.1, briefs.2, briefs.4, briefs.12): the
-# conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
-# a unit; crew orders and lifts its own forecast orders, which neither the conductor nor the planner asks anyone to lift
-# (plan.13); the conductor takes main into the bolt on a forecast against main, and waits out one against a submission
-# queued there (teams.21); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
-# one reading session on the batch, posts and closes no batch card, and sends the notes the card's wait prints from the
-# session and the card to each unit they speak of (briefs.9, briefs.12, briefs.13);
-# construct writes Touches as a block crew reads;
-# the coder keeps both intents, settles, corrects only Touches, and submits to sluice; verify names what was changed
-# and not declared; the reviewer writes its summary and nothing else, as prose opening each unit with the paragraph the
-# card carries; main-ops checks the landing row before it submits a bolt to main.
-expect_ok crewpy brief swb-1 conductor
-for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned\`" "with nobody asked to approve it" \
-  "You post no card for a unit, and open nothing for a batch" "run construct again with them, word for word" \
-  "hold the notes until it settles" "Overlapping *Touches* never hold a unit back" "orders neither by itself" \
-  "when the later unit's settle takes the earlier's work, crew puts the later after the earlier itself, as your write" \
-  "when that settle finds nothing to change, crew lifts an order of its own" \
-  "Never ask the planner or the user to lift an order crew wrote from a forecast" \
-  "no proposal and no card asks the user to undo one" \
-  "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
-  "your bolt waits for them: crew makes a batch due for them at once" \
-  "every unit's latest change in a batch whose card the user has answered" \
-  "When it names a batch the user has not answered, your bolt waits for their answer on that batch's card" "submits the unit to the bolt, \`sluice submit bolt/<bolt>\`, and waits on it with \`sluice wait\` from its harness's background, so the submission never holds the agent's session" "changed and did not declare in its Touches" \
-  "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it" \
-  "crew also forecasts the bolt itself against the kit's main" "start the take-main fix it gives at once, as when \`wldn-ops\` tells you a landing conflicts" \
-  "when it says the bolt would conflict with a submission queued on main, take nothing in"; do
-  has "$out" "$want"
-done
-for gone in "build them one after the other" "When in doubt, don't" "## Review with the user" \
-  "A forecast between two unmerged units puts the later after the earlier"; do lacks "$out" "$gone"; done
+# Units are reviewed in batches (briefs.12): the planner runs the reviewer, whose summary has crew raise the batch's one
+# card in the planner's name with one reading session on the batch, posts and closes no batch card, and acts on the
+# notes the card's read prints from the session and the card as fixes on the bolts of the units they speak of, or new
+# work (briefs.9, briefs.12, briefs.13; Decision 6 of the-team-machinery-leaves); the reviewer writes its summary and nothing else, as prose opening each unit with the paragraph the card
+# carries; main-ops checks the landing row before it submits a bolt to main.
 expect_ok crewpy brief wldn planner
 for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
-  "Never propose lifting an \`After\` crew wrote from a forecast: crew lifts its own." \
   "crew records the batch, starts its one reading session, the summary and every unit's whole change as one review, and raises its one card in your name, keyed \`batch/<n>\`" \
-  "naming every unit of the batch with its team and the paragraph the reviewer opened it with, however many" \
+  "naming every unit of the batch with its bolt and the paragraph the reviewer opened it with, however many" \
   "a batch is never split across cards" "\`call get_request (requestId req_…, name wldn-planner)\`" \
   "Start no wait for the batch's answer: nothing of crew's waits on a card or its reading." \
   "When the user sends the card back with a tap, its answer wakes you, as every card you adopted does" \
@@ -585,16 +385,16 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "a card raised without its reading says so and why, and names \`$CREW/plugin/bin/crew card session batch/<n> --label wldn\` as your act, never the user's, which starts the reading and changes the card to carry its link" \
   "crew's rail read tries it again too" \
   "names \`$CREW/plugin/bin/crew card session proposal/<n> --label wldn\` as your act, never the user's" \
-  "at once, word for word, to the conductor of each unit it speaks of" \
-  "go to every unit's conductor, saying they named no unit you could tell" \
+  "is a fix on that unit's bolt you start yourself" "a note that speaks of several goes whole into each one's fix" \
+  "ask the user about on a card of your own, quoting them, saying they named no unit you could tell" \
   "Never split, reword or summarize the user's words" "you never run a stage" \
   "Never answer a batch yourself: only the user's own words in your pane answer it, beside their card and its reading session." \
   "When an agent tells you the user's answer, tell it the user answers on the card or in your pane, and record nothing" \
   "Run the read too once the batch is answered in your pane or the operator's (step 4): it says in whose, without the words, and closes the card you hold." \
-  "Send what the read printed at once, word for word" \
+  "Act on what the read printed at once" \
   "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once, once for each batch they answered" \
   "crew reads the words in your own session's transcript as the user's and records the batch answered, as a tap on its card does" \
-  "When crew tells you a batch was answered in the operator's pane, with the user's words, send those as step 3 does too." \
+  "When crew tells you a batch was answered in the operator's pane, with the user's words, act on those as step 3 does too." \
   "a bolt lands only once each of its changes has been in a batch whose card the user has answered" \
   "posted before crew raised one card per batch, is yours as it was" \
   "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back"; do
@@ -606,51 +406,11 @@ for gone in "of at most five units" "which need notes?" "one in words for the no
   "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
   "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \
   "a decision in it is never the card's answer" "a batch card's summary says first what it is" \
-  "card wait batch/" "ends your wait on it" "the wait starts it first" "Send what the wait printed"; do
+  "card wait batch/" "ends your wait on it" "the wait starts it first" "Send what the wait printed" \
+  "Never propose lifting an \`After\` crew wrote from a forecast" "to the conductor of each unit"; do
   lacks "$out" "$gone"
 done
 lacks "$out" "the user reviews the change written for the new intent"
-expect_ok crewpy brief swb-1 construct
-for want in "End the proposal with \`## Touches\`" "one fenced block listing every path or glob" "refuses code without it" \
-  "The revised change goes into the next batch" "The user reads it in a batch, while it is built"; do
-  has "$out" "$want"
-done
-lacks "$out" "Two units are built side by side only when"; lacks "$out" "back in review"
-expect_ok crewpy brief swb-1 coder
-for want in "Settle <unit>: <what reached it>" "keeping both changes' intents" "The earlier unit is never changed for it" \
-  "The one part of it you may edit is the \`## Touches\` block" "sluice submit bolt/<bolt> --no-wait --json" "A unit you come after, constructed again"; do
-  has "$out" "$want"
-done
-lacks "$out" "the user reviewed and approved it"
-expect_ok crewpy brief swb-1 verify; has "$out" "\"changed and not declared\""
-# A verify is one round with no card (teams.17, record 0027): it checks the code against the change as written, and its
-# report marks each finding fix or leave; the conductor takes the marks as they stand and runs one fresh coder on what is
-# marked fix, taking nothing to the planner; the coder fixes those alone, and a unit's merge archives its change first.
-expect_ok crewpy brief swb-1 conductor
-for want in "run verify, once" "Its recommendations are taken as they stand: post no card for it, ask the user nothing about it, take nothing of it to the planner, and choose no findings yourself" \
-  "unit run <unit> code \"Fix every finding the verify report at <path> marks fix.\"" "Once that delivers, the unit goes on to merge, with no verify again" \
-  "A finding marked leave is left" "A fix round that stops short, is stuck or is no longer running is a stuck stage" \
-  "Its merge stage archives the unit's change first" "run its verify, once, and act on its report as for a unit"; do
-  has "$out" "$want"
-done
-lacks "$out" "the user decides with you what is fixed"; lacks "$out" "marked amend"
-expect_ok crewpy brief swb-1 verify
-for want in "You check the code against the unit's change as it is written, its proposal, specs, design and tasks" \
-  "\`## What to do\`" "starting **fix** or **leave**" "A CRITICAL finding is never left." "\"Nothing to do.\"" \
-  "nothing verifies the fixes again, and the unit merges" "end it with *What to do* as below"; do
-  has "$out" "$want"
-done
-lacks "$out" "decides with the user"; lacks "$out" "**amend**"
-expect_ok crewpy brief swb-1 coder
-for want in "you are the unit's one round of fixes after its verify" "marks fix, and only those" "No verify runs after you" \
-  "\`openspec archive <unit> --yes\`" "crew reads the merge as delivered only once the bolt holds the change archived" \
-  "A chore or a fix has no change to archive" "A merge archives what its own archive needs first" \
-  "crew refuses a merge that stops short for an archive it can make" \
-  "Only when the archive needs one you cannot make, another unit's change or one with a task open, or openspec refuses one of them"; do
-  has "$out" "$want"
-done
-lacks "$out" "When the prompt carries findings from a verify"; lacks "$out" "leave or amend"
-ok "a verify is one round with no card, grounded in the change as written: the report marks each finding fix or leave, one fresh coder fixes what it marks fix, nothing goes to the planner, and the merge archives the change first, and what its own archive needs before it"
 expect_ok crewpy brief wldn reviewer
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/reviewer.md left ${BASH_REMATCH[0]} unfilled"
 for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but this file" "at the commit the prompt names" \
@@ -662,20 +422,19 @@ for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but t
 done
 for gone in "**What it does**" "the paths it declares" "the batch's cards"; do lacks "$out" "$gone"; done
 expect_ok crewpy brief wldn design; has "$out" "\`wldn-reviewer\`, started fresh for each batch"
-expect_ok crewpy brief swb-1 ops; has "$out" "(construct, code, verify, settle, merge)"
 expect_ok crewpy brief wldn main-ops
 for want in "plugin/bin/crew rail --label wldn\` names it as one that can land" \
   "your submission in step 2 is what puts it on main" "while a unit's latest change has been in no batch" \
   "or batches whose card the user has not answered"; do
   has "$out" "$want"
 done
-ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"
+ok "the briefs put changes before the user in batches, and main-level ops lands a bolt only once its changes have been in one"
 
 # A decision record is accepted only on the user's yes (briefs.15): the design agent commits every record and amendment
 # as proposed, runs crew record at each turn of its status once it is on the kit's main, which raises, changes and closes
 # the record's one card in its name, adopts the card by the line crew record prints, names a rule-decided choice in an
 # alternatives file, never settled silently, and queues nothing before the yes; it posts and closes no record card, and
-# the planner and the conductors post none.
+# the planner posts none.
 expect_ok crewpy brief wldn design
 for want in "Every decision record you write, and every amendment you make to one, is committed as proposed" \
   "put to the user on one Pending You card in the record's own words, which crew raises for it through \`crew record\`" \
@@ -712,25 +471,10 @@ for gone in "record/<kit>/<number>/<commit>" "The record's card is the one card 
   "Close the card with \`ack_answer\`" "Accept decision record <number>"; do
   lacks "$out" "$gone"
 done
-for brief in "wldn planner" "swb-1 conductor"; do expect_ok crewpy brief $brief; lacks "$out" "record/<kit>"; done
+expect_ok crewpy brief wldn planner; lacks "$out" "record/<kit>"
 ok "the design agent runs crew record at each turn of a record's status, which raises, changes and closes its one card, names a rule-decided choice, accepts a record only on the user's yes and queues nothing before; no brief posts a record card"
 
 # A chore (plan.11): planned maintenance with no change, no construct and no review, its every commit carrying its trailer.
-expect_ok crewpy brief swb-1 coder
-for want in "## A chore" "Your worktree is on \`chore/<name>\`, and the prompt starts \`Chore <name>:\`" "Do exactly what they say" \
-  '--trailer "Chore: <name>"' "crew refuses its merge while a commit beyond the bolt lacks it" \
-  "Touch nothing under \`openspec/\` but the archive of a change whose every task is ticked" "\`openspec archive <change> --yes\`" \
-  "A chore never grows" "the change it would archive has a task open"; do has "$out" "$want"; done
-expect_ok crewpy brief swb-1 verify
-for want in "## A chore" "\`Verify chore <name>: <its words>\`" "\`git log @{upstream}..HEAD\`" "carries the trailer \`Chore: <name>\`" \
-  "nothing under \`openspec/\` changed but the archive" "You change nothing here either" "\`verify-<chore>-<YYYYMMDD-HHMM>.md\`"; do has "$out" "$want"; done
-expect_ok crewpy brief swb-1 conductor
-for want in "A bolt may also hold **chores**" "with no construct, no change and no review" "chore run <chore> code" "chore run <chore> verify" \
-  "chore run <chore> merge" "chore wait <chore>" "chore order" "chore after" "A chore takes its turn in the plan's order with the units" \
-  "has no construct and no batch" "until its verify has delivered, every commit of its own carries its trailer and everything it comes after has merged" \
-  "A unit that comes after a chore is constructed once the chore's code has delivered" "never waiting on a merge: its place takes their work as it stands" "each holding one unit, chore or fix in flight"; do
-  has "$out" "$want"
-done
 expect_ok crewpy brief wldn planner
 for want in "**Unit, fix or chore.**" "chore add <chore> \"<what is done>\" --bolt <bolt>" "A chore is never split or amended" \
   "its words change by a proposal that drops it and adds it again" "A batch of chores" "chore by chore on the card" \
@@ -738,41 +482,32 @@ for want in "**Unit, fix or chore.**" "chore add <chore> \"<what is done>\" --bo
   "\`unit add\` or \`chore add\`"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn design
 has "$out" "is queued the same way as a chore: \`$CREW/plugin/bin/crew chore add <chore> \"<what is done>\" --repo <kit>\`"
-ok "the coder, verifier, conductor, planner and design agent each carry what a chore is to them"
+ok "the planner and the design agent each carry what a chore is to them"
 
-# A team moves to Flume one at a time (record 0050, roles.8; teams-cross-to-flume-as-their-bolts-land): a due team is
-# given nothing, its bolt going on with its conductor until it lands, which crosses it; a crossed team runs no standing
-# agent and takes every planned bolt of its kits; its places' answers and fixes are the planner's, its landing ops's by
-# the one procedure, the read of its refusal for a conflict with main launching its take-main fix, and a red main of a
-# kit a crossed team builds is a Flume fix place on main, sent on the user's word (state.3).
-expect_ok crewpy brief wldn dispatcher
-for want in "## Teams that move to Flume" "\`in Flume stream <stream>\`" "\`due to cross once <bolt> lands\`" \
-  "**A due team is given nothing.**" "naming each bolt it finishes first and on which path, and never tells you a due team is free" \
-  "**A crossed team is never full.**" "however many it already holds" \
-  "bolt give <team> <bolt>\`, which makes the bolt's branch as any give does and starts no agent" "while no runner answers there" \
-  "refuse a crossed team at once, naming where its work runs"; do has "$out" "$want"; done
-expect_ok crewpy brief swb-1 conductor
-for want in "## When your team moves to Flume" "\`due to cross once <bolt> lands\`" "Build your bolt to its landing as this brief says" \
-  "nothing of it moves to Flume" "Your team is given no next bolt meanwhile" \
-  "crew ends you and \`swb-1-ops\` at your next stop once you are idle, with no restart"; do has "$out" "$want"; done
+# Every bolt's work runs through Flume (Decisions 1, 6 and 15 of the-team-machinery-leaves): its places' answers and
+# fixes are the planner's, its landing ops's by the one procedure, the read of its refusal for a conflict with main
+# launching its take-main fix, a forecast conflict a take-main fix ops starts, and a red main is a Flume fix place on
+# main, sent on the user's word (state.3).
 expect_ok crewpy brief wldn planner
-for want in "## Teams crossed to Flume" "so \`bolt order\` is how you move one ahead" "keep chains short" \
+for want in "## A bolt's work in Flume" "so \`bolt order\` is how you move one ahead" "keep chains short" \
   "**Plan writes reach its places by their approval.**" "naming drop and add as the way on, so propose the drop and the add" \
   "by your address \`wldn/planner\`" "answer <work> \"<the answer, in the words of whoever gave it>\"\`" \
   "when the place neither stopped short nor waits on its caller" "**Its fixes are yours to start.**" \
-  "fix <team> <name> \"<what is wrong, in the words of whoever found it>\" --bolt <bolt>\`" \
-  "so \`--merge\` and \`--wait\` are refused" "fix <team> <name> --drop --bolt <bolt>\`" \
+  "fix <bolt> <name> \"<what is wrong, in the words of whoever found it>\"\`" "fix <bolt> <name> --drop\`" \
   "is in a batch only once its place has merged into its bolt"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn main-ops
-for want in "A bolt of a team crossed to Flume lands by these same steps" "It has no conductor, so there is none to tell of it" \
+for want in "Every bolt's units, chores and fixes are Flume places, taken by a runner whose configuration names the kit's repository" \
+  "No agent drives a bolt's work, so a landing tells nobody but the user and the planner" \
+  "crew records the forecast once and starts nothing for it" "start that fix yourself" \
+  "take-main-<main's revision, seven characters> \"Take main into the bolt: merge origin/main into this place" \
   "crew's read of that refusal launches its take-main fix itself" "\`<bolt>--take-main-<main's revision>\`" "start nothing yourself" \
-  "the user's send that ticked it still lands it: land it on that send" "fix <team> <name> \"<the note>\" --bolt <bolt>\`" \
+  "the fix having only taken main in: land it on that send" "fix <bolt> <name> \"<the note>\" --label wldn\`" \
   "main fix <kit> <name> \"<the failure's words>\" --label wldn\`" "which you launch on reading main red" \
-  "\`--team <team>\` choosing among crossed teams" "its submission held for the user's word" "\`fixes in flight\`" \
+  "its submission held for the user's word" "\`fixes in flight\`" \
   "answer main--<name> \"<the answer>\" --label wldn\`" "\`fix main--<name>\` with the failure's first line" \
   "main fix <kit> <name> --send --label wldn\`" \
   "with \`--excerpt \"<their words, as they wrote them>\"\`, which crew reads in your own session's transcript as the user's and refuses otherwise, sending nothing" \
   "Send it ahead of the bolts the same word lands" "main fix <kit> <name> --drop --label wldn\`" \
   "who proposes it as a bolt of one chore, first among the planned"; do has "$out" "$want"; done
-lacks "$out" "who decide which team builds it"
-ok "a due team is given nothing and its conductor builds its bolt to its landing, a crossed team takes every planned bolt of its kits and runs no standing agent, its places' answers and fixes are the planner's, its landing ops's by the one procedure, and a red main of a kit a crossed team builds is a Flume fix place sent on the user's word"
+lacks "$out" "who decide which team builds it"; lacks "$out" "--team <team>"
+ok "a bolt's places' answers and fixes are the planner's, its landing ops's by the one procedure, and a red main is a Flume fix place sent on the user's word"

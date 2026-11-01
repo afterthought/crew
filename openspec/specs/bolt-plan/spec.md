@@ -6,19 +6,19 @@ Keeps what a partition means to build, its bolts and their units, in one plain-t
 ## Requirements
 
 ### Requirement: The file's order and dependencies are the plan
-A bolt's units SHALL be ordered by the file: bolts SHALL be given out in the order they appear, and a unit is ahead of every unit after it in its bolt. A unit's `After` SHALL name units of the same bolt that it builds on, or whose work its settle took after a forecast conflict between them; a forecast alone SHALL NOT put a unit after another. The unit's construct SHALL NOT start until each of them has finished construct, its OpenSpec change committed, and SHALL NOT wait for any of them to merge. The unit SHALL NOT merge into the bolt until each of them has merged. A unit with no `Bolt` SHALL be queued work.
+A bolt's units SHALL be ordered by the file: a bolt's launches SHALL take their priority from the order the bolts appear, and a unit is ahead of every unit after it in its bolt. A unit's `After` SHALL name units or chores of the same bolt that it builds on. Its launch SHALL be held by the runner until each of them has landed on the bolt, so its place is cut from a bolt that holds their work, as bolt-teams "A dependent launches once its After work has landed" has it. A unit with no `Bolt` SHALL be queued work.
 
 #### Scenario: A dependency still in construct
-- **WHEN** unit B has `After: A`, and A's construct has not committed
-- **THEN** B's stage is `waiting`, and crew refuses to start B's construct
+- **WHEN** unit B of started bolt `x` has `After: A`, and A's construct has not committed
+- **THEN** B's stage is `waiting` on A, and its launch is held
 
 #### Scenario: A dependency constructed
 - **WHEN** unit B has `After: A`, and A's change is committed while A is in code
-- **THEN** crew accepts B's construct
+- **THEN** B still waits on A, its launch held until A has landed on `bolt/x`
 
 #### Scenario: A dependency not yet merged
-- **WHEN** unit B has `After: A`, B is verified and A has not merged into the bolt
-- **THEN** crew refuses B's merge, naming A
+- **WHEN** unit B has `After: A`, and A has not landed on `bolt/x`
+- **THEN** no place of B's is launched, so nothing of B's merges into the bolt before A
 
 #### Scenario: Queued work
 - **WHEN** a unit is added with no bolt
@@ -39,89 +39,6 @@ Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Ea
 - **WHEN** a write runs on a Mac
 - **THEN** git reaches the state repository over https and never waits on 1Password
 
-### Requirement: A bolt is created, given, dropped and landed through crew
-`crew bolt new` SHALL add a bolt with its repo, goal and sources. `crew bolt give <team> [<bolt>]` SHALL set the bolt's team; with no bolt named it takes the first planned bolt in the team's kit. It SHALL have sluice make `bolt/<bolt>` on GitHub from main, `sluice branch create bolt/<bolt> --from main` on the team's host, and no worktree, before the plan is written. It SHALL be refused, with the plan unchanged and no branch made, while the team holds two bolts, and while a bolt it holds is not proven: it holds no unit or chore yet, a unit or chore of it has not merged, or sluice's verdict at its head is not green, naming the bolt and what holds it; a fix in flight on a proven bolt SHALL refuse nothing. What crew cannot read of a held bolt SHALL refuse the give, naming what could not be read. It SHALL be refused, with the plan unchanged and no branch made, naming the file, when the kit's `.config/sluice.toml` at `origin/main` names no checks or no `remote` for its bolt branches; naming the version it needs and the one the host has when the host's sluice lacks `branch create` or its version cannot be read; and in sluice's words when sluice refuses the create. `crew bolt order` SHALL move a bolt. `crew bolt drop` SHALL remove a bolt and its units, or with `--requeue` queue them, and SHALL refuse `--requeue` while a unit of the bolt has a worktree, since a queued unit has none. `crew bolt submit` SHALL submit a held bolt's branch to its kit's main through sluice, and `crew bolt land` SHALL remove a landed bolt and its units and have sluice delete its branch, `sluice branch delete bolt/<bolt> --into main`, naming a refusal in sluice's words. `crew bolt drop` of a bolt a team holds SHALL have sluice delete its branch the same way after the plan write; when sluice refuses, as while the branch's tip is not in main, the branch SHALL be kept where it lives, on GitHub and on the team's host, named in the drop's output as the drop's unmerged work with sluice's words, and recorded once in the run record, and the team's reads SHALL ask sluice's delete again once main holds its tip; crew SHALL NOT delete a dropped bolt's branch with git. A dropped or landed bolt's worktrees SHALL then go from its team's host. A bolt whose branch crew made on its host before gives went through sluice SHALL stay local until it lands: crew SHALL run no create for it, its places SHALL be cut from the local branch, each read of its team SHALL say once that it is local until it lands, and its land SHALL have sluice delete it wherever its tip's policy routes it, on GitHub once its landing's pull request put it there.
-
-#### Scenario: A team still holds a bolt
-- **WHEN** `crew bolt give swb-1` runs while swb-1 holds a bolt with a unit that has not merged
-- **THEN** it is refused, naming that bolt and that unit with its stage
-
-#### Scenario: A team's bolt is merged but not yet green
-- **WHEN** `crew bolt give swb-1` runs while every unit of swb-1's bolt has merged and its head is no landing of sluice's
-- **THEN** it is refused, naming the bolt and what its verification is now
-
-#### Scenario: A team's bolt is proven
-- **WHEN** `crew bolt give swb-1` runs while every unit of swb-1's bolt has merged, sluice is green at its head, and a fix of it is in flight
-- **THEN** swb-1 is given the next planned bolt and holds both
-
-#### Scenario: A team holding two bolts
-- **WHEN** `crew bolt give swb-1` runs while swb-1 holds two bolts, both proven
-- **THEN** it is refused, naming the bolt waiting to land longest, whose landing frees the team
-
-#### Scenario: A kit with no bolt policy
-- **WHEN** `crew bolt give swb-1` runs for a kit whose `origin/main` holds no `.config/sluice.toml`, or one with no `[branches."bolt/*"]` table naming its `required` checks
-- **THEN** it is refused, naming the file and what it lacks, the plan is unchanged, and no `bolt/` branch is made
-
-#### Scenario: A kit whose bolts have no remote
-- **WHEN** `crew bolt give swb-1` runs for a kit whose bolt policy at `origin/main` names checks but no `remote`
-- **THEN** it is refused, naming the file and the key, the plan is unchanged, and no branch is made anywhere
-
-#### Scenario: A host whose sluice cannot make a branch
-- **WHEN** `crew bolt give swb-1` runs on a host whose sluice is older than 0.20.0, or whose `sluice --version` prints nothing crew can read
-- **THEN** it is refused, naming 0.20.0 and what the host's sluice said, and the plan is unchanged
-
-#### Scenario: Sluice refuses the create
-- **WHEN** `crew bolt give swb-1` runs and sluice refuses to make `bolt/<bolt>`, as when it is already there
-- **THEN** the give is refused with sluice's words, and the plan is unchanged
-
-#### Scenario: A bolt is made on GitHub
-- **WHEN** `crew bolt give swb-1` gives swb-1 the bolt `b` for a kit whose policy names `origin` for its bolts
-- **THEN** `bolt/b` is on GitHub at main's commit, made by sluice, the plan gives `b` to swb-1, and crew says where the branch was made and at which commit
-
-#### Scenario: Landing too early
-- **WHEN** `crew bolt land` runs while one of the bolt's units has not landed on main
-- **THEN** it is refused, naming that unit
-
-#### Scenario: The bolt's branch is deleted at its land
-- **WHEN** `crew bolt land` runs for a landed bolt whose branch is on GitHub
-- **THEN** the bolt leaves the plan, sluice deletes `bolt/<bolt>` from GitHub, and the branch is gone from the team's host
-
-#### Scenario: A delete sluice refuses
-- **WHEN** `crew bolt land` runs and sluice refuses to delete `bolt/<bolt>` because a submission is still queued on it
-- **THEN** the bolt leaves the plan, the branch stays on GitHub, and crew names it with sluice's words
-
-#### Scenario: A bolt made before stays local
-- **WHEN** a team's read finds that the team holds a bolt whose branch is on its host only, its tip's policy naming no remote for it, while the policy at the kit's main names `origin` for its bolts
-- **THEN** crew says once that the bolt is local until it lands, runs no create, and its places are cut from the local branch
-
-#### Scenario: A bolt made before lands
-- **WHEN** `crew bolt land` runs for a landed bolt made before, whose last merge brought it a policy naming `origin` and whose landing's pull request sluice pushed to GitHub
-- **THEN** the bolt leaves the plan, sluice deletes `bolt/<bolt>` from GitHub, and the branch is gone from the team's host
-
-#### Scenario: Dropping a bolt a team holds
-- **WHEN** the planner drops a bolt that swb-2 holds, whose branch's tip main holds
-- **THEN** the bolt and its units are gone from the plan, sluice deletes `bolt/<bolt>` from GitHub, and the branch is gone from swb-2's host
-
-#### Scenario: A dropped bolt holds work main lacks
-- **WHEN** the planner drops a bolt that swb-2 holds, into which a unit has merged that main does not hold
-- **THEN** the bolt and its units are gone from the plan, sluice refuses the delete, the branch stays on GitHub and on swb-2's host, and the drop names it as its unmerged work with sluice's words, the user's to keep or delete, and records it once
-
-#### Scenario: Main comes to hold a dropped bolt's work
-- **WHEN** a read of swb-2 finds a dropped bolt's kept branch whose tip the kit's main now holds, as after a landing that carried it
-- **THEN** crew asks sluice to delete it, and it is gone from GitHub and from swb-2's host
-
-#### Scenario: A dropped bolt's kept branch while main lacks it
-- **WHEN** a read of swb-2 finds a dropped bolt's kept branch whose tip main does not hold
-- **THEN** nothing is asked of sluice and nothing is said, and the branch stays
-
-#### Scenario: The drop's host does not answer
-- **WHEN** the planner drops a bolt that swb-2 holds while swb-2's host does not answer
-- **THEN** the drop names the host and the command, and swb-2's next read asks sluice's delete as the drop would have
-
-#### Scenario: Requeuing a unit that has a worktree
-- **WHEN** `crew bolt drop <bolt> --requeue` runs while one of the bolt's units has a worktree
-- **THEN** it is refused, naming the unit and its worktree, and the plan is unchanged
-
 ### Requirement: Units change while a bolt runs
 `crew unit add` SHALL add a unit to a bolt, or to the queue, at the end or before a named unit. `crew unit split` SHALL narrow a unit and add the remainder right after it. `crew unit order` SHALL move a unit within its bolt. `crew unit after` SHALL set or clear a dependency, refusing a cycle or a unit of another bolt. `crew unit move` SHALL move a unit to another bolt of the same repo, or to the queue. `crew unit drop` SHALL remove a unit, with the reason in the commit.
 
@@ -137,66 +54,8 @@ Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Ea
 - **WHEN** `crew unit drop` names a unit that has merged into its bolt
 - **THEN** it is refused
 
-### Requirement: A unit's stage is read from the kits
-crew SHALL derive each unit's stage from its kit on the team's host. The first rule that holds is the unit's stage:
-
-- `landed`: main holds the unit's OpenSpec change, open or archived;
-- `merged`: `bolt/<bolt>` holds it archived, as the unit's own merge leaves it;
-- `amended`: the plan marks the unit amended, and construct has not been run again;
-- `construct`: construct has been run again on an amended unit, and has not yet committed;
-- `verify`: every task is ticked;
-- `code`: some task is ticked;
-- `planned`: the change's planning is complete;
-- `construct`: the unit's worktree exists;
-- `ready` or `waiting`: neither, depending on whether each of its `After` units has finished construct;
-- `queued`: the unit has no bolt.
-
-A unit whose change `bolt/<bolt>` holds open, carried there inside another unit's merge, has not merged: it reads at its own stage, from its worktree, or, once that is gone, from its change as the bolt holds it, its planning complete.
-
-A task, a ticked task and a complete planning mean what OpenSpec means by them. crew SHALL read them from the change's files without the `openspec` command line when the change uses OpenSpec's own spec-driven workflow, and through `openspec` otherwise; on the same worktree both readings SHALL agree.
-
-#### Scenario: A squashed merge
-- **WHEN** a unit's commits reached its bolt inside another unit's merge, its change open there with every task ticked, and its worktree and branch were removed
-- **THEN** its stage is `verify`, read from the change on `bolt/<bolt>`, and not `merged`
-
-#### Scenario: Merged by its own merge
-- **WHEN** a unit's merge archived its change and the bolt holds it archived
-- **THEN** its stage is `merged`
-
-#### Scenario: Nothing kept by hand
-- **WHEN** a coder ticks the last task of a unit's change
-- **THEN** `crew bolts` shows the unit in `verify`, and no file was edited to say so
-
-#### Scenario: An amended unit with ticked tasks
-- **WHEN** a unit in code is marked amended and construct has been run again and has committed
-- **THEN** its stage is `code`, read from its tasks, and no approval is asked
-
-#### Scenario: A constructed unit
-- **WHEN** a unit's construct has committed a change whose planning is complete, and no task is ticked
-- **THEN** its stage is `planned`, and its code may start
-
-#### Scenario: A task OpenSpec counts is counted
-- **WHEN** a unit's `tasks.md` holds an indented sub-task `  - [ ] 1.1.1 …`, a numbered `1. [ ] …` or a `- [~] …`
-- **THEN** crew counts each as a task not done, as `openspec list` does, and the unit stays in `code`
-
-#### Scenario: A link is not a task
-- **WHEN** a unit's `tasks.md` holds a bullet `- [design](./design.md)`
-- **THEN** crew does not count it, as `openspec list` does not
-
-#### Scenario: Planning complete without specs
-- **WHEN** a unit's change declares `skip_specs: true` in its `.openspec.yaml` and has its proposal, design and tasks
-- **THEN** its planning is complete, as `openspec status` says, and the unit is in `planned`
-
-#### Scenario: Another workflow
-- **WHEN** a unit's change names a workflow other than spec-driven, or its kit redefines spec-driven
-- **THEN** crew reads that unit's tasks and planning through `openspec`, and every other unit's from its files
-
-#### Scenario: The readings are held together
-- **WHEN** the suite runs
-- **THEN** a test reads a set of changes covering every case above both ways, on the same worktrees, and fails on any difference
-
 ### Requirement: What is in flight can be read from anywhere
-`crew bolts [<bolt>] [--json]` SHALL list each of the partition's bolts with its repo, team, host and state, each unit's stage and worktree, any `fix/*` worktrees branched from the bolt, and the queue. Bolts that are not active, and queued work, SHALL be listed without reaching any host. Each host holding active bolts SHALL be read once.
+`crew bolts [<bolt>] [--json]` SHALL list each of the partition's bolts with its repo, its kit's host and its state, each unit's and chore's stage and place, the fixes in flight on it, and the queue. Bolts with no work started, and queued work, SHALL be listed without reaching any host. Each host holding a bolt's work SHALL be read once. No line SHALL name a team.
 
 #### Scenario: A host is unreachable
 - **WHEN** the box is asleep
@@ -217,15 +76,8 @@ A task, a ticked task and a complete planning mean what OpenSpec means by them. 
 - **WHEN** the signal named already has its move
 - **THEN** the command is refused, naming the move it has, and the plan is unchanged
 
-### Requirement: A conductor hears about writes to its bolt
-When anyone other than a bolt's conductor writes to an active bolt or its units, crew SHALL send that conductor the commit's subject.
-
-#### Scenario: The planner adds a unit
-- **WHEN** the planner adds a unit to swb-1's active bolt
-- **THEN** swb-1's conductor receives the commit's subject
-
 ### Requirement: A flywheel keeps one plan in its state repository
-Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal, sources and team. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`); a Unit record marked `Kind: chore` is a chore, whose intent is its words. The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got.
+Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal and sources. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`); a Unit record marked `Kind: chore` is a chore, whose intent is its words. The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got. A Bolt record that still carries a `Team` field, written before teams left, SHALL be read as any bolt, the field read by nothing; a new branch's schema SHALL allow no `Team`.
 
 #### Scenario: Business and agentplot work
 - **WHEN** the business partition (label `madswan`) builds kits whose design is in afterthought/blueprints and kits whose design is in agentplot/blueprints
@@ -243,67 +95,13 @@ Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of
 - **WHEN** a bolt holds two units and a chore between them
 - **THEN** `plan.rec` holds the chore's Unit record, marked `Kind: chore`, between the two units' records, and the file's order is their build order
 
-### Requirement: A unit's intent is amended through crew
-`crew unit amend <unit> "<new intent>"` SHALL replace the unit's intent in the plan. A unit that has a worktree SHALL also be marked amended, and once the write has landed its construct SHALL be handed to its team's host, where it SHALL start again in the name of whoever applied the amendment and the conductor SHALL be told from that host what started or why nothing did. The command, run directly or by a proposal's approval, SHALL answer once its write is made and the construct is handed to the host, and SHALL NOT wait on an agent's session coming up or its prompt landing. `crew unit wait <unit>` SHALL wait for a handed construct to start before it waits on the stage, and say why when it did not start; a stage of the unit SHALL be refused while a handed construct starts. A unit that has merged into its bolt or landed SHALL be refused. Run by the planner it SHALL be refused outside a proposal; the user at a shell runs it directly.
+#### Scenario: A bolt given before teams left
+- **WHEN** `plan.rec` holds a Bolt record with `Team: swb-1`, and its branch's schema allows the field
+- **THEN** `recfix --check` passes, `crew bolts` shows the bolt with no team, and the next write leaves the field as it is
 
-#### Scenario: A queued unit
-- **WHEN** an amendment to a queued unit's intent is applied
-- **THEN** the unit's intent is the new one, and nothing else changes
-
-#### Scenario: A unit in code
-- **WHEN** an amendment to a unit in code is applied
-- **THEN** the unit's intent is the new one, the unit is marked amended, the command answers once its construct is handed to the team's host, and that host starts construct again and tells the conductor to wait for it
-
-#### Scenario: A team taken down
-- **WHEN** an amendment to a unit in verify is applied while its team is down
-- **THEN** the unit is marked amended, the start is recorded refused, and the command says construct did not start because the team is down and tells the conductor so
-
-#### Scenario: A wait on a handed construct
-- **WHEN** the conductor runs `crew unit wait <unit>` while the construct an amendment handed is starting
-- **THEN** the wait waits for it to start and then on its stage, within its timeout; and when it could not start, the wait says why
-
-#### Scenario: A stage while a handed construct starts
-- **WHEN** the conductor runs a stage of a unit whose handed construct is starting
-- **THEN** crew refuses it, saying the construct is starting and that `crew unit wait <unit>` waits for it
-
-#### Scenario: The unit's stage cannot be read
-- **WHEN** an amendment to a unit with a worktree is applied while its team's host does not answer, so the unit's stage cannot be read
-- **THEN** the amendment, or the approval holding it, is refused naming the host that did not answer, and nothing is written
-
-#### Scenario: The construct cannot start
-- **WHEN** an amendment to a unit in flight is applied once its stage has been read, and its handed construct cannot start because its team's host stops answering before the run reaches it or its team is down
-- **THEN** the amendment stands, the unit's stage reads `amended`, the command says why construct did not start, and the conductor, when it can be told, is told why and to run construct once it can, with the card the amendment ended named
-
-#### Scenario: A merged unit
-- **WHEN** `crew unit amend` names a unit that has merged into its bolt
-- **THEN** it is refused; what is needed is a fix or a new unit
-
-### Requirement: A command reads each kit and the plan once
-A crew command SHALL read each kit once and fetch the state branch once on each host it runs on, however many steps it has. A step that makes or removes a worktree in a kit SHALL leave the next step to read that kit again. A plan write SHALL start from the tip the command holds and fetch again only when its push is refused. A wait SHALL read afresh each time it looks. The host's follower and `crew events --follow` SHALL check at each look whether what they read has moved, and read again only what has.
-
-#### Scenario: Status with three units in flight
-- **WHEN** `crew status <team>` runs for a team with three units in flight
-- **THEN** the team's host reads the kit once and fetches the state branch once, and `openspec` is not started
-
-#### Scenario: Running a stage
-- **WHEN** `crew unit run <unit> construct` frees finished slots, tidies worktrees, checks the stage and makes the unit's place
-- **THEN** the team's host fetches the state branch once and reads the kit once before the place is made
-
-#### Scenario: A write after the plan moved
-- **WHEN** another agent's write lands on the state branch after a command fetched it, and the command then writes
-- **THEN** the command's push is refused, it fetches the new tip and applies its change there, as any write does
-
-#### Scenario: A wait sees what changes while it waits
-- **WHEN** `crew unit wait <unit>` is waiting and the coder ticks the last task
-- **THEN** the wait's next look reads the new head and returns with the delivered end
-
-#### Scenario: Nothing is left behind
-- **WHEN** a command ends, whether it succeeded or was refused
-- **THEN** what it kept for its steps is gone, and the next command reads afresh
-
-#### Scenario: A follower's look after nothing moved
-- **WHEN** the host's follower looks again and nothing it read has moved
-- **THEN** it reads no kit and fetches no branch at that look
+#### Scenario: A new branch
+- **WHEN** `crew state init` starts a flywheel's branch
+- **THEN** its `plan.rec` declares no `Team` field and its `proposals.rec` no `Agreed` field
 
 ### Requirement: A bolt on GitHub is read where it lives
 crew SHALL read a bolt at GitHub's copy of its branch, `origin/bolt/<bolt>`, when the host holds that copy and the policy in it names a remote for the bolt, and otherwise at the host's own `bolt/<bolt>`. Its head, verification, the changes and chores it holds, and every stage read from it SHALL come from that ref. crew SHALL never read a bolt on GitHub from the host's own `bolt/<bolt>`, sluice's copy, whether or not sluice has levelled it.
@@ -314,7 +112,7 @@ crew SHALL read a bolt at GitHub's copy of its branch, `origin/bolt/<bolt>`, whe
 
 #### Scenario: A proven bolt whose copy lags
 - **WHEN** every unit of a bolt on GitHub has merged and the `Sluice-Result` at GitHub's head starts `passed`, while the host's `bolt/b` is at an earlier landing
-- **THEN** the bolt reads proven, and a give to its team is not refused for it
+- **THEN** the bolt reads proven, and its row on its kit's landings card is offered
 
 #### Scenario: A bolt kept on its host
 - **WHEN** a bolt was made before gives went through sluice, the policy at GitHub's copy of it names no remote for its bolts, and the host's own `bolt/b` holds merges GitHub's copy lacks
@@ -332,31 +130,8 @@ crew SHALL read a bolt at GitHub's copy of its branch, `origin/bolt/<bolt>`, whe
 - **WHEN** a chore's place holds one commit of its own beyond GitHub's `bolt/b`, and a fix's tip is in GitHub's `bolt/b` but not in the host's
 - **THEN** the chore reads `verify` and the fix reads merged
 
-### Requirement: A bolt on GitHub is fetched where a decision rests on it
-As main is read (plan.18), crew SHALL read a bolt on GitHub as the host last fetched it on every team read and every refresh of the rail and the board, fetching nothing. `crew bolts`, a give's check that the team's bolts are proven, each look a wait takes at a merge stage, and a give's making of a branch SHALL fetch the kit's origin first. A fetch that fails SHALL be named with git's words, never read past to the host's copy.
-
-#### Scenario: A wait on a merge sees it at once
-- **WHEN** `crew chore wait <chore>` waits on a merge, and sluice lands it on GitHub's `bolt/b` without moving the host's `bolt/b` or its tracking ref
-- **THEN** the wait's next look fetches, reads the chore in GitHub's `bolt/b`, and returns with the merge delivered at GitHub's head
-
-#### Scenario: crew bolts after a landing elsewhere
-- **WHEN** a merge has landed on GitHub's `bolt/b` since the host last fetched, and `crew bolts` runs
-- **THEN** it fetches the kit's origin once on the team's host and shows the merged unit as `merged`
-
-#### Scenario: The board does not fetch
-- **WHEN** the rail's or the board's refresh reads the team's kit
-- **THEN** no fetch is run, and the bolt is read at `origin/bolt/b` as the host last fetched it
-
-#### Scenario: A fetch that fails
-- **WHEN** `crew bolts` runs and the fetch of the kit's origin on the team's host fails
-- **THEN** the kit's stages read `unknown`, naming that GitHub could not be fetched and git's words, and nothing is read from the host's `bolt/b`
-
-#### Scenario: A give fetches the branch it made
-- **WHEN** `crew bolt give` has sluice make `bolt/b` on GitHub
-- **THEN** the host holds `origin/bolt/b` at the commit sluice made it at before the give's plan write, and the team's next read reads the bolt there
-
-### Requirement: A crossed team's work reads its stage from the runner's records
-For every unit, chore and fix of a bolt marked `Path: flume`, crew SHALL read its stage from its newest launch not dropped, that launch's answer and its place's record on the runner's branch, never from a place in the kit: unknown where its host was not read or it has no launch, launching before an answer, waiting while held for its After work, refused with the runner's words. `crew bolts` and every decision that reads a stage SHALL read the same.
+### Requirement: A started bolt's work reads its stage from the runner's records
+For every unit, chore and fix of a bolt marked `Path: flume`, a bolt started by `crew bolt start`, crew SHALL read its stage from its newest launch not dropped, that launch's answer and its place's record on the runner's branch, never from a place in the kit: unknown where its host was not read or it has no launch, launching before an answer, waiting while held for its After work, refused with the runner's words. `crew bolts` and every decision that reads a stage SHALL read the same.
 
 #### Scenario: A dependent waits
 - **WHEN** `b`'s launch is answered held, `a`'s place not yet landed
@@ -364,10 +139,10 @@ For every unit, chore and fix of a bolt marked `Path: flume`, crew SHALL read it
 
 #### Scenario: The runner's host is silent
 - **WHEN** deneb's runner branch can't be read
-- **THEN** every crossed piece on deneb reads unknown, and `crew bolts` names deneb
+- **THEN** every piece launched on deneb reads unknown, and `crew bolts` names deneb
 
-### Requirement: A crossed place's stage is where Flume's status has it
-Once launched, a crossed piece SHALL read queued while Flume waits for room; construct, code with its ticked tasks of all, or verify while a stage runs; needing an answer with the agent's question when it stopped short asking; its stage, sent back, with sluice's words when a submission failed or conflicted; submitted with sluice's number; waiting on its caller with Flume's words past its bound; stalled; merged once it has landed on its bolt and landed once its bolt has; or dropped.
+### Requirement: A launched place's stage is where Flume's status has it
+Once launched, a unit, chore or fix SHALL read queued while Flume waits for room; construct, code with its ticked tasks of all, or verify while a stage runs; needing an answer with the agent's question when it stopped short asking; its stage, sent back, with sluice's words when a submission failed or conflicted; submitted with sluice's number; waiting on its caller with Flume's words past its bound; stalled; merged once it has landed on its bolt and landed once its bolt has; or dropped.
 
 #### Scenario: A unit in code
 - **WHEN** deneb's runner record for `a`'s launch carries Flume's status of its place in code with three of seven tasks ticked
@@ -384,3 +159,132 @@ Once launched, a crossed piece SHALL read queued while Flume waits for room; con
 #### Scenario: Landed on the bolt
 - **WHEN** the runner's record shows `a`'s place landed on `bolt/x`, and `x` has not landed
 - **THEN** `crew bolts` shows `a` merged
+
+### Requirement: A bolt is created, dropped and landed through crew
+`crew bolt new` SHALL add a bolt with its repo, goal and sources; `crew bolt order` moves it; `crew bolt drop` SHALL remove it and its units, or with `--requeue` queue them, and in either case SHALL drop each of the bolt's launches still standing in the drop's own commit, a requeued unit's among them, so a requeued unit is launched afresh once a bolt it is placed in is started. `crew bolt submit` SHALL submit its branch to its kit's main through sluice; `crew bolt land` SHALL remove a landed bolt and its units, and land and drop SHALL have sluice delete its branch, keeping and naming one holding work main lacks. No command SHALL give a bolt to a team.
+
+#### Scenario: Landing too early
+- **WHEN** `crew bolt land` runs while one of the bolt's units has not landed on main
+- **THEN** it is refused, naming that unit
+
+#### Scenario: The bolt's branch is deleted at its land
+- **WHEN** `crew bolt land` runs for a landed bolt whose branch is on GitHub
+- **THEN** the bolt leaves the plan, sluice deletes `bolt/<bolt>` from GitHub, and the branch is gone from the kit's host
+
+#### Scenario: A delete sluice refuses
+- **WHEN** `crew bolt land` runs and sluice refuses to delete `bolt/<bolt>` because a submission is still queued on it
+- **THEN** the bolt leaves the plan, the branch stays on GitHub, and crew names it with sluice's words
+
+#### Scenario: Dropping a bolt in flight
+- **WHEN** the planner drops a bolt whose branch's tip main holds
+- **THEN** the bolt and its units are gone from the plan, sluice deletes `bolt/<bolt>` from GitHub, and the branch is gone from the kit's host
+
+#### Scenario: A dropped bolt holds work main lacks
+- **WHEN** the planner drops a bolt into which a unit has merged that main does not hold
+- **THEN** the bolt and its units are gone from the plan, sluice refuses the delete, the branch stays on GitHub and on the kit's host, and the drop names it as its unmerged work with sluice's words, the user's to keep or delete, and records it once
+
+#### Scenario: The drop's host does not answer
+- **WHEN** the planner drops a bolt while its kit's host does not answer
+- **THEN** the drop names the host and the command, and the bolt is gone from the plan
+
+#### Scenario: Requeuing a unit that has a place
+- **WHEN** `crew bolt drop x "Later." --requeue` runs while unit `a` of started `x` has a launched place
+- **THEN** `a` is in its repository's queue with no bolt or `After`, `x` is gone from the plan, and `requests.rec` gains a drop of `a`'s launch, in the drop's commit
+
+#### Scenario: A give
+- **WHEN** anyone runs `crew bolt give swb-1`
+- **THEN** crew refuses it as no command it has, and the plan is unchanged
+
+### Requirement: A unit's intent is amended through crew, its construct run again
+`crew unit amend <unit> "<new intent>"` SHALL replace the unit's intent. A unit with a place SHALL also be marked amended, its construct run again with the new intent as the bolt's work is started, never handed to a team's host or told to a conductor. The command, direct or by an approval, SHALL answer once its write is made and wait on no agent (`code.9`). A unit merged into its bolt or landed SHALL be refused; run by the planner it SHALL be refused outside a proposal.
+
+#### Scenario: A queued unit
+- **WHEN** an amendment to a queued unit's intent is applied
+- **THEN** the unit's intent is the new one, and nothing else changes
+
+#### Scenario: A unit in code
+- **WHEN** an amendment to a unit in code is applied
+- **THEN** the unit's intent is the new one, the unit is marked amended, and the command answers once its write is made, naming no team, host or conductor
+
+#### Scenario: A merged unit
+- **WHEN** `crew unit amend` names a unit that has merged into its bolt
+- **THEN** it is refused; what is needed is a fix or a new unit
+
+### Requirement: A command reads each kit and the plan once, and fetches again only when refused
+A crew command SHALL read each kit once and fetch the state branch once on each host it runs on, however many steps it has. A step that makes or removes a worktree in a kit SHALL leave the next step to read that kit again. A plan write SHALL start from the tip the command holds and fetch again only when its push is refused. The host's follower and `crew events --follow` SHALL check at each look whether what they read has moved, and read again only what has.
+
+#### Scenario: Bolts with three units in flight
+- **WHEN** `crew bolts` runs for a partition whose one bolt has three units in flight on one host
+- **THEN** that host reads the kit once and fetches the state branch once, and `openspec` is not started
+
+#### Scenario: A write after the plan moved
+- **WHEN** another agent's write lands on the state branch after a command fetched it, and the command then writes
+- **THEN** the command's push is refused, it fetches the new tip and applies its change there, as any write does
+
+#### Scenario: Nothing is left behind
+- **WHEN** a command ends, whether it succeeded or was refused
+- **THEN** what it kept for its steps is gone, and the next command reads afresh
+
+#### Scenario: A follower's look after nothing moved
+- **WHEN** the host's follower looks again and nothing it read has moved
+- **THEN** it reads no kit and fetches no branch at that look
+
+### Requirement: A bolt on GitHub is fetched before crew bolts and a landing read it
+As main is read (plan.18), crew SHALL read a bolt on GitHub as the host last fetched it on every read of a kit and every refresh of the rail and the board, fetching nothing. `crew bolts` and a landing's submission SHALL fetch the kit's origin first. A fetch that fails SHALL be named with git's words, never read past to the host's copy.
+
+#### Scenario: crew bolts after a landing elsewhere
+- **WHEN** a merge has landed on GitHub's `bolt/b` since the host last fetched, and `crew bolts` runs
+- **THEN** it fetches the kit's origin once on the kit's host and shows the merged unit as `merged`
+
+#### Scenario: The board does not fetch
+- **WHEN** the rail's or the board's refresh reads the kit
+- **THEN** no fetch is run, and the bolt is read at `origin/bolt/b` as the host last fetched it
+
+#### Scenario: A fetch that fails
+- **WHEN** `crew bolts` runs and the fetch of the kit's origin on the kit's host fails
+- **THEN** the kit's stages read `unknown`, naming that GitHub could not be fetched and git's words, and nothing is read from the host's `bolt/b`
+
+### Requirement: A bolt's work starts by crew bolt start
+`crew bolt start <bolt>` SHALL make `bolt/<bolt>` through sluice from the kit's main, in the checkout the partition's main-level host keeps of the kit, mark the bolt `Path: flume` and request a launch of each unit and chore of it in its repository, with its `After` and priority and naming no host or stream, for a runner whose configuration names the repository to take, in one plan write, starting no agent, and record `bolt.start`. A proposal MAY hold it; the user runs it directly; no other agent SHALL. It SHALL be refused, with the plan unchanged and no branch made, while that host keeps no checkout of the kit or is held, or no runner answers for the partition.
+
+#### Scenario: A bolt is started
+- **WHEN** the user approves a proposal holding `crew bolt start b`, a bolt of switchboard-kit with two units, and a runner answers for wldn
+- **THEN** `bolt/b` is made on GitHub by sluice, `b` is marked `Path: flume`, two launch requests name switchboard-kit and no host or stream, no agent starts, and the run record has `bolt.start` on `bolt/b`
+
+#### Scenario: A partition no runner answers for
+- **WHEN** `crew bolt start b` runs and wldn's state repository holds no runner's branch
+- **THEN** it is refused, naming that no runner answers for wldn, the plan is unchanged and no branch is made
+
+#### Scenario: An agent starts a bolt directly
+- **WHEN** `wldn-ops` runs `crew bolt start b` outside a proposal
+- **THEN** it is refused, naming the planner and the user, and the plan is unchanged
+
+### Requirement: A fix names its bolt, and a fix of main its kit alone
+`crew fix <bolt> <name> "<words>"` SHALL request a fix place on `bolt/<bolt>`, and `crew main fix <kit> <name> "<words>"` one on the kit's main, each in the kit's repository and naming no host or stream, for a runner whose configuration names it to take, in the stream its host maps it to. Neither SHALL take a team; `--drop` SHALL drop either's launch, and `crew fix` SHALL take no `--merge`, `--wait` or `--bolt`. A fix of main where no runner answers for the partition SHALL be refused, naming it.
+
+#### Scenario: A fix on a bolt
+- **WHEN** wldn-planner runs `crew fix b zone-check "the zone check fails on tenants with no region"`
+- **THEN** a launch request of a fix on `bolt/b` names its kit's repository and the words and no host or stream, and no slot or agent of crew's is involved
+
+#### Scenario: A team's name where the bolt goes
+- **WHEN** an agent runs `crew fix swb-1 zone-check "<words>"` and no bolt is named `swb-1`
+- **THEN** it is refused, naming no bolt `swb-1`, and nothing is requested
+
+### Requirement: A unit's stage is read from the runner, or from the plan before its bolt starts
+crew SHALL read each unit's and chore's stage from the plan and the runner's records alone, never from a place in the kit: `queued` while it has no bolt; for a bolt not started, `ready`, or `waiting` while it names `After` work, which builds only once the bolt starts; for a started bolt, as "A started bolt's work reads its stage from the runner's records" and "A launched place's stage is where Flume's status has it" give it, `landed` once main holds its change, open or archived, or a chore's trailer; and `unknown`, naming why, where crew cannot read what it rests on. Nothing SHALL be kept by hand to say how far work has got.
+
+#### Scenario: Queued work
+- **WHEN** a unit has no bolt
+- **THEN** its stage is `queued`
+
+#### Scenario: A bolt not started
+- **WHEN** bolt `y` is planned and not started, unit `a` names no `After` and `b` has `After: a`
+- **THEN** `a` reads `ready` and `b` `waiting`, and nothing of a runner or a place in the kit is read for them
+
+#### Scenario: Nothing kept by hand
+- **WHEN** `x` is started and deneb's runner reports `a`'s place in code with 6 of 26 tasks ticked
+- **THEN** `crew bolts` shows `a` at `code 6/26`, and no file was edited to say so
+
+#### Scenario: A worktree of crew's from before
+- **WHEN** a `unit/a` worktree from before teams left stands under the kit's `places/` with every task ticked, and `x` is started
+- **THEN** `a`'s stage is the runner's, and nothing of that worktree is read for it

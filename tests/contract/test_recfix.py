@@ -2,8 +2,8 @@
 commits, a signal's and a capture's markdown by its frontmatter as one record, so a value that breaks the record is
 refused, named by its file and line, and nothing is pushed (plan.1, signals.4); a Move the moves file's enum does not
 allow is refused (the route a unit add --signal writes); a hand edit that duplicates a key is refused by name
-(read.1, crew bolts naming the commit); a bolt given to a crossed team is marked Path: flume, the one Path the
-plan takes; and requests.rec and a runner's branch files are refused for what their descriptors do not allow."""
+(read.1, crew bolts naming the commit); a started bolt is marked Path: flume, the one Path the plan takes, and a new
+branch allows no Team or Agreed while an old branch's records still pass; and requests.rec and a runner's branch files are refused for what their descriptors do not allow."""
 import json
 import re
 
@@ -101,10 +101,10 @@ def test_an_ask_or_a_role_record_the_headers_do_not_allow_is_refused(path, drop,
         plan.checked({path: pl.text()})
 
 
-def test_a_bolt_given_to_a_crossed_team_is_marked_flume_and_no_other_path_passes():
-    """A give to a crossed team marks its bolt Path: flume beside Team (the change teams-cross-to-flume-as-their-bolts-land,
-    Decision 2): plan.checked takes it, and refuses a Path the Bolt set's enum does not hold (plan.1)."""
-    bolt = "Bolt: x\nRepo: crew\nGoal: Cross.\nTeam: crw-4\nPath: flume\n\n"
+def test_a_started_bolt_is_marked_flume_and_no_other_path_passes():
+    """crew bolt start marks its bolt Path: flume (Decision 14 of the-team-machinery-leaves): plan.checked takes it, and
+    refuses a Path the Bolt set's enum does not hold (plan.1)."""
+    bolt = "Bolt: x\nRepo: crew\nGoal: Start.\nPath: flume\n\n"
     text = plan.HEADER.replace("%rec: Unit", bolt + "%rec: Unit")
     plan.recfix(text, "plan.rec")
     assert [b.get("Path") for b in plan.Plan(text).bolts()] == ["flume"]
@@ -112,11 +112,30 @@ def test_a_bolt_given_to_a_crossed_team_is_marked_flume_and_no_other_path_passes
         plan.recfix(text.replace("Path: flume", "Path: other"), "plan.rec")
 
 
+def test_a_new_branch_allows_no_team_or_agreement_and_an_old_branchs_records_still_pass():
+    """bolt-plan (Decision 9 of the-team-machinery-leaves): a new state branch's descriptors (HEADER, PROPOSALS) allow
+    no Bolt's Team and no Proposal's Agreed, so recfix --check refuses a record that carries one; a branch whose own
+    descriptor allows Team keeps allowing it when crew brings it in step (plan.in_step, still_allowed), so a bolt still
+    carrying Team passes, nothing stripped from it (plan.1, state.2)."""
+    bolt = "Bolt: x\nRepo: crew\nGoal: Start.\nTeam: crw-4\nPath: flume\n\n"
+    with pytest.raises(Refusal, match="^plan.rec fails recfix --check"):
+        plan.recfix(plan.HEADER.replace("%rec: Unit", bolt + "%rec: Unit"), "plan.rec")
+    proposal = "\nProposal: 1\nCase: Why.\nDo: bolt start x\nAgreed: crw-4-conductor\nState: open\nOpened: 2026-10-31\nBy: madswan-planner\n"
+    with pytest.raises(Refusal, match="^proposals.rec fails recfix --check"):
+        plan.recfix(plan.PROPOSALS + proposal, "proposals.rec")
+    old = plan.Plan(plan.HEADER.replace("%allowed: Bolt Repo Goal Source Path", "%allowed: Bolt Repo Goal Team Source Path")
+                    .replace("%rec: Unit", bolt + "%rec: Unit"))
+    assert not plan.in_step(old) or "Team" in old.text()
+    plan.recfix(old.text(), "plan.rec")
+    assert [b.get("Team") for b in old.bolts()] == ["crw-4"]
+
+
 def launch_rec(n, work="unit/a", after=(), **more):
-    """A launch request as plan.request writes it (runner.request_fields), its brief over two lines."""
-    given = dict(Repo="afterthought/crew", Kind="change", Name=work.split("/")[-1], Base="bolt/b", Stream="madswan",
+    """A kit's launch request as plan.request writes it (runner.request_fields), naming its repository and no host or
+    stream, its brief over two lines."""
+    given = dict(Repo="afterthought/crew", Kind="change", Name=work.split("/")[-1], Base="bolt/b",
                  Priority=2, Intent="madswan/b", Recipient="madswan/planner", After=list(after), Brief="Build a.\nSource: a.md", **more)
-    return plan.Rec("Request", runner.request_fields(n, "launch", "deneb", work, given, "2026-10-31T12:00:00Z", "madswan-dispatch-deneb"))
+    return plan.Rec("Request", runner.request_fields(n, "launch", work, given, "2026-10-31T12:00:00Z", "madswan-dispatch-deneb"))
 
 
 def requests_text(*recs):
@@ -129,10 +148,10 @@ def test_requests_of_every_act_pass_and_the_descriptor_refuses_what_it_does_not_
     lines and its After, a retry with a stage and words, a retry of the submission, a drop, a priority and a role's chore
     launch on main at priority 0 (runner.role_launch; Decision 10 of roles-run-as-flume-kinds) pass; an act, a kind or a
     hold the enums do not hold, a number that is no number and a date that is none are refused."""
-    other = lambda n, act, **g: plan.Rec("Request", runner.request_fields(n, act, "deneb", "unit/a", g, "2026-10-31T12:00:00Z", "madswan-planner"))
-    (_, _, work, given), _ = runner.role_launch([], {"afterthought/crew"}, "madswan", "design", "deneb", "madswan-main", "afterthought/crew",
-                                                "record-0053", "Write docs/adr/0053.md whole:\n# 53. Roles run as kinds")
-    role_land = plan.Rec("Request", runner.request_fields(7, "launch", "deneb", work, given, "2026-10-31T12:00:00Z", "madswan-design"))
+    other = lambda n, act, **g: plan.Rec("Request", runner.request_fields(n, act, "unit/a", g, "2026-10-31T12:00:00Z", "madswan-planner"))
+    (_, work, given), _ = runner.role_launch([], {"afterthought/crew"}, "madswan", "design", "deneb", "madswan-main", "afterthought/crew",
+                                             "record-0053", "Write docs/adr/0053.md whole:\n# 53. Roles run as kinds")
+    role_land = plan.Rec("Request", runner.request_fields(7, "launch", work, given, "2026-10-31T12:00:00Z", "madswan-design"))
     text = requests_text(launch_rec(1, "unit/a"), launch_rec(2, "unit/b", after=[1]), other(3, "retry", Of=1, Stage="construct", Words="Read it again."),
                          other(4, "retry", Of=1, Submission=True), other(5, "drop", Of=2), other(6, "priority", Of=1, Priority=5), role_land)
     plan.checked({"requests.rec": text})
@@ -166,9 +185,9 @@ def test_a_runners_branch_files_pass_by_their_descriptors_and_an_outcome_they_do
 
 
 def launch_of_a(w, **more):
-    """A change function's request: a launch of unit a on bolt b, as a give appends it."""
-    return plan.request(w, "launch", "deneb", "unit/a", **dict(dict(Repo="afterthought/crew", Kind="change", Name="a", Base="bolt/b",
-                        Stream="madswan", Priority=1, Intent="madswan/b", Recipient="madswan/planner", Brief="Build a."), **more))
+    """A change function's request: a launch of unit a on bolt b in its repository, as a start appends it."""
+    return plan.request(w, "launch", "unit/a", **dict(dict(Repo="afterthought/crew", Kind="change", Name="a", Base="bolt/b",
+                        Priority=1, Intent="madswan/b", Recipient="madswan/planner", Brief="Build a."), **more))
 
 
 def test_a_request_is_written_in_the_commit_of_the_plan_write_that_occasions_it_and_a_refused_one_pushes_nothing(state, monkeypatch):
@@ -179,18 +198,18 @@ def test_a_request_is_written_in_the_commit_of_the_plan_write_that_occasions_it_
     ref = f"{state.LABEL}/main"
     before = state.git("rev-parse", ref)
 
-    def give(w):
-        w.plan.insert(plan.Rec("Bolt", [("Bolt", "b"), ("Repo", "afterthought/crew"), ("Goal", "Cross."), ("Team", "crw-4"), ("Path", "flume")]))
+    def start(w):
+        w.plan.insert(plan.Rec("Bolt", [("Bolt", "b"), ("Repo", "afterthought/crew"), ("Goal", "Start."), ("Path", "flume")]))
         assert launch_of_a(w) == 1
         return []
-    sha = plan.write(state.fleet, state.LABEL, give, "plan(bolt b): give to crw-4")
+    sha = plan.write(state.fleet, state.LABEL, start, "plan(b): start the bolt")
     assert state.git("rev-parse", ref) == sha and state.git("rev-list", "--count", f"{before}..{sha}") == "1"
     assert state.git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split() == ["plan.rec", "requests.rec"]
     assert len(state.git("log", "-1", "--format=%(trailers:key=Crew-Entry,valueonly)", sha).split()) == 1
     held = state.git("show", f"{sha}:requests.rec")
-    assert held.startswith(runner.REQUESTS.split("\n")[0]) and "Request: 1\nAct: launch\nHost: deneb\nWork: unit/a\n" in held
+    assert held.startswith(runner.REQUESTS.split("\n")[0]) and "Request: 1\nAct: launch\nWork: unit/a\n" in held
 
-    for change, said in ((lambda w: launch_of_a(w, Stream=None), "names no Stream"),
+    for change, said in ((lambda w: launch_of_a(w, Stream="madswan"), "names a Host or a Stream"),
                          (lambda w: launch_of_a(w, Priority="high"), "^requests.rec fails recfix --check"),
                          (lambda w: w.replace("requests.rec", w.text("requests.rec").replace("Name: a", "Name: b")), "request 1 would be changed")):
         with pytest.raises(Refusal, match=said):

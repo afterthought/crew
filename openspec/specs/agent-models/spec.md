@@ -16,36 +16,31 @@ Each role crew starts SHALL be an agent definition, `plugin/roles/<role>.md` in 
 - **WHEN** a role's `effort` is edited in its definition and crew's checkout is pulled
 - **THEN** that role's next start uses it, with no deploy
 
-### Requirement: Every role starts on its model at its effort level
-Every definition SHALL set this model, each with its 1M-token context, and this effort:
-
-| role | model | effort |
-|---|---|---|
-| design agent | Fable 5.1 | xhigh |
-| planner | Fable 5.1 | xhigh |
-| conductor | Opus 5.5 | high |
-| ops (team and main level) | Opus 5.5 | high |
-| unit: construct | Opus 5.5 | high |
-| unit: code and merge | Opus 5.5 | xhigh |
-| unit: verify | Opus 5.5 | high |
-| fix | Opus 5.5 | xhigh |
-| dispatcher | Opus 5.5 | medium |
-| operator agent | Opus 5.5 | medium |
-
-#### Scenario: A unit moves from construct to code
-- **WHEN** a unit's construct stage at high effort is followed by its code stage
-- **THEN** the code stage's fresh agent starts at xhigh
-
 ### Requirement: The teams file overrides a role's model or effort
-A team, or a partition's main level, in `teams.json` MAY set `roles.<role>.model` or `roles.<role>.effort`. crew SHALL start that role there with the override instead of its definition's value. An override naming a role or an effort level that does not exist SHALL be refused with a message naming it.
+A partition's main level in `teams.json` MAY set `roles.<role>.model` or `roles.<role>.effort` for its design agent, planner, main-level ops, operator or reviewer. crew SHALL start that role there with the override instead of its definition's value. An override naming a role or an effort level that does not exist SHALL be refused with a message naming it.
 
 #### Scenario: One partition's planner
 - **WHEN** wldn's partition entry sets `roles.planner.effort` to `max`
 - **THEN** wldn's planner starts at max, and madswan's at its definition's xhigh
 
-### Requirement: The design agent replaces fable
-No role SHALL be called fable. The design agent at the main level SHALL take over what fable did, and a team SHALL have no design role of its own.
+#### Scenario: A dispatcher's override
+- **WHEN** a partition's entry sets `roles.dispatcher.effort`
+- **THEN** crew refuses to load the teams file, naming the role it has no definition for
 
-#### Scenario: A team's design question
-- **WHEN** a conductor needs a design answer
-- **THEN** it asks its partition's design agent
+### Requirement: Each standing role starts on its model at its effort level
+Every definition SHALL set this model, each with its 1M-token context where it runs on Opus, and this effort: the design agent and the planner Fable 5.1 at xhigh; main-level ops and the reviewer Opus 5.5 at high; the operator agent Opus 5.5 at medium. No definition SHALL exist for a conductor, a team's ops, a dispatcher or a unit's stage.
+
+#### Scenario: The planner comes up
+- **WHEN** `crew main up wldn` starts `wldn-planner`
+- **THEN** it runs on Fable 5.1 at xhigh, as `roles/planner.md` sets
+
+#### Scenario: A role crew no longer has
+- **WHEN** anything asks crew for the brief of `conductor`, `ops`, `dispatcher`, `construct`, `coder` or `verify`
+- **THEN** crew refuses, naming the definition it has no file for
+
+### Requirement: The design agent is the partition's one design role
+No role SHALL be called fable. The design agent at the main level SHALL take over what fable did, and SHALL be the partition's one design role.
+
+#### Scenario: The main level's one design role
+- **WHEN** `crew main up wldn` runs
+- **THEN** `wldn-design` is the one design agent it starts, and nothing named fable starts

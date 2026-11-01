@@ -12,11 +12,7 @@ f965a6bb-1725-4522-8d49-576f4bb1fc50, a chore's verify of 2026-10-20, on deneb o
 grade falls; nothing that is not a paraphrase is refused, and no capture is stopped: when the copy's type changes, a
 quote of the agent's own earlier words grades found again.
 
-Who asserted the words is read from the mark crew puts on what it sends, and a stage's own prompt, which crew cannot
-mark, from its form: `Fix: …`, a chore's `Chore <name>: …` and `Verify chore <name>: …`, the merge line, and the /opsx:
-commands, which Claude Code records as a string holding <command-name>/opsx:apply</command-name> and
-<command-args>…</command-args>, the skill's text following in the next record received, ending ARGUMENTS: and the same
-words. When these stop holding, a stage's words are read as the user's.
+Who asserted the words is read from the mark crew puts on what it sends; anything unmarked is the user's.
 
 Claude Code writes a tool call's record only once the tool returns, so the running crew signal is never in the
 transcript it reads. What shows crew it is reading the live session is the record before it, the user's message or
@@ -69,11 +65,6 @@ TELL = re.compile(r"^\[crew tell from ([^\]\s]+)\]")
 # How a tell's sender ends when it carries the user's word from the board, crew tell --board's <user>@board (record
 # 0038 §3): the user's words, which answer nothing.
 BOARD = "@board"
-# A stage's own prompt, as crew's run_stage sends it: a fix, a chore's code or verify, a merge, or construct, code and
-# verify as slash commands. A merge is a submission to the bolt through sluice; one sent before record 0026 merged with
-# wt merge, and a transcript of then still reads as the conductor's.
-STAGE = re.compile(r"^(Fix: |Chore \S+: |Verify chore \S+: |Merge \S+ into bolt/\S+: wt (?:submit bolt/\S+|merge bolt/\S+ --no-squash) --no-remove)")
-SLASH = re.compile(r"<command-name>/opsx:(propose|apply|verify)</command-name>")
 ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 FRESH = datetime.timedelta(minutes=15)
 # The types of the lines that hold the agent's own writing: its records, and api-request-blob, Claude Code's copy of
@@ -181,18 +172,10 @@ def lines(path, start=0):
     return out
 
 
-def stage_args(s):
-    """The words of a stage's /opsx: command, as Claude Code records the command, or None for any other string."""
-    text = s.lstrip()
-    m = ARGS.search(text) if text.startswith("<command-") and SLASH.search(text) else None
-    return m.group(1) if m else None
-
-
-def asserter(value, hit, stage_by=None, expansion=False):
+def asserter(value, hit):
     """Who asserted a received record's excerpt, from the record and the string that holds it: a tool, for a record
     holding a tool_result block; the agent crew tell names, or the user when that names <user>@<host>; crew, for
-    crew's own message; stage_by, the conductor whose stage the session runs, for the stage's own prompt or the
-    expansion of its command; otherwise the user."""
+    crew's own message; otherwise the user."""
     if holds_tool_result(value):
         return "tool"
     text = hit.lstrip()
@@ -201,8 +184,6 @@ def asserter(value, hit, stage_by=None, expansion=False):
         return "user" if "@" in m.group(1) else f"agent:{m.group(1)}"
     if text.startswith("[crew]"):
         return "crew"
-    if stage_by and (expansion or STAGE.match(text) or stage_args(text) is not None):
-        return f"agent:{stage_by}"
     return "user"
 
 
@@ -221,14 +202,13 @@ def holds_tool_result(v):
     return False
 
 
-def check(session, excerpt, skip=(), stage_by=None, want=None):
+def check(session, excerpt, skip=(), want=None):
     """Look for the excerpt in the session's transcript, whitespace aside, once it shows it is the live session's: its
     last record written within FRESH. The crew signal command lines that carry an excerpt are crew's commands and their
     echoes, lines of type assistant what the agent wrote and lines of type api-request-blob Claude Code's copies of
     what it sent the model, the agent's own among them, and lines that name a path in skip the writing of the excerpt's
-    file: none of them is searched, and the rest of a string that holds such a command line is. stage_by is
-    the conductor whose stage the session runs, None for a session that runs none, where a prompt of a stage's form is
-    the user's. The source is the last received record that holds the excerpt; with want="user", the last one the user
+    file: none of them is searched, and the rest of a string that holds such a command line is. The source is the last
+    received record that holds the excerpt; with want="user", the last one the user
     asserted, so that a later echo of the user's words in a tool's output or a tell does not hide them, one not from the
     board before one that is, so the same words typed in the pane count however the board's word fell beside them, and
     the last received record only when the user asserted none. Returns a Verdict; refused is one too."""
@@ -248,23 +228,19 @@ def check(session, excerpt, skip=(), stage_by=None, want=None):
         return unverified(f"session {session}'s transcript has not been written for {int(age.total_seconds() // 60)} "
                           "minutes: crew may be reading another session's")
     needle = collapse(excerpt)
-    received = received_user = received_board = other = args = None  # args: the words of the stage command just received, which its expansion ends with
+    received = received_user = received_board = other = None
     for n, raw, v in found:
         if kind(v) in WROTE:
             continue
         every = list(strings(v))
-        expansion = False
-        if kind(v) == "user":
-            expansion = args is not None and any(collapse(s).endswith(collapse(f"ARGUMENTS: {args}")) for s in every)
-            args = next((x for x in map(stage_args, every) if x is not None), None)
         if any(p in s for s in every for p in skip):
             continue
         hits = [s for s in every if any(needle in collapse(p) for p in searched(s))]
         if not hits:
             continue
         if kind(v) == "user":
-            received = (n, raw, v, hits, expansion)
-            if asserter(v, hits[-1], stage_by, expansion) == "user":
+            received = (n, raw, v, hits)
+            if asserter(v, hits[-1]) == "user":
                 if from_board(hits[-1]):
                     received_board = received
                 else:
@@ -274,8 +250,8 @@ def check(session, excerpt, skip=(), stage_by=None, want=None):
     if want == "user" and (received_user or received_board):
         received = received_user or received_board
     if received:
-        n, raw, v, hits, expansion = received
-        by = asserter(v, hits[-1], stage_by, expansion)
+        n, raw, v, hits = received
+        by = asserter(v, hits[-1])
         return Verdict("verified", raw=raw, n=n, value=v, asserted_by=by, board=by == "user" and from_board(hits[-1]))
     if other:
         n, raw, v, _ = other
@@ -333,22 +309,6 @@ def last_at(path):
         return None
     times = [t for t in (stamp(v.get("timestamp")) for _, _, v in found if isinstance(v, dict)) if t]
     return max(times) if times else None
-
-
-def turn_over(path):
-    """When the session's turn ended, with nothing sent to it since: the time of its last record of type user or
-    assistant, not a subagent's, when that record is the model's and ended its turn (message.stop_reason end_turn).
-    None while a turn goes on, or when the transcript is missing or can't be read, or that record carries no time crew
-    reads."""
-    found = lines(path) if path else None
-    if found is None or isinstance(found, str):
-        return None
-    said = [v for _, _, v in found if kind(v) in ("user", "assistant") and not v.get("isSidechain")]
-    last = said[-1] if said else None
-    message = last.get("message") if last and kind(last) == "assistant" else None
-    if not isinstance(message, dict) or message.get("stop_reason") != "end_turn":
-        return None
-    return stamp(last.get("timestamp"))
 
 
 def unnamed(session):

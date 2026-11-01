@@ -1,14 +1,15 @@
 # crew's Pending You cards on the stub pendingyou (the rail-cards spec, briefs.16, record 0031), the journey each
-# change of the card series adds its card to. An agent's own question, through Pending You's own tools, with crew's
-# card hook before and after each call: a coder's post refused, naming crew needs, with nothing sent; a conductor's
-# question posted in its kit's area made under the kit's key, recorded on the conductor with its id and key; crew card
-# read printing where it stands and the user's answer, recording nothing; the conductor's close and withdrawal
-# recorded under its key; a post under its bolt's landing key refused as crew's card; and after the host signs in
-# again, a question read as lost, saying to ask it again, and asked again under its key. Then the act that sends
-# crew's own cards, as a raise of the series calls it: a landing card raised outside its owner's turn, asked in the
-# owner's name, told to the owner with the line that adopts it, and closed by the owner's crew card read once the user
-# declines it, with their words; raised again, a new card under the key's revision, changed in place while it waits,
-# and once the user answers it and its head moves, acked with the change note and followed by its new version. Then
+# change of the card series adds its card to, on a plan whose bolt b1's work the box's runner takes through Flume, its
+# configuration naming switchboard-kit (Decision 1 of the-team-machinery-leaves; the user's ruling of 2026-11-01). An agent's own question, through Pending You's own tools, with crew's card hook before and
+# after each call: the operator's post refused, naming why, with nothing sent; the planner's question posted in a kit's
+# area made under the kit's key, recorded on the planner with its id and key; crew card read printing where it stands
+# and the user's answer, recording nothing; the planner's close and withdrawal recorded under its key; a post under a
+# bolt's landing key refused as crew's card; and after the host signs in again, a question read as lost, saying to ask
+# it again, and asked again under its key. Then the act that sends crew's own cards, as a raise of the series calls it:
+# a landing card raised outside its owner's turn, asked in main-level ops's name, told to ops with the line that adopts
+# it, and closed by ops's crew card read once the user declines it, with their words; raised again, a new card under
+# the key's revision, changed in place while it waits, and once the user answers it and its head moves, acked with the
+# change note and followed by its new version. Then
 # crew record, as the design agent runs it at each turn of a record's status: the record read on the kit's main, its
 # status recorded with its commit and its card raised in the design agent's name under record/<kit>/<number>; a
 # status the file does not hold, an alternatives file crew can't read and another host refused with nothing recorded; the card changed in place
@@ -38,7 +39,7 @@
 # does, test_rail.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-team_world
+bolt_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
 stub=$(home_of $box)/.stub-pendingyou
@@ -49,16 +50,15 @@ for f in sorted(glob.glob(os.path.expanduser("~/.local/state/crew/wldn/runs/*/*.
         if e["Act"] == sys.argv[2]:
             print(json.dumps(e))' "$CREW/plugin/lib" "$1"
 }
-# The conductor's worktree: a checkout whose origin is switchboard-kit's on GitHub, where its card commands run.
-wd=$T/conductor-work; git init -q "$wd"; git -C "$wd" remote add origin git@github.com:WilldanGroup/switchboard-kit.git
-# card <command...>: crew card as swb-1-conductor on the box, in its worktree, standard input passed on
-card() { (export CREW_TEST_HOST=$box CREW_AGENT=swb-1-conductor HOME; HOME=$(home_of $box); cd "$wd" && "$CREW/plugin/bin/crew" card "$@"); }
-# card2 <command...>: the same, as swb-2-conductor, whose questions the hook's and crew card read's wiring is shown on
-card2() { (export CREW_TEST_HOST=$box CREW_AGENT=swb-2-conductor HOME; HOME=$(home_of $box); cd "$wd" && "$CREW/plugin/bin/crew" card "$@"); }
+# The main level's folder on the box, where its agents' card commands run.
+wd=$(space $box willdan)
+# card <command...>: crew card as wldn-ops on the box, in the main level's folder, standard input passed on
+card() { (export CREW_TEST_HOST=$box CREW_AGENT=wldn-ops HOME; HOME=$(home_of $box); cd "$wd" && "$CREW/plugin/bin/crew" card "$@"); }
+# card2 <command...>: the same, as wldn-planner, whose questions the hook's and crew card read's wiring is shown on
+card2() { (export CREW_TEST_HOST=$box CREW_AGENT=wldn-planner HOME; HOME=$(home_of $box); cd "$wd" && "$CREW/plugin/bin/crew" card "$@"); }
 py_calls() { grep " pendingyou " "$CREW_TEST_LOG" | cut -d' ' -f3- || true; }
 
-# The plan, by hand: b1 holds v1 and b2 holds w1; swb-1 holds b1, whose landing card crew raises below, and swb-2 holds b2,
-# whose conductor asks the questions below.
+# The plan, by hand: b1 holds v1, built through Flume, whose landing card crew raises below.
 w=$T/hand; git clone -q -b wldn/main "$ws" "$w"
 python3 - "$CREW/plugin/lib" "$w/plan.rec" <<'PY'
 import sys
@@ -67,13 +67,15 @@ import plan
 f = sys.argv[2]; p = plan.Plan(open(f).read())
 p.insert(plan.Rec("Bolt", [("Bolt", "b1"), ("Repo", "switchboard-kit"), ("Goal", "Goal of b1.")]))
 p.insert(plan.Rec("Unit", [("Unit", "v1"), ("Repo", "switchboard-kit"), ("Bolt", "b1"), ("Intent", "Unit v1.")]))
-p.insert(plan.Rec("Bolt", [("Bolt", "b2"), ("Repo", "switchboard-kit"), ("Goal", "Goal of b2.")]))
-p.insert(plan.Rec("Unit", [("Unit", "w1"), ("Repo", "switchboard-kit"), ("Bolt", "b2"), ("Intent", "Unit w1.")]))
 open(f, "w").write(p.text())
 PY
 commit_all "$w" "plan: by hand"; push_state "$w"
-crew bolt give swb-1 b1 >/dev/null 2>&1
-crew bolt give swb-2 b2 >/dev/null 2>&1
+flume_world
+crew bolt start b1 >/dev/null
+# The box's runner, which keeps switchboard-kit in $k (flume_world), took v1's launch, its place coding: b1's work runs
+# on the box.
+runner_writes $box "$(request_of unit/v1)" /flume/places/change--v1 \
+  '{"status":{"places":[{"place":"/flume/places/change--v1","phase":"live","current":"code","stages":[{"name":"code","state":"running"}]}]}}'
 
 # ask <agent> <tool> <args as JSON>: a Pending You call from the agent's session through Pending You's own tools, as
 # Claude Code makes it on the box: crew's card hook before it, which may deny it, then the stub's answer, then the hook
@@ -96,27 +98,28 @@ print(json.dumps(got))
 PY
 }
 
-# A stage agent asks nothing on a card: crew's hook refuses a coder's post before it reaches Pending You.
+# The operator asks nothing on a card: crew's hook refuses its post before it reaches Pending You, since the user is in
+# its pane.
 : > "$CREW_TEST_LOG"
-out=$(ask swb-1-unit-1 post_request '{"name": "swb-1-unit-1", "idempotencyKey": "ask/swb-1-unit-1/zones", "title": "Which zone?"}')
-eq "$out" "denied: crew refuses a card from swb-1-unit-1: only a conductor, the planner, main-level ops and the design agent ask the user on a card. Say what you need with \`$CREW/plugin/bin/crew needs\`, and your conductor gets it and asks if it must."
+out=$(ask wldn-operator post_request '{"name": "wldn-operator", "idempotencyKey": "ask/wldn-operator/zones", "title": "Which zone?"}')
+eq "$out" "denied: crew refuses a card from wldn-operator: only the planner, main-level ops and the design agent ask the user on a card. The user is in your pane: ask them there."
 eq "$(py_calls)" ""
-ok "crew's card hook refuses a stage agent's card before it reaches Pending You, saying it asks its conductor with crew needs"
+ok "crew's card hook refuses the operator's card before it reaches Pending You, saying the user is in its pane"
 
-# A conductor asks the user a question of its own, through Pending You's own tools, filed in its kit's area, under a
-# key of its own; the hook records it on the conductor. crew card read then reads it, and the conductor closes it.
-q1=ask/swb-2-conductor/hold-the-macs
+# The planner asks the user a question of its own, through Pending You's own tools, filed in a kit's area, under a key
+# of its own; the hook records it on the planner. crew card read then reads it, and the planner closes it.
+q1=ask/wldn-planner/hold-the-macs
 : > "$CREW_TEST_LOG"
-area=$(ask swb-2-conductor match_area '{"cwd": "/work", "remote": "github.com/WilldanGroup/switchboard-kit", "task": "swb-2-conductor"}' | jq -r '.proposedName')
+area=$(ask wldn-planner match_area '{"cwd": "/work", "remote": "github.com/WilldanGroup/switchboard-kit", "task": "wldn-planner"}' | jq -r '.proposedName')
 eq "$area" "switchboard-kit"
-area=$(ask swb-2-conductor create_area '{"name": "switchboard-kit", "group": "wldn", "idempotencyKey": "create-area:WilldanGroup/switchboard-kit", "repo": {"remote": "github.com/WilldanGroup/switchboard-kit"}}' | jq -r .areaId)
+area=$(ask wldn-planner create_area '{"name": "switchboard-kit", "group": "wldn", "idempotencyKey": "create-area:WilldanGroup/switchboard-kit", "repo": {"remote": "github.com/WilldanGroup/switchboard-kit"}}' | jq -r .areaId)
 eq "$area" "prj_stub-1"
-asked=$(ask swb-2-conductor post_request "{\"name\": \"swb-2-conductor\", \"idempotencyKey\": \"$q1\", \"areaId\": \"$area\", \"kind\": \"choice\",
+asked=$(ask wldn-planner post_request "{\"name\": \"wldn-planner\", \"idempotencyKey\": \"$q1\", \"areaId\": \"$area\", \"kind\": \"choice\",
   \"title\": \"Hold the Macs for the demo?\", \"summary\": \"The demo is Friday.\", \"options\": [{\"id\": \"hold\", \"label\": \"Hold them\"}, {\"id\": \"go\", \"label\": \"Go on\"}],
-  \"recommendedIds\": [\"hold\"], \"blocking\": false, \"session\": {\"label\": \"swb-2-conductor\", \"machine\": \"$box\", \"cwd\": \"$wd\"}}")
+  \"recommendedIds\": [\"hold\"], \"blocking\": false, \"session\": {\"label\": \"wldn-planner\", \"machine\": \"$box\", \"cwd\": \"$wd\"}}")
 eq "$(jq -r .requestId <<<"$asked")" "req_stub-1"
-eq "$(entries card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By] | join(" ")')" "agent/swb-2-conductor req_stub-1 $q1 swb-2-conductor"
-ok "a conductor asks a question of its own through Pending You's own tools, in its kit's area, and crew's hook records it on the conductor with its id and key"
+eq "$(entries card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By] | join(" ")')" "agent/wldn-planner req_stub-1 $q1 wldn-planner"
+ok "the planner asks a question of its own through Pending You's own tools, in a kit's area, and crew's hook records it on the planner with its id and key"
 
 eq "$(card2 read $q1)" "card $q1: req_stub-1, pending, waiting on the user
   https://www.pendingyou.com/app/r/req_stub-1"
@@ -128,57 +131,58 @@ eq "$(card2 read $q1)" "card $q1: req_stub-1, answered, your turn: the user has 
 eq "$(card2 read $q1 --json | jq -r .version)" "2"
 eq "$(entries card.read)" ""
 : > "$CREW_TEST_LOG"
-eq "$(ask swb-2-conductor ack_answer '{"name": "swb-2-conductor", "requestId": "req_stub-1", "expectedVersion": 2, "outcome": "Held until Monday."}' | jq -r .status)" "resolved"
-eq "$(entries card.close | jq -r '[(.On | join(" ")), .Card, .Key] | join(" ")')" "agent/swb-2-conductor req_stub-1 $q1"
-expect_fail "swb-2-conductor holds no open card under $q1 on $box" card2 read $q1
-ok "crew card read prints where the question stands and the user's answer, recording nothing, and the conductor's close is recorded under its key"
+eq "$(ask wldn-planner ack_answer '{"name": "wldn-planner", "requestId": "req_stub-1", "expectedVersion": 2, "outcome": "Held until Monday."}' | jq -r .status)" "resolved"
+eq "$(entries card.close | jq -r '[(.On | join(" ")), .Card, .Key] | join(" ")')" "agent/wldn-planner req_stub-1 $q1"
+expect_fail "wldn-planner holds no open card under $q1 on $box" card2 read $q1
+ok "crew card read prints where the question stands and the user's answer, recording nothing, and the planner's close is recorded under its key"
 
-# Crew's own cards are crew's: a conductor's post under its bolt's landing key is refused, naming the card as crew's.
+# Crew's own cards are crew's: the planner's post under a bolt's landing key is refused, naming the card as crew's.
 : > "$CREW_TEST_LOG"
-out=$(ask swb-2-conductor post_request '{"name": "swb-2-conductor", "idempotencyKey": "land/b2", "title": "Land b2"}')
-eq "$out" "denied: crew refuses swb-2-conductor's post of the card under land/b2: a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, and closed when nothing waits to land on the kit's main. Ask a question of your own under a key of your own, ask/swb-2-conductor/<what it is about>."
+out=$(ask wldn-planner post_request '{"name": "wldn-planner", "idempotencyKey": "land/b1", "title": "Land b1"}')
+eq "$out" "denied: crew refuses wldn-planner's post of the card under land/b1: a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, and closed when nothing waits to land on the kit's main. Ask a question of your own under a key of your own, ask/wldn-planner/<what it is about>."
 eq "$(py_calls)" ""
-ok "a conductor's post under its bolt's landing key is refused before it reaches Pending You, naming the card as crew's"
+ok "the planner's post under a bolt's landing key is refused before it reaches Pending You, naming the card as crew's"
 
 # A second question, withdrawn by its asker; a third, lost when the host signs in to Pending You again, and asked again.
-q2=ask/swb-2-conductor/zones q3=ask/swb-2-conductor/cutover
-ask swb-2-conductor post_request "{\"name\": \"swb-2-conductor\", \"idempotencyKey\": \"$q2\", \"kind\": \"fyi\", \"title\": \"Zones\"}" >/dev/null
-eq "$(ask swb-2-conductor cancel_request '{"name": "swb-2-conductor", "requestId": "req_stub-2", "reason": "Settled in the pane."}' | jq -r .status)" "cancelled"
+q2=ask/wldn-planner/zones q3=ask/wldn-planner/cutover
+ask wldn-planner post_request "{\"name\": \"wldn-planner\", \"idempotencyKey\": \"$q2\", \"kind\": \"fyi\", \"title\": \"Zones\"}" >/dev/null
+eq "$(ask wldn-planner cancel_request '{"name": "wldn-planner", "requestId": "req_stub-2", "reason": "Settled in the pane."}' | jq -r .status)" "cancelled"
 eq "$(entries card.close | jq -r .Card | tr '\n' ' ')" "req_stub-1 req_stub-2 "
-ask swb-2-conductor post_request "{\"name\": \"swb-2-conductor\", \"idempotencyKey\": \"$q3\", \"kind\": \"fyi\", \"title\": \"Cutover\"}" >/dev/null
+ask wldn-planner post_request "{\"name\": \"wldn-planner\", \"idempotencyKey\": \"$q3\", \"kind\": \"fyi\", \"title\": \"Cutover\"}" >/dev/null
 mv "$stub/cards.json" "$stub/cards.before-sign-in.json"
 expect_fail "card req_stub-3 under $q3 is lost to its owner (Pending You: \"Not found: request:req_stub-3.\")" card2 read $q3
 has "$out" "Ask it again if it still matters, saying in it that an older copy is dead"
-eq "$(ask swb-2-conductor post_request "{\"name\": \"swb-2-conductor\", \"idempotencyKey\": \"$q3\", \"kind\": \"fyi\", \"title\": \"Cutover\"}" | jq -r .requestId)" "req_stub-4"
+eq "$(ask wldn-planner post_request "{\"name\": \"wldn-planner\", \"idempotencyKey\": \"$q3\", \"kind\": \"fyi\", \"title\": \"Cutover\"}" | jq -r .requestId)" "req_stub-4"
 eq "$(card2 read $q3 | head -1)" "card $q3: req_stub-4, pending, waiting on the user"
 ok "a question withdrawn by its asker is recorded closed; one lost after the host signs in again reads as lost, saying to ask it again, and asked again it is the key's card"
 
 # crew's own card, raised as a raise of the series raises it: the landing of b1, read on the user's rail at the box,
-# not in its conductor's turn. The conductor is up, so the line that adopts it can be told.
-c=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
-as $box herdr --session wldn-1 stub agent "$c" swb-1-conductor
-mkdir -p "$(home_of $box)/.local/state/swb-1-team"; echo "conductor $c" > "$(home_of $box)/.local/state/swb-1-team/panes"
+# not in its owner's turn, main-level ops's. ops is up, so the line that adopts it can be told.
+mains=$(home_of $box)/.local/state/crew/wldn-main; mkdir -p "$mains"
+c=$(as $box herdr --session wldn-3 workspace create --cwd / --label ops | jq -r .result.root_pane.pane_id)
+as $box herdr --session wldn-3 stub agent "$c" wldn-ops
+echo "ops $c" > "$mains/panes"
 : > "$CREW_TEST_LOG"
 raised=$(as $box python3 - "$CREW/plugin/lib" "$wd" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
 import cards, crew, plan
 facts = dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches={"v1": 1}, head="abc1400", at=None, moved=0, pr=None)
-plan.row_card_post(crew.load(), "wldn", "swb-1-conductor", cards.landing_card, facts,
+plan.row_card_post(crew.load(), "wldn", "wldn-ops", cards.landing_card, facts,
                    (sys.argv[2], "github.com/WilldanGroup/switchboard-kit"))
 PY
 )
 eq "$raised" "card land/b1: req_stub-5 https://www.pendingyou.com/app/r/req_stub-5
-call get_request (requestId req_stub-5, name swb-1-conductor)
-told swb-1-conductor: call get_request (requestId req_stub-5, name swb-1-conductor)"
+call get_request (requestId req_stub-5, name wldn-ops)
+told wldn-ops: call get_request (requestId req_stub-5, name wldn-ops)"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
-eq "$(py_calls | sed -n 1p)" 'whoami {"name": "swb-1-conductor"}'
+eq "$(py_calls | sed -n 1p)" 'whoami {"name": "wldn-ops"}'
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .approve.risk, .approve.reversible, (.highStakes // "none"), .artifacts[0].lines]' <<<"$posted")" \
-  '["land/b1@wldn","swb-1-conductor","approve","high",false,"none",["v1"]]'
-has "$(grep "agent prompt swb-1-conductor" "$CREW_TEST_LOG")" \
-  "[crew] Your card land/b1 is up for the user: call get_request (requestId req_stub-5, name swb-1-conductor), to hear their answer."
-eq "$(entries card.post | jq -r 'select(.Key == "land/b1") | [(.On | join(" ")), .Card, .By] | join(" ")')" "bolt/b1 req_stub-5 swb-1-conductor"
+  '["land/b1@wldn","wldn-ops","approve","high",false,"none",["v1"]]'
+has "$(grep "agent prompt wldn-ops" "$CREW_TEST_LOG")" \
+  "[crew] Your card land/b1 is up for the user: call get_request (requestId req_stub-5, name wldn-ops), to hear their answer."
+eq "$(entries card.post | jq -r 'select(.Key == "land/b1") | [(.On | join(" ")), .Card, .By] | join(" ")')" "bolt/b1 req_stub-5 wldn-ops"
 ok "crew's own card is posted in its owner's name under its row's key, prints the line that adopts it, and is told to its owner when raised outside its turn"
 
 echo '{"answer": {"approved": false, "note": {"text": "Not before the box pulls."}}}' > "$stub/answered/req_stub-5.json"
@@ -189,10 +193,11 @@ eq "$(card read land/b1)" "card land/b1: req_stub-5, answered, your turn: the us
   https://www.pendingyou.com/app/r/req_stub-5
 card land/b1: req_stub-5 closed, as the user declined it"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer "
-eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.name, .outcome]')" '["swb-1-conductor","Declined: Not before the box pulls."]'
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.name, .outcome]')" '["wldn-ops","Declined: Not before the box pulls."]'
 eq "$(entries card.close | jq -r 'select(.Key == "land/b1") | [.Card, .State, .Outcome] | join(" ")')" "req_stub-5 declined Declined: Not before the box pulls."
-eq "$(card read land/b1)" "land/b1: no reading of it runs on this host: crew card session land/b1 starts it"
-ok "the owner's crew card read finds the approval the user declined and closes it with their words, and with no card of the bolt's own held reads the bolt's reading in its place"
+# With no card of the bolt's own held, a read of its key reads the bolt's reading in its place, the user's here.
+eq "$(as $box "$CREW/plugin/bin/crew" card read land/b1)" "land/b1: no reading of it runs on this host: crew card session land/b1 starts it"
+ok "the owner's crew card read finds the approval the user declined and closes it with their words, and with no card of the bolt's own held a read of its key reads the bolt's reading in its place"
 
 # crew record (briefs.15, record 0031 §1): the design agent's record at each turn of its status, read on switchboard-kit's
 # main as this host's checkout of it holds it, raising, changing and closing the record's one card in its name.
@@ -317,11 +322,11 @@ where = (sys.argv[2], "github.com/WilldanGroup/switchboard-kit")
 fleet = crew.load()
 acts = plan.CardActs(fleet)
 if sys.argv[3] == "post":
-    plan.row_card_post(fleet, "wldn", "swb-1-conductor", cards.landing_card, facts, where, acts)
+    plan.row_card_post(fleet, "wldn", "wldn-ops", cards.landing_card, facts, where, acts)
 else:
     es = acts.entries("wldn")
-    anew = cards.head_anew(es, cards.card_under(es, "land/b1", "swb-1-conductor"), sys.argv[4])
-    plan.row_card_change(fleet, "wldn", "swb-1-conductor", cards.landing_card, facts, f"Head is now {sys.argv[4]}", where, acts, anew=anew)
+    anew = cards.head_anew(es, cards.card_under(es, "land/b1", "wldn-ops"), sys.argv[4])
+    plan.row_card_change(fleet, "wldn", "wldn-ops", cards.landing_card, facts, f"Head is now {sys.argv[4]}", where, acts, anew=anew)
 PY
 }
 : > "$CREW_TEST_LOG"
@@ -343,7 +348,7 @@ eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows]
 has "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -r .summary)" "Its head moved since your approval, from abc1600 to abc1700"
 eq "$(jq -r '.["req_stub-9"].status' "$stub/cards.json")" "resolved"
 eq "$(entries card.close | jq -r 'select(.Card == "req_stub-9") | [.Key, .State] | join(" ")')" "land/b1 closed"
-eq "$(entries card.post | jq -r 'select(.Card == "req_stub-10") | [(.On | join(" ")), .Key, .By] | join(" ")')" "bolt/b1 land/b1 swb-1-conductor"
+eq "$(entries card.post | jq -r 'select(.Card == "req_stub-10") | [(.On | join(" ")), .Key, .By] | join(" ")')" "bolt/b1 land/b1 wldn-ops"
 eq "$(card read land/b1 | head -1)" "card land/b1: req_stub-10, pending, waiting on the user"
 ok "a card waiting on the user is changed in place; once they answer it and its head moves, it is acked with the change note and its new version, saying so, posted following it, recorded under the row's key, and crew card read finds that one"
 
@@ -408,7 +413,7 @@ ok "a batch's card lost to the planner is raised again by the sweep's entry unde
 
 expect_ok planner session batch/1; eq "$out" "$u1"; eq "$(listed)" "$p1"
 expect_fail "a batch has one reading session, on the whole batch: crew card session batch/1" planner session batch/1 v1
-expect_fail "b1 is no row of switchboard-kit's landings card, so it has no reading: every unit and chore of it has landed" \
+expect_fail "b1 is no row of switchboard-kit's landings card, so it has no reading: unit v1 has not merged: it is code" \
   planner session land/b1
 expect_fail "crew card wait is gone: crew keeps no process waiting on a card or its reading. Run crew card read land/b1 when" \
   planner wait land/b1
@@ -438,10 +443,10 @@ v1: say what the zone is.
 card batch/1: req_stub-12 closed
 ended batch/1's session, plannotator pid $p1"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request whoami get_request ack_answer "
-eq "$(py_calls | sed -n 5p | cut -d' ' -f2- | jq -r .outcome)" "Read; 1 note sent to its team"
+eq "$(py_calls | sed -n 5p | cut -d' ' -f2- | jq -r .outcome)" "Read; 1 note for its unit"
 gone "$p1"
 [[ ! -e $cards_dir/batch/1 ]] || fail "batch/1's session folder outlived its card"
-eq "$(entries card.close | jq -r 'select(.Key == "batch/1" and .State == "closed") | [.Card, .Outcome] | join(" ")')" "req_stub-12 Read; 1 note sent to its team"
+eq "$(entries card.close | jq -r 'select(.Key == "batch/1" and .State == "closed") | [.Card, .Outcome] | join(" ")')" "req_stub-12 Read; 1 note for its unit"
 ok "the card sent back is read by the planner's crew card read with its note, and crew closes it and ends its session"
 
 raise 2 >/dev/null; p2=$(jq -r .pid "$cards_dir/batch/2/session.json")
@@ -453,7 +458,7 @@ eq "$out" "batch/2: annotated
 $notes
 card batch/2: req_stub-13 withdrawn
 batch/2's session had ended as the user sent it, and batch/2 is forgotten"
-eq "$(py_calls | tail -1 | cut -d' ' -f2- | jq -r .reason)" "Read; 2 notes sent to their teams"
+eq "$(py_calls | tail -1 | cut -d' ' -f2- | jq -r .reason)" "Read; 2 notes for their units"
 ok "the session sent with its annotations is read with every one as the user wrote it, and crew closes the card and forgets the session"
 
 batch 3
@@ -576,7 +581,7 @@ ok "the user's boxes, sent on the card, are applied as they stand, and crew clos
 # The rail read's sweep of the cards on the box, under its sign-in (record 0031 §1, §2, read.4). The landing cards
 # posted before the batch's sign-in were recorded lost by the planner's rail reads above, their row gone; a landing card
 # posted since, whose bolt has no row; and two questions asked through Pending You's own tools and recorded as crew's
-# card hook records them: swb-2-conductor's, whose pane herdr lists with no agent in it, and swb-1-conductor's, which
+# card hook records them: the design agent's, whose pane herdr lists with no agent in it, and the planner's, which
 # runs. crew board reads them and acts on none.
 question() {  # question <asker>: the question's id
   local id
@@ -593,27 +598,29 @@ PY
   echo "$id"
 }
 lc=$(land post abc1900 | sed -n '1s/^card [^:]*: \([^ ]*\).*/\1/p')
-q2=$(question swb-2-conductor); q1=$(question swb-1-conductor)
-p2=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-2 | jq -r .result.root_pane.pane_id)
-mkdir -p "$(home_of $box)/.local/state/swb-2-team"; echo "conductor $p2" > "$(home_of $box)/.local/state/swb-2-team/panes"
+qd=$(question wldn-design); qp=$(question wldn-planner)
+pp=$(as $box herdr --session wldn-3 workspace create --cwd / --label planner | jq -r .result.root_pane.pane_id)
+as $box herdr --session wldn-3 stub agent "$pp" wldn-planner
+pd=$(as $box herdr --session wldn-3 workspace create --cwd / --label design | jq -r .result.root_pane.pane_id)
+printf 'planner %s\ndesign %s\n' "$pp" "$pd" >> "$mains/panes"
 closes=$(entries card.close | wc -l)
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew board --label wldn
 eq "$(py_calls)" ""; eq "$(entries card.close | wc -l)" "$closes"
 HOST=$box expect_ok crew rail --label wldn; r=$out
 eq "$(sed -n '/^cards swept:$/,/^$/p' <<<"$r")" "cards swept:
-  land/b1 (wldn), swb-1-conductor's $lc: withdrawn: its bolt no longer waits to land
-  a question (wldn), swb-2-conductor's $q2: withdrawn: swb-2-conductor ended"
+  land/b1 (wldn), wldn-ops's $lc: withdrawn: its bolt no longer waits to land
+  a question (wldn), wldn-design's $qd: withdrawn: wldn-design ended"
 asked=$(sed -n '/^questions waiting on you:$/,/^$/p' <<<"$r")
-has "$asked" "a question (wldn), asked by swb-1-conductor on $box ($q1)"; lacks "$asked" "$q2"
+has "$asked" "a question (wldn), asked by wldn-planner on $box ($qp)"; lacks "$asked" "$qd"
 eq "$(py_calls | sed -n 1p)" 'whoami {"name": "crew"}'
 eq "$(py_calls | awk 'NR > 1 && $1 != "get_request" {exit} NR > 1 {print $1, $2, $3}' | sort -u)" 'get_request {"name": "crew",'
-has "$(py_calls)" "cancel_request {\"name\": \"swb-1-conductor\", \"reason\": \"its bolt no longer waits to land\", \"requestId\": \"$lc\"}"
-has "$(py_calls)" "cancel_request {\"name\": \"swb-2-conductor\", \"reason\": \"swb-2-conductor ended; ask again if it still matters\", \"requestId\": \"$q2\"}"
-eq "$(entries card.close | jq -r "select(.Card == \"req_stub-4\" or .Card == \"$lc\" or .Card == \"$q2\") | [.Card, .State, (.On | join(\" \"))] | join(\" \")" | tail -3)" \
-  "req_stub-4 lost agent/swb-2-conductor
+has "$(py_calls)" "cancel_request {\"name\": \"wldn-ops\", \"reason\": \"its bolt no longer waits to land\", \"requestId\": \"$lc\"}"
+has "$(py_calls)" "cancel_request {\"name\": \"wldn-design\", \"reason\": \"wldn-design ended; ask again if it still matters\", \"requestId\": \"$qd\"}"
+eq "$(entries card.close | jq -r "select(.Card == \"req_stub-4\" or .Card == \"$lc\" or .Card == \"$qd\") | [.Card, .State, (.On | join(\" \"))] | join(\" \")" | tail -3)" \
+  "req_stub-4 lost agent/wldn-planner
 $lc withdrawn bolt/b1
-$q2 withdrawn agent/swb-2-conductor"
+$qd withdrawn agent/wldn-design"
 ok "the rail read, asking after each card in crew's own name, records lost a card whose row is gone and that Pending You no longer finds, withdraws one it finds and a question whose asker herdr no longer lists, keeps the one whose asker runs, and crew board acts on none"
 
 # A deploy offered: crew ops offer raises its card in main-level ops's name on the box; the box signs in to Pending You

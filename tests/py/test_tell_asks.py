@@ -10,8 +10,7 @@ import record
 
 FALSE = dict.fromkeys(crew.KIND_ROLES, False)
 FLEET = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "roles": {}, "flume": dict(FALSE, planner="madswan-main", operator="madswan-main")},
-                        "wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "roles": {}, "flume": FALSE}},
-         "teams": {"swc-3": {"name": "swc-3", "label": "madswan", "machine": "deneb", "session": "madswan-2"}}, "hosts": {}}
+                        "wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "roles": {}, "flume": FALSE}}, "hosts": {}}
 
 
 class TestAsksInstead:
@@ -120,10 +119,12 @@ class TestSend:
         assert capsys.readouterr().out == "asked madswan-operator\n"
 
     @pytest.mark.usefixtures("sender")
-    def test_a_send_to_a_team_of_that_partition_names_the_team(self, herdr):
-        _, _, asked, _ = herdr
-        assert crew.send(FLEET, "swc-3", "hello") is True
-        assert asked[0][2:] == ("send", "swancloud-planner", "(sent to swc-3) hello")
+    def test_a_send_to_a_teams_name_from_before_is_refused_and_asks_nothing(self, herdr):
+        """operator-agent, A name crew does not know."""
+        _, typed, asked, _ = herdr
+        with pytest.raises(crew.Refusal, match="crew send sends to a partition by its label, not 'swc-3'"):
+            crew.send(FLEET, "swc-3", "hello")
+        assert asked == [] and typed == []
 
     @pytest.mark.usefixtures("sender")
     def test_a_standing_operator_still_up_is_typed_into_with_its_send_entry(self, herdr):
@@ -131,4 +132,4 @@ class TestSend:
         read["madswan-operator"] = ("idle", False, None)
         assert crew.send(FLEET, "madswan", "hello") is True
         assert asked == [] and typed[0][-1] == "[crew tell from swancloud-planner] (sent to madswan) hello"
-        assert [(e[1], e[2]) for e in emitted] == [("send", ["agent/madswan-operator", None])]
+        assert [(e[1], e[2]) for e in emitted] == [("send", ["agent/madswan-operator"])]

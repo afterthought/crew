@@ -1,21 +1,21 @@
-# A partition's main level and its console through the crew command on the stubs (tests.11, record 0022), a part of
-# the teams journey (t-journey-teams): crew main up starts the main level, its operator among it, and a dispatcher on
-# each host of the partition, each greeted once, one waiting on a question holding back no other; main status reaches
-# every host; a tell records its length and never its text; crew send reaches the partition's operator, marked with
-# whom it was for, and records its length; a word from the board, piped to crew tell --board as the board's listener
-# pipes it, reaches the agent its item's kind goes to marked as the user's from the board and naming the item, and
-# records its length, and one for an agent its kind does not go to types nothing; the console opens its shell tab alone
-# while the host's job follows, a tab named beside it and the rail tab of itself while no follower runs, keeps what is
-# open, and starts no agent; a tell reaches an agent
-# whose pane herdr names no session for, refused while the session crew recorded in its pane has a question open;
-# crew revive brings back what a restart left empty, leaving down what was taken down; crew revive and crew main up
-# open again a pane herdr brought back dead; a role its partition names a session for comes up there (record 0035);
-# and a role its partition runs as its kind is started by none of them, its role record written and a standing agent
-# of it left from before ended, and main status says whether a run of it stands and what waits.
+# A partition's main level and its console through the crew command on the stubs (tests.11, record 0022), in the
+# journeys' world (tests/journeys.sh): crew main up starts the main level, its operator among it, and nothing else,
+# no dispatcher on any host, each greeted once, one waiting on a question holding back no other; main status lists
+# them; a tell records its length and never its text; crew send reaches the partition named by its label's operator,
+# marked with whom it was for, and records its length, and a team's name from before teams left is refused; a word from the board, piped to crew tell --board as the board's
+# listener pipes it, reaches the agent its item's kind goes to marked as the user's from the board and naming the item,
+# and records its length, and one for an agent its kind does not go to types nothing; the console opens its shell tab
+# alone while the host's job follows, a tab named beside it and the rail tab of itself while no follower runs, keeps
+# what is open, and starts no agent; a tell reaches an agent whose pane herdr names no session for, refused while the
+# session crew recorded in its pane has a question open; crew revive brings back what a restart left empty, resumed or,
+# with no conversation to pick up, fresh, leaving down what was taken down; crew revive and crew main up open again a
+# pane herdr brought back dead; a role its partition names a session for comes up there (record 0035); and a role its
+# partition runs as its kind is started by none of them, its role record written and a standing agent of it left from
+# before ended, and main status says whether a run of it stands and what waits.
 # What each agent is greeted with, where it runs and whether a pane is dead are logic cases (tests/py/test_teams.py).
-# Reads: plugin/hooks/ plugin/lib/board.py plugin/roles/ tests/teams.sh
+# Reads: plugin/hooks/ plugin/lib/board.py plugin/roles/ tests/journeys.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-. "$TESTS/teams.sh"
+. "$TESTS/journeys.sh"
 
 # The main level, with the planner stopped on a question as it starts: the others are greeted meanwhile.
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
@@ -31,41 +31,42 @@ answer() {
 answer &
 CREW_TEST_BLOCKED=wldn-planner expect_ok crew main up wldn
 wait
-for a in wldn-design wldn-planner wldn-ops wldn-operator wldn-dispatch-chuck-herdr-alpha wldn-dispatch-mac-studio; do has "$out" "$a started"; has "$out" "$a greeted"; done
+for a in wldn-design wldn-planner wldn-ops wldn-operator; do has "$out" "$a started"; has "$out" "$a greeted"; done
+lacks "$out" "dispatch"
 has "$out" "wldn-planner is waiting on a question in its pane; answer it there and it will be greeted"
-eq "$(herdr_state $box wldn-3 '[.workspaces[].label] | join(",")')" "wldn,wldn dispatch"
+eq "$(herdr_state $box wldn-3 '[.workspaces[].label] | join(",")')" "wldn"
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator"
-eq "$(herdr_state mac-studio wldn-5 '[.agents[].name] | map(select(startswith("wldn-"))) | join(",")')" "wldn-dispatch-mac-studio"
+eq "$(herdr_state mac-studio wldn-5 '[.agents[].name] | map(select(startswith("wldn-"))) | join(",")' 2>/dev/null)" ""
 eq "$(jq -r 'select(.agent == "wldn-design") | "\(.host) \(.argv[1]) \(.argv[3])"' "$CREW_TEST_CLAUDE_LOG")" "$box claude-fable-5-1 xhigh"
-eq "$(jq -r 'select(.agent == "wldn-dispatch-mac-studio") | "\(.host) \(.argv[3]) \(.cwd)"' "$CREW_TEST_CLAUDE_LOG")" "mac-studio medium $(space mac-studio willdan)/willdan-blueprints/main"
-grep -q "^$box ssh mac-studio .*agent \(get\|prompt\) wldn-dispatch-mac-studio" "$CREW_TEST_LOG" && fail "mac-studio's dispatcher was greeted from another host"
+grep -q " ssh mac-studio " "$CREW_TEST_LOG" && fail "crew main up reached another host"
 at() { grep -n "$1" "$CREW_TEST_LOG" | head -1 | cut -d: -f1; }
 answered=$(at "stub status wldn-planner idle")
 (( $(at "agent prompt wldn-design '") < answered && answered < $(at "agent prompt wldn-planner '") )) ||
   fail "the planner's question held back the design agent, or the planner was greeted before it was answered"
 eq "$(field $box main.up On agent/wldn-design)" "agent/wldn-design agent/wldn-planner agent/wldn-ops agent/wldn-operator"
-eq "$(field mac-studio main.up On)" "agent/wldn-dispatch-mac-studio"
 expect_ok crew main up wldn
 has "$out" "wldn-design is already up"; lacks "$out" "greeted"
-eq "$(count $box main.up)" "2"
-ok "crew main up starts the main level, its operator among it, on its host and a dispatcher on each host of the partition, greeting each once, one waiting on a question once it is answered and holding back no other; a second starts and records nothing"
+eq "$(count $box main.up)" "1"
+ok "crew main up starts the main level, its operator among it, on its host and no dispatcher on any host, greeting each once, one waiting on a question once it is answered and holding back no other; a second starts and records nothing"
 
 expect_ok crew main status wldn
-for a in wldn-design wldn-planner wldn-ops wldn-operator wldn-dispatch-chuck-herdr-alpha wldn-dispatch-mac-studio; do has "$(grep "^$a " <<<"$out")" "idle"; done
+for a in wldn-design wldn-planner wldn-ops wldn-operator; do has "$(grep "^$a " <<<"$out")" "idle"; done
+lacks "$out" "dispatch"
 crew tell wldn-planner "Secret words ZQXR" >/dev/null
 eq "$(field mac-studio tell Chars)" "17"
 [[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *ZQXR* ]] || fail "a tell's text is in the run record"
-# crew send: a team's agent and the user reach the partition's operator, the door, wherever it runs.
-CREW_AGENT=swb-1-conductor expect_ok crew send swb-2 "Words QVXJ for the team"
-grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from swb-1-conductor\] (sent to swb-2) Words QVXJ for the team'" "$CREW_TEST_LOG" ||
+# crew send: another partition's agent and the user reach the partition's operator, the door, wherever it runs.
+CREW_AGENT=swancloud-planner expect_ok crew send wldn "Words QVXJ for the partition"
+grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from swancloud-planner\] (sent to wldn) Words QVXJ for the partition'" "$CREW_TEST_LOG" ||
   fail "crew send did not reach wldn-operator marked with its sender and whom it was for"
-eq "$(field mac-studio send On team/swb-2) $(field mac-studio send Chars team/swb-2) $(field mac-studio send Why team/swb-2)" "agent/wldn-operator team/swb-2 23 send swb-2"
+eq "$(field mac-studio send On agent/wldn-operator) $(field mac-studio send Chars agent/wldn-operator) $(field mac-studio send Why agent/wldn-operator)" "agent/wldn-operator 28 send wldn"
 [[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *QVXJ* ]] || fail "a send's text is in the run record"
 expect_ok crew send wldn "For the partition"
 grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from [^]]*@mac-studio\] (sent to wldn) For the partition'" "$CREW_TEST_LOG" ||
   fail "crew send from the user's shell did not reach wldn-operator"
 eq "$(count mac-studio send) $(field mac-studio tell Chars)" "2 17"
-expect_fail "crew send takes a team or a partition, not 'nosuch': teams apk-1 atl-1 brd-1 swb-1 swb-2; partitions madswan swancloud wldn" crew send nosuch "x"
+expect_fail "crew send sends to a partition by its label, not 'swb-2': partitions madswan swancloud wldn" crew send swb-2 "x"
+expect_fail "crew send sends to a partition by its label, not 'nosuch'" crew send nosuch "x"
 eq "$(count mac-studio send)" "2"
 # A word from a proposal's dock, as the board's listener pipes it: the planner is told it as the user's from the board,
 # naming the item (record 0038 §3); one for another agent than the kind's types nothing.
@@ -76,8 +77,8 @@ grep -q "^$box wldn-3 agent prompt wldn-planner '\[crew tell from [^]@ ]*@board\
   fail "crew tell --board did not reach wldn-planner marked from the board and naming the item"
 eq "$(field mac-studio tell Chars agent/wldn-planner)" "41"
 [[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *BRDW* ]] || fail "a word from the board's text is in the run record"
-expect_fail "a word on a proposal goes to wldn-planner, not swb-1-conductor" \
-  board_word '{"label":"wldn","key":"proposal:4","to":"swb-1-conductor","text":"Words BRDX for the conductor"}'
+expect_fail "a word on a proposal goes to wldn-planner, not wldn-ops" \
+  board_word '{"label":"wldn","key":"proposal:4","to":"wldn-ops","text":"Words BRDX for ops"}'
 grep -q BRDX "$CREW_TEST_LOG" && fail "a word for an agent its kind does not go to was typed"
 # herdr drops the planner's name in its pane, its session there the one crew started (briefs.17): a tell from another
 # host finds it in the pane crew keeps for it, and its host's crew gives the name back.
@@ -180,53 +181,53 @@ expect_ok crew console up wldn
 grep -q "pane run" "$CREW_TEST_LOG" && fail "console up ran a tab's command over one already running"
 ok "after a restart, console up runs each tab's command again in the shell herdr brought back, once, and leaves a tab running something else"
 
-# After a restart: panes back with no agent in them are revived, resumed or fresh; a team taken down stays down.
+# After a restart: panes back with no agent in them are revived, resumed or fresh; a main level taken down stays down.
 gone() { local p; p=$(as $box herdr --session "$1" agent get "$2" | jq -r .result.agent.pane_id); as $box herdr --session "$1" agent prompt "$p" /exit >/dev/null; }
-crew up swb-1 >/dev/null; crew up swb-2 >/dev/null; crew down swb-2 >/dev/null
-CREW_TEST_NO_MESSAGE=1 crew restart swb-1 ops --no-greet >/dev/null  # an ops never spoken to, with no conversation
-gone wldn-1 swb-1-conductor; gone wldn-1 swb-1-ops; gone wldn-3 wldn-design
+# wldn-ops's last session holds no conversation, as Claude Code keeps none for a session never spoken to.
+ops_sid=$(basename "$(ls -t $(grep -lx "CREW_AGENT=wldn-ops" "$(home_of $box)"/.local/state/crew/sessions/*) | head -1)")
+rm "$(home_of $box)"/.claude/projects/*/"$ops_sid.jsonl" || fail "wldn-ops's last session kept no transcript to remove"
+gone wldn-3 wldn-design; gone wldn-3 wldn-ops
 : > "$CREW_TEST_CLAUDE_LOG"; : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew revive
-has "$out" "swb-1-conductor resumed"; has "$out" "wldn-design resumed"
-has "$out" "swb-1-ops has no conversation to resume; starting it fresh"
-has "$out" "swb-2 was taken down; it stays down"
-for a in wldn-planner wldn-ops swb-2-conductor; do eq "$(jq -r --arg a $a 'select(.agent == $a)' "$CREW_TEST_CLAUDE_LOG" | wc -l | tr -d ' ')" "0"; done
-eq "$(greetings $box wldn-1 swb-1-conductor)" "1"; eq "$(greetings $box wldn-3 wldn-design)" "1"; eq "$(greetings $box wldn-1 swb-1-ops)" "1"
+has "$out" "wldn-design resumed"
+has "$out" "wldn-ops has no conversation to resume; starting it fresh"
+for a in wldn-planner wldn-operator; do eq "$(jq -r --arg a $a 'select(.agent == $a)' "$CREW_TEST_CLAUDE_LOG" | wc -l | tr -d ' ')" "0"; done
+eq "$(launched wldn-design | cut -d' ' -f2) $(launched wldn-ops | cut -d' ' -f2)" "resumed fresh"
+eq "$(greetings $box wldn-3 wldn-design)" "1"; eq "$(greetings $box wldn-3 wldn-ops)" "1"
 grep -q "agent prompt wldn-planner '" "$CREW_TEST_LOG" && fail "an agent that came back by itself was greeted"
 HOST=$box crew main down wldn >/dev/null
-eq "$(herdr_state $box wldn-3 '.agents | length') $(herdr_state mac-studio wldn-5 '[.agents[].name] | map(select(startswith("wldn-dispatch"))) | length')" "0 0"
+eq "$(herdr_state $box wldn-3 '.agents | length')" "0"
 : > "$CREW_TEST_CLAUDE_LOG"
 HOST=$box expect_ok crew revive
 has "$out" "wldn was taken down; it stays down"
 eq "$(wc -l < "$CREW_TEST_CLAUDE_LOG" | tr -d ' ')" "0"
 echo mac-studio > "$T/down"
-HOST=$box expect_fail "mac-studio port 22: Operation timed out" crew main up wldn
-has "$out" "wldn-dispatch-$box started"; has "$out" "wldn-dispatch-$box greeted"
+HOST=$box expect_ok crew main up wldn
+lacks "$out" "dispatch"
 rm "$T/down"
-ok "crew revive brings back the agents whose panes came back empty and greets each it brought back once, a team's ops it had to start fresh among them; a team or main level taken down stays down; main down reaches every host, and a host that does not answer fails main up once the others are up"
+ok "crew revive brings back the agents whose panes came back empty and greets each it brought back once, one it had to start fresh among them; a main level taken down stays down; and main up reaches no other host, so one that does not answer fails nothing"
 
 # herdr brings panes back dead, their folder gone at its restart, as it brought crw-2's back before test D (2026-10-18):
-# crew revive closes each and opens it again in its layout, a team's and a main level's, and picks up its agent there;
-# crew main up does the same and starts it.
-tpane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of $box)/.local/state/swb-1-team/panes"; }
+# crew revive closes each and opens it again in the main level's layout, and picks up its agent there; crew main up
+# does the same and starts it.
 mpane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of $box)/.local/state/crew/wldn-main/panes"; }
-c=$(tpane conductor); o=$(tpane ops); d=$(mpane design)
-for p in "$c" "$o"; do as $box herdr --session wldn-1 stub dead "$p" "$T/trash/gone"; done
+o=$(mpane ops); d=$(mpane design)
+as $box herdr --session wldn-3 stub dead "$o" "$T/trash/gone"
 as $box herdr --session wldn-3 stub dead "$d"
 HOST=$box expect_ok crew revive
-has "$out" "swb-1's conductor pane $c is dead: herdr could not bring it back in $T/trash/gone (Saved directory is unavailable. Restore the directory and restart this session.); crew closes it and opens it again"
-has "$out" "swb-1's ops pane $o is dead"; has "$out" "wldn's design pane $d is dead"
-has "$out" "swb-1-conductor resumed"; has "$out" "swb-1-ops resumed"; has "$out" "wldn-design resumed"
-eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-2,swb-1"
-eq "$(herdr_state $box wldn-3 '[.workspaces[].label] | join(",")')" "wldn,wldn dispatch"
-eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "planner,ops,operator,design"
+has "$out" "wldn's ops pane $o is dead: herdr could not bring it back in $T/trash/gone (Saved directory is unavailable. Restore the directory and restart this session.); crew closes it and opens it again"
+has "$out" "wldn's design pane $d is dead"
+has "$out" "wldn-ops resumed"; has "$out" "wldn-design resumed"
+eq "$(herdr_state $box wldn-3 '[.workspaces[].label] | join(",")')" "wldn"
+eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "planner,operator,design,ops"
+eq "$(herdr_state $box wldn-3 "[.panes | keys[] | select(. == \"$o\" or . == \"$d\")] | length")" "0"
 HOST=$box crew main down wldn >/dev/null
 d=$(mpane design); as $box herdr --session wldn-3 stub dead "$d"
 HOST=$box expect_ok crew main up wldn
 has "$out" "wldn's design pane $d is dead"; has "$out" "wldn-design started"; has "$out" "wldn-design greeted"
-eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "planner,ops,operator,design"
+eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "planner,operator,ops,design"
 eq "$(herdr_state $box wldn-3 "[.panes | keys[] | select(. == \"$d\")] | length")" "0"
-ok "crew revive closes the panes herdr brought back dead, a team's and a main level's, opens each again in its layout and picks up its agent there, and crew main up does the same and starts it, each saying so"
+ok "crew revive closes the main level's panes herdr brought back dead, opens each again in its layout and picks up its agent there, and crew main up does the same and starts it, each saying so"
 
 # A role its partition names a session for comes up there, in a <label> workspace of its own; up refuses while the
 # role's agent still runs where it stood, and down ends it there (record 0035).

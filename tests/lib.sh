@@ -5,8 +5,8 @@
 #     madswan, madswan-1, -2                                         business (label madswan)
 #     swancloud, swancloud-1                                         personal (label swancloud)
 #
-# Teams: swb-1 (4 units) and swb-2 (2) in wldn-1 and brd-1 in wldn-2 on the box; atl-1 in wldn-5 and apk-1 in
-# madswan-2 on mac-studio. Each host has its own HOME under hosts/<host>/home and its sessions' folders under
+# The teams file holds these three partitions alone, wldn's main level in wldn-3 on the box and madswan's and
+# swancloud's on mac-studio. Each host has its own HOME under hosts/<host>/home and its sessions' folders under
 # hosts/<host>/work/<space>. Commands run as mac-studio unless HOST says otherwise.
 set -euo pipefail
 CREW=$(cd "$TESTS/.." && pwd -P)
@@ -55,8 +55,8 @@ has() { [[ $1 == *"$2"* ]] || fail "expected '$2' in:"$'\n'"$1"; }
 lacks() { [[ $1 != *"$2"* ]] || fail "did not expect '$2' in:"$'\n'"$1"; }
 eq() { [[ $1 == "$2" ]] || fail "expected '$2', got '$1'"; }
 calls() { cat "$CREW_TEST_LOG"; }
-# merge_as <agent> <place> <branch>: what a stage's agent does to merge, as its brief has it: submits the place's head
-# without waiting, then waits on the submission with sluice wait, returning its exit
+# merge_as <agent> <place> <branch>: what Flume does to submit a place's work: submits the place's head without
+# waiting, then waits on the submission with sluice wait, returning its exit
 merge_as() {
   local id
   id=$(cd "$2" && SLUICE_AGENT=$1 sluice submit "$3" --no-wait --json 2>/dev/null | jq -r .id) && [[ $id =~ ^[0-9]+$ ]] || return 2
@@ -64,19 +64,19 @@ merge_as() {
 }
 launches() { cat "$CREW_TEST_CLAUDE_LOG"; }
 
-fixtures() {  # the teams file (version $1, default 4) and the hosts file, written into every host's HOME
-  local v=${1:-4} h
+fixtures() {  # the teams file (version 5, or an older one named: teams_old) and the hosts file, written into every host's HOME
+  local v=${1:-5} h
   for h in mac-studio chuck-herdr-alpha; do
     mkdir -p "$(home_of $h)/.config/crew" "$(home_of $h)/.config/swancloud"
     hosts_json > "$(home_of $h)/.config/swancloud/herdr-hosts.json"
-    if [[ $v == 1 ]]; then teams_v1; else teams_json "$v"; fi > "$(home_of $h)/.config/crew/teams.json"
+    if [[ $v == 5 ]]; then teams_json; else teams_old "$v"; fi > "$(home_of $h)/.config/crew/teams.json"
   done
 }
 
-# teams_json [<version>]: the teams file at that version, 4 unless named: every team on today's path and every
-# partition's main-level roles standing, `flume` false throughout, which a file below 4, or below 3 for a team, does
-# not read
-teams_json() { printf '{ "version": %s,\n' "${1:-4}"; cat <<'EOF'
+# teams_json: the teams file, version 5, its partitions alone, every partition's main-level roles standing, `flume`
+# false throughout
+teams_json() { cat <<'EOF'
+{ "version": 5,
   "partitions": [
     { "label": "wldn", "partition": "clients/willdan", "blueprints": ["WilldanGroup/willdan-blueprints"],
       "state": "WilldanGroup/crew-state", "review": {"every": 5, "hours": 4},
@@ -89,24 +89,15 @@ teams_json() { printf '{ "version": %s,\n' "${1:-4}"; cat <<'EOF'
     { "label": "swancloud", "partition": "personal", "blueprints": ["afterthought/blueprints"],
       "state": "afterthought/crew-state", "review": {"every": 5, "hours": 4},
       "machine": "mac-studio", "session": "swancloud-1",
-      "flume": {"design": false, "planner": false, "reviewer": false, "ops": false, "operator": false} } ],
-  "teams": [
-    { "name": "swb-1", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
-      "units": 4, "repos": ["switchboard-kit", "willdan-blueprints"], "flume": false },
-    { "name": "swb-2", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
-      "units": 2, "repos": ["switchboard-kit", "willdan-blueprints"], "flume": false },
-    { "name": "brd-1", "system": "Breadboard", "machine": "chuck-herdr-alpha", "session": "wldn-2",
-      "units": 2, "repos": ["breadboard-kit", "willdan-blueprints"], "flume": false },
-    { "name": "atl-1", "system": "Atlas", "machine": "mac-studio", "session": "wldn-5",
-      "units": 2, "repos": ["atlas-kit", "willdan-blueprints"], "flume": false },
-    { "name": "apk-1", "system": "Flywheel", "machine": "mac-studio", "session": "madswan-2",
-      "units": 4, "repos": ["flywheel-next", "blueprints"], "flume": false } ] }
+      "flume": {"design": false, "planner": false, "reviewer": false, "ops": false, "operator": false} } ] }
 EOF
 }
 
-teams_v1() { cat <<'EOF'
-{"teams":[{"coders":4,"machine":"chuck-herdr-alpha","name":"swb-1","repos":["switchboard-kit","willdan-blueprints"],"session":"wldn-1","system":"Switchboard"}],"version":1}
-EOF
+# teams_old <version>: the teams file as the machine's configuration wrote it for a crew that ran teams, at that
+# version, its partitions with a team listed beside them, which crew refuses
+teams_old() {
+  teams_json | jq --argjson v "$1" '.version = $v | .teams = [{name: "swb-1", system: "Switchboard", machine: "chuck-herdr-alpha",
+    session: "wldn-1", units: 4, repos: ["switchboard-kit", "willdan-blueprints"], flume: false}]'
 }
 
 hosts_json() {
@@ -176,7 +167,7 @@ world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
   local h
   gitconfig "$HOME"
   for h in mac-studio chuck-herdr-alpha; do mkdir -p "$(home_of $h)" "$T/hosts/$h/work"; gitconfig "$(home_of $h)"; done
-  fixtures "${1:-4}"
+  fixtures
   mkdir -p "$(space chuck-herdr-alpha willdan)/crew" "$(space mac-studio madswan)/crew"
   ln -s "$CREW" "$(space chuck-herdr-alpha willdan)/crew/main"
   ln -s "$CREW" "$(space mac-studio madswan)/crew/main"
@@ -197,7 +188,7 @@ acts_since() { git --git-dir "${3:-$ws}" rev-list --count --invert-grep --grep='
 rewrite() { sed -e "$2" "$1" > "$1.new" && mv "$1.new" "$1"; }
 
 # kit <host> <space> <name>: a kit's main checkout at <space>/<name>/main, with OpenSpec set up and a sluice policy
-# naming the checks its bolt branches and main require, which a bolt is given only with (teams.5), and origin, GitHub,
+# naming the checks its bolt branches and main require, which a bolt is started only with (teams.5), and origin, GitHub,
 # for both (plan.19): its origin is a bare remote under the test's remotes, as https://github.com/<owner>/<name>, its
 # owner the one the hosts file's sessions name it under, its main pushed there. A kit already standing on its remote,
 # made again on another host, is cloned from it.
@@ -299,11 +290,94 @@ exec(sys.argv[2])
 json.dump(d, open(f, "w"), indent=1)' "$f" "$2"
   done
 }
-team() { echo "[t for t in d['teams'] if t['name'] == '$1'][0]"; }
 part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }
 # role_stream <label> <role> <stream|false>: on every host, the partition's main-level role set to run as its kind in
 # that Flume stream, or to stand (record 0047 move 6)
 role_stream() { local s="'$3'"; [[ $3 == false ]] && s=False; edit teams "$(part "$1")['flume']['$2'] = $s"; }
+
+# The Flume world: every bolt's work runs in Flume places, taken by a runner whose configuration names its
+# repository (the user's ruling of 2026-11-01; Decision 1 of the-team-machinery-leaves).
+# flume_world: a runner serving wldn on each host, its own branch wldn/runner/<host> on wldn's state repository, and
+# the box's runner keeping switchboard-kit in its checkout ($k) in stream wldn where the world made one
+flume_world() {
+  [ -n "${k:-}" ] && keeps chuck-herdr-alpha switchboard-kit "$k"
+  runner_writes chuck-herdr-alpha; runner_writes mac-studio
+}
+# keeps <host> <kit> <folder> [<stream>]: the runner on <host> keeps <kit> in <folder>, as its configuration names them,
+# and the host's Flume configuration maps the kit to <stream> (wldn by default): the repository and stream Flume's status
+# of each place it takes of the kit names, which runner_writes gives a status naming none
+keeps() {
+  local d=$T/runner/$1; mkdir -p "$d"
+  python3 -c 'import json, os, sys
+f = sys.argv[1]; kept = json.load(open(f)) if os.path.exists(f) else {}
+kept[sys.argv[2]] = [sys.argv[3], sys.argv[4]]; json.dump(kept, open(f, "w"))' "$d/keeps.json" "$2" "$3" "${4:-wldn}"
+}
+# runner_writes <host> [<request> <place> <status JSON>]...: wldn/runner/<host> on the state repository as that host's
+# runner writes it, and crew never does: its runner.rec, and each request named answered launched at its place with
+# Flume's status of the place as the runner carried it, beside those an earlier call named, a status naming no
+# repository or stream given the folder the runner keeps the request's kit in and the stream its host maps it to
+# (keeps), as Flume's status names them
+runner_writes() {
+  local h=$1 d=$T/runner/$1 tree parent f; shift
+  mkdir -p "$d"
+  git --git-dir "$ws" show wldn/main:requests.rec > "$d/requests.rec" 2>/dev/null || : > "$d/requests.rec"
+  python3 - "$CREW/plugin/lib" "$d" "$h" "$@" <<'EOF'
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+import runner
+d, h, args = sys.argv[2], sys.argv[3], sys.argv[4:]
+f = os.path.join(d, "kept.json")
+kept = json.load(open(f)) if os.path.exists(f) else {}
+keeps = json.load(open(os.path.join(d, "keeps.json"))) if os.path.exists(os.path.join(d, "keeps.json")) else {}
+recs = [dict(l.split(": ", 1) for l in r.splitlines() if ": " in l and not l.startswith(("%", "#")))
+        for r in open(os.path.join(d, "requests.rec")).read().split("\n\n")]
+repo = {r["Request"]: r.get("Repo", "").split("/")[-1] for r in recs if "Request" in r}
+for i in range(0, len(args), 3):
+    status = json.loads(args[i + 2])
+    for p in status.get("status", {}).get("places", []):
+        if repo.get(args[i]) in keeps:
+            folder, stream = keeps[repo[args[i]]]
+            p.setdefault("repository", folder)
+            p.setdefault("stream", {"name": stream, "from": "intent"})
+    kept[args[i]] = [args[i + 1], status]
+json.dump(kept, open(f, "w"))
+at = "2026-10-31T12:01:00Z"
+files = {"runner": runner.RUNNER + f"\nHost: {h}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n",
+         "answers": runner.ANSWERS + "".join(f"\nRequest: {n}\nOutcome: launched\nPlace: {p}\nAt: {at}\n" for n, (p, _) in sorted(kept.items(), key=lambda x: int(x[0]))),
+         "places": runner.PLACES + "".join(f"\nRequest: {n}\nPlace: {p}\nAt: {at}\nStatus: {json.dumps(s)}\n" for n, (p, s) in sorted(kept.items(), key=lambda x: int(x[0])))}
+for name, text in files.items():
+    open(os.path.join(d, f"{name}.rec"), "w").write(text)
+EOF
+  tree=$(for f in runner answers places; do printf '100644 blob %s\t%s.rec\n' "$(git --git-dir "$ws" hash-object -w "$d/$f.rec")" "$f"; done |
+    git --git-dir "$ws" mktree)
+  parent=$(git --git-dir "$ws" rev-parse -q --verify "refs/heads/wldn/runner/$h") || parent=
+  git --git-dir "$ws" update-ref "refs/heads/wldn/runner/$h" "$(git --git-dir "$ws" -c user.name=runner -c user.email=runner@example.com \
+    commit-tree "$tree" ${parent:+-p "$parent"} -m "runner: $h")"
+}
+# landed_status <place> <commit>: Flume's status of a place whose work has landed at the commit, as runner_writes takes it
+landed_status() { printf '{"status":{"places":[{"place":"%s","phase":{"over":{"over":{"landed":{"commit":"%s"}}}},"current":"verify","stages":[]}]}}' "$1" "$2"; }
+# request_of <work>: the number of the newest launch of the work (unit/<u>, chore/<c>, fix/<bolt>/<name>) in requests.rec
+request_of() { git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Act = 'launch' && Work = '$1'" -P Request | tail -1; }
+# flume_lands <host> <unit|chore> <name> <bolt> [<file>]: what Flume does with a launched unit or chore once it has
+# built: its place, cut from the bolt on GitHub, commits its work, a unit's change written and archived and a chore's
+# commit carrying its trailer, and submits it to the bolt through sluice, which lands it there as a merge commit
+# carrying its verdict; then the runner on <host> carries Flume's status of the place, landed at the bolt's new head
+flume_lands() {
+  local h=$1 kind=$2 n=$3 b=$4 p=$T/flume/$3 head
+  git -C "$k" fetch -q origin
+  git -C "$k" worktree add -q -b "$kind/$n" "$p" "origin/bolt/$b"
+  git -C "$p" branch -q --set-upstream-to "origin/bolt/$b"
+  if [[ $kind == unit ]]; then
+    change "$p" "$n" 3 3; mkdir -p "$p/openspec/changes/archive"; mv "$p/openspec/changes/$n" "$p/openspec/changes/archive/2026-10-31-$n"
+    commit_all "$p" "docs($n): the change, archived"
+  else
+    echo "$n" > "$p/${5:-$n}"; git -C "$p" add -A && git -C "$p" commit -qm "chore($n): $n" -m "Chore: $n"
+  fi
+  merge_as "flume" "$p" "bolt/$b" || fail "$n's submission to bolt/$b failed"
+  git -C "$k" fetch -q origin; head=$(git -C "$k" rev-parse "origin/bolt/$b")
+  git -C "$k" worktree remove --force "$p"
+  runner_writes "$h" "$(request_of "$kind/$n")" "$p" "$(landed_status "$p" "$head")"
+}
 
 # race <owner/name> <host> <agent> <crew args...>: the next push to that remote first lets this crew write land,
 # run as <agent> on <host> from the remote's pre-receive hook, so the push in flight finds the branch moved.
@@ -360,8 +434,9 @@ ago() { python3 -c 'import datetime, sys; t = datetime.datetime.now(datetime.tim
 
 # herdr_state <host> <session> <jq>: what the stub herdr holds there
 herdr_state() { jq -r "$3" "$(home_of "$1")/.stub-herdr/$2.json"; }
-# team_world: the box's switchboard-kit and willdan-blueprints checkouts, and the plan with swb-1 holding a bolt
-team_world() {
+# bolt_world: the box's switchboard-kit and willdan-blueprints checkouts, and wldn's flywheel started, its plan
+# empty, which a test's bolts and units fill as the planner's commands do
+bolt_world() {
   world
   wb=$(blueprints WilldanGroup/willdan-blueprints); ws=$(remote WilldanGroup/crew-state)
   k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")

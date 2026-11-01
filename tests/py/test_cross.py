@@ -1,196 +1,25 @@
-"""A team crossing to Flume, one team at a time (record 0050 parts 2 and 3, the change
-teams-cross-to-flume-as-their-bolts-land): a team's path from its setting and the bolts it holds (runner.team_path,
-runner.path_of). The commands that act on it, a give's refusal and a crossed team's end, are the cross journey's
-(t-journey-cross)."""
+"""A team's work through Flume (record 0050 parts 2 and 3, the change teams-cross-to-flume-as-their-bolts-land; Decisions 1
+and 14 of the-team-machinery-leaves): a team runs no standing agent, every standing-agent or slot command of it refused; a
+start launches its bolt whole; plan writes reach its places; a place is answered by a retry. The commands that act on it are
+the cross journey's (t-journey-cross)."""
 import re
 
 import pytest
 
-from facts import crossed_fleet, flume_plan
+from facts import flume_plan, madswan_fleet
 import plan
 import runner
 
 CREW = "crew"
 
 
-def plan_with(bolts):
-    """A plan whose bolts are given as (name, team or None, Path or None), in order."""
-    return plan.Plan("%rec: Bolt\n%key: Bolt\n\n" + "".join(
-        f"Bolt: {b}\nRepo: {CREW}\nGoal: Goal of {b}.\n" + (f"Team: {t}\n" if t else "") + (f"Path: {p}\n" if p else "") + "\n"
-        for b, t, p in bolts) + "%rec: Unit\n%key: Unit\n")
-
-
 def team(flume, name="crw-4"):
     return {"name": name, "flume": flume, "label": "madswan", "machine": "deneb"}
 
 
-class TestPath:
-    """A team's path is today's, due or crossed, from its setting and the Path of each bolt it holds (Decision 2)."""
-
-    @pytest.mark.parametrize("setting, held, path", [
-        (False, [], ("today", None)),
-        (False, [None], ("today", None)),
-        (False, [None, None], ("today", None)),
-        ("madswan", [], ("crossed", None)),
-        ("madswan", ["flume"], ("crossed", None)),
-        ("madswan", ["flume", "flume"], ("crossed", None)),
-        ("madswan", [None], ("due", "cross")),
-        ("madswan", ["flume", None], ("due", "cross")),
-        (False, ["flume"], ("due", "back")),
-        (False, [None, "flume"], ("due", "back"))])
-    def test_the_setting_and_each_bolt_held_give_the_path(self, setting, held, path):
-        assert runner.team_path(setting, held) == path
-
-    def test_the_setting_turned_on_while_the_team_builds_a_bolt_of_todays_path_makes_it_due_to_cross(self):
-        p = plan_with([("x", "crw-4", None), ("y", None, None)])
-        assert runner.path_of(p, team("madswan")) == ("due", "cross")
-
-    def test_a_team_holding_nothing_when_its_setting_turns_on_is_crossed(self):
-        assert runner.path_of(plan_with([("x", "crw-5", None)]), team("madswan")) == ("crossed", None)
-
-    def test_turned_back_while_it_holds_a_bolt_given_through_flume_it_is_due_back(self):
-        assert runner.path_of(plan_with([("y", "crw-4", "flume")]), team(False)) == ("due", "back")
-
-    def test_only_the_teams_own_bolts_count(self):
-        p = plan_with([("x", "crw-5", None), ("y", "crw-4", "flume")])
-        assert runner.path_of(p, team("madswan")) == ("crossed", None)
-        assert runner.path_of(p, team("madswan", "crw-5")) == ("due", "cross")
-
-
-class TestDue:
-    """A team due to cross is given no new bolt, and no dispatcher is told it can take one (Decision 2)."""
-
-    def test_a_give_to_a_due_team_is_refused_naming_each_bolt_and_the_path_it_was_given_on(self):
-        assert runner.due_refusal("crw-4", ("due", "cross"), [("x", None)]) == (
-            "crw-4 is due to cross to Flume, so it is given no bolt now: it holds x, given on today's path, and is given its next "
-            "bolt once x has landed or been dropped")
-
-    def test_two_bolts_of_todays_path_are_both_named_and_both_finished_first(self):
-        assert runner.due_refusal("crw-4", ("due", "cross"), [("x", None), ("z", None)]).endswith(
-            "it holds x and z, given on today's path, and is given its next bolt once x and z have landed or been dropped")
-
-    def test_due_back_names_the_bolts_given_through_flume_as_the_ones_it_finishes_first(self):
-        assert runner.due_refusal("crw-4", ("due", "back"), [("y", "flume"), ("x", None)]) == (
-            "crw-4 is due back to today's path, so it is given no bolt now: it holds y, given through Flume and x, given on "
-            "today's path, and is given its next bolt once y has landed or been dropped")
-
-    @pytest.mark.parametrize("path", [("today", None), ("crossed", None)])
-    def test_a_team_that_is_not_due_is_not_refused_for_it(self, path):
-        assert runner.due_refusal("crw-4", path, [("x", None)]) is None
-
-    def test_a_proven_bolt_waiting_to_land_on_a_due_team_tells_no_dispatcher_it_is_free(self):
-        p = plan_with([("x", "crw-4", None), ("next", None, None)])
-        assert not plan.free_now(plan.give_due(p, team("madswan")) or plan.give_refusal("crw-4", []), "next")
-        assert plan.free_now(plan.give_due(p, team(False)) or plan.give_refusal("crw-4", []), "next")
-
-    def test_a_bolt_landed_by_a_team_the_write_leaves_due_tells_no_dispatcher(self):
-        teams = {"crw-4": team("madswan"), "crw-5": team(False, "crw-5")}
-        after = plan_with([("z", "crw-4", None), ("w", "crw-5", None)])
-        assert plan.due_teams({"teams": teams}, after) == {"crw-4"}
-
-        def told(freed_by):
-            seen = dict(before={"x": freed_by}, after={}, touched=["x"], quiet=set(), due=plan.due_teams({"teams": teams}, after))
-            return plan.notices(teams, seen, "madswan-ops", "plan(x): land the bolt (madswan-ops)")[2]
-        assert not told("crw-4")
-        assert told("crw-5")
-
-
-def entry(act, on, refused=None):
-    """A run-record entry as record.parse gives one."""
-    return {"Act": act, "On": on, **({"Refused": refused} if refused else {})}
-
-
-class TestCrossing:
-    """Once a team has crossed, its conductor and ops are due an end, and its crossing is closed once neither is up,
-    once, however they went down (Decision 3)."""
-
-    def test_once_crossed_every_role_up_is_due_an_end(self):
-        assert runner.cross_due(("crossed", None), ["conductor", "ops"]) == ["conductor", "ops"]
-        assert runner.cross_due(("crossed", None), ["ops"]) == ["ops"]
-        assert runner.cross_due(("crossed", None), []) == []
-
-    @pytest.mark.parametrize("path", [("today", None), ("due", "cross"), ("due", "back")])
-    def test_a_team_that_has_not_crossed_owes_its_agents_nothing(self, path):
-        assert runner.cross_due(path, ["conductor", "ops"]) == []
-        assert not runner.cross_close(path, [], False)
-
-    def test_a_crossed_team_with_neither_role_up_is_closed_once(self):
-        assert runner.cross_close(("crossed", None), [], False)
-        assert not runner.cross_close(("crossed", None), [], True)
-
-    @pytest.mark.parametrize("up", [["conductor"], ["ops"], ["conductor", "ops"]])
-    def test_a_crossed_team_with_a_role_up_is_closed_by_that_roles_end(self, up):
-        assert not runner.cross_close(("crossed", None), up, False)
-
-    def test_the_crossing_is_recorded_once_the_teams_newest_cross_or_start_is_its_crossing(self):
-        up = entry("team.up", ["team/crw-4", "agent/crw-4-conductor", "agent/crw-4-ops"])
-        cross = entry("team.cross", ["team/crw-4"])
-        assert runner.cross_recorded([up, entry("host.down", ["team/crw-4", "agent/crw-4-ops"]), cross,
-                                      entry("agent.end", ["team/crw-4", "agent/crw-4-ops"])], "crw-4") is True
-        assert runner.cross_recorded([up, entry("agent.end", ["team/crw-4", "agent/crw-4-ops"])], "crw-4") is False
-
-    @pytest.mark.parametrize("act", runner.STARTS)
-    def test_a_start_after_a_crossing_is_a_crossing_the_team_came_back_from(self, act):
-        assert runner.cross_recorded([entry("team.cross", ["team/crw-4"]), entry(act, ["team/crw-4", "agent/crw-4-ops"])], "crw-4") is False
-
-    def test_another_teams_acts_and_a_refused_start_tell_nothing(self):
-        cross = entry("team.cross", ["team/crw-4"])
-        assert runner.cross_recorded([cross, entry("team.up", ["team/crw-5", "agent/crw-5-ops"]),
-                                      entry("team.up", ["team/crw-4"], refused="crw-4 has crossed to Flume")], "crw-4") is True
-        assert runner.cross_recorded([entry("team.cross", ["team/crw-5"]), entry("tell", ["agent/crw-4-ops"])], "crw-4") is None
-        assert runner.cross_recorded([], "crw-4") is None
-
-
-class TestNoStandingAgent:
-    """A crossed team runs no standing agent: every standing-agent or slot command of it is refused at once, naming
-    where its work runs (Decision 15)."""
-    FLEET = {"teams": {}, "partitions": {"madswan": {"label": "madswan"}}}
-
-    def test_a_crossed_teams_command_is_refused_naming_flume_its_host_its_stream_and_crew_bolts(self):
-        assert runner.crossed_refusal("crw-4", ("crossed", None), "madswan", "deneb", "up crw-4") == (
-            "crw-4 has crossed to Flume: its work runs in Flume places on deneb, in stream madswan, and crew bolts shows them; it "
-            "runs no conductor, ops or slot, so crew up crw-4 has nothing of it to act on")
-
-    @pytest.mark.parametrize("path", [("today", None), ("due", "cross"), ("due", "back")])
-    def test_a_team_that_has_not_crossed_is_not_refused_for_it(self, path):
-        assert runner.crossed_refusal("crw-4", path, "madswan", "deneb", "up crw-4") is None
-
-    def reads(self, monkeypatch, found, errors=None):
-        read = []
-
-        def plans(fleet, labels, errs=None):
-            read.append(labels)
-            errs.update(errors or {})
-            return [] if errors else [("madswan", "afterthought/crew-state", "a" * 40 if found else None, found)]
-        monkeypatch.setattr(plan, "plans", plans)
-        return read
-
-    def test_a_team_whose_setting_is_off_is_not_refused_and_its_plan_is_not_read(self, monkeypatch):
-        read = self.reads(monkeypatch, plan_with([("x", "crw-4", None)]))
-        plan.not_crossed(self.FLEET, team(False), "up crw-4")
-        assert read == []
-
-    def test_a_crossed_team_is_refused_from_its_plan_and_a_due_one_is_not(self, monkeypatch):
-        self.reads(monkeypatch, plan_with([("x", "crw-4", "flume")]))
-        with pytest.raises(plan.Refusal, match="^crw-4 has crossed to Flume: its work runs in Flume places on deneb"):
-            plan.not_crossed(self.FLEET, team("madswan"), "up crw-4")
-        self.reads(monkeypatch, plan_with([("x", "crw-4", None)]))
-        plan.not_crossed(self.FLEET, team("madswan"), "up crw-4")
-
-    def test_a_branch_not_started_holds_no_bolt_of_the_team_so_it_has_crossed(self, monkeypatch):
-        self.reads(monkeypatch, None)
-        assert plan.crossing_path(self.FLEET, team("madswan")) == ("crossed", None)
-
-    def test_a_plan_that_cannot_be_read_refuses_naming_it(self, monkeypatch):
-        self.reads(monkeypatch, None, {"madswan/main of afterthought/crew-state": "timed out"})
-        with pytest.raises(plan.Refusal, match="^can't tell whether crw-4 has crossed to Flume: madswan/main of "
-                                               "afterthought/crew-state could not be read: timed out$"):
-            plan.not_crossed(self.FLEET, team("madswan"), "up crw-4")
-
-
 # ------------------------------------------------------------------------------------- a crossed team's bolt launched
 
-FLEET = crossed_fleet()
+FLEET = madswan_fleet()
 
 
 def unit(name, bolt="x", after=(), kind="unit", sources=()):
@@ -215,9 +44,10 @@ def requests(w):
 
 
 def launch(n, work, name, after=(), kind="change", bolt="x", priority="1", brief=None):
-    """A launch request as a give writes it for crw-4 on deneb."""
-    d = {"Request": str(n), "Act": "launch", "Host": "deneb", "Work": work, "Repo": "afterthought/crew", "Kind": kind, "Name": name,
-         "Base": f"bolt/{bolt}", "Stream": "madswan", "Priority": priority, "Intent": f"madswan/{bolt}", "Recipient": "madswan/planner"}
+    """A launch request as a start writes it, in crew's repository as the plan names it and naming no host or stream,
+    for a runner whose configuration names it to take (the user's ruling of 2026-11-01)."""
+    d = {"Request": str(n), "Act": "launch", "Work": work, "Repo": CREW, "Kind": kind, "Name": name,
+         "Base": f"bolt/{bolt}", "Priority": priority, "Intent": f"madswan/{bolt}", "Recipient": "madswan/planner"}
     if after:
         d["After"] = [str(a) for a in after]
     d["Brief"] = brief or f"Build {name}."
@@ -225,63 +55,63 @@ def launch(n, work, name, after=(), kind="change", bolt="x", priority="1", brief
 
 
 def given(*bolts, work=(), files=None, runners=None):
-    """A write over madswan's plan, each bolt given as (name, team or None, Path or None)."""
+    """A write over madswan's plan, each bolt as (name, started, Path or None) (facts.flume_plan)."""
     from facts import FactsWrite
     return FactsWrite(flume_plan(bolts, work), files=files, runners=runners, label="madswan")
 
 
-def give(w, bolt, team="crw-4"):
-    """What a give's change function does for a crossed team once sluice made the branch: Team and Path: flume set,
-    and the bolt's work launched (plan.reach_places)."""
-    b = w.plan.bolt(bolt)
-    b.set("Team", team)
-    b.set("Path", "flume", after="Team")
-    return plan.reach_places(FLEET, w, bolt, FLEET["teams"][team])
+def start(w, bolt):
+    """What a start's change function does once sluice made the branch (plan.op_bolt_start): Path: flume set, no Team,
+    and the bolt's work launched in its repository (plan.reach_places)."""
+    w.plan.bolt(bolt).set("Path", "flume")
+    return plan.reach_places(FLEET, w, bolt)
 
 
-class TestGive:
-    """A give to a crossed team launches its bolt whole (Decision 5): a launch per unit and chore, in the file's order,
-    each after the launches of its After work, and no bound for the bolts the team holds."""
+class TestStart:
+    """A start launches its bolt whole (Decision 5 of teams-cross-to-flume-as-their-bolts-land, Decision 14 of
+    the-team-machinery-leaves): a launch per unit and chore, in the file's order, each after the launches of its After
+    work, with no team on the bolt and no bound for the bolts already started."""
 
     def test_a_bolt_of_three(self):
-        """crew bolt give crw-4 x, x holding units a and b, b after a, and chore c: three launches of change, change and
-        chore on bolt/x, b's naming a's as its After."""
+        """crew bolt start x, x holding units a and b, b after a, and chore c: three launches of change, change and
+        chore on bolt/x, b's naming a's as its After, and the bolt marked started with no Team."""
         w = given(("x", None, None), work=[unit("a", sources=["signals/s1", "README.md"]), unit("b", after=["a"]), unit("c", kind="chore")])
-        assert give(w, "x") == [(1, "unit/a"), (2, "unit/b"), (3, "chore/c")]
+        assert start(w, "x") == [(1, "unit/a"), (2, "unit/b"), (3, "chore/c")]
         assert requests(w) == [launch(1, "unit/a", "a", brief="Build a. Sources: signals/s1; README.md."),
                                launch(2, "unit/b", "b", after=[1]), launch(3, "chore/c", "c", kind="chore")]
-        assert (w.plan.bolt("x").get("Team"), w.plan.bolt("x").get("Path")) == ("crw-4", "flume")
+        assert (w.plan.bolt("x").get("Team"), w.plan.bolt("x").get("Path")) == (None, "flume")
+        assert plan.started(w.plan.bolt("x"))
 
     def test_a_dependent_listed_first_is_launched_after_its_after_work(self):
         w = given(("x", None, None), work=[unit("b", after=["a"]), unit("a")])
-        assert give(w, "x") == [(1, "unit/a"), (2, "unit/b")]
+        assert start(w, "x") == [(1, "unit/a"), (2, "unit/b")]
         assert requests(w)[1]["After"] == ["1"]
 
     def test_a_chores_brief_is_its_words_alone(self):
         w = given(("x", None, None), work=[unit("c", kind="chore", sources=["signals/s1"])])
-        give(w, "x")
+        start(w, "x")
         assert requests(w)[0]["Brief"] == "Build c."
 
-    def test_a_crossed_team_takes_a_third_bolt_and_its_launches_follow_the_requests_already_written(self):
-        """crw-4 holds x and y, each with work launched, and is given z: z is launched, nothing refused for x and y."""
+    def test_a_third_bolt_started_has_its_launches_follow_the_requests_already_written(self):
+        """x and y are started, each with work launched, and z is started: z is launched, nothing refused for x and y."""
         w = given(("x", None, None), ("y", None, None), ("z", None, None),
                   work=[unit("a"), unit("b", bolt="y"), unit("c", bolt="z")])
-        give(w, "x")
-        give(w, "y")
-        assert give(w, "z") == [(4, "unit/c")]
+        start(w, "x")
+        start(w, "y")
+        assert start(w, "z") == [(4, "unit/c")]
         assert [r["Act"] for r in requests(w)] == ["launch", "launch", "priority", "launch", "priority", "priority"]
 
-    def test_a_give_with_no_runner_on_the_host_is_refused_naming_it(self):
-        """crw-4 is crossed on deneb and the state repository has no madswan/runner/deneb."""
-        assert runner.runnerless("madswan", "deneb", {"alpha": "a" * 40}) == (
-            "no runner answers on deneb: madswan/runner/deneb does not exist, so nothing would launch the bolt's work there; a "
-            "give to a team crossed to Flume waits for the runner (flywheel-runner) to serve the partition there")
-        assert runner.runnerless("madswan", "deneb", {"deneb": "a" * 40}) is None
+    def test_a_start_with_no_runner_for_the_partition_is_refused_naming_it(self):
+        """The state repository holds no madswan/runner/<host> at all: nothing would take the bolt's work."""
+        assert runner.runnerless("madswan", {}) == (
+            "no runner answers for madswan: its state repository holds no madswan/runner/<host>, so nothing would take the bolt's "
+            "work; a start waits for a runner (flywheel-runner) to serve the partition")
+        assert runner.runnerless("madswan", {"alpha": "a" * 40}) is None
 
-    def test_what_the_give_says_names_each_launch_and_that_no_agent_starts(self):
-        assert plan.launched_said(FLEET["teams"]["crw-4"], "x", [(1, "unit/a"), (2, "chore/c")]) == (
-            "crw-4 has crossed to Flume, so no agent of it starts: the runner on deneb launches unit/a (request 1), chore/c "
-            "(request 2) in stream madswan, and crew bolts shows their places")
+    def test_what_the_start_says_names_each_launch_and_that_no_agent_starts(self):
+        assert plan.launched_said("crew", "x", [(1, "unit/a"), (2, "chore/c")]) == (
+            "no agent starts: unit/a (request 1), chore/c (request 2) is launched in crew, for a runner whose configuration "
+            "names it to take, in the stream its host maps it to, and crew bolts shows their places")
 
 
 def ops(w, *dos, stages=None, n=None):
@@ -291,10 +121,10 @@ def ops(w, *dos, stages=None, n=None):
 
 
 def launched(*bolts, work=(), runners=None):
-    """A write over a plan whose bolts are each given to crw-4 through Flume, their work launched as the give launches it."""
+    """A write over a plan whose bolts are each started, their work launched as the start launches it."""
     w = given(*[(b, None, None) for b in bolts], work=work, runners=runners)
     for b in bolts:
-        give(w, b)
+        start(w, b)
     return w
 
 
@@ -307,8 +137,8 @@ class TestReach:
         ops(w, 'unit add b "Build b." --bolt x --after a', 'chore add c "Build c." --bolt x')
         assert requests(w)[1:] == [launch(2, "unit/b", "b", after=[1]), launch(3, "chore/c", "c", kind="chore")]
 
-    def test_work_added_to_a_bolt_of_todays_path_or_the_queue_is_not_launched(self):
-        w = given(("x", "crw-5", None), work=[unit("a")])
+    def test_work_added_to_a_bolt_not_started_or_the_queue_is_not_launched(self):
+        w = given(("x", None, None), work=[unit("a")])
         ops(w, 'unit add b "Build b." --bolt x', f'unit add q "Build q." --repo {CREW}')
         assert "requests.rec" not in w.files
 
@@ -318,18 +148,14 @@ class TestReach:
         assert requests(w)[1] == launch(2, "unit/q", "q")
 
     def test_launched_work_moved_out_is_refused_naming_its_place_and_drop_then_add(self):
-        """A proposal moves a, launched on crossed crw-4's x, to bolt y."""
+        """A proposal moves a, launched on started x, to bolt y: bolt-teams "A move of launched work", and plan-proposals
+        "A unit with a worktree is moved", refused with nothing rebased."""
         w = launched("x", work=[unit("a")])
         w.plan.insert(plan.Rec("Bolt", [("Bolt", "y"), ("Repo", CREW), ("Goal", "Goal of y.")]))
         with pytest.raises(plan.Refusal, match=r"^unit a is launched as Flume place a on bolt/x \(request 1\), whose base and order are fixed "
                                                r"at its launch, so it is not moved to y: drop it \(crew unit drop a\) and add it again as it "
                                                r"should be \(crew unit add\)$"):
             ops(w, "unit move a y")
-
-    def test_work_with_a_place_on_todays_path_does_not_move_into_a_crossed_bolt(self):
-        w = given(("x", "crw-4", "flume"), ("t", "crw-5", None), work=[unit("a", bolt="t")])
-        with pytest.raises(plan.Refusal, match="^unit a has a place at /kit/places/a on today's path, and bolt x is built through Flume"):
-            ops(w, "unit move a x", stages={"a": "code"})
 
     def test_a_split_of_launched_work_is_refused(self):
         w = launched("x", work=[unit("a")])
@@ -358,55 +184,96 @@ class TestReach:
     def test_a_dropped_bolt_drops_every_place_it_launched_and_requeued_too(self):
         w = launched("x", work=[unit("a"), unit("c", kind="chore")])
         w.files["requests.rec"] += "\n" + "\n".join(plan.Rec("Request", runner.request_fields(
-            3, "launch", "deneb", "fix/x/tidy", dict(launch(3, "fix/x/tidy", "x--tidy"), Kind="fix"), "2026-10-31T12:00:00Z", "madswan-planner")).lines()) + "\n"
+            3, "launch", "fix/x/tidy", dict(launch(3, "fix/x/tidy", "x--tidy"), Kind="fix"), "2026-10-31T12:00:00Z", "madswan-planner")).lines()) + "\n"
         ops(w, 'bolt drop x "Not needed."')
         assert [(r["Act"], r["Work"], r.get("Of")) for r in requests(w)[3:]] == [
             ("drop", "unit/a", "1"), ("drop", "chore/c", "2"), ("drop", "fix/x/tidy", "3")]
         w = launched("x", work=[unit("a")])
-        ops(w, 'bolt drop x "Later." --requeue')
+        ops(w, 'bolt drop x "Later." --requeue')  # bolt-plan "Requeuing a unit that has a place": its launch dropped, not refused
         assert [(r["Act"], r.get("Of")) for r in requests(w)[1:]] == [("drop", "1")]
+        assert w.plan.item("a").get("Bolt") is None and w.plan.bolt("x") is None
 
-    def test_a_unit_added_to_a_crossed_bolt_of_a_team_turned_back_runs_on_in_the_stream_its_launches_named(self):
-        w = launched("x", work=[unit("a")])
-        back = dict(FLEET["teams"]["crw-4"], flume=False)
-        w.plan.insert(plan.Rec("Unit", [("Unit", "b"), ("Repo", CREW), ("Bolt", "x"), ("Intent", "Build b.")]))
-        plan.reach_places(FLEET, w, "x", back)
-        assert requests(w)[1]["Stream"] == "madswan"
+    def test_a_drop_no_runner_has_taken_work_of_is_swept_in_the_main_level_hosts_checkout(self, monkeypatch):
+        """bolt-plan "The drop's host does not answer", for a started bolt whose work no runner has reported taking: its
+        branch was made on the main-level host's checkout, so the drop asks sluice there; with no checkout there, why."""
+        b = launched("x", work=[unit("a")]).plan.bolt("x")
+        monkeypatch.setattr(plan, "known_at", lambda *a, **k: None)
+        kept = {"name": CREW, "repo": "afterthought/crew", "dir": "/w/crew", "main": "/w/crew/main"}
+        monkeypatch.setattr(plan.crew, "kit_kept", lambda fleet, host, kit: kept)
+        assert plan.drop_at(FLEET, "madswan", b) == ({"label": "madswan", "machine": "deneb", "stream": None, "kit": kept}, None)
+        monkeypatch.setattr(plan.crew, "kit_kept", lambda fleet, host, kit: None)
+        assert plan.drop_at(FLEET, "madswan", b) == (None, "madswan's main level runs on deneb, and no space there keeps crew, so "
+                                                           "crew can't ask sluice to delete bolt/x there")
+        w = given(("y", None, None), work=[unit("q", bolt="y")])
+        assert plan.drop_at(FLEET, "madswan", w.plan.bolt("y")) == (None, None)
 
-    def test_a_bolt_given_to_a_team_the_teams_file_does_not_name_is_refused(self):
-        w = given(("x", "crw-9", "flume"), work=[unit("a")])
-        with pytest.raises(plan.Refusal, match="^bolt x is given to crw-9, which .*teams.json does not name, so crew can't tell where its work runs$"):
+    def test_a_bolt_not_started_is_refused(self):
+        w = given(("x", None, None), work=[unit("a")])
+        with pytest.raises(plan.Refusal, match="^bolt x is not started, so nothing of its work is launched$"):
             plan.reach_places(FLEET, w, "x")
 
 
-class TestPlanned:
-    """A bolt planned in a kit a crossed team builds, held by no team, is told to the partition's dispatchers that are up
-    as theirs to give it (Decisions 3 and 5)."""
-
-    def test_a_planned_bolt_of_a_crossed_teams_kit_names_the_team_and_the_give(self):
-        p = flume_plan([("x", "crw-4", "flume"), ("next", None, None)])
-        assert plan.planned_takers(FLEET, "madswan", plan.Plan(p), ["next"]) == {"next": ["crw-4"]}
-        assert plan.dispatch_said("plan(next): add the bolt (madswan-planner)", {"next": ["crw-4"]}) == (
-            "plan(next): add the bolt (madswan-planner). bolt next can be given to crw-4, which has crossed to Flume and takes "
-            "each planned bolt of its kits: crew bolt give crw-4 next.")
-
-    def test_two_crossed_teams_building_the_kit_are_both_named(self):
-        fleet = crossed_fleet(**{"crw-5": "madswan"})
-        assert plan.planned_takers(fleet, "madswan", plan.Plan(flume_plan([("next", None, None)])), ["next"]) == {"next": ["crw-4", "crw-5"]}
-        assert runner.planned_said("next", ["crw-4", "crw-5"]) == (
-            "bolt next can be given to crw-4 or crw-5, which have crossed to Flume and take each planned bolt of their kits: "
-            "crew bolt give crw-4 next or crew bolt give crw-5 next")
-
-    def test_no_crossed_team_of_the_kit_held_or_gone_or_due_names_none_and_the_tell_is_todays(self):
-        p = plan.Plan(flume_plan([("x", "crw-4", None), ("held", "crw-5", None), ("next", None, None)]))
-        assert plan.planned_takers(FLEET, "madswan", p, ["next", "held", "gone"]) == {}
-        other = dict(FLEET, teams={"crw-4": dict(FLEET["teams"]["crw-4"], label="wldn")})
-        assert plan.planned_takers(other, "madswan", plan.Plan(flume_plan([("next", None, None)])), ["next"]) == {}
-        assert plan.dispatch_said("plan(next): add the bolt (madswan-planner)", {}) == (
-            "plan(next): add the bolt (madswan-planner). Give a free team its next bolt.")
+def submitted(*states):
+    """The run record of x's landing, oldest first, each state (Outcome queued, a refusal with its head, or landed) as
+    crew bolt submit and the landing's read record them."""
+    out = []
+    for i, s in enumerate(states):
+        n, head = str(412 + i // 2), "abc1234" + str(i // 2) * 33
+        f = dict(Outcome="queued") if s == "queued" else dict(Outcome="landed") if s == "landed" else dict(Refused="#%s conflict: README.md" % n)
+        out.append(dict(Act="bolt.submit", On=["bolt/x"], Submission=n, Head=head, **f))
+    return out
 
 
-# ------------------------------------------------------------------------------------- a crossed team's place answered
+class TestALandingQueuedHoldsTheBoltsWork:
+    """bolt-teams "A landing queued holds its bolt's work" (plan.8): while the run record has x's landing queued, or
+    landing again, with no outcome, a unit or chore added to x or moved into it is refused naming the landing, at the tip
+    the write is applied to, and nothing is launched; once sluice has rejected it, the bolt is open for work again."""
+
+    def test_a_unit_or_chore_added_while_the_landing_is_queued_is_refused_and_nothing_launched(self):
+        for do, what in (('unit add b "Build b." --bolt x', "unit b"), ('chore add c "Build c." --bolt x', "chore c")):
+            w = launched("x", work=[unit("a")])
+            w.logged = submitted("queued")
+            before = w.files["requests.rec"]
+            with pytest.raises(plan.Refusal, match=rf"^bolt x has its landing queued on main as #412, so {what} does not join it until "
+                                                   r"sluice decides: .* once sluice has rejected the landing$"):
+                ops(w, do)
+            assert w.files["requests.rec"] == before
+
+    def test_work_moved_in_from_the_queue_while_the_landing_is_queued_is_refused(self):
+        w = launched("x", work=[unit("a"), unit("q", bolt=None)])
+        w.logged = submitted("queued")
+        with pytest.raises(plan.Refusal, match=r"^bolt x has its landing queued on main as #412, so unit q does not join it"):
+            ops(w, "unit move q x")
+
+    def test_once_sluice_has_rejected_the_landing_work_joins_the_bolt_and_is_launched(self):
+        w = launched("x", work=[unit("a"), unit("q", bolt=None)])
+        w.logged = submitted("queued", "rejected")
+        ops(w, 'unit add b "Build b." --bolt x', "unit move q x")
+        assert [r["Work"] for r in requests(w)[1:]] == ["unit/b", "unit/q"]
+
+    def test_landing_again_holds_the_work_again_naming_the_rejection(self):
+        w = launched("x", work=[unit("a")])
+        w.logged = submitted("queued", "rejected", "queued")
+        with pytest.raises(plan.Refusal, match=r"^bolt x is landing again as #413, after #412 was rejected, so unit b does not join it"):
+            ops(w, 'unit add b "Build b." --bolt x')
+
+    def test_another_bolts_landing_holds_nothing_of_this_one(self):
+        w = launched("x", "y", work=[unit("a"), unit("z", bolt="y")])
+        w.logged = [dict(e, On=["bolt/y"]) for e in submitted("queued")]
+        ops(w, 'unit add b "Build b." --bolt x')
+        assert requests(w)[-1]["Work"] == "unit/b"
+
+    def test_a_proposals_card_drawn_refuses_nothing_for_it_and_its_approval_does(self):
+        """A card is drawn with no read beyond the plan (Drawn); the approval applies at the tip and refuses."""
+        w = launched("x", work=[unit("a")])
+        w.logged = submitted("queued")
+        from facts import apply
+        apply(w, 'unit add b "Build b." --bolt x', ctx=plan.Drawn(FLEET, "madswan", w, 1))
+        w = launched("x", work=[unit("a")])
+        w.logged = submitted("queued")
+        with pytest.raises(plan.Refusal, match=r"^bolt x has its landing queued on main as #412"):
+            ops(w, 'unit add b "Build b." --bolt x', n=1)
+
 
 def path_at(name):
     """The place a flume 0.3.6 status fixture stands at (facts.ran), without a tidied place's @<when>."""
@@ -428,8 +295,7 @@ class TestAnswer:
     def test_a_stage_that_stopped_short_asking_is_retried_with_the_answer(self):
         """The runner's record shows a's code stopped short asking, and the planner runs crew answer a "madswan's"."""
         w, got = self.answered("stopped-short")
-        assert requests(w)[1] == {"Request": "2", "Act": "retry", "Host": "deneb", "Work": "unit/a", "Of": "1", "Stage": "code",
-                                  "Words": "madswan's"}
+        assert requests(w)[1] == {"Request": "2", "Act": "retry", "Work": "unit/a", "Of": "1", "Stage": "code", "Words": "madswan's"}
         assert got == dict(n=2, work="unit/a", host="deneb", place=path_at("stopped-short"), what="code")
         assert (w.subject, w.on) == ("plan(x): answer unit/a's code", ["unit/a", "bolt/x"])
 
@@ -453,8 +319,8 @@ class TestAnswer:
     def test_a_fix_is_answered_by_its_places_name(self):
         from facts import ran
         w = launched("x", work=[unit("a")], runners=ran({2: "stopped-short"}))
-        fields = {k: v for k, v in launch(2, "fix/x/rail-word", "x--rail-word").items() if k not in ("Request", "Act", "Host", "Work")}
-        plan.request(w, "launch", "deneb", "fix/x/rail-word", **dict(fields, Kind="fix"))
+        fields = {k: v for k, v in launch(2, "fix/x/rail-word", "x--rail-word").items() if k not in ("Request", "Act", "Work")}
+        plan.request(w, "launch", "fix/x/rail-word", **dict(fields, Kind="fix"))
         plan.answer_place(w, "x--rail-word", "Say land.")
         assert (requests(w)[2]["Work"], requests(w)[2]["Of"], requests(w)[2]["Stage"]) == ("fix/x/rail-word", "2", "code")
 
@@ -464,10 +330,10 @@ class TestAnswer:
         with pytest.raises(plan.Refusal, match=r"^no launch of b stands in requests.rec, so no Flume place of it waits on an answer"):
             plan.answer_place(w, "b", "yes")
 
-    def test_a_host_whose_runner_cant_be_read_refuses_naming_why(self):
+    def test_a_partition_no_runner_answers_for_refuses_naming_why(self):
         w = launched("x", work=[unit("a")])
-        with pytest.raises(plan.Refusal, match=r"^can't tell whether unit/a's place waits on an answer: no runner answers on deneb: "
-                                               r"madswan/runner/deneb does not exist$"):
+        with pytest.raises(plan.Refusal, match=r"^can't tell whether unit/a's place waits on an answer: no runner answers for the "
+                                               r"partition: no <label>/runner/<host> branch exists, so nothing takes request 1$"):
             plan.answer_place(w, "a", "yes")
 
     def test_a_place_held_for_its_after_work_has_nothing_to_answer(self):
@@ -483,6 +349,6 @@ class TestAnswer:
                   "send, which no answer gives: crew main fix crew red --send, on the user's word")
 
     def test_two_works_answering_to_one_name_are_both_named(self):
-        requests_ = [plan.Rec("Request", runner.request_fields(1, "launch", "deneb", "unit/x--n", dict(launch(1, "unit/x--n", "x--n")), "2026-10-31T12:00:00Z", "u")),
-                     plan.Rec("Request", runner.request_fields(2, "launch", "deneb", "fix/x/n", dict(launch(2, "fix/x/n", "x--n"), Kind="fix"), "2026-10-31T12:00:00Z", "u"))]
+        requests_ = [plan.Rec("Request", runner.request_fields(1, "launch", "unit/x--n", dict(launch(1, "unit/x--n", "x--n")), "2026-10-31T12:00:00Z", "u")),
+                     plan.Rec("Request", runner.request_fields(2, "launch", "fix/x/n", dict(launch(2, "fix/x/n", "x--n"), Kind="fix"), "2026-10-31T12:00:00Z", "u"))]
         assert runner.named_launch(requests_, "x--n") == (None, "x--n names fix/x/n and unit/x--n: name the one meant as requests.rec does")
