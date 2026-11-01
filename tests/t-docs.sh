@@ -33,7 +33,17 @@ ok "every command in the README is in crew's usage"
 for gone in assign release opsx fable explorer verifier coder-; do
   for doc in usage readme skill; do lacks "${!doc}" "$gone"; done
 done
-for gone in assign release opsx; do expect_fail "every bolt, unit and chore of the plans" crew $gone swb-1; done
+for gone in assign release opsx list status up rebuild close restart resume clear down _tidy _status _team; do
+  expect_fail "every bolt, unit and chore of the plans" crew $gone swb-1
+done
+for doc in usage readme skill; do
+  team=$(grep -oE '(^|[^a-z_])crew +(list|status|up|rebuild|close|restart|resume|clear|down)([^a-z]|$)' <<<"${!doc}" || true)
+  [[ -z $team ]] || fail "the $doc names a team command:"$'\n'"$team"
+  for gone in "<team or partition>" "(sent to <team" "SLUICE_BRANCH" "sluice_branch" "conductor fresh" "unit slot"; do
+    lacks "${!doc}" "$gone"
+  done
+  has "${!doc}" 'crew send'; has "${!doc}" '<partition> "<text>"'
+done
 for doc in usage readme skill; do lacks "${!doc}" "unit approve"; lacks "${!doc}" "review/<unit>"; done
 for doc in usage readme skill; do has "${!doc}" "crew review"; done
 for gone in "unit run" "unit wait" "unit free" "chore run" "chore wait" "chore free" "crew needs" "fix <team>"; do
@@ -41,7 +51,7 @@ for gone in "unit run" "unit wait" "unit free" "chore run" "chore wait" "chore f
 done
 for gone in "unit run a code" "unit wait a" "chore free c"; do expect_fail "invalid choice" crew $gone; done
 expect_fail "crew: run bolt teams of agents in herdr" crew needs "what it needs"
-ok "none of the removed commands or roles is in the README, the skill or the usage, crew drives no stage and waits on none, and each names crew review"
+ok "none of the removed commands or roles is in the README, the skill or the usage, a team command among them, crew drives no stage and waits on none, crew send names a partition alone, and each names crew review"
 
 for doc in usage readme skill; do has "${!doc}" "crew ops offer <env>"; has "${!doc}" "[--notes <file>] [--steps <file>]"; done
 for doc in usage readme skill; do
@@ -90,11 +100,11 @@ expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge 
 ok "the README, the skill and the usage say a bolt's work is started by crew bolt start, refused for one started already, and name no give, agreement or dispatcher, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
 
 for doc in usage readme skill; do
-  for want in "version 2, 3 or 4" "in Flume stream" "Path: flume" "still closes" \
+  for want in "version 2, 3 or 4" "in Flume stream" "Path: flume" "no team's conductor, ops or slot" \
     "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
   for gone in "due to cross" "due back" "however they went down" "closes what the hold left" "crossed team"; do lacks "${!doc}" "$gone"; done
 done
-ok "the README, the skill and the usage say a team's stream, what a team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
+ok "the README, the skill and the usage say a team's stream, that crew runs no team's agents, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
 
 for doc in usage readme skill; do
   for want in "runs as its kind" "every role stands" "asks.rec" "roles.rec" "crew-<role>--<label>" "end --report <path>" \
