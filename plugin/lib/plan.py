@@ -944,6 +944,18 @@ class Write:
         reading = runner.taken(self.runners(), runner.number(launch.get("Request")))[0] if launch is not None else None
         return reading["host"] if reading else None
 
+    def entries(self):
+        """The partition's run record from BATCH_DAYS back as the branch holds it at the tip the change is applied to,
+        each entry once, oldest first, as partition_entries reads it from the branch's tip (read.5), so a check of it
+        is made again on each replay (plan.1)."""
+        if getattr(self, "_entries", None) is None:
+            since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=BATCH_DAYS)).isoformat()
+            seen = {}
+            for e in record.at(self.repo, self.tip, since):
+                seen.setdefault(e["Id"], e)
+            self._entries = sorted(seen.values(), key=lambda e: (e["At"], e["Id"]))
+        return self._entries
+
     def bolt(self, name):
         return self.plan.bolt(name) or self.gone("Bolt", name)
 
@@ -2355,8 +2367,9 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
     the card's forecast or the run record's (main_conflict). In the plan's order, each {bolt, box: True, facts}, a row
     the user ticks, its facts carrying stopped, (head, words), when its last landing was stopped at its present head
     (stopped_at), which holds nothing (rail-cards "A landing sluice or its host stopped keeps its box"); or {bolt, box:
-    False, why, facts}, held with no box: for a fix in flight on it, in the fix's words, or for sluice's refusal of its
-    landing at its present head, until a fix on the bolt moves the head; or, marked takes_main, taking main first,
+    False, why, facts}, held with no box: for a fix in flight on it, in the fix's words, or for sluice's rejection of its
+    landing at its present head, the row saying the landing was rejected and the bolt is open for work, until a fix on
+    the bolt moves the head; or, marked takes_main, taking main first,
     forecast to conflict with main, or with only take-main fixes in flight (TAKE_MAIN), each named with its words; but a
     bolt the user left (left, left_now) marked takes_main keeps its box, its facts marked would_main, (main's short
     sha, [paths]), for its row to say it would take main first once ticked (rail-cards "A row the user left says
@@ -2372,7 +2385,7 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
                             else f"held for a fix: {note} ({fix})" if note else f"held for {fix} until it merges or is dropped"
                             for fix, note in sorted(fixes.items()))
         elif at and (at.startswith(f["head"]) or f["head"].startswith(at)):
-            why = f"held: sluice refused its landing at {f['head'][:7]}, and it waits for a fix on the bolt: {words}"
+            why = f"landing rejected at {f['head'][:7]}, open for work: it waits for a fix on the bolt: {words}"
         elif b in takes_main and b not in left:
             main, paths = takes_main[b]
             why, main_first = (f"takes main first: forecast to conflict with main on {joined(list(paths))} at {main[:7]}, "
@@ -2571,7 +2584,8 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
         left = [b for b, h in now if b in was and was[b][1] and was[b][0] == h]
         said = [f"{b} reads proven and joins the card" for b, _ in now if b not in was]
         said += [f"{b}'s head is now {h}" for b, h in now if b in was and was[b][0] != h]
-        said += [(f"{b} {held[b]}" if held[b].startswith("takes main first") else f"{b} is {held[b]}") if b in held
+        said += [(f"{b} {held[b]}" if held[b].startswith("takes main first") else f"{b}'s {held[b]}" if held[b].startswith("landing ")
+                  else f"{b} is {held[b]}") if b in held
                  else f"{b} no longer waits to land" for b, _, _ in heads if b not in dict(now)]
         said = ([note] if note else []) + said
         if not said:
@@ -4638,6 +4652,77 @@ def landing_pending(entries, bolt):
     return None if any(e.get("Submission") == n and e.get("Outcome") != "queued" for e in mine[i + 1:]) else mine[i]
 
 
+def landing_phase(entries, bolt):
+    """Where the bolt's landing stands in the run record (plan.8; bolt-teams "A landing queued holds its bolt's work"),
+    from the partition's entries, oldest first, each state its own: queued, {state, n, head}, while its last submission
+    sluice queued has no outcome recorded (landing_pending) and no earlier one of it was rejected; again, the same with
+    rejected, (its number or None, its head), the newest earlier submission of it sluice rejected; rejected, {state, n,
+    head, words}, once sluice rejected its newest submission for the bolt's own content, a conflict or a failed check,
+    recorded refused with the head submitted (landing_not_landed), until it is submitted again, its number None for one
+    sluice refused in its answer; else None: never submitted, landed, stopped by sluice or its host, nothing of the
+    bolt's, or refused by crew before anything was submitted, which names no head. queued and again hold the bolt's work
+    (landing_hold); rejected holds none. A decision of facts alone (code.7)."""
+    mine = [e for e in entries if e.get("Act") == "bolt.submit" and f"bolt/{bolt}" in (e.get("On") or [])]
+    rejected = lambda e: bool(e.get("Refused") and e.get("Head"))
+    q = landing_pending(entries, bolt)
+    if q is not None:
+        i = next(i for i, e in enumerate(mine) if e is q)
+        before = next((e for e in reversed(mine[:i]) if rejected(e)), None)
+        out = dict(state="again" if before else "queued", n=q["Submission"], head=q.get("Head") or "")
+        return dict(out, rejected=(before.get("Submission"), before["Head"])) if before else out
+    last = next((e for e in reversed(mine) if e.get("Head") or e.get("Submission")), None)
+    if last is not None and rejected(last):
+        return dict(state="rejected", n=last.get("Submission"), head=last["Head"], words=last["Refused"])
+    return None
+
+
+def landing_phases(entries):
+    """Each bolt's landing as the run record holds it (landing_phase), for every bolt a bolt.submit names, from the
+    partition's entries, oldest first: {bolt: phase} for those whose landing is queued, again or rejected."""
+    named = {o[5:] for e in entries if e.get("Act") == "bolt.submit" for o in e.get("On") or [] if o.startswith("bolt/")}
+    return {b: p for b in sorted(named) for p in [landing_phase(entries, b)] if p}
+
+
+def rejected_said(n, head):
+    """A landing sluice rejected, as a line names it: by its number, else by the head it was submitted at."""
+    return f"#{n}" if n else f"its landing at {(head or '')[:7]}"
+
+
+def phase_said(phase, head, live=False):
+    """What a bolt's line says of its landing as the run record holds it (landing_phase), each state in words of its own
+    (bolt-teams "A landing queued holds its bolt's work"): queued, `landing queued as #<n>`, or nothing while sluice's
+    queue shows its landing standing (live), whose own state says it; again, `landing again as #<n>, after #<m> was
+    rejected`, the number left to sluice's state while live; rejected, while the bolt's head now (head) is the one
+    rejected, `landing #<m> rejected at <head>, open for work: <words>`, and nothing once a fix has moved it, the
+    rejection holding nothing (held_at); else None. A decision of facts alone (code.7)."""
+    if not phase:
+        return None
+    if phase["state"] == "queued":
+        return None if live else f"landing queued as #{phase['n']}"
+    if phase["state"] == "again":
+        after = f"after {rejected_said(*phase['rejected'])} was rejected"
+        return f"landing again, {after}" if live else f"landing again as #{phase['n']}, {after}"
+    if at_head(phase["head"], head):
+        return (f"landing {'#' + str(phase['n']) + ' ' if phase['n'] else ''}rejected at {phase['head'][:7]}, open for work: "
+                f"{phase['words']}")
+    return None
+
+
+def landing_hold(phase, bolt, what):
+    """Why work may not join a bolt whose landing is queued (plan.8; bolt-teams "A landing queued holds its bolt's work"),
+    from the run record's state of its landing (landing_phase), or None: while it is queued or landing again, what
+    would join it (what, `unit <u>`, `chore <c>` or `fix <bolt>--<f>`) is refused naming the landing, since sluice
+    lands the head it was given and work merged into the bolt meanwhile would be left out of main's landing; once
+    sluice has rejected it, or with no landing in flight, nothing is refused. A decision of facts alone (code.7)."""
+    if not phase or phase["state"] not in ("queued", "again"):
+        return None
+    landing = (f"is landing again as #{phase['n']}, after {rejected_said(*phase['rejected'])} was rejected"
+               if phase["state"] == "again" else f"has its landing queued on main as #{phase['n']}")
+    return (f"bolt {bolt} {landing}, so {what} does not join it until sluice decides: sluice lands the head it was given, "
+            "and work merged into the bolt meanwhile would be left out of main; put it on another bolt, or into this one "
+            "once sluice has rejected the landing")
+
+
 def landing_at(fleet, label, plan, entries, bolt):
     """Where a landing's read reads (bolt_at): where the bolt's work runs while the plan holds it started, else, a read
     after a close by another, where its launches ran (launched_at) in the kit its last queued submission names (Repo);
@@ -5120,6 +5205,11 @@ class Reads:
     def start_checked(self, label, t, bolt):
         return start_check(self.fleet, label, t, bolt)
 
+    def landing(self, w, bolt):
+        """The bolt's landing as the run record holds it at the tip the write is applied to (landing_phase), which work
+        joining it is checked against (landing_hold)."""
+        return landing_phase(w.entries(), bolt)
+
 
 class Direct(Reads):
     """What a command run directly sees: the plans of every partition, or of --label (or the agent's own)."""
@@ -5185,6 +5275,9 @@ class Drawn(Proposed):
         return next((u.name() for u in plan.work_of(bolt)), None)
 
     def start_checked(self, label, t, bolt):
+        return None
+
+    def landing(self, w, bolt):
         return None
 
 
@@ -5393,7 +5486,8 @@ def drop_at(fleet, label, b):
 
 def op_unit_add(ctx, a):
     """crew unit add, and crew chore add (a.cmd), whose record is marked Kind: chore (plan.11): the same flags, the same
-    refusals and the same hands."""
+    refusals and the same hands. Work added to a bolt whose landing the run record has queued, or landing again, with no
+    outcome is refused naming the landing, as a move into it is (landing_hold, plan.8)."""
     k = a.cmd
     label = ctx.label
     if a.bolt:
@@ -5415,6 +5509,8 @@ def op_unit_add(ctx, a):
         had is None or fail(f"{label}/main already has {kind_of(had)} {a.unit}")
         if a.bolt:
             w.bolt(a.bolt)
+            why = landing_hold(ctx.landing(w, a.bolt), a.bolt, f"{k} {a.unit}")
+            not why or fail(why)
         if a.signal:  # its one move, route, in the same commit, checked again on each replay
             move(ctx.fleet, label, w, a.signal, route_move(a.signal, f"{k}/{a.unit}"))
         r = Rec("Unit", [("Unit", a.unit), ("Repo", kit)] + ([("Bolt", a.bolt)] if a.bolt else []) + ([("Kind", "chore")] if k == "chore" else [])
@@ -5586,6 +5682,8 @@ def op_unit_move(ctx, a):
         u.drop("After")
         if to:
             w.bolt(to)
+            why = landing_hold(ctx.landing(w, to), to, f"{k} {a.unit}")
+            not why or fail(why)
             u.set("Bolt", to, after="Repo")
         else:
             u.drop("Bolt")
@@ -8604,7 +8702,9 @@ def fix(fleet, a):
     ops's (may_request), a plan write on the asking host that starts nothing there: a new fix a launch on the bolt's
     branch in its repository, for a runner whose configuration names it to take, in the stream its host maps it to (the user's
     ruling of 2026-11-01; runner.fix_launch), the bolt's landing held while it is in
-    flight (land_hand, land_facts); --drop a drop of its launch (runner.fix_drop_refusal). Flume submits the place and
+    flight (land_hand, land_facts), and refused while the run record has the bolt's landing queued or landing again
+    with no outcome, naming it, open again once sluice has rejected it (landing_hold); --drop a drop of its launch
+    (runner.fix_drop_refusal). Flume submits the place and
     tells its end itself, so crew fix has no merge and no wait. Recorded as fix.start or fix.drop, done or refused
     (teams.3)."""
     crew.NAME.match(a.name) or fail("a fix is named with lowercase words and dashes")
@@ -8639,7 +8739,8 @@ def took(host):
 
 def fix_flume(fleet, w, bolt, mode, name, words):
     """crew fix's change to a write (fix), each fact read again at the tip it is applied to (plan.1): the bolt started,
-    marked Path: flume; then a new fix's launch appended in the bolt's repository (runner.fix_launch), or for --drop its
+    marked Path: flume; then a new fix's launch appended in the bolt's repository (runner.fix_launch), refused while the
+    run record at that tip has the bolt's landing queued or landing again (landing_phase, landing_hold), or for --drop its
     launch's drop (runner.fix_drop_refusal), its stage read from the runner that took it as the write reads them.
     Returns what it asked, {n, host, repo}: host, the runner's that took the launch dropped, where crew can tell."""
     crossed_bolt(w.plan, bolt) or fail(f"bolt {bolt} has not been started, so a fix of it has no Flume place to run in")
@@ -8651,6 +8752,8 @@ def fix_flume(fleet, w, bolt, mode, name, words):
         not why or fail(why)
         w.subject = f"plan({bolt}): drop fix {name}"
         return dict(n=request(w, "drop", work, Of=launch.get("Request")), host=w.taker(launch), repo=launch.get("Repo"))
+    why = landing_hold(landing_phase(w.entries(), bolt), bolt, f"fix {bolt}--{name}")
+    not why or fail(why)
     launched, why = runner.fix_launch(w.plan, requests, bolt, w.label, name, words)
     not why or fail(why)
     act, work, given = launched
@@ -9103,8 +9206,15 @@ def bolts_view(fleet, a):
     runs = rail_runs(found)
     held = [(t, b.name()) for l, _, _, p in found if p and l in runs for b in p.bolts() if started(b) and a.bolt in (None, b.name())
             for t in [known_at(fleet, l, b, runs[l])] if t]
+    logs = {}  # each partition's run record, its bolts' landings read from it (landing_phase), or why it can't be read
+    for l, _, _, p in found:
+        if p:
+            try:
+                logs[l] = partition_entries(fleet, l)
+            except Refusal as e:
+                logs[l] = str(e)
     # Each kit's GitHub fetched once on its host before it is read: what has merged into a bolt is on GitHub (plan.19).
-    data = bolts_data(fleet, labels, found, survey(fleet, held, fetch=True), errors, a.bolt, runs)
+    data = bolts_data(fleet, labels, found, survey(fleet, held, fetch=True), errors, a.bolt, runs, logs)
     if a.bolt and not any(b for p in data["partitions"] for pl in p["plans"] for b in pl["bolts"]):
         fail(f"no bolt {a.bolt} in the plans of " + ", ".join(labels))
     if a.json:
@@ -9153,7 +9263,7 @@ def standing_said(sub):
     return f"#{sub['id']}" + (f" {words}" if words else "")
 
 
-def bolts_data(fleet, labels, found, sv, errors, bolt=None, runs=None):
+def bolts_data(fleet, labels, found, sv, errors, bolt=None, runs=None, logs=None):
     """What crew bolts shows, from the plans read (found) and the survey of the hosts holding their bolts (sv): each
     partition's plans, each bolt with the host its work runs on as the runner that took it reported (bolt_at), state, verification (sluice's verdict on its last landing, as
     kit.verification reads it, for a bolt whose kit was read), units and chores in build order with their kinds and
@@ -9165,10 +9275,14 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None, runs=None):
     runner's records (Stages.crossed, Stages.fixes), each with stage_of's answer (flume), no worktree and no submission
     of crew's, and the runners that could not be read, which hide that work alone (runners_unread; Decisions 8 and 14
     of teams-cross-to-flume-as-their-bolts-land), read once for the command (runs, as Stages takes them, read when
-    first needed where not given). With bolt, that bolt alone."""
+    first needed where not given). Each started bolt carries its head and its landing as its partition's run record
+    holds it (logs, {label: entries, or why they can't be read}; landing_phase), queued, again or rejected, each its
+    own state (landing_record), and a partition whose record can't be read says why (record_error). With bolt, that
+    bolt alone."""
     data = {"partitions": [], "unreachable": {h: v["error"] for h, v in sv.items() if not v["ok"]}, "unread": errors, "runners_unread": {}}
     for l in labels:
-        part = {"label": l, "plans": []}
+        log = (logs or {}).get(l)
+        part = {"label": l, "plans": [], **({"record_error": log} if isinstance(log, str) else {})}
         for pl, repo, tip, plan in found:
             if pl != l:
                 continue
@@ -9199,7 +9313,8 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None, runs=None):
                     x["submission"] = rows.get(x.get("unit") or x.get("fix"))
                 bolts.append(dict(bolt=b.name(), repo=b.get("Repo"), goal=b.get("Goal"), sources=b.all("Source"),
                                   host=t["machine"] if t else None, state=st.bolt_state(b), verification=verified, units=units, fixes=fixes,
-                                  landing=landing, submissions_error=unread, given=b.get("Path"), stream=t["stream"] if t else None))
+                                  landing=landing, submissions_error=unread, given=b.get("Path"), stream=t["stream"] if t else None,
+                                  head=bk.get("head"), landing_record=landing_phase(log, b.name()) if crossed and isinstance(log, list) else None))
             queue = [] if bolt else [dict(unit=u.name(), kind=kind_of(u), repo=u.get("Repo"), stage="queued", sources=u.all("Source"))
                                      for u in plan.queue()]
             part["plans"].append({"repo": repo, "plan": tip, "bolts": bolts, "queue": queue})
@@ -9213,7 +9328,8 @@ def bolts_text(data):
     when they can't, its verification when its kit was read, and each unit with its stage, tasks, its merge standing in
     sluice, `#<n> <state>`, and place, each chore among them with `chore` before its stage, each fix with its merge, the
     queue by repo with each unit's and chore's sources, and each host that did not answer. A started bolt's host and
-    stream are on its head line (runner.stream_said), and a crossed piece's line says its stage as the runner's records give it, its
+    stream are on its head line (runner.stream_said), with its landing as the run record holds it, queued, again or
+    rejected, each in words of its own (phase_said), and a crossed piece's line says its stage as the runner's records give it, its
     Flume place in its place's stead and what goes with its stage after (runner.piece_said); each runner that could not
     be read is named, the stages of the work it runs unknown (Decision 14 of teams-cross-to-flume-as-their-bolts-land)."""
     lines = []
@@ -9226,7 +9342,8 @@ def bolts_text(data):
             for b in pl["bolts"]:
                 who = (f"@ {b['host']}" if b["host"] else "not started" if not b.get("given") else "where it runs can't be told") + (
                     f", {runner.stream_said(b['stream'])}" if b.get("stream") else "")
-                lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}"
+                record_said = phase_said(b.get("landing_record"), b.get("head"), live=bool(b.get("landing")))
+                lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}" + (f"  {record_said}" if record_said else "")
                              + (f"  landing {standing_said(b['landing'])}" if b.get("landing") else ""))
                 if b.get("submissions_error"):
                     lines.append(f"  submissions: can't be read on {b['host']}: {b['submissions_error']}")
@@ -9256,6 +9373,8 @@ def bolts_text(data):
                 for u in (x for x in pl["queue"] if x["repo"] == r):
                     queued = "chore queued" if u.get("kind") == "chore" else "queued"
                     lines.append(f"  {u['unit']:<40} {queued:<12} {', '.join(u['sources'])}".rstrip())
+        if p.get("record_error"):
+            lines.append(f"{p['label']}'s run record can't be read ({p['record_error']}): no bolt's landing is said from it")
     for h, why in data["unreachable"].items():
         lines.append(f"{h} did not answer ({why}): the stages of its bolts are unknown")
     for what, why in data.get("runners_unread", {}).items():
@@ -10351,6 +10470,7 @@ def record_reading(l, entries, plan, fresh, missing=None, crossed=None):
     held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
                 due=None if missing else {u for u, *_ in due_changes(plan, entries, crossed)},
                 unanswered=None if missing else awaiting_answer(entries, crossed), refused=refusals(entries), stopped=stops(entries),
+                phases=landing_phases(entries),
                 forecasts=[e for e in entries if e.get("Act") == "forecast"],
                 left=[e for e in entries if e.get("Act") in ("landing.left", "bolt.leave", "bolt.submit")])
     return dict(times=times, cards=list(posted.values()), landings=landings, held=held)
@@ -10374,7 +10494,10 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
     change has been in a batch whose card the user has answered, no fix is in flight on it, sluice did not refuse its
     landing at its head (refusals, held's refused) and the run record holds no conflict with main forecast at its head
     (main_conflict, held's forecasts); until then its line says which units no batch has held, which batches wait on the
-    user's answer, the fix, sluice's words, or that it takes main first (briefs.12), or for a bolt the user left on the
+    user's answer, the fix, that its landing was rejected and the bolt is open for work, in sluice's words, or that it
+    takes main first (briefs.12); a bolt whose landing the run record has queued, or landing again, with no outcome
+    (held's phases, landing_phase) says so and that no work joins it until sluice decides, and is no bolt that can land
+    (bolt-teams "A landing queued holds its bolt's work"), or for a bolt the user left on the
     kit's landings card (left_of, held's left), that it takes main first once ticked (crew-rail "A left bolt's land line
     says it would take main first once ticked"). A bolt given through Flume is a row's on the same terms, its pieces' stages
     and its fixes in flight read from the runner's records (Stages, runner.fixes_on), and each bolt's line says its
@@ -10443,11 +10566,14 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
             refused = held_at(held.get(l, {}).get("refused") or {}, b.name(), head)
             stop = stopped_at(held.get(l, {}).get("stopped") or {}, b.name(), head)
             conflict = main_conflict(held.get(l, {}).get("forecasts") or [], b.name(), head)
+            phase = (held.get(l, {}).get("phases") or {}).get(b.name())
             kit_name = b.get("Repo") or k["kit"]["name"]
-            if not lands and fixes:  # a fix started on the bolt holds its landing
+            if phase and phase["state"] in ("queued", "again"):  # submitted and not yet decided: its work held (landing_hold)
+                lands = [f"{phase_said(phase, head)}: no unit, chore or fix joins it until sluice decides"]
+            elif not lands and fixes:  # a fix started on the bolt holds its landing
                 lands = [f"lands once {either(sorted(fixes))} has merged or been dropped"]
-            elif not lands and refused:  # sluice refused its landing at this head (refused_at)
-                lands = [f"held: sluice refused its landing at {head[:7]}, until a fix moves its head: {refused}"]
+            elif not lands and refused:  # sluice rejected its landing at this head (refused_at), the bolt open for work
+                lands = [f"landing rejected at {head[:7]}, open for work: it lands again once a fix moves its head: {refused}"]
             elif not lands and conflict and left_of(held.get(l, {}).get("left") or [], f"land/{kit_name}", {b.name(): head}):
                 lands = [f"left by the user: takes main first once ticked, forecast to conflict with main on {joined(conflict[1])}"]
             elif not lands and conflict:  # forecast at this head to conflict with what main holds (main_conflict)

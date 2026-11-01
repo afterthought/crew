@@ -390,8 +390,12 @@ def on_branch(fleet, label, since_day, tips=None):
     tip = plan.fetch(repo, ref)
     if tips is not None:
         tips[label] = tip
-    if not tip:
-        return []
+    return at(repo, tip, since_day) if tip else []
+
+
+def at(repo, tip, since_day):
+    """The entries a state repository's branch holds at the commit tip, from since_day on, as on_branch reads them."""
+    import plan
     out = []
     for path in plan.paths_at(repo, tip, "runs/"):
         if path.endswith(".rec") and pathlib.PurePath(path).stem >= since_day:

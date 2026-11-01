@@ -1330,8 +1330,8 @@ class TestMore:
                              "label", "operation", "plan", "records", "runs"]
         assert p["kits"] == ["breadboard-kit", "switchboard-kit"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
-        assert sorted(te) == ["bolt", "fixes", "goal", "host", "landing", "markers", "record", "repo", "state", "stream", "submissions_error",
-                              "time", "units", "url"]
+        assert sorted(te) == ["bolt", "fixes", "goal", "head", "host", "landing", "markers", "record", "repo", "state", "stream",
+                              "submissions_error", "time", "units", "url"]
         assert (te["host"], te["stream"]) == (BOX, "wldn")  # where the box's runner reported its work (plan.bolt_at)
         assert sorted(te["units"][0]) == ["flume", "kind", "stage", "submission", "tasks", "unit", "url", "worktree"]
         assert te["fixes"] == []  # a fix is a started bolt's Flume place alone (TestCrossed)
@@ -1467,12 +1467,27 @@ class TestViews:
         assert ledger("wldn-planner", "tenant-environments", logs=logs)[0] == (
             f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  landing queued as #355  0 of 2 merged  {TE_TIME}")
 
+    REJECTED = QUEUED + [dict(entry("bolt.submit", 25, Refused="#412 conflict: README.md", Submission="412", Head="d" * 40),
+                              On=["bolt/tenant-environments"])]
+
+    def test_a_landing_rejected_or_landing_again_is_said_on_its_head_line_as_a_state_of_its_own(self):
+        """crew-board "A landing rejected" and "Landing again": rejected at its head now, the bolt open for work, in
+        sluice's words; once submitted again, landing again after the rejection, with the record's number."""
+        assert ledger("wldn-planner", "tenant-environments", logs=self.REJECTED)[0] == (
+            "  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  landing #412 rejected at ddddddd, open for work: "
+            f"#412 conflict: README.md  0 of 2 merged  {TE_TIME}")
+        again = self.REJECTED + [dict(entry("bolt.submit", 20, Outcome="queued", Submission="415", Head="e" * 40), On=["bolt/tenant-environments"])]
+        assert ledger("wldn-planner", "tenant-environments", logs=again)[0] == (
+            "  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  landing again as #415, after #412 was rejected  "
+            f"0 of 2 merged  {TE_TIME}")
+        assert board.landing_of(again, "tenant-environments")["state"] == "again"
+
     def test_what_a_held_bolts_landing_is_read_from_the_run_record(self):
         """Decision 5 (board.landing_of): queued while its last bolt.submit is, unclosed while its last bolt.land since
         its landing is refused, and nothing once a close went through or before any landing."""
         b = "tenant-environments"
-        assert board.landing_of(self.QUEUED, b) == {"queued": "412"}
-        assert board.landing_of(self.UNCLOSED, b) == {"unclosed": self.READY}
+        assert board.landing_of(self.QUEUED, b) == {"state": "queued", "n": "412", "head": S1}
+        assert board.landing_of(self.UNCLOSED, b) == {"state": "unclosed", "words": self.READY}
         assert board.landing_of(self.UNCLOSED + [entry("bolt.land", 20, bolt=b, Repo="switchboard-kit", Head=S2)], b) is None
         assert board.landing_of(self.UNCLOSED[:1], b) is None and board.landing_of([], b) is None
         refused_before = [entry("bolt.land", 40, bolt=b, Refused=self.READY)] + self.UNCLOSED[:1]

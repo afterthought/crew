@@ -427,6 +427,7 @@ class TestWhenABoltIsFetched:
         monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
         monkeypatch.setattr(plan, "rail_runs", lambda found: {"wldn": ([], {})})
         monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: self.WHERE if plan.started(b) else None)
+        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [])  # the run record crew bolts reads its landings from
         if kept:
             plan.READ.keep_kits("box", kept)
 

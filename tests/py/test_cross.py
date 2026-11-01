@@ -213,6 +213,68 @@ class TestReach:
             plan.reach_places(FLEET, w, "x")
 
 
+def submitted(*states):
+    """The run record of x's landing, oldest first, each state (Outcome queued, a refusal with its head, or landed) as
+    crew bolt submit and the landing's read record them."""
+    out = []
+    for i, s in enumerate(states):
+        n, head = str(412 + i // 2), "abc1234" + str(i // 2) * 33
+        f = dict(Outcome="queued") if s == "queued" else dict(Outcome="landed") if s == "landed" else dict(Refused="#%s conflict: README.md" % n)
+        out.append(dict(Act="bolt.submit", On=["bolt/x"], Submission=n, Head=head, **f))
+    return out
+
+
+class TestALandingQueuedHoldsTheBoltsWork:
+    """bolt-teams "A landing queued holds its bolt's work" (plan.8): while the run record has x's landing queued, or
+    landing again, with no outcome, a unit or chore added to x or moved into it is refused naming the landing, at the tip
+    the write is applied to, and nothing is launched; once sluice has rejected it, the bolt is open for work again."""
+
+    def test_a_unit_or_chore_added_while_the_landing_is_queued_is_refused_and_nothing_launched(self):
+        for do, what in (('unit add b "Build b." --bolt x', "unit b"), ('chore add c "Build c." --bolt x', "chore c")):
+            w = launched("x", work=[unit("a")])
+            w.logged = submitted("queued")
+            before = w.files["requests.rec"]
+            with pytest.raises(plan.Refusal, match=rf"^bolt x has its landing queued on main as #412, so {what} does not join it until "
+                                                   r"sluice decides: .* once sluice has rejected the landing$"):
+                ops(w, do)
+            assert w.files["requests.rec"] == before
+
+    def test_work_moved_in_from_the_queue_while_the_landing_is_queued_is_refused(self):
+        w = launched("x", work=[unit("a"), unit("q", bolt=None)])
+        w.logged = submitted("queued")
+        with pytest.raises(plan.Refusal, match=r"^bolt x has its landing queued on main as #412, so unit q does not join it"):
+            ops(w, "unit move q x")
+
+    def test_once_sluice_has_rejected_the_landing_work_joins_the_bolt_and_is_launched(self):
+        w = launched("x", work=[unit("a"), unit("q", bolt=None)])
+        w.logged = submitted("queued", "rejected")
+        ops(w, 'unit add b "Build b." --bolt x', "unit move q x")
+        assert [r["Work"] for r in requests(w)[1:]] == ["unit/b", "unit/q"]
+
+    def test_landing_again_holds_the_work_again_naming_the_rejection(self):
+        w = launched("x", work=[unit("a")])
+        w.logged = submitted("queued", "rejected", "queued")
+        with pytest.raises(plan.Refusal, match=r"^bolt x is landing again as #413, after #412 was rejected, so unit b does not join it"):
+            ops(w, 'unit add b "Build b." --bolt x')
+
+    def test_another_bolts_landing_holds_nothing_of_this_one(self):
+        w = launched("x", "y", work=[unit("a"), unit("z", bolt="y")])
+        w.logged = [dict(e, On=["bolt/y"]) for e in submitted("queued")]
+        ops(w, 'unit add b "Build b." --bolt x')
+        assert requests(w)[-1]["Work"] == "unit/b"
+
+    def test_a_proposals_card_drawn_refuses_nothing_for_it_and_its_approval_does(self):
+        """A card is drawn with no read beyond the plan (Drawn); the approval applies at the tip and refuses."""
+        w = launched("x", work=[unit("a")])
+        w.logged = submitted("queued")
+        from facts import apply
+        apply(w, 'unit add b "Build b." --bolt x', ctx=plan.Drawn(FLEET, "madswan", w, 1))
+        w = launched("x", work=[unit("a")])
+        w.logged = submitted("queued")
+        with pytest.raises(plan.Refusal, match=r"^bolt x has its landing queued on main as #412"):
+            ops(w, 'unit add b "Build b." --bolt x', n=1)
+
+
 def path_at(name):
     """The place a flume 0.3.6 status fixture stands at (facts.ran), without a tidied place's @<when>."""
     import json

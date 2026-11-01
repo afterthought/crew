@@ -145,12 +145,28 @@ class TestRows:
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {},
                          "refused": {"apex-zones": ("abc1234" + "0" * 33, "bolt/apex-zones did not land: sluice found a conflict")}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1] == (f"apex-zones, on {BOX}, in Flume stream wldn: held: sluice refused its landing at abc1234, until a fix "
-                                   "moves its head: bolt/apex-zones did not land: sluice found a conflict")
+        assert land["what"][1] == (f"apex-zones, on {BOX}, in Flume stream wldn: landing rejected at abc1234, open for work: it lands again "
+                                   "once a fix moves its head: bolt/apex-zones did not land: sluice found a conflict")
         assert land["cmds"] == []
         held["wldn"]["refused"] = {"apex-zones": ("c" * 40, "an older head's")}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == f"apex-zones, on {BOX}, in Flume stream wldn: can land"
+
+    def test_a_landing_queued_or_landing_again_says_so_holds_the_bolts_work_and_is_no_bolt_that_can_land(self):
+        """crew-rail "A landing queued" and "Landing again": submitted and not yet decided, so the tell leaves it out."""
+        queued = [dict(Act="bolt.submit", On=["bolt/apex-zones"], Outcome="queued", Submission="412", Head="abc1234" + "0" * 33)]
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {}, "refused": {},
+                         "phases": plan.landing_phases(queued)}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, on {BOX}, in Flume stream wldn: landing queued as #412: no unit, chore or fix joins it "
+                                   "until sluice decides")
+        assert (land["cmds"], land["bolts"][0]["can"]) == ([], False)
+        again = queued + [dict(queued[0], Outcome=None, Refused="#412 failed: tests:logic"),
+                          dict(queued[0], Submission="415")]
+        held["wldn"]["phases"] = plan.landing_phases(again)
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, on {BOX}, in Flume stream wldn: landing again as #415, after #412 was rejected: no unit, "
+                                   "chore or fix joins it until sluice decides")
 
     def test_a_landing_sluice_stopped_at_the_bolts_head_can_land_saying_what_stopped_it(self):
         """crew-rail "A stopped landing": the line says it can land, what stopped it at that head in sluice's words, and
@@ -1481,6 +1497,19 @@ class TestBolts:
         d = self.data(sv=survey(ok=False))
         assert {b["state"] for b in d["partitions"][0]["plans"][0]["bolts"]} == {"unknown"}
         assert plan.bolts_text(d).splitlines()[-1] == f"{BOX} did not answer (ssh: connect to host timed out): the stages of its bolts are unknown"
+
+    def test_a_bolts_landing_is_said_from_the_run_record_each_state_its_own(self):
+        """bolt-teams "A landing queued holds its bolt's work": crew bolts reads queued, landing again and rejected from
+        the run record, each in its own words, and names a record it can't read."""
+        queued = [dict(Act="bolt.submit", On=["bolt/tenant-environments"], Outcome="queued", Submission="412", Head="d" * 40)]
+        d = plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, the_plan())], survey(), {}, None,
+                            runs(at=self.AT), {"wldn": queued})
+        te = next(b for b in d["partitions"][0]["plans"][0]["bolts"] if b["bolt"] == "tenant-environments")
+        assert te["landing_record"] == dict(state="queued", n="412", head="d" * 40)
+        assert f"tenant-environments  switchboard-kit  @ {BOX}, in Flume stream wldn  active  landing queued as #412" in plan.bolts_text(d)
+        d = plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, the_plan())], survey(), {}, None,
+                            runs(at=self.AT), {"wldn": "could not fetch wldn/main"})
+        assert "wldn's run record can't be read (could not fetch wldn/main): no bolt's landing is said from it" in plan.bolts_text(d)
 
     def test_a_plan_not_started_says_how_to_start_it(self):
         d = plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", None, None)], {}, {})

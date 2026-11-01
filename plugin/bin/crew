@@ -20,8 +20,9 @@
 #                                      on a started bolt, cut from bolt/<bolt>, appended to requests.rec in its
 #                                      kit's repository for a runner whose configuration names it, which Flume builds and
 #                                      submits to the bolt itself, telling the planner its end, and crew bolts shows its
-#                                      stage; refused for a bolt not started and a name in use on the bolt. A fix in
-#                                      flight holds the bolt's landing
+#                                      stage; refused for a bolt not started, a name in use on the bolt, and while
+#                                      the bolt's landing is queued or landing again, naming it. A fix in flight holds
+#                                      the bolt's landing
 #   crew fix     <bolt> <name> --drop [--label L]
 #                                      drop a fix not wanted: its launch dropped; a merged one is refused
 #   crew answer  <work> "<words>" [--label L]
@@ -45,7 +46,8 @@
 #                                      or, in a started bolt, from the records of the runner that took it of Flume's
 #                                      status of its place, a runner that can't be read named and the work no runner
 #                                      read has taken unknown; each started bolt's head line saying where the runner
-#                                      that took its work reported it runs, @ <host>, in Flume stream <s>;
+#                                      that took its work reported it runs, @ <host>, in Flume stream <s>, and
+#                                      its landing as the run record holds it, queued, rejected or landing again;
 #                                      each held bolt's verification, sluice's verdict on
 #                                      its last landing, and each merge and landing standing in sluice's queue with
 #                                      its number and state on its line, a queue that can't be read said once on the
@@ -107,7 +109,9 @@
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
-#                                      same hands, and built in its bolt as a Flume place of the chore kind
+#                                      same hands, and built in its bolt as a Flume place of the chore kind; a unit or
+#                                      chore added to or moved into a bolt whose landing is queued, or landing again,
+#                                      is refused naming the landing
 #   crew plan  propose|proposed|approve|answer|drop ...
 #                                      the planner's proposals: a change to the plan, waiting on the user alone and applied
 #                                      once the user approves it,

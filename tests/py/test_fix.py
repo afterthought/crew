@@ -63,6 +63,30 @@ class TestAFixOfAStartedBolt:
         with pytest.raises(plan.Refusal, match=said):
             self.fix(w, "drop", "rail-word")
 
+    QUEUED = [dict(Act="bolt.submit", On=["bolt/x"], Outcome="queued", Submission="412", Head="a" * 40)]
+    REJECTED = QUEUED + [dict(Act="bolt.submit", On=["bolt/x"], Refused="#412 failed: tests:logic", Submission="412", Head="a" * 40)]
+
+    def test_a_fix_while_the_bolts_landing_is_queued_is_refused_naming_it(self):
+        """bolt-teams "A landing queued holds its bolt's work": nothing is launched."""
+        w = self.bolt()
+        w.logged = self.QUEUED
+        with pytest.raises(plan.Refusal, match=r"^bolt x has its landing queued on main as #412, so fix x--logic does not join it until "
+                                               r"sluice decides"):
+            self.fix(w, "start", "logic", "Fix tests:logic.")
+        assert len(self.launches(w)) == 1
+
+    def test_a_fix_once_sluice_has_rejected_the_landing_is_launched(self):
+        """The fix ops starts for a failed check, sluice's words its brief."""
+        w = self.bolt()
+        w.logged = self.REJECTED
+        assert self.fix(w, "start", "logic", "#412 failed: tests:logic") == dict(n=2, host=None, repo="crew")
+
+    def test_a_drop_while_the_landing_is_queued_is_not_held(self):
+        w = self.bolt(runners=ran({2: "code"}))
+        self.fix(w, "start", "rail-word", "Say land.")
+        w.logged = self.QUEUED
+        assert self.fix(w, "drop", "rail-word")["n"] == 3
+
     def test_a_fix_with_no_launch_is_not_there_to_drop(self):
         with pytest.raises(plan.Refusal, match="^bolt x has no fix fix/x/gap: no launch of it stands in requests.rec$"):
             self.fix(self.bolt(), "drop", "gap")

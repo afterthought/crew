@@ -27,6 +27,7 @@
 # once the planner drops the chore, the drop's read of the bolt closes it, its branch, holding a commit main lacks after
 # the landing, kept on GitHub, sluice refusing its delete, and on the host, named, its mark unset and the keeping
 # recorded. A landing outlives the crew bolt submit that queued it (plan.21): killed once sluice has queued the landing,
+# a unit added to the bolt meanwhile is refused naming the landing (plan.8),
 # its waiter on the box calls sluice wait again while sluice is undecided, then reads the landing from sluice's record,
 # recording it landed and closing the bolt; and with the waiter stopped too, ops's crew bolt land reads it from sluice's
 # record first, records it landed and closes it. With wldn's ops, planner and design agent running as their kinds, a
@@ -483,6 +484,11 @@ decoy
 killed far-reach "$submitter"
 spared "ending this run's crew bolt submit far-reach"
 n=$(field mac-studio bolt.submit Submission bolt/far-reach)
+# While the run record has the landing queued, work joining the bolt is refused naming it, and nothing is launched
+# (bolt-teams "A landing queued holds its bolt's work", plan.8).
+expect_fail "bolt far-reach has its landing queued on main as #$n, so unit far-two does not join it until sluice decides" \
+  crew unit add far-two "Unit far-two." --bolt far-reach
+[[ $(plan -t Unit -e "Unit = 'far-two'" -c) == 0 ]] || fail "far-two joined far-reach while its landing was queued"
 far=$k/places/land-far-reach
 waiter=$(cat "$(git -C "$far" rev-parse --absolute-git-dir)/crew-landing")
 kill -0 "$waiter" 2>/dev/null || fail "no waiter runs on the landing's submission #$n"

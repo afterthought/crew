@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: A bolt whose every unit has merged and that has not landed is a row of its kit's
-Each kit with a bolt in flight whose units have all merged and not all landed SHALL be one row under land, keyed `land/<kit>`, naming the partition's main-level ops and, in the plan's order, each such bolt with what it waits on. A bolt not yet proven SHALL say what it waits on: the verification as it reads, the units due a batch, the batches waiting on the user's answer, a fix in flight, a landing sluice refused at its head for the bolt's own content, or that it takes main first, forecast at its present head to conflict with what main holds. A bolt that can land whose last landing at its head sluice or its host stopped SHALL say, beside that it can land, what stopped it and that main-level ops submits it again once that is cleared. Once a bolt can land, the row SHALL carry `crew tell <label>-ops "Land <bolts that can land, in order>."`. The row SHALL have begun to wait at the time of the earliest last commit among its bolts' branches.
+Each kit with a bolt in flight whose units have all merged and not all landed SHALL be one row under land, keyed `land/<kit>`, naming the partition's main-level ops and, in the plan's order, each such bolt with what it waits on. A bolt not yet proven SHALL say what it waits on: the verification as it reads, the units due a batch, the batches waiting on the user's answer, a fix in flight, a landing sluice rejected at its head for the bolt's own content, said as rejected with the bolt open for work, or that it takes main first, forecast at its present head to conflict with what main holds. A bolt whose landing the run record has queued, or landing again, SHALL say so with its number and that no work joins it until sluice decides, and SHALL be none of the bolts that can land (bolt-teams "A landing queued holds its bolt's work"). A bolt that can land whose last landing at its head sluice or its host stopped SHALL say, beside that it can land, what stopped it and that main-level ops submits it again once that is cleared. Once a bolt can land, the row SHALL carry `crew tell <label>-ops "Land <bolts that can land, in order>."`. The row SHALL have begun to wait at the time of the earliest last commit among its bolts' branches.
 
 #### Scenario: The last unit merges
 - **WHEN** the last unit of crew's bolt `b` merges into `bolt/b` through sluice, every unit's change has been in a batch the user has answered, and the landing's verdict is `passed`
@@ -21,7 +21,15 @@ Each kit with a bolt in flight whose units have all merged and not all landed SH
 
 #### Scenario: A refused landing
 - **WHEN** sluice refused `b`'s landing at its head for a conflict
-- **THEN** `b`'s line says it is held, in sluice's words, until a fix moves its head
+- **THEN** `b`'s line says its landing was rejected at that head and the bolt is open for work, and, in sluice's words, that it lands again once a fix moves its head
+
+#### Scenario: A landing queued
+- **WHEN** the run record has `b`'s landing queued on main as #412 with no outcome
+- **THEN** `b`'s line says its landing is queued as #412 and that no unit, chore or fix joins it until sluice decides, and the row's tell leaves `b` out
+
+#### Scenario: Landing again
+- **WHEN** `b`, rejected as #412, is queued again as #415
+- **THEN** `b`'s line says it is landing again as #415, after #412 was rejected, and the row's tell leaves `b` out
 
 #### Scenario: A bolt taking main first
 - **WHEN** `b` reads proven and the run record holds a `forecast` on `bolt/b` at `b`'s present head naming a conflict with main on `README.md` and no submission queued on main

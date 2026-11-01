@@ -153,6 +153,37 @@ No brief crew gives an agent SHALL name a proof list, a task's shape or a design
 - **WHEN** the planner's brief, or any brief's results section, is printed
 - **THEN** it names no *Proof in dev* list, no *Task notes* section and no shape for a task
 
+### Requirement: A landing queued holds its bolt's work
+crew SHALL read a bolt's landing from the run record as one of four states, each its own. **Queued** runs from the `bolt.submit` that records sluice's submission queued until an entry records that submission's outcome. **Rejected** holds once sluice refused the bolt's newest submission for the bolt's own content, a conflict or a failed check, recorded refused with the head submitted, until the bolt is submitted again. **Landing again** is queued once more after a rejection. **None** is a bolt never submitted, landed, or stopped by sluice or its host, nothing of the bolt's.
+
+While a bolt's landing is queued or landing again, these SHALL be refused, naming the landing and its number, with nothing written or launched: `crew unit add` and `crew chore add` into the bolt, `crew unit move` and `crew chore move` into it, and `crew fix <bolt> <name>`. That holds whether they run directly or as a proposal's commands, at the proposal's check and at its approval. Each SHALL read the state from the run record at the tip its write is applied to. Once the bolt's landing is rejected, or with none, they SHALL go on as for any started bolt. `crew fix <bolt> <name> --drop`, the take-main fix crew launches on reading a conflict, and a proposal's card as it is drawn SHALL read no state.
+
+`crew bolts`, text and JSON, the rail's line under land and the board's head line SHALL each say the state in words of their own. A landing queued is said with its number. A landing again is said with its number and the submission sluice rejected before it. A rejection is said, while the bolt's head is the one rejected, as the landing rejected and the bolt open for work, with sluice's words. The rail SHALL leave a bolt whose landing is queued or landing again out of the bolts that can land.
+
+#### Scenario: A unit added while the landing is queued
+- **WHEN** main-level ops's `crew bolt submit z` has `z`'s landing queued on main as #412, and the user approves the planner's proposal adding unit `b` to `z`
+- **THEN** the approval is refused, saying `z` has its landing queued on main as #412, so unit `b` does not join it until sluice decides, and to put it on another bolt; `requests.rec` gains nothing
+
+#### Scenario: A fix while the landing is queued
+- **WHEN** main-level ops runs `crew fix z logic "Fix tests:logic."` while #412 is queued
+- **THEN** it is refused naming #412, and no fix is launched
+
+#### Scenario: A rejection opens the bolt for work
+- **WHEN** sluice rejects #412, blaming `tests:logic`, which ran and failed
+- **THEN** `crew bolts`, the rail and the board say `z`'s landing #412 was rejected at its head and the bolt is open for work, in sluice's words, and ops's `crew fix z logic "<sluice's words>"` is launched
+
+#### Scenario: Landing again
+- **WHEN** the fix has merged into `z` and ops's `crew bolt submit z` has it queued again as #415
+- **THEN** `crew bolts`, the rail and the board say `z` is landing again as #415, after #412 was rejected; a unit added to `z` is refused naming both; and the rail's tell leaves `z` out
+
+#### Scenario: A wait sluice itself failed on
+- **WHEN** `crew bolt submit z`'s wait recorded `z`'s landing stopped with no submission named, sluice itself failing each time it waited on #412
+- **THEN** `z`'s landing still reads queued as #412, and its work is held until a read records #412's outcome
+
+#### Scenario: Another bolt's landing
+- **WHEN** `y`'s landing is queued and the user adds a unit to `z`
+- **THEN** the unit is added to `z` and launched
+
 ## MODIFIED Requirements
 
 ### Requirement: crew removes only its own worktrees
@@ -304,15 +335,15 @@ While a submission stands in sluice's queue, crew SHALL show its number and stat
 - **THEN** each held bolt of that kit on the host says its submissions can't be read and why, once, and no line shows a number or says it has none
 
 ### Requirement: A landing's waiter waits from the background a call at a time
-Once sluice has queued a landing's submission, crew SHALL leave a waiter running on the kit's host, outside any agent's session. The waiter SHALL wait on the submission's number as `teams.5` has an agent wait: `sluice wait <n> --timeout 9m --json`, called again while it exits 5. It SHALL stop calling on any other exit. While it waits, no unit or chore stage starts on the bolt, as `plan.8` has it. When it stops, it SHALL run crew's read of the landing on that host.
+Once sluice has queued a landing's submission, crew SHALL leave a waiter running on the kit's host, outside any agent's session. The waiter SHALL wait on the submission's number as `teams.5` has an agent wait: `sluice wait <n> --timeout 9m --json`, called again while it exits 5. It SHALL stop calling on any other exit. While the run record has the landing queued with no outcome, no work SHALL join the bolt, as `plan.8` has it and "A landing queued holds its bolt's work" says. When it stops, it SHALL run crew's read of the landing on that host.
 
 #### Scenario: The waiter calls again while sluice is undecided
 - **WHEN** a landing's submission is queued and sluice's first two waits on it exit 5, and its third exits 0
 - **THEN** the waiter has called `sluice wait <n> --timeout 9m --json` three times, then crew's read of the landing has run, and the landing is recorded landed
 
 #### Scenario: Nothing starts on the bolt while the waiter waits
-- **WHEN** a landing's waiter is still calling `sluice wait` and a stage of a unit of the bolt would start
-- **THEN** it does not start, and crew says the bolt's landing is in flight
+- **WHEN** a landing's waiter is still calling `sluice wait` on `z`'s submission #412, and the user runs `crew unit add b "Build b." --bolt z`
+- **THEN** it is refused, saying `z` has its landing queued on main as #412, the plan is unchanged, and nothing is launched
 
 ### Requirement: A close crew refuses is said on the bolt's row and in the run record until it is lifted
 When a landed bolt's close is refused, crew SHALL record a `bolt.land` entry on the bolt carrying the refusal in crew's words, and SHALL say the same words on standard error. While the plan still holds the bolt, each later read SHALL try the close again. A read SHALL record a new refused entry only when the words differ from the bolt's last refused `bolt.land` since its landing. The bolt's head line SHALL say it landed on main and was not closed, with the words of its last refused close, until a close succeeds.
