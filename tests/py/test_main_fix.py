@@ -38,8 +38,9 @@ class TestLaunch:
             "Intent": "madswan/main/crew", "Recipient": "madswan/ops", "Hold": "submission", "Brief": WORDS}]
         assert w.subject == "plan(main): fix a-test-reads-its-fixture of crew"
 
-    def test_its_priority_is_above_every_bolt_given_through_flume(self):
-        w = write([("x", "crw-4", "flume"), ("y", "crw-4", "flume"), ("z", "crw-5", None)])
+    def test_its_priority_is_above_every_started_bolt(self):
+        """x and y are started and z planned: the fix goes above x and y, and z counts for nothing."""
+        w = write([("x", None, "flume"), ("y", None, "flume"), ("z", None, None)])
         plan.main_fix_change(crossed_fleet(), w, "crew", "red", "start", WORDS)
         assert requests(w)[0]["Priority"] == "3"
         assert runner.priority_of(w.plan, "x") == 2
@@ -92,7 +93,7 @@ class TestWhichTeam:
         assert runner.main_fixer(fleet["teams"], "madswan", "crew", "alpha") == ("crw-5", None)
         assert runner.main_fixer(fleet["teams"], "madswan", "crew", "mac-studio") == (
             None, "crw-4 and crw-5 build crew through Flume on alpha and deneb, none of them madswan's main-level host mac-studio, "
-                  "so crew can't tell the one host a fix of its main runs on")
+                  "so crew can't tell the one host crew's work runs on")
         fleet["partitions"]["madswan"]["machine"] = "alpha"
         w = write(runners=ran(host="alpha"))
         assert plan.main_fix_change(fleet, w, "crew", "red", "start", WORDS) == dict(n=1, host="alpha", stream="late")

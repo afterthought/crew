@@ -14,6 +14,12 @@ import plan
 KIT, TE = "switchboard-kit", "tenant-environments"
 
 
+@pytest.fixture(autouse=True)
+def writer(monkeypatch):
+    """An amendment of a started bolt's unit reaches its place by requests, which name their writer."""
+    monkeypatch.setenv("CREW_AGENT", "chuck@mac-studio")
+
+
 def fresh():
     return FactsWrite(plan_text(bolts=[(TE, KIT, "swb-1")], units=[("coding", KIT, TE, []), ("later", KIT, None, [])]))
 
@@ -89,10 +95,9 @@ class TestCrossed:
                           "runner": None, "answers": answers, "places": places}}
 
     def amend(self, runners, n=None, proposals=None):
-        """a and b after it, launched on crossed crw-4's x as the give launched them, then a amended."""
+        """a and b after it, launched on started x with crw-4 as the start launched them, then a amended."""
         w = FactsWrite(flume_plan([("x", None, None)], [("a", "x", [], "unit", ["README.md"]), ("b", "x", ["a"], "unit", [])]),
                        runners=runners, label="madswan")
-        w.plan.bolt("x").set("Team", "crw-4")
         w.plan.bolt("x").set("Path", "flume")
         plan.reach_places(self.FLEET, w, "x", self.FLEET["teams"]["crw-4"])
         if proposals:

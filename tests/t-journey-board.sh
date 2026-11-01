@@ -52,7 +52,7 @@ crew bolt new tenant-environments "Tenants hold environments." --repo switchboar
 for u in a b c; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
 crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
 crew unit add map-one "Map one." --bolt atlas-maps >/dev/null
-crew bolt give swb-1 tenant-environments >/dev/null; crew bolt give atl-1 atlas-maps >/dev/null
+crew bolt start tenant-environments >/dev/null; crew bolt start atlas-maps >/dev/null
 crew fix tenant-environments edge "The edge answers an object." >/dev/null
 # live <place> <stage> [<ticked> <total>]: Flume's status of a live place at that stage, begun, with its tasks, as the
 # runner carries it (tests/py/flume-0.3.6/code.json, trimmed to what crew reads)

@@ -403,13 +403,6 @@ class TestTeamGreetings:
     def test_status_names_the_bolt_a_team_builds_and_the_one_waiting_to_land(self):
         assert plan.two_held_said("swc-1", "ssh-fix", "doctor-rows") == "swc-1 builds ssh-fix; doctor-rows waits to land"
 
-    def test_a_give_beside_a_waiting_bolt_says_its_roles_start_again_at_their_next_stop(self):
-        assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 0, "") == (
-            "swc-1-conductor and swc-1-ops start again on bolt/ssh-fix at their next stop")
-        assert plan.given_beside("swc-1", "ssh-fix", ["ops"], 0, "") == "swc-1-ops starts again on bolt/ssh-fix at its next stop"
-        assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 255, "") == (
-            "swc-1's host did not answer: swc-1-conductor and swc-1-ops carry bolt/ssh-fix once next started")
-
     def test_ops_of_a_team_holding_two_bolts_is_told_the_one_it_builds_and_the_one_waiting(self):
         assert crew.ops_greeting("swc-1", "ssh-fix", waiting="doctor-rows").startswith(
             "You are swc-1's ops; your team builds the bolt ssh-fix. Bolt doctor-rows waits to land. Nothing is asked of you now")

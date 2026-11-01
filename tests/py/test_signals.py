@@ -114,7 +114,7 @@ class TestFiles:
 
 
 class TestCaptureText:
-    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2")]))
+    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "breadboard-kit", True)]))  # started, its work run with swb-2, breadboard-kit's
 
     def text(self, v, name="swb-2-conductor", raw="chuck-herdr-alpha:~/.local/state/crew/wldn/raw/x.jsonl"):
         key, cap, date, *_ = named(v, name=name)
@@ -140,9 +140,9 @@ class TestCaptureText:
 
 
 class TestWhere:
-    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2")]))
+    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "breadboard-kit", True)]))  # started, its work run with swb-2, breadboard-kit's
 
-    def test_a_conductor_is_at_its_team_and_the_bolt_it_holds_a_planner_at_the_main_level(self):
+    def test_a_conductor_is_at_its_team_and_the_bolt_its_work_runs_a_planner_at_the_main_level(self):
         assert plan.where_of(FLEET, "swb-2-conductor", self.PLAN) == "team swb-2, bolt smoke-2"
         assert plan.where_of(FLEET, "swb-1-ops", self.PLAN) == "team swb-1"
         assert plan.where_of(FLEET, "wldn-planner", self.PLAN) == "main level"
@@ -155,8 +155,9 @@ class TestWhere:
         assert plan.where_of(FLEET, "swb-2-unit-1", self.PLAN) == "team swb-2, bolt smoke-2, unit cfn-lint-treefmt"
         assert plan.where_of(FLEET, "swb-2-unit-2", self.PLAN) == "team swb-2, bolt smoke-2, fix edge"
 
-    def test_a_team_holding_two_bolts_is_at_both(self):
-        p = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2"), ("smoke-3", "switchboard-kit", "swb-2")]))
+    def test_a_team_whose_kit_has_two_bolts_started_is_at_both(self):
+        p = plan.Plan(plan_text(bolts=[("smoke-2", "breadboard-kit", True), ("smoke-3", "breadboard-kit", True),
+                                       ("planned", "breadboard-kit", None)]))
         assert plan.where_of(FLEET, "swb-2-conductor", p) == "team swb-2, bolt smoke-2, bolt smoke-3"
 
     def test_a_session_on_another_host_is_not_read_here(self):

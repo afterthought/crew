@@ -275,7 +275,7 @@ def board_data(fleet, labels, read, now):
             """The teams of each bolt a proposal's changes name, the team holding it or else those building its
             repository; and, where a change makes a bolt or names the queue, those building that bolt's repository or
             the unit's. A change that names no repository adds none."""
-            bolts = {b.name(): (b.get("Team"), b.get("Repo")) for b in pl.bolts()}
+            bolts = {b.name(): (plan.team_name(fleet, b), b.get("Repo")) for b in pl.bolts()}
             units = {u.name(): u.get("Repo") for u in pl.work()}
             out = []
             for c in d["changes"]:
@@ -308,11 +308,11 @@ def board_data(fleet, labels, read, now):
             st = plan.Stages(fleet, pl, sv, read.get("runs"))
             for b in pl.bolts():
                 units = pl.work_of(b.name())
-                if not b.get("Team"):
+                if not plan.started(b):
                     planned.append({"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "teams": building(b.get("Repo")),
                                     "units": [{"unit": u.name(), "kind": plan.kind_of(u), "stage": st.of(u.name())["stage"]} for u in units]})
                     continue
-                t = fleet["teams"].get(b.get("Team"))
+                t = plan.known_team(fleet, b)
                 k, _ = st.kit(b) if t else (None, None)
                 k = k or {}
 
@@ -328,9 +328,10 @@ def board_data(fleet, labels, read, now):
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
                                                      [(u.name(), plan.kind_of(u)) for u in units])
                 recorded = landing_of(logs, b.name())
-                ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
-                          "stream": streams.get(b.get("Team")), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
-                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
+                team = t["name"] if t else None
+                ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": team, "host": t["machine"] if t else None,
+                          "stream": streams.get(team), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
+                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [team], "units": [], "fixes": [],
                           "landing": landing, "submissions_error": unread, "record": recorded,
                           "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
                 for u in units:

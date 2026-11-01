@@ -57,12 +57,12 @@ PY
 commit_all "$w" "plan: by hand"; push_state "$w"
 # sluice makes the bolt's branch on GitHub pushing as its app, which moves no tracking ref; the give fetches it.
 touch "$T/sluice-leaves-copy"
-expect_ok crew bolt give swb-1 tenant-environments
+expect_ok crew bolt start tenant-environments
 rm "$T/sluice-leaves-copy"
 made=$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/tenant-environments)
 eq "$(git -C "$k" rev-parse refs/remotes/origin/bolt/tenant-environments)" "$made"
 has "$out" "the runner on $box launches unit/the-deploy-names-its-host-tenant (request 1), unit/the-deploy-is-logged (request 2), unit/in-verify (request 3) in stream wldn"
-eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team,Path | row)" "swb-1 flume"
+eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team,Path | row)" "flume"
 ok "a give fetches the bolt's branch sluice made on GitHub, marks the bolt Path: flume and launches each of its units"
 # The runner on the box launched two of them: Flume's status of their places, carried on its branch, has one in code
 # and the other in verify.

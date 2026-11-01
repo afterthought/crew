@@ -9,7 +9,7 @@ from pathlib import PurePath
 
 import pytest
 
-from facts import plan_text
+from facts import FLEET, plan_text
 
 import page
 import plan
@@ -88,6 +88,8 @@ class TestLabels:
         pl = plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", "swb-1")], units=[]))
 
         class St:
+            fleet = FLEET  # whose teams say which team a started bolt's work runs with (plan.team_name)
+
             def of(self, name):
                 return {"stage": "code"}
 
@@ -214,29 +216,27 @@ class TestSites:
 
 
 class TestSitesOfAStartedBolt:
-    """crew-sites "A started bolt's work shows no server": x, given through Flume, is listed with where its work runs and
-    no server, though one runs in a unit's place of crew's naming, since its places are Flume's (_open.md: the runner
-    reports a place's addresses); y, given before, still shows its unit's server."""
+    """crew-sites "A started bolt's work shows no server": x, started, is listed with where its work runs and no
+    server, though one runs in a unit's place of crew's naming, since its places are Flume's (_open.md: the runner
+    reports a place's addresses)."""
 
     def listed(self, monkeypatch):
         import crew
         from facts import crew_read, crossed_fleet_read, flume_plan
         fleet = dict(crossed_fleet_read(), hosts={"deneb": {"kind": "nixos"}})
-        p = plan.Plan(flume_plan([("x", "crw-4", "flume"), ("y", "crw-5", None)], [("a", "x", [], "unit", []), ("b", "y", [], "unit", [])]))
-        sv = crew_read(bolts={"x": {}, "y": {}})
+        p = plan.Plan(flume_plan([("x", "crw-4", "flume")], [("a", "x", [], "unit", [])]))
+        sv = crew_read(bolts={"x": {}})
         k = sv["deneb"]["kits"]["/crew/main"]
-        k.update(places={u: {"path": f"/crew/places/unit-{u}"} for u in "ab"},
-                 sites={f"/crew/places/unit-{u}": {"here": f"https://unit-{u}--crew.local"} for u in "ab"},
-                 routes=[{"name": f"unit-{u}--crew", "url": f"https://unit-{u}--crew.local"} for u in "ab"])
+        k.update(places={"a": {"path": "/crew/places/unit-a"}}, sites={"/crew/places/unit-a": {"here": "https://unit-a--crew.local"}},
+                 routes=[{"name": "unit-a--crew", "url": "https://unit-a--crew.local"}])
         monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("madswan", "afterthought/crew-state", "tip0", p)])
         monkeypatch.setattr(plan, "survey", lambda fleet, held, sites=False: sv)
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
         return sites.sites(fleet, ["madswan"])
 
     def test_a_started_bolt_is_listed_with_no_server_saying_why(self, monkeypatch):
-        x, y = self.listed(monkeypatch)["partitions"][0]["hosts"][0]["bolts"]
+        x, = self.listed(monkeypatch)["partitions"][0]["hosts"][0]["bolts"]
         assert (x["bolt"], x["url"], x["units"], x["note"]) == ("x", None, [], sites.FLUME_PLACES)
-        assert y["units"] == [{"worktree": "/crew/places/unit-b", "url": "https://unit-b--crew.local", "note": None, "unit": "b"}]
 
     def test_its_line_says_where_its_work_runs(self, monkeypatch):
         line = next(l for l in sites.text(self.listed(monkeypatch)).splitlines() if l.strip().startswith("x "))
@@ -249,6 +249,8 @@ class TestMore:
         pl = plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", "swb-1")], units=[("a", "switchboard-kit", "tenant-environments", [])]))
 
         class Unknown:
+            fleet = FLEET  # swb-1 builds switchboard-kit in stream wldn, so tenant-environments' work runs with it
+
             def of(self, name):
                 return {"stage": "unknown"}
 
@@ -296,7 +298,8 @@ class TestMore:
 class TestDocks:
     """board-page: every item the page draws opens a dock with what the page's data and lineage hold of it (page.docks),
     on the board of test_board's fixture: a signal, a proposal waiting with its card open, a planned bolt and a queued
-    unit, tenant-environments held by swb-1 with a in code and a fix, atlas-maps landed by atl-1 and deployed to
+    unit, tenant-environments started, its work with swb-1, with a in code, b at construct and a fix, atlas-maps landed
+    by atl-1 and deployed to
     mac-studio, a newer deploy waiting on the word, and operations waiting on the environment."""
     SIG = "2026-10-01-planning/01-zones"
 
@@ -356,7 +359,7 @@ class TestDocks:
         facts = {f[0]: f[1:] for f in a["facts"]}
         assert facts["bolt"] == ["tenant-environments", "bolt:tenant-environments"]
         assert (facts["stage"], facts["tasks"]) == (["code"], ["1 of 2 tasks"]) and "slot" not in facts
-        assert facts["server"] == ["https://unit-a--switchboard-kit--box.dev"]
+        assert "server" not in facts and "worktree" not in facts
 
     def test_the_same_deploy_from_the_operation_lane_and_the_deploys_view_has_one_key(self):
         """board-page "A deploy from either view"."""
@@ -404,13 +407,13 @@ class TestDocks:
         assert {"title": "units and bolts", "rows": [{"text": "unit d"}]} in p["parts"]
         assert {"title": "teams", "rows": [{"text": "swb-1", "key": "team:swb-1"}]} in p["parts"]
 
-    def test_a_held_bolts_dock_is_a_ledger_of_its_units_and_fixes_and_a_planned_ones_says_no_team(self):
+    def test_a_started_bolts_dock_is_a_ledger_of_its_units_and_fixes_and_a_planned_ones_says_no_team(self):
         d = self.paged()
         b = d["docks"]["bolt:tenant-environments"]
         assert (b["form"], b["title"], b["tail"]) == ("ledger", "tenant-environments", "switchboard-kit · swb-1 on chuck-herdr-alpha · active")
         assert ["team", "swb-1", "team:swb-1"] in b["facts"]
         units = next(p["rows"] for p in b["parts"] if p["title"] == "units")
-        assert units == [{"text": "a · code 1/2", "key": "unit:a"}, {"text": "b · planned", "key": "unit:b"}]
+        assert units == [{"text": "a · code 1/2", "key": "unit:a"}, {"text": "b · construct", "key": "unit:b"}]
         assert next(p["rows"] for p in b["parts"] if p["title"] == "fixes") == [
             {"text": "fix/tenant-environments/edge · not merged", "key": "fix:tenant-environments/edge"}]
         assert b["history"] == d["histories"]["bolt/tenant-environments"]
@@ -578,6 +581,8 @@ def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labell
     pl = plan.Plan(plan_text(bolts=[("c", "switchboard-kit", "swb-1")], units=[("bump", "switchboard-kit", "c", [], "chore")]))
 
     class St:
+        fleet = FLEET
+
         def of(self, name):
             return {"stage": "verify"}
 

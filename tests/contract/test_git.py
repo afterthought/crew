@@ -79,7 +79,7 @@ def test_a_unit_moved_to_a_bolt_on_github_tracks_it_there(repo, tmp_path):
 
 
 def found_of(repo, remote="origin"):
-    """plan.BOLT_FOUND in the kit's main checkout, as bolt_give runs it once sluice refused to make bolt/b, and
+    """plan.BOLT_FOUND in the kit's main checkout, as crew bolt start runs it once sluice refused to make bolt/b, and
     kit.bolt_found's reading of it."""
     import kit
     r = script("BOLT_FOUND", str(repo.path), "b", remote)
@@ -87,9 +87,9 @@ def found_of(repo, remote="origin"):
     return r.stdout, kit.bolt_found(r.stdout, "b")
 
 
-def test_a_bolt_a_give_left_at_main_on_github_is_found_there_at_mains_commit(repo, tmp_path):
+def test_a_bolt_a_start_left_at_main_on_github_is_found_there_at_mains_commit(repo, tmp_path):
     """plan.made_said through BOLT_FOUND (plan.19): bolt/b on a bare GitHub stand-in at its main's commit, and the
-    host's own at the same, as sluice's create leaves them when the give fails after it, read by one ls-remote for the
+    host's own at the same, as sluice's create leaves them when the start fails after it, read by one ls-remote for the
     bolt and main beside the host's own ref; the host's own gone reads as None."""
     head = repo.commit("chore: start", {"README.md": "r\n"})
     repo.git("branch", "bolt/b")

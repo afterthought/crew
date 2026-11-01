@@ -243,8 +243,8 @@ class TestTheWordsAtAClose:
 
     def test_a_reads_close_on_a_host_keeping_no_words_names_the_pane_and_the_time_and_reaches_no_other_host(
             self, monkeypatch, tmp_path, capsys):
-        P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "crw-5", "Repo": "crew"}, "work_of": lambda s, b: [],
-                           "units": lambda s: []})
+        P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Path": "flume", "Repo": "crew"}, "work_of": lambda s, b: [],
+                           "units": lambda s: [], "bolts": lambda s: []})
         at = "2026-10-28T09:41:00Z"
         entries = [dict(submitted(frm="session/s-1/u-7", at=at, host="mac-studio"), Outcome="queued", Submission="412", Chars=len(WORDS)),
                    dict(submitted(frm="session/s-1/u-7", at=at, host="mac-studio"), Outcome="landed", Submission="412", Chars=len(WORDS))]
@@ -258,7 +258,6 @@ class TestTheWordsAtAClose:
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: entries)
         monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append(k.get("by")))
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
-        monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
         monkeypatch.setattr(plan, "sweep_on", lambda fleet, t, what, landed=None, **k: tidied.append(landed))
         monkeypatch.setattr(plan, "LANDINGS", tmp_path)  # this host keeps no words
         monkeypatch.setattr(plan.crew, "on_machine", lambda *a: pytest.fail(f"the close reached a host: {a[1:]}"))

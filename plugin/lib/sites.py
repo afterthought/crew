@@ -42,7 +42,7 @@ def sites(fleet, labels):
     here = crew.this_host()
     found, errors = [], {}
     found = plan.plans(fleet, labels, errors)
-    held = [(b.get("Team"), b.name(), b.get("Repo")) for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]]
+    held = [(n, b.name(), b.get("Repo")) for _, _, _, p in found if p for b in p.bolts() for n in [plan.team_name(fleet, b)] if n]
     sv = plan.survey(fleet, held, sites=True)
     out = {"from": here, "partitions": [], "unread": errors}
     for l in labels:

@@ -47,10 +47,10 @@ def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
     [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it,
     in the policy as the kit's main holds it now (ref, origin/main for a kit on GitHub, plan.18). Refused, naming the
     file and the ref, when the kit has none, it is not TOML, or no table names bolt branches with a check: a kit merges
-    and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
+    and lands only through sluice, so crew starts none of its bolts until its policy says what gates one."""
     if text is None:
         crew.fail(f"{kit} merges only through sluice, and has no {where} on {ref}: write one whose "
-                  f"[branches.\"bolt/*\"] names the checks a bolt's merges must pass, then give the bolt again")
+                  f"[branches.\"bolt/*\"] names the checks a bolt's merges must pass, then start the bolt again")
     try:
         branches = tomllib.loads(text).get("branches", {})
     except tomllib.TOMLDecodeError as e:
@@ -59,7 +59,7 @@ def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
     required = table.get("required") if table else None
     if not (isinstance(required, list) and required and all(isinstance(r, str) and r for r in required)):
         crew.fail(f"{kit} merges only through sluice, and its {where} names no checks for its bolt branches: give "
-                  f"[branches.\"bolt/*\"] a `required` list of the checks a bolt's merges must pass, then give the bolt again")
+                  f"[branches.\"bolt/*\"] a `required` list of the checks a bolt's merges must pass, then start the bolt again")
     return required
 
 
@@ -136,15 +136,15 @@ def pull_marked(code, out, err):
 
 
 def give_remote(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="origin/main"):
-    """The remote a give has sluice make a bolt's branch on (plan.19): the one the kit's policy at its main now names
+    """The remote a start has sluice make a bolt's branch on (plan.19): the one the kit's policy at its main now names
     for its bolt branches (bolt_remote). Refused, naming the file and the key, when it names none, since crew gives
     bolts only on GitHub and writing the key is the kit's own change (plan.17)."""
     return bolt_remote(text, branch, where) or crew.fail(
-        f"{kit} gives bolts only on GitHub, and its {where} on {ref} names no remote for its bolt branches: its "
-        f"[branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change (plan.17), then give the bolt again")
+        f"{kit} starts bolts only on GitHub, and its {where} on {ref} names no remote for its bolt branches: its "
+        f"[branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change (plan.17), then start the bolt again")
 
 
-# The first sluice with `branch create` and `branch delete` (sluice ADR 0026, v0.20.0), which a give and a land need.
+# The first sluice with `branch create` and `branch delete` (sluice ADR 0026, v0.20.0), which a start and a land need.
 SLUICE_BRANCHES = (0, 20, 0)
 
 
@@ -156,14 +156,14 @@ def sluice_version(out):
 
 
 def sluice_refusal(out, host):
-    """Why a give can't go through the host's sluice, or None (plan.19, read.1): its version is below SLUICE_BRANCHES,
+    """Why a start can't go through the host's sluice, or None (plan.19, read.1): its version is below SLUICE_BRANCHES,
     which has no `branch create`, or `sluice --version` printed nothing crew can read; naming the version needed and
     the host's own words."""
     v = sluice_version(out)
     if v is not None and v >= SLUICE_BRANCHES:
         return None
     said = " ".join((out or "").split())[:120] or "nothing"
-    return (f"a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice --version on {host} "
+    return (f"a bolt is started through sluice 0.20.0 or later, which has `branch create`, and sluice --version on {host} "
             f"said: {said}")
 
 

@@ -1,11 +1,13 @@
 """A proposal's commands (plan.3, plan.4): how its Do lines parse (plan.do_args), which conductors must agree
 (plan.touched_by, plan.held_teams), the units the user may leave out and what is applied without them (plan.new_units,
-plan.kept), and the plan its commands leave, applied in order to the plan in memory. Writing, recording and telling
-the planner are the proposals journey's (t-journey-plan)."""
+plan.kept), the plan its commands leave, applied in order to the plan in memory, and a start it holds checked and
+approved (plan.check_ops, plan.apply_all). Writing, recording and telling the planner are the proposals journey's
+(t-journey-plan)."""
 import pytest
-from facts import FactsWrite, apply, plan_text, units_of
+from facts import FLEET, FactsWrite, apply, plan_text, units_of
 
 import plan
+import runner
 
 KIT = "switchboard-kit"
 
@@ -18,6 +20,14 @@ def refused(fn, *a):
     with pytest.raises(plan.Refusal) as e:
         fn(*a)
     return str(e.value), getattr(e.value, "recorded", None)
+
+
+def carrying(text, teams):
+    """plan.rec text with each bolt in teams, {bolt: team}, carrying a Team field as a branch's records written before
+    teams left still do (bolt-plan "A flywheel keeps one plan"), which the conductors' agreement reads until it leaves."""
+    for b, t in teams.items():
+        text = text.replace(f"Goal: Goal of {b}.\n", f"Goal: Goal of {b}.\nTeam: {t}\n")
+    return text
 
 
 class TestDoLines:
@@ -41,8 +51,9 @@ class TestDoLines:
 
 
 class TestAgreement:
-    PLAN = plan.Plan(plan_text(bolts=[("held", KIT, "swb-1"), ("free", KIT, None), ("other", KIT, "swb-2")],
-                               units=[("h1", KIT, "held", []), ("f1", KIT, "free", []), ("q1", KIT, None, [])]))
+    PLAN = plan.Plan(carrying(plan_text(bolts=[("held", KIT, "swb-1"), ("free", KIT, None), ("other", KIT, "swb-2")],
+                                        units=[("h1", KIT, "held", []), ("f1", KIT, "free", []), ("q1", KIT, None, [])]),
+                              {"held": "swb-1", "other": "swb-2"}))
 
     def test_each_command_touches_the_bolts_it_changes(self):
         touched = plan.touched_by(self.PLAN, args(f'unit add n "N." --bolt free', "unit move q1 held", "unit move h1 queue",
@@ -148,6 +159,11 @@ class TestRestsOnAccepted:
     REPO = "WilldanGroup/switchboard-kit"
     FILE = "docs/adr/0033-a-record.md"
 
+    @pytest.fixture(autouse=True)
+    def writer(self, monkeypatch):
+        """Work moved into a started bolt is launched, and a launch names its writer."""
+        monkeypatch.setenv("CREW_AGENT", "wldn-planner")
+
     def said(self, status="proposed", marked=False, files=(FILE,), kit=KIT, repo=REPO):
         return plan.unaccepted([("unit", "u", kit, repo, 33)], {(repo, 33): {"files": list(files), "status": status, "marked": marked}})
 
@@ -209,7 +225,8 @@ class TestRestsOnAccepted:
         assert plan.record_items(self.FLEET, "wldn", w.plan, args("unit move q held")) == [("unit", "q", KIT, self.REPO, 33)]
 
     def test_work_the_proposal_does_not_make_new_is_not_read(self):
-        text = plan_text(bolts=[("held", KIT, "swb-1")], units=[("h1", KIT, "held", []), ("h2", KIT, "held", [])]).replace(
+        """A planned bolt, since work launched in a started one is never moved out."""
+        text = plan_text(bolts=[("held", KIT, None)], units=[("h1", KIT, "held", []), ("h2", KIT, "held", [])]).replace(
             "Intent: Unit h1.\n", "Intent: Unit h1.\nSource: docs/adr/0033\n")
         dos = ("unit order h2 --first", 'unit amend h1 "Amended."', "unit move h2 queue")
         w = apply(FactsWrite(text), *dos)
@@ -219,3 +236,56 @@ class TestRestsOnAccepted:
         said, _ = refused(self.items, 'unit add n "N." --repo breadboard-kit --source docs/adr/0001')
         assert said == "unit n names a decision record, and no team of wldn builds breadboard-kit, so crew can't tell whose it is"
         assert self.items('unit add m "M." --repo breadboard-kit --source docs/architecture/core.md') == []
+
+
+class TestStartProposed:
+    """A proposal may hold crew bolt start (bolt-plan "A bolt is started"; Decision 14 of the-team-machinery-leaves,
+    roles.1): its Do parses by the command's grammar and touches the bolt; it is checked as the proposal's card is drawn,
+    reading no kit (Drawn); and its approval, the kit's host read as a direct start reads it (plan.start_check), marks
+    the bolt Path: flume and launches each unit of it on its kit's host in its stream, starting no agent. One naming a
+    bolt started already is refused whole. sluice's branch and the commit are the cross journey's (t-journey-cross)."""
+    FLEET = dict(FLEET, teams={n: dict(t, kit=dict(t["kit"], main=f"/w/{t['kit']['name']}/main", dir=f"/w/{t['kit']['name']}"))
+                               for n, t in FLEET["teams"].items()})
+    DOS = ("bolt start pages",)
+
+    @pytest.fixture(autouse=True)
+    def host(self, monkeypatch):
+        """chuck-herdr-alpha free, its runner answering, and switchboard-kit's policy making bolts on GitHub."""
+        import crew
+        self.read = []
+        monkeypatch.setenv("CREW_AGENT", "chuck@mac-studio")
+        monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+        monkeypatch.setattr(crew, "held_on", lambda fleet, host: None)
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("WilldanGroup/crew-state", f"{label}/main"))
+        monkeypatch.setattr(plan, "runner_tips", lambda repo, label: {"chuck-herdr-alpha": "a" * 40})
+        monkeypatch.setattr(plan, "kit_policy", lambda fleet, t: self.read.append(t["machine"]) or (
+            '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n', "origin/main", "c" * 40, "sluice 0.36.4"))
+
+    def write(self):
+        return FactsWrite(plan_text(bolts=[("deploys", KIT, "started"), ("pages", KIT, None)],
+                                    units=[("d1", KIT, "deploys", []), ("p1", KIT, "pages", []), ("p2", KIT, "pages", ["p1"])]),
+                          files={"requests.rec": runner.REQUESTS})
+
+    def test_its_do_parses_and_touches_the_bolt(self):
+        a, = args(*self.DOS)
+        assert (a.cmd, a.sub, a.bolt) == ("bolt", "start", "pages")
+        assert plan.touched_by(self.write().plan, [a]) == [["pages"]]
+        assert plan.summary([a]) == "start bolt pages"
+
+    def test_its_card_is_checked_reading_no_kit(self):
+        after = plan.check_ops(self.FLEET, "wldn", self.write(), args(*self.DOS), 1, plan.Drawn).plan
+        assert plan.started(after.bolt("pages")) and self.read == []
+
+    def test_its_approval_starts_the_bolt_on_its_kits_host_in_its_stream(self):
+        w = self.write()
+        ops, _ = plan.apply_all(self.FLEET, "wldn", w, args(*self.DOS), 1)
+        assert [op.act for op in ops] == ["bolt.start"] and self.read == ["chuck-herdr-alpha"]
+        assert plan.started(w.plan.bolt("pages")) and w.plan.bolt("pages").get("Team") is None
+        assert [(r.get("Act"), r.get("Host"), r.get("Stream"), r.get("Work"), r.get("Base"), r.all("After"))
+                for r in plan.Plan(w.files["requests.rec"]).recs("Request") if r.get("Act") == "launch"] == [
+            ("launch", "chuck-herdr-alpha", "wldn", "unit/p1", "bolt/pages", []),
+            ("launch", "chuck-herdr-alpha", "wldn", "unit/p2", "bolt/pages", ["1"])]
+
+    def test_one_naming_a_bolt_started_already_is_refused_whole(self):
+        said, _ = refused(plan.check_ops, self.FLEET, "wldn", self.write(), args("bolt start pages", "bolt start deploys"), 1, plan.Drawn)
+        assert said == "`bolt start deploys`: bolt deploys is started already"

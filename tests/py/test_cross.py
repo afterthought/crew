@@ -1,6 +1,6 @@
-"""A team's work through Flume (record 0050 parts 2 and 3, the change teams-cross-to-flume-as-their-bolts-land; Decision 1
-of the-team-machinery-leaves): a team runs no standing agent, every standing-agent or slot command of it refused; a give
-launches its bolt whole; plan writes reach its places; a place is answered by a retry. The commands that act on it are
+"""A team's work through Flume (record 0050 parts 2 and 3, the change teams-cross-to-flume-as-their-bolts-land; Decisions 1
+and 14 of the-team-machinery-leaves): a team runs no standing agent, every standing-agent or slot command of it refused; a
+start launches its bolt whole; plan writes reach its places; a place is answered by a retry. The commands that act on it are
 the cross journey's (t-journey-cross)."""
 import re
 
@@ -61,7 +61,7 @@ def requests(w):
 
 
 def launch(n, work, name, after=(), kind="change", bolt="x", priority="1", brief=None):
-    """A launch request as a give writes it for crw-4 on deneb."""
+    """A launch request as a start writes it on deneb, crw-4's host and stream building crew."""
     d = {"Request": str(n), "Act": "launch", "Host": "deneb", "Work": work, "Repo": "afterthought/crew", "Kind": kind, "Name": name,
          "Base": f"bolt/{bolt}", "Stream": "madswan", "Priority": priority, "Intent": f"madswan/{bolt}", "Recipient": "madswan/planner"}
     if after:
@@ -71,60 +71,61 @@ def launch(n, work, name, after=(), kind="change", bolt="x", priority="1", brief
 
 
 def given(*bolts, work=(), files=None, runners=None):
-    """A write over madswan's plan, each bolt given as (name, team or None, Path or None)."""
+    """A write over madswan's plan, each bolt as (name, started, Path or None) (facts.flume_plan)."""
     from facts import FactsWrite
     return FactsWrite(flume_plan(bolts, work), files=files, runners=runners, label="madswan")
 
 
-def give(w, bolt, team="crw-4"):
-    """What a give's change function does for a crossed team once sluice made the branch: Team and Path: flume set,
-    and the bolt's work launched (plan.reach_places)."""
-    b = w.plan.bolt(bolt)
-    b.set("Team", team)
-    b.set("Path", "flume", after="Team")
-    return plan.reach_places(FLEET, w, bolt, FLEET["teams"][team])
+def start(w, bolt):
+    """What a start's change function does once sluice made the branch (plan.op_bolt_start): Path: flume set, no Team,
+    and the bolt's work launched on the host and in the stream of the team building its kit (plan.kit_team,
+    plan.reach_places)."""
+    w.plan.bolt(bolt).set("Path", "flume")
+    return plan.reach_places(FLEET, w, bolt, plan.kit_team(FLEET, "madswan", w.plan.bolt(bolt).get("Repo")))
 
 
-class TestGive:
-    """A give to a crossed team launches its bolt whole (Decision 5): a launch per unit and chore, in the file's order,
-    each after the launches of its After work, and no bound for the bolts the team holds."""
+class TestStart:
+    """A start launches its bolt whole (Decision 5 of teams-cross-to-flume-as-their-bolts-land, Decision 14 of
+    the-team-machinery-leaves): a launch per unit and chore, in the file's order, each after the launches of its After
+    work, with no team on the bolt and no bound for the bolts already started."""
 
     def test_a_bolt_of_three(self):
-        """crew bolt give crw-4 x, x holding units a and b, b after a, and chore c: three launches of change, change and
-        chore on bolt/x, b's naming a's as its After."""
+        """crew bolt start x, x holding units a and b, b after a, and chore c: three launches of change, change and
+        chore on bolt/x, b's naming a's as its After, and the bolt marked started with no Team."""
         w = given(("x", None, None), work=[unit("a", sources=["signals/s1", "README.md"]), unit("b", after=["a"]), unit("c", kind="chore")])
-        assert give(w, "x") == [(1, "unit/a"), (2, "unit/b"), (3, "chore/c")]
+        assert start(w, "x") == [(1, "unit/a"), (2, "unit/b"), (3, "chore/c")]
         assert requests(w) == [launch(1, "unit/a", "a", brief="Build a. Sources: signals/s1; README.md."),
                                launch(2, "unit/b", "b", after=[1]), launch(3, "chore/c", "c", kind="chore")]
-        assert (w.plan.bolt("x").get("Team"), w.plan.bolt("x").get("Path")) == ("crw-4", "flume")
+        assert (w.plan.bolt("x").get("Team"), w.plan.bolt("x").get("Path")) == (None, "flume")
+        assert plan.started(w.plan.bolt("x")) and plan.team_name(FLEET, w.plan.bolt("x")) == "crw-4"
 
     def test_a_dependent_listed_first_is_launched_after_its_after_work(self):
         w = given(("x", None, None), work=[unit("b", after=["a"]), unit("a")])
-        assert give(w, "x") == [(1, "unit/a"), (2, "unit/b")]
+        assert start(w, "x") == [(1, "unit/a"), (2, "unit/b")]
         assert requests(w)[1]["After"] == ["1"]
 
     def test_a_chores_brief_is_its_words_alone(self):
         w = given(("x", None, None), work=[unit("c", kind="chore", sources=["signals/s1"])])
-        give(w, "x")
+        start(w, "x")
         assert requests(w)[0]["Brief"] == "Build c."
 
-    def test_a_team_takes_a_third_bolt_and_its_launches_follow_the_requests_already_written(self):
-        """crw-4 holds x and y, each with work launched, and is given z: z is launched, nothing refused for x and y."""
+    def test_a_third_bolt_started_has_its_launches_follow_the_requests_already_written(self):
+        """x and y are started, each with work launched, and z is started: z is launched, nothing refused for x and y."""
         w = given(("x", None, None), ("y", None, None), ("z", None, None),
                   work=[unit("a"), unit("b", bolt="y"), unit("c", bolt="z")])
-        give(w, "x")
-        give(w, "y")
-        assert give(w, "z") == [(4, "unit/c")]
+        start(w, "x")
+        start(w, "y")
+        assert start(w, "z") == [(4, "unit/c")]
         assert [r["Act"] for r in requests(w)] == ["launch", "launch", "priority", "launch", "priority", "priority"]
 
-    def test_a_give_with_no_runner_on_the_host_is_refused_naming_it(self):
-        """crw-4 runs on deneb and the state repository has no madswan/runner/deneb."""
+    def test_a_start_with_no_runner_on_the_host_is_refused_naming_it(self):
+        """crew's kit is built on deneb, crw-4's host, and the state repository has no madswan/runner/deneb."""
         assert runner.runnerless("madswan", "deneb", {"alpha": "a" * 40}) == (
             "no runner answers on deneb: madswan/runner/deneb does not exist, so nothing would launch the bolt's work there; a "
-            "give waits for the runner (flywheel-runner) to serve the partition there")
+            "start waits for the runner (flywheel-runner) to serve the partition there")
         assert runner.runnerless("madswan", "deneb", {"deneb": "a" * 40}) is None
 
-    def test_what_the_give_says_names_each_launch_and_that_no_agent_starts(self):
+    def test_what_the_start_says_names_each_launch_and_that_no_agent_starts(self):
         assert plan.launched_said(FLEET["teams"]["crw-4"], "x", [(1, "unit/a"), (2, "chore/c")]) == (
             "no agent of crw-4 starts: the runner on deneb launches unit/a (request 1), chore/c (request 2) in stream madswan, and "
             "crew bolts shows their places")
@@ -137,10 +138,10 @@ def ops(w, *dos, stages=None, n=None):
 
 
 def launched(*bolts, work=(), runners=None):
-    """A write over a plan whose bolts are each given to crw-4 through Flume, their work launched as the give launches it."""
+    """A write over a plan whose bolts are each started, their work launched as the start launches it."""
     w = given(*[(b, None, None) for b in bolts], work=work, runners=runners)
     for b in bolts:
-        give(w, b)
+        start(w, b)
     return w
 
 
@@ -153,8 +154,8 @@ class TestReach:
         ops(w, 'unit add b "Build b." --bolt x --after a', 'chore add c "Build c." --bolt x')
         assert requests(w)[1:] == [launch(2, "unit/b", "b", after=[1]), launch(3, "chore/c", "c", kind="chore")]
 
-    def test_work_added_to_a_bolt_of_todays_path_or_the_queue_is_not_launched(self):
-        w = given(("x", "crw-5", None), work=[unit("a")])
+    def test_work_added_to_a_bolt_not_started_or_the_queue_is_not_launched(self):
+        w = given(("x", None, None), work=[unit("a")])
         ops(w, 'unit add b "Build b." --bolt x', f'unit add q "Build q." --repo {CREW}')
         assert "requests.rec" not in w.files
 
@@ -219,9 +220,15 @@ class TestReach:
         plan.reach_places(FLEET, w, "x", back)
         assert requests(w)[1]["Stream"] == "madswan"
 
-    def test_a_bolt_given_to_a_team_the_teams_file_does_not_name_is_refused(self):
-        w = given(("x", "crw-9", "flume"), work=[unit("a")])
-        with pytest.raises(plan.Refusal, match="^bolt x is given to crw-9, which .*teams.json does not name, so crew can't tell where its work runs$"):
+    def test_a_started_bolt_whose_kit_no_team_builds_in_a_stream_is_refused(self):
+        w = given(("x", None, "flume"), work=[unit("a")])
+        with pytest.raises(plan.Refusal, match="^bolt x is started, and no team builds crew in a Flume stream, so crew can't tell where its "
+                                               "work runs$"):
+            plan.reach_places(crossed_fleet(**{"crw-4": False}), w, "x")
+
+    def test_a_bolt_not_started_is_refused(self):
+        w = given(("x", None, None), work=[unit("a")])
+        with pytest.raises(plan.Refusal, match="^bolt x is not started, so crew can't tell where its work runs$"):
             plan.reach_places(FLEET, w, "x")
 
 

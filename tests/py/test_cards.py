@@ -1374,14 +1374,6 @@ class TestLanding:
                                   "will be offered on a card.")
         assert c["context"]["background"].startswith("Read in its batches:\nbatch 6: 4 units\nbatch 7: 2 units\n\nA note naming a defect")
 
-    def test_its_summary_says_what_a_yes_frees_when_its_team_holds_another_proven_bolt_and_nothing_otherwise(self):
-        """A team may hold a bolt waiting to land beside the one it builds; once both are proven a yes frees it (teams.16)."""
-        assert landing(frees={"team": "swc-1", "next": "d"})["card"]["summary"].endswith(
-            "main has moved 1 landing since the bolt was cut. A yes frees swc-1 for d, which waits behind this landing.")
-        assert landing(frees={"team": "swc-1", "next": None})["card"]["summary"].endswith(
-            "since the bolt was cut. A yes frees swc-1, and nothing is planned for it.")
-        assert landing(frees=None)["card"]["summary"].endswith("main has moved 1 landing since the bolt was cut.")
-
     def test_sluices_pull_request_is_linked_and_a_kit_whose_sluice_opens_none_has_no_link(self):
         c = landing()["card"]
         assert c["artifacts"][1] == {"kind": "url", "title": "Pull request #23 on GitHub, opened by sluice",

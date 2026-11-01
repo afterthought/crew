@@ -413,7 +413,7 @@ class TestPlanEntries:
 
     def test_a_refused_command_names_what_its_command_line_names(self):
         assert plan.named(plan.parser().parse_args(["unit", "drop", "a", "Gone."])) == ["unit/a"]
-        assert plan.named(plan.parser().parse_args(["bolt", "give", "swb-1", TE])) == [f"bolt/{TE}", "team/swb-1"]
+        assert plan.named(plan.parser().parse_args(["bolt", "start", TE])) == [f"bolt/{TE}"]
         assert plan.named(plan.parser().parse_args(["state", "init", "wldn"])) == ["plan/wldn"]
 
 

@@ -38,9 +38,10 @@ def saved(name):
 
 
 def plan_of(bolts=None, units=None):
-    """A plan.rec as plan.Plan reads it: bolts as {bolt: team or None}, units as {unit: bolt or None}, in order."""
+    """A plan.rec as plan.Plan reads it: bolts as {bolt: started or not}, a team's name read as started (Path: flume),
+    units as {unit: bolt or None}, in order."""
     import plan
-    text = "%rec: Bolt\n\n" + "".join(f"Bolt: {b}\n" + (f"Team: {t}\n" if t else "") + "\n" for b, t in (bolts or {}).items())
+    text = "%rec: Bolt\n\n" + "".join(f"Bolt: {b}\n" + ("Path: flume\n" if t else "") + "\n" for b, t in (bolts or {}).items())
     text += "%rec: Unit\n\n" + "".join(f"Unit: {u}\n" + (f"Bolt: {b}\n" if b else "") + "\n" for u, b in (units or {}).items())
     return plan.Plan(text)
 
@@ -77,8 +78,10 @@ def told(minutes=0):
 STANDING = {r: False for r in ("design", "planner", "reviewer", "ops", "operator")}
 FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}, "teams": ["swb-1", "swb-2"],
                                  "flume": STANDING}},
-         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha"},
-                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": "chuck-herdr-alpha"}},
+         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha", "flume": "wldn",
+                             "kit": {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit"}},
+                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": "chuck-herdr-alpha", "flume": "wldn",
+                             "kit": {"name": "breadboard-kit", "repo": "WilldanGroup/breadboard-kit"}}},
          "hosts": {}}
 
 
@@ -86,10 +89,11 @@ KITS = ("switchboard-kit", "breadboard-kit")
 
 
 def plan_text(bolts=(), units=()):
-    """plan.rec text with its descriptors: bolts as (name, repo, team or None), units as (name, repo, bolt or None,
+    """plan.rec text with its descriptors: bolts as (name, repo, started), a team's name read as started (Path:
+    flume), units as (name, repo, bolt or None,
     [after...]), in order, a fifth "chore" making it a chore, whose words are "Chore <name>."."""
     text = "%rec: Bolt\n%key: Bolt\n\n" + "".join(
-        f"Bolt: {b}\nRepo: {r}\nGoal: Goal of {b}.\n" + (f"Team: {t}\n" if t else "") + "\n" for b, r, t in bolts)
+        f"Bolt: {b}\nRepo: {r}\nGoal: Goal of {b}.\n" + ("Path: flume\n" if t else "") + "\n" for b, r, t in bolts)
     text += "%rec: Unit\n%key: Unit\n\n" + "".join(
         f"Unit: {u}\nRepo: {r}\n" + (f"Bolt: {b}\n" if b else "") + ("Kind: chore\n" if kind else "")
         + (f"Intent: Chore {u}.\n" if kind else f"Intent: Unit {u}.\n") + "".join(f"After: {x}\n" for x in after) + "\n"
@@ -204,10 +208,11 @@ def crew_read(main=(), chores=(), bolts=None):
 
 
 def flume_plan(bolts=(), work=()):
-    """madswan's plan.rec text, every bolt and piece of work in crew: bolts as (name, team or None, Path or None), work as
+    """madswan's plan.rec text, every bolt and piece of work in crew: bolts as (name, started, Path or None), a team's
+    name read as Path: flume, work as
     (name, bolt or None, [after], kind, [sources]), kind "chore" or "unit", each in order and intended `Build <name>.`."""
     out = "%rec: Bolt\n%key: Bolt\n\n" + "".join(
-        f"Bolt: {b}\nRepo: crew\nGoal: Goal of {b}.\n" + (f"Team: {t}\n" if t else "") + (f"Path: {p}\n" if p else "") + "\n"
+        f"Bolt: {b}\nRepo: crew\nGoal: Goal of {b}.\n" + (f"Path: {p or 'flume'}\n" if p or t else "") + "\n"
         for b, t, p in bolts)
     return out + "%rec: Unit\n%key: Unit\n\n" + "".join(
         f"Unit: {u}\nRepo: crew\n" + (f"Bolt: {b}\n" if b else "") + ("Kind: chore\n" if kind == "chore" else "")
@@ -238,17 +243,14 @@ def ran(launched=None, held=(), host="deneb", label="madswan"):
 
 
 def launched(bolts, work=(), team="crw-4", fleet=None, held=()):
-    """madswan's plan (flume_plan) with each bolt in bolts given to team through Flume and its work launched as a give
-    launches it (plan.reach_places), and each of held, (bolt, its team), given to that team on today's path: (the plan,
-    requests.rec's records as the writes leave them). The requests name their writer: set CREW_AGENT first."""
+    """madswan's plan (flume_plan) with each bolt in bolts started and its work launched with team as a start launches
+    it (plan.reach_places), and each of held, (bolt, a team), planned and not started: (the plan, requests.rec's
+    records as the writes leave them). The requests name their writer: set CREW_AGENT first."""
     import plan
     import runner
     fleet = fleet or crossed_fleet()
     w = FactsWrite(flume_plan([(b, None, None) for b in [*bolts, *(b for b, _ in held)]], work), label="madswan")
-    for b, t in held:
-        w.plan.bolt(b).set("Team", t)
     for b in bolts:
-        w.plan.bolt(b).set("Team", team)
-        w.plan.bolt(b).set("Path", "flume", after="Team")
+        w.plan.bolt(b).set("Path", "flume")
         plan.reach_places(fleet, w, b, fleet["teams"][team])
     return w.plan, plan.Plan(w.files.get("requests.rec") or runner.REQUESTS).recs("Request")

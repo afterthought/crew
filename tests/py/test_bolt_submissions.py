@@ -269,25 +269,31 @@ def test_a_standing_state_is_said_in_crews_words_and_sluices_own_for_one_crew_ha
 
 BOX = "chuck-herdr-alpha"
 FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": BOX, "teams": ["swb-1"]}},
-         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "flume": False,
-                             "kit": {"main": "/kit/main", "dir": "/kit", "name": "switchboard-kit"}}},
+         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "flume": "wldn",
+                             "kit": {"main": "/kit/main", "dir": "/kit", "name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit"}}},
          "hosts": {BOX: {"ssh": BOX, "home": "/h/box"}}}
 
 
 @pytest.fixture(autouse=True)
 def here(monkeypatch):
     monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+    monkeypatch.setenv("CREW_AGENT", "chuck")
 
 
-def bolts(submissions=None, error=None):
-    p = plan.Plan(plan_text(bolts=[("y", "switchboard-kit", "swb-1")],
-                            units=[("a", "switchboard-kit", "y", []), ("b", "switchboard-kit", "y", []), ("bump", "switchboard-kit", "y", [], "chore")]))
-    place = {"path": "/kit/places/a", "head": "f" * 40, "head_at": "2026-10-28T10:00:00Z", "tasks": (2, 2), "planning": True, "open": [],
-             "bolt": "y"}
-    kit = {"ok": True, "main": [], "fixes": [], "places": {"a": place}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": []}},
+def bolts(submissions=None, error=None, at="code"):
+    """crew bolts of wldn's plan, its bolt y started and its work launched on swb-1's host, a's place at the Flume 0.3.6
+    status fixture named (tests/py/flume-0.3.6/<at>.json), the kit's submissions in sluice's queue as given."""
+    from facts import FactsWrite, ran
+    import runner
+    w = FactsWrite(plan_text(bolts=[("y", "switchboard-kit", "swb-1")],
+                             units=[("a", "switchboard-kit", "y", []), ("b", "switchboard-kit", "y", []), ("bump", "switchboard-kit", "y", [], "chore")]))
+    plan.reach_places(FLEET, w, "y", FLEET["teams"]["swb-1"])
+    requests = plan.Plan(w.files.get("requests.rec") or runner.REQUESTS).recs("Request")
+    kit = {"ok": True, "main": [], "fixes": [], "places": {}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": []}},
            **({"submissions": submissions} if submissions is not None else {}), **({"submissions_error": error} if error else {})}
     sv = {BOX: {"ok": True, "kits": {"/kit/main": kit}}}
-    return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, p)], sv, {})
+    return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, w.plan)], sv, {},
+                           runs={"wldn": (requests, ran({1: at}, host=BOX, label="wldn"))})
 
 
 def held(d):
@@ -296,20 +302,21 @@ def held(d):
 
 def test_crew_bolts_shows_a_merge_under_test_on_its_line_and_the_landing_on_the_head_line():
     """bolt-teams "A unit's merge under test", "A bolt's landing queued on main"."""
-    d = bolts([sub(41, "bolt/y", "unit/a", "testing"), sub(355, "main", "pull/198", pull_head="bolt/y", head="d" * 40)])
+    d = bolts([sub(41, "bolt/y", "unit/a", "testing"), sub(355, "main", "pull/198", pull_head="bolt/y", head="d" * 40)], at="submitted")
     b = held(d)
     assert {u["unit"]: u["submission"] for u in b["units"]} == {"a": {"id": 41, "state": "testing"}, "b": None, "bump": None}
     assert (b["landing"], b["submissions_error"]) == ({"id": 355, "state": "queued", "head": "d" * 40}, None)
     out = plan.bolts_text(d).splitlines()
-    assert out[1] == f"y  switchboard-kit  swb-1 @ {BOX}  active  landing #355 queued"
-    assert "  a                                        verify 2/2 #41 under test places/a" in out
+    assert out[1] == f"y  switchboard-kit  swb-1 @ {BOX}, in Flume stream wldn  active  landing #355 queued"
+    assert "  a                                        submitted #413 flume/change--teams-cross-to-flume-as-their-bolts-land" in out
     assert json.loads(json.dumps(d))["partitions"][0]["plans"][0]["bolts"][0]["units"][0]["submission"] == {"id": 41, "state": "testing"}
 
 
 def test_a_merge_passed_and_nothing_waiting_on_it_still_shows():
     """bolt-teams "Read again after the session that submitted it ended": the queue is sluice's, so a restart loses nothing."""
-    out = plan.bolts_text(bolts([sub(41, "bolt/y", "unit/a", "passed")]))
-    assert "#41 passed, to land next" in out
+    d = bolts([sub(41, "bolt/y", "unit/a", "passed")])
+    assert held(d)["units"][0]["submission"] == {"id": 41, "state": "passed"}
+    assert plan.standing_said(held(d)["units"][0]["submission"]) == "#41 passed, to land next"
 
 
 def test_once_decided_no_line_shows_a_submission():

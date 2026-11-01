@@ -10,8 +10,8 @@
 # as its kind, whose runs are launched by the host's runner while something is pending for it (crew role below); in
 # versions 2 and 3 every role stands.
 #
-# A team holds as many bolts as it is given, a give never refused for the bolts it holds; a bolt that is proven, every
-# unit and chore merged and sluice green at its head, waits to land:
+# A team runs the work of its kits' started bolts on its host, in its stream; a bolt that is proven, every unit and
+# chore merged and sluice green at its head, waits to land:
 #   crew list                          the teams that are defined
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
 #                                      slot with what it holds. It first reads each landing of the team's bolts nothing
@@ -32,7 +32,7 @@
 #   crew close   <team>                end everything the team has and close its panes; nothing is started
 #   crew restart <team> [role...] [--no-greet]
 #                                      end the conductor's or ops' session and start a fresh one in the same pane,
-#                                      greeted; --no-greet leaves the greeting to the caller, as a bolt's give does
+#                                      greeted; --no-greet leaves the greeting to the caller
 #   crew resume  <team> [role...]      bring back the conductor or ops when not up, with its last conversation, or
 #                                      fresh and greeted when it has none; a conductor brought back with its
 #                                      conversation is sent, as crew's notice, the units of its bolt that wait amended
@@ -65,23 +65,24 @@
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
-#                                      or, in a bolt given through Flume, from its host's runner's records of Flume's
+#                                      or, in a started bolt, from its host's runner's records of Flume's
 #                                      status of its place, a host whose runner can't be read named and its work
 #                                      unknown; each bolt's head line saying its team's stream, in Flume stream <s>;
 #                                      each held bolt's verification, sluice's verdict on
 #                                      its last landing, and each merge and landing standing in sluice's queue with
 #                                      its number and state on its line, a queue that can't be read said once on the
 #                                      bolt's head line
-#   crew bolt  new|give|order|drop|land ...
-#                                      give has sluice make bolt/<bolt> on GitHub from main (sluice branch create, on the
-#                                      team's host), with no worktree, before the plan write; refused, nothing changed,
-#                                      in a kit whose .config/sluice.toml on origin/main names no checks or no remote
-#                                      for its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
+#   crew bolt  new|start|order|drop|land ...
+#                                      start, the user's or a proposal's, has sluice make bolt/<bolt> on GitHub from
+#                                      main (sluice branch create, on the host of the team that builds its kit in a
+#                                      stream), with no worktree, before the plan write; refused, nothing changed, in a
+#                                      kit whose .config/sluice.toml on origin/main names no checks or no remote for
+#                                      its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
 #                                      words when it makes none; a branch
-#                                      already on GitHub at main's tip with no commit of its own, as a give that
-#                                      failed after sluice made it leaves it, is taken and the give goes on. A give is
-#                                      never refused for the bolts the team holds, but while its host is held, the
-#                                      team names no stream, or no runner answers there (no
+#                                      already on GitHub at main's tip with no commit of its own, as a start that
+#                                      failed after sluice made it leaves it, is taken and the start goes on. A start
+#                                      is refused for a bolt started already, while its host is held, while no team
+#                                      builds its kit in a stream, or while no runner answers there (no
 #                                      <label>/runner/<host>); it marks the bolt Path: flume, appends a launch to
 #                                      requests.rec for each unit and chore, a dependent's naming the launches of its
 #                                      After work, which the runner holds it for until that work has landed on the
@@ -92,7 +93,7 @@
 #                                      land and drop have sluice delete it (sluice branch delete) once its worktrees
 #                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
 #                                      while main lacks its tip, and deleted once main holds it. A bolt made before
-#                                      gives went through sluice stays local until it lands
+#                                      sluice made bolts' branches stays local until it lands
 #   crew bolt  submit <bolt>... [--excerpt "<the user's words>"] [--label L]
 #                                      main-level ops's landing of one kit's bolts, in the order the user's landings
 #                                      card gives: each bolt's branch submitted to its kit's main through sluice from a

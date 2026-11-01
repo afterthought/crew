@@ -1,11 +1,11 @@
 """The chore kind (the chores spec, plan.11, signals.7): a Unit record marked Kind: chore, written by the unit's commands
-and hands, its stage read from its kit, counted wherever work in a bolt is, and carried by a proposal whose card lets
+and hands, its stage read as a unit's is, counted wherever work in a bolt is, and carried by a proposal whose card lets
 each be left out. That git reads a chore's trailer as crew assumes is the contract tier's."""
 import argparse
 
 import pytest
 
-from facts import FLEET, FactsWrite, apply, known, plan_text, units_of
+from facts import FLEET, FactsWrite, apply, crew_read, crossed_fleet_read, known, launched, plan_text, ran, units_of
 
 import cards
 import plan
@@ -13,11 +13,19 @@ import plan
 KIT = "switchboard-kit"
 TE = "tenant-environments"
 BOLTS = [(TE, KIT, "swb-1"), ("console-pages", KIT, "swb-2"), ("apex-zones", KIT, None)]
+PLANNED = [(b, r, None) for b, r, _ in BOLTS]
 
 
-def fresh():
-    """A held bolt of a unit, a chore and a unit, a chore queued, and a unit in another bolt."""
-    return FactsWrite(plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore"), ("b", KIT, TE, []),
+@pytest.fixture(autouse=True)
+def writer(monkeypatch):
+    """A write to a started bolt appends its launches, which name their writer."""
+    monkeypatch.setenv("CREW_AGENT", "wldn-planner")
+
+
+def fresh(bolts=BOLTS):
+    """A started bolt of a unit, a chore and a unit, a chore queued, and a unit in another bolt; the bolts started as
+    bolts says."""
+    return FactsWrite(plan_text(bolts=bolts, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore"), ("b", KIT, TE, []),
                                                     ("tidy", KIT, None, [], "chore"), ("c", KIT, "console-pages", [])]))
 
 
@@ -42,7 +50,8 @@ class TestThePlan:
         assert "%type: Kind enum chore" in plan.HEADER and "%allowed: Unit Repo Bolt Kind Intent After Source Amended" in plan.HEADER
 
     def test_after_crosses_kinds_within_a_bolt_and_a_chore_is_never_amended(self):
-        w = run(fresh(), "unit after b bump", "chore after bump a")
+        """On a bolt not started: a started bolt's launched work keeps the After of its launch (test_cross.py)."""
+        w = run(fresh(PLANNED), "unit after b bump", "chore after bump a")
         assert w.plan.unit("b").all("After") == ["bump"] and w.plan.chore("bump").all("After") == ["a"]
         w.plan.chore("bump").set("Amended", "intent")
         with pytest.raises(plan.Refusal, match="chore bump is marked amended, and a chore has no amendment"):
@@ -145,51 +154,14 @@ class TestWho:
             apply(w, "chore order bump --first", ctx=known(w))
 
 
-def kit(chores=(), bolt_chores=(), places=None, changes=()):
-    """A kit as gathered: the chores main and the bolt hold, and chore places."""
-    return {"ok": True, "main": list(changes), "chores": list(chores), "places": {}, "chore_places": places or {}, "fixes": [], "reports": {},
-            "bolts": {TE: {"head": "d" * 40, "head_at": "2026-10-12T09:00:00Z", "changes": [], "chores": list(bolt_chores)}}}
-
-
-def place(ahead, bolt=TE):
-    return {"path": "/kit/places/chore-bump", "head": "e" * 40, "head_at": "2026-10-12T10:00:00Z", "ahead": ahead, "bolt": bolt,
-            "branch": "chore/bump"}
-
-
-STAGE_FLEET = {"partitions": FLEET["partitions"],
-               "teams": {t: {"name": t, "label": "wldn", "machine": "box", "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}
-                         for t in ("swb-1", "swb-2")}}
-
-
-def stages(k, text=None):
-    p = plan.Plan(text or plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore"), ("b", KIT, TE, ["bump"])]))
-    return plan.Stages(STAGE_FLEET, p, {"box": {"ok": True, "kits": {"/kit/main": k}}})
-
-
 class TestStage:
-    @pytest.mark.parametrize("k, stage", [
-        (kit(chores=["bump"], bolt_chores=["bump"]), "landed"),
-        (kit(bolt_chores=["bump"]), "merged"),
-        (kit(places={"bump": place(2)}), "verify"),
-        (kit(places={"bump": place(0)}), "code"),
-        (kit(), "ready")], ids=["landed", "merged", "coded", "placed", "no place"])
-    def test_a_chores_stage_is_read_from_its_kit(self, k, stage):
-        assert stages(k).of("bump")["stage"] == stage
-
-    def test_a_place_that_tracks_no_bolt_is_unknown(self):
-        s = stages(kit(places={"bump": place(None)})).of("bump")
-        assert (s["stage"], s["why"]) == ("unknown", "chore bump's place /kit/places/chore-bump tracks no bolt crew can read")
-
-    def test_a_dependent_starts_once_what_it_comes_after_has_something_committed_to_build_on_never_waiting_on_a_merge(self):
-        """plan.13, the user's ruling of 2026-10-12: a unit's change once its construct has finished, a chore's code
-        once its commits are in its place, for a unit or a chore that comes after either."""
-        text = plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, ["a"], "chore"), ("b", KIT, TE, ["bump"])])
-        assert stages(kit(places={"bump": place(0)}), text).of("b")["stage"] == "waiting"
-        assert stages(kit(places={"bump": place(1)}), text).of("b")["stage"] == "ready"
-        assert stages(kit(), text).of("bump")["stage"] == "waiting"
-        unit_place = {"path": "/kit/places/a", "head": "a" * 40, "head_at": "2026-10-12T10:00:00Z", "tasks": (0, 2), "planning": True,
-                      "open": [], "bolt": TE}
-        assert stages(dict(kit(), places={"a": unit_place}), text).of("bump")["stage"] == "ready"
+    def test_work_of_a_bolt_not_started_is_ready_or_waiting_by_its_after(self):
+        """A chore after a unit, and a unit after the chore, in a bolt not started: each waits until what it comes after
+        has something committed to build on (plan.13), which nothing of a planned bolt has."""
+        p = plan.Plan(plan_text(bolts=PLANNED, units=[("a", KIT, TE, []), ("bump", KIT, TE, ["a"], "chore"), ("b", KIT, TE, ["bump"])]))
+        st = plan.Stages(FLEET, p, {})
+        assert [st.of(n)["stage"] for n in ("a", "bump", "b")] == ["ready", "waiting", "waiting"]
+        assert st.bolt_state(p.bolt(TE)) == "planned"
 
     @pytest.mark.parametrize("deps, met", [
         ([("unit", "construct")], False), ([("unit", "planned")], True), ([("unit", "merged"), ("chore", "landed")], True),
@@ -198,11 +170,15 @@ class TestStage:
         assert plan.after_met(deps) is met
 
     def test_a_bolt_lands_once_every_unit_and_chore_has(self):
-        p = plan.Plan(plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore")]))
-        st = plan.Stages(STAGE_FLEET, p, {"box": {"ok": True, "kits": {"/kit/main": kit(changes=["a"])}}})
-        assert st.bolt_state(p.bolt(TE)) == "active"
-        st = plan.Stages(STAGE_FLEET, p, {"box": {"ok": True, "kits": {"/kit/main": kit(chores=["bump"], changes=["a"])}}})
-        assert st.bolt_state(p.bolt(TE)) == "landed"
+        """Started bolt x of unit a and chore bump, both landed on x by the runner: active while crew's main holds a's change
+        and not bump's trailer, landed once it holds both."""
+        fleet = crossed_fleet_read()
+        p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("bump", "x", [], "chore", [])], fleet=fleet)
+        runs = {"madswan": (requests, ran({1: "landed", 2: "landed"}))}
+        st = plan.Stages(fleet, p, crew_read(main=["a"], bolts={"x": {}}), runs=runs)
+        assert st.bolt_state(p.bolt("x")) == "active"
+        st = plan.Stages(fleet, p, crew_read(main=["a"], chores=["bump"], bolts={"x": {}}), runs=runs)
+        assert st.bolt_state(p.bolt("x")) == "landed"
 
 
 class TestSlotsAndPlaces:
@@ -212,12 +188,8 @@ class TestSlotsAndPlaces:
 
 
 class TestBolts:
-    def test_a_team_is_given_no_bolt_until_its_chores_merge_and_a_landing_waits_for_them_to_land(self):
-        p = plan.Plan(plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore")]))
+    def test_a_landing_waits_for_its_chores_to_land(self):
         stage = {"a": "landed", "bump": "merged"}
-        held = lambda st: [(TE, [(u.name(), plan.kind_of(u), st[u.name()]) for u in p.work_of(TE)], "abc1234", "passed", None)]
-        assert plan.give_refusal("swb-1", held({"a": "landed", "bump": "verify"})) == "bolt tenant-environments's chore bump has not merged (verify)"
-        assert plan.give_refusal("swb-1", held(stage)) is None
         of = lambda u: {"stage": stage[u], "kind": "chore" if u == "bump" else "unit"}
         assert plan.land_refusal(TE, ["a", "bump"], of, [], "wldn") == "chore bump has not landed on main: it is merged"
 

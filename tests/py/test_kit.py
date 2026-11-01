@@ -39,7 +39,7 @@ POLICY = '[tests]\nrunner = "moon"\n\n[branches."bolt/*"]\nrequired = ["#check-f
 
 
 class TestBoltChecks:
-    """A kit merges and lands only through sluice, so crew gives a bolt only in a kit whose policy names the checks its
+    """A kit merges and lands only through sluice, so crew starts a bolt only in a kit whose policy names the checks its
     bolt branches must pass (teams.5, record 0026)."""
 
     def test_the_bolt_branches_required_checks(self):
@@ -56,14 +56,14 @@ class TestBoltChecks:
         ('[branches."bolt/*"]\nrequired = []\n', "names no checks for its bolt branches"),
         ("[branches\n", "is not TOML"),
     ])
-    def test_a_kit_whose_policy_gates_no_bolt_is_given_none_naming_the_file(self, text, said):
+    def test_a_kit_whose_policy_gates_no_bolt_starts_none_naming_the_file(self, text, said):
         with pytest.raises(Refusal) as e:
             kit.bolt_checks(text, "switchboard-kit")
         assert "switchboard-kit" in str(e.value) and said in str(e.value)
 
     def test_the_policy_is_read_by_ref_at_main_now_and_a_refusal_names_the_ref(self):
         """plan.18: the policy is the one at main now, GitHub's for a kit with an origin and the kit's own for one with
-        none, as POLICY read both, and a kit given no bolt is told which ref lacks it."""
+        none, as POLICY read both, and a kit whose bolt is not started is told which ref lacks it."""
         b64 = base64.b64encode(POLICY.encode()).decode()
         assert kit.policy_said(mains("yes", at_github=b64), "switchboard-kit", "h") == (POLICY, "origin/main", GITHUB)
         assert kit.policy_said(mains("no", github="-", at_own=b64), "switchboard-kit", "h") == (POLICY, "main", OWN)
@@ -83,7 +83,7 @@ ON_GITHUB = POLICY.replace('required = ["#check-full"]\n', 'required = ["#check-
 
 class TestBoltRemote:
     """Where sluice keeps a branch, as the policy routes it (plan.19, sluice's core.15): the `remote` of the table that
-    matches the branch, which a give needs for a bolt's branch, since crew gives bolts only on GitHub."""
+    matches the branch, which a start needs for a bolt's branch, since crew starts bolts only on GitHub."""
 
     def test_the_bolt_branches_remote(self):
         assert kit.bolt_remote(ON_GITHUB, "bolt/b") == "origin"
@@ -101,17 +101,17 @@ class TestBoltRemote:
         with pytest.raises(Refusal, match=r"^\.config/sluice\.toml at bolt/b is not TOML"):
             kit.bolt_remote("[branches\n", "bolt/b", ".config/sluice.toml at bolt/b")
 
-    def test_a_give_takes_the_remote_the_policy_at_main_now_names(self):
+    def test_a_start_takes_the_remote_the_policy_at_main_now_names(self):
         assert kit.give_remote(ON_GITHUB, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b") == "origin"
 
-    def test_a_give_in_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
+    def test_a_start_in_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
         """bolt-plan "A kit whose bolts have no remote"."""
         with pytest.raises(Refusal) as e:
             kit.give_remote(POLICY, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b", ref="origin/main")
         assert str(e.value) == (
-            "switchboard-kit gives bolts only on GitHub, and its /k/main/.config/sluice.toml on origin/main names no remote "
+            "switchboard-kit starts bolts only on GitHub, and its /k/main/.config/sluice.toml on origin/main names no remote "
             "for its bolt branches: its [branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change "
-            "(plan.17), then give the bolt again")
+            "(plan.17), then start the bolt again")
 
 
 def b64(text):
@@ -293,13 +293,13 @@ def recorded(name):
 
 
 class TestSluiceVersion:
-    """A give needs sluice's `branch create`, first in sluice 0.20.0 (plan.19, sluice ADR 0026)."""
+    """A start needs sluice's `branch create`, first in sluice 0.20.0 (plan.19, sluice ADR 0026)."""
 
     def test_the_version_sluice_prints(self):
         assert kit.sluice_version(recorded("version.txt")[0]) == (0, 36, 4)
 
     @pytest.mark.parametrize("out", ["sluice 0.36.4\n", "sluice 0.20.0", "sluice 1.0.0\n"])
-    def test_a_sluice_with_branch_create_gives(self, out):
+    def test_a_sluice_with_branch_create_starts(self, out):
         assert kit.sluice_refusal(out, "chuck-herdr-alpha") is None
 
     @pytest.mark.parametrize("out, said", [
@@ -312,7 +312,7 @@ class TestSluiceVersion:
     def test_an_older_sluice_or_one_crew_cannot_read_is_refused_naming_the_version_needed_and_the_hosts_words(self, out, said):
         """bolt-plan "A host whose sluice cannot make a branch" (read.1)."""
         assert kit.sluice_refusal(out, "chuck-herdr-alpha") == (
-            "a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice --version on "
+            "a bolt is started through sluice 0.20.0 or later, which has `branch create`, and sluice --version on "
             f"chuck-herdr-alpha said: {said}")
 
 

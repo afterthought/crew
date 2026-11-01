@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from facts import plan_text
+from facts import FLUME, plan_text
 
 import board
 import crew
@@ -22,11 +22,11 @@ BOX = "chuck-herdr-alpha"
 KIT = {"name": "switchboard-kit", "main": "/kit/main", "dir": "/kit"}
 FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "teams": ["swb-1", "swb-2", "brd-1", "atl-1"],
                                  "blueprints": ["WilldanGroup/willdan-blueprints"], "state": "WilldanGroup/crew-state"}},
-         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "flume": False, "kit": KIT},
-                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": BOX, "flume": False, "kit": KIT},
-                   "brd-1": {"name": "brd-1", "label": "wldn", "machine": BOX, "flume": False,
+         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "flume": "wldn", "kit": KIT},
+                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": BOX, "flume": "wldn", "kit": KIT},
+                   "brd-1": {"name": "brd-1", "label": "wldn", "machine": BOX, "flume": "wldn",
                              "kit": {"name": "breadboard-kit", "main": "/b/main", "dir": "/b"}},
-                   "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio", "flume": False,
+                   "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio", "flume": "wldn",
                              "kit": {"name": "atlas-kit", "main": "/a/main", "dir": "/a"}}},
          "hosts": {BOX: {"kind": "nixos", "ssh": BOX}, "mac-studio": {"kind": "darwin", "ssh": "mac-studio"}}}
 NOW = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -42,13 +42,13 @@ def hm(minutes):
     return f"{t:%H:%M}" if t.date() == NOW.astimezone().date() else f"{t:%Y-%m-%d %H:%M}"
 
 
-# Each held bolt's give, as the run record holds it: tenant-environments 200 minutes before the board was read, and
+# Each started bolt's start, as the run record holds it: tenant-environments 200 minutes before the board was read, and
 # board-done 30; with nothing else of theirs recorded, each has been nobody's since (plan.20).
-GIVES = [dict(Id=f"{ago(200)}-mac-studio-1-0", At=ago(200), Host="mac-studio", Act="bolt.give", On=["bolt/tenant-environments", "team/swb-1"]),
-         dict(Id=f"{ago(30)}-mac-studio-1-0", At=ago(30), Host="mac-studio", Act="bolt.give", On=["bolt/board-done", "team/brd-1"])]
+STARTS = [dict(Id=f"{ago(200)}-mac-studio-1-0", At=ago(200), Host="mac-studio", Act="bolt.start", On=["bolt/tenant-environments"]),
+          dict(Id=f"{ago(30)}-mac-studio-1-0", At=ago(30), Host="mac-studio", Act="bolt.start", On=["bolt/board-done"])]
 TE_TIME = f"3h 20m: nobody 3h 20m; stalled since {hm(200)}"
 DONE_TIME = f"30m: nobody 30m; stalled since {hm(30)}"
-NO_GIVE = "its age can't be told: the run record of the last 60 days holds no give of it"
+NO_START = "its age can't be told: the run record of the last 60 days holds no start of it"
 
 
 @pytest.fixture(autouse=True)
@@ -58,19 +58,16 @@ def here(monkeypatch):
 
 def the_plan():
     return plan.Plan(plan_text(
-        bolts=[("apex-zones", "switchboard-kit", None), ("tenant-environments", "switchboard-kit", "swb-1"), ("board-done", "breadboard-kit", "brd-1")],
+        bolts=[("apex-zones", "switchboard-kit", None), ("tenant-environments", "switchboard-kit", True), ("board-done", "breadboard-kit", True)],
         units=[("zone-one", "switchboard-kit", "apex-zones", []), ("a", "switchboard-kit", "tenant-environments", []),
                ("b", "switchboard-kit", "tenant-environments", []), ("done-one", "breadboard-kit", "board-done", []),
                ("zone-two", "switchboard-kit", None, [])]).replace("Unit: zone-two\nRepo: switchboard-kit\n", "Unit: zone-two\nRepo: switchboard-kit\nSource: docs/zones.md\n"))
 
 
 def kits(ok=True):
-    place = lambda u, tasks: {"path": f"/kit/places/{u}", "head": "a" * 40, "head_at": ago(90), "tasks": tasks, "planning": True, "open": [],
-                              "bolt": "tenant-environments"}
-    swb = {"ok": True, "main": [], "places": {"a": place("a", (1, 2)), "b": place("b", (0, 2))}, "reports": {},
+    swb = {"ok": True, "main": [], "places": {}, "reports": {},
            "bolts": {"tenant-environments": {"head": "d" * 40, "head_at": ago(200), "changes": [], "worktree": "/kit/bolts/tenant-environments"}},
-           "sites": {"/kit/places/a": {"here": "http://unit-a--switchboard-kit.localhost", "tailnet": "https://unit-a--switchboard-kit--box.dev"}},
-           "routes": [{"name": "unit-a--switchboard-kit", "url": "http://unit-a.localhost"}],
+           "sites": {}, "routes": [],
            "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}], "submissions": [], "decided": []}
     brd = {"ok": True, "main": ["done-one"], "places": {}, "reports": {}, "bolts": {"board-done": {"head": "e" * 40, "head_at": ago(10), "changes": []}},
            "fixes": [], "sites": {}, "routes": [], "submissions": [], "decided": []}
@@ -78,19 +75,60 @@ def kits(ok=True):
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
 
+# Where each started bolt's work stands in Flume, as the runner on its host carries it: a at code with one of its two
+# tasks ticked, b at construct, and done-one's place landed on board-done, which breadboard-kit's main holds.
+PLACED = {"a": ("code", (1, 2)), "b": ("construct", None), "done-one": ("landed", None)}
+
+
+def flume_status(name, place, tasks=None):
+    """A flume 0.3.6 status fixture (facts.FLUME) of the place at path place, its tasks (ticked, in all) where given."""
+    s = json.loads((FLUME / f"{name}.json").read_text())
+    p = s["status"]["places"][0]
+    p["place"] = place + p["place"][len(p["place"].split("@")[0]):]
+    if tasks:
+        p["tasks"] = [{"text": f"1.{i + 1}", "ticked": i < tasks[0], "group": 0} for i in range(tasks[1])]
+    return json.dumps(s)
+
+
+def flume_runs(p, placed):
+    """wldn's requests and runners as the board reads them (plan.runner_facts): a launch of each unit and chore of each
+    started bolt in p, in the plan's order, on the host of the team its kit's work runs with, as a start writes them,
+    and that host's runner answering each launch of placed launched with its place at {unit: (fixture, tasks)}, the
+    rest unanswered."""
+    import runner
+    requests, answers, places = [], "", ""
+    for b in p.bolts() if p else []:
+        t = plan.known_team(FLEET, b)
+        for u in p.work_of(b.name()) if t else []:
+            n, k = len(requests) + 1, plan.kind_of(u)
+            requests.append(plan.Rec("Request", [("Request", str(n)), ("Act", "launch"), ("Host", t["machine"]), ("Work", f"{k}/{u.name()}"),
+                                                 ("Repo", b.get("Repo")), ("Kind", "change" if k == "unit" else "chore"), ("Name", u.name()),
+                                                 ("Base", f"bolt/{b.name()}"), ("Stream", t["flume"]), ("Priority", "1")]))
+            if u.name() in placed:
+                fixture, tasks = placed[u.name()]
+                where = f"/flume/places/{u.name()}"
+                answers += f"\nRequest: {n}\nOutcome: launched\nPlace: {where}\nAt: {ago(100)}\n"
+                places += f"\nRequest: {n}\nPlace: {where}\nAt: {ago(90)}\nStatus: {flume_status(fixture, where, tasks)}\n"
+    files = {"runner.rec": plan.Plan(runner.RUNNER + f"\nHost: {BOX}\nVersion: 0.1.0\nSince: {ago(300)}\n"),
+             "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)}
+    return {"wldn": (requests, {BOX: runner.host_read("wldn", BOX, "5e1f0c2a" + "0" * 32, files, {})})}
+
+
 def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, cards=(), errors=None, unread=None, pl=True, entries=(), logs=(),
-         roles=None):
+         roles=None, placed=None):
     """The read the board is made from; entries are the partition's run record entries the operations are read from,
-    whose rail rows join the plan's, as plan.rail_record makes them, logs every entry it read, and roles what it read of
-    the roles the partition runs as their kinds (board.roles_read), none by default."""
+    whose rail rows join the plan's, as plan.rail_record makes them, logs every entry it read, roles what it read of
+    the roles the partition runs as their kinds (board.roles_read), none by default, and placed where each started
+    bolt's work stands on its host's runner (flume_runs), PLACED by default."""
     p = the_plan() if pl else None
     found = [("wldn", "WilldanGroup/crew-state", "tip0" if pl else None, p)]
     sv = sv or kits()
+    runs = flume_runs(p, PLACED if placed is None else placed)
     ops_rows = [dict(r, at=plan.utc(r["at"]), doc=None) for r in ops.rows(FLEET, "wldn", list(entries))]
     return dict(found=found, sv=sv, props=list(props), cards=list(cards), unread=unread or {}, errors=errors or {},
                 landings=list(landings), gives=gives or {}, signals={"wldn": (signals or [], {})}, ops={"wldn": list(entries)},
-                logs={"wldn": GIVES + (list(logs) or list(entries))}, roles={"wldn": roles} if roles else {},
-                rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None) if p else []) + ops_rows)
+                logs={"wldn": STARTS + (list(logs) or list(entries))}, roles={"wldn": roles} if roles else {}, runs=runs,
+                rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None, runs) if p else []) + ops_rows)
 
 
 def data(**kw):
@@ -162,13 +200,15 @@ class TestText:
         bp = lane(board.board_text(data()), "Bolt plan")
         assert bp == ["  switchboard-kit apex-zones  Goal of apex-zones.", "    zone-one  ready", "  switchboard-kit zone-two  queued  docs/zones.md"]
 
-    def test_construction_shows_a_held_bolt_as_a_ledger(self):
+    def test_construction_shows_a_started_bolt_as_a_ledger(self):
+        """Each unit at its stage as its host's runner carries its place, with no server (a started bolt's work is
+        Flume's)."""
         con = lane(board.board_text(data()), "Construction")
-        assert con[:3] == [f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {TE_TIME}",
-                           "    a  code 1/2  https://unit-a--switchboard-kit--box.dev", "    b  planned"]
-        assert f"! breadboard-kit board-done  brd-1 on chuck-herdr-alpha  landed  {DONE_TIME}" in con
+        assert con[:3] == [f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  in Flume stream wldn  {TE_TIME}",
+                           "    a  code 1/2", "    b  construct"]
+        assert f"! breadboard-kit board-done  brd-1 on chuck-herdr-alpha  in Flume stream wldn  landed  {DONE_TIME}" in con
 
-    def test_a_held_bolt_every_unit_of_which_landed_is_named_for_attention(self):
+    def test_a_started_bolt_every_unit_of_which_landed_is_named_for_attention(self):
         att = lane(board.board_text(data()), "attention")
         assert att == ["! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
 
@@ -224,12 +264,14 @@ class TestText:
         assert lane(board.board_text(data(entries=es)), "Operation") == [
             f"  mac-studio  deploy {S2[:7]} from {S1[:7]}  failed {board.local(ago(10))} at the machine  carrying what can't be read: {S2[:7]} is no landing's commit in the record"]
 
-    def test_a_host_that_does_not_answer_is_named_and_its_ledgers_units_are_unknown(self):
+    def test_a_host_that_does_not_answer_is_named_and_its_ledgers_bolts_are_unknown(self):
+        """Its bolts' states and times can't be told; each unit's stage is the runner's, read from the branch, but a
+        place merged on its bolt can't be told landed with main unread."""
         out = board.board_text(data(sv=kits(ok=False)))
         assert f"! {BOX} did not answer (its kits: ssh: timed out)" in lane(out, "attention")
         con = lane(out, "Construction")
-        assert (f"  switchboard-kit tenant-environments  swb-1 on {BOX}  unknown  3h 20m; who held its time can't be told: its submissions "
-                "can't be read: its kit was not read") in con and "    a  unknown" in con
+        assert (f"  switchboard-kit tenant-environments  swb-1 on {BOX}  in Flume stream wldn  unknown  3h 20m; who held its time can't be told: its submissions "
+                "can't be read: its kit was not read") in con and "    a  code 1/2" in con and "    done-one  merged" in con
         assert out.splitlines()[0].endswith("read from mac-studio")
 
     def test_an_operator_host_with_no_team_is_never_named_for_its_run_record(self):
@@ -1247,7 +1289,7 @@ class TestRailFrame:
 
 
 class TestMore:
-    def test_a_proposal_adding_to_a_held_bolt_belongs_to_the_team_holding_it(self):
+    def test_a_proposal_adding_to_a_started_bolt_belongs_to_the_team_its_work_runs_with(self):
         props = [{"label": "wldn", "proposal": 2, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "Tenants get d.", "waiting": [],
                   "changes": [{"do": 'unit add d "Unit d." --bolt tenant-environments', "bolts": ["tenant-environments"]}]}]
         assert data(props=props)["partitions"][0]["bolt_plan"]["proposals"][0]["teams"] == ["swb-1"]
@@ -1299,35 +1341,38 @@ WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-
 
 class TestViews:
     def test_a_conductor_reads_its_bolt_as_a_ledger_a_pip_to_each_unit_then_what_comes_next(self):
-        assert view("swb-1-conductor") == [f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2", "    ◔  b  planned",
+        assert view("swb-1-conductor") == [f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2", "    ◔  b  construct",
                                            "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
 
-    def test_a_team_holding_a_bolt_that_waits_to_land_and_one_it_builds_draws_both(self, monkeypatch):
-        """A team builds one bolt and may hold one more, proven, that waits to land (teams.16): its conductor's band and
-        the Construction lane draw both, the proven one saying it waits to land."""
-        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", "swb-2"), ("ssh-fix", "switchboard-kit", "swb-2")],
+    def test_a_started_bolt_that_waits_to_land_and_one_in_flight_of_one_kit_are_both_drawn(self, monkeypatch):
+        """Two bolts of switchboard-kit started, doctor-rows proven, so it waits to land (teams.16), and ssh-fix at code:
+        the band of the conductor of the team their work runs with, swb-1, the kit's first by name, and the Construction
+        lane draw both, the proven one saying it waits to land."""
+        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", True), ("ssh-fix", "switchboard-kit", True)],
                                   units=[("rows-one", "switchboard-kit", "doctor-rows", []), ("ssh-one", "switchboard-kit", "ssh-fix", [])]))
         monkeypatch.setitem(globals(), "the_plan", lambda: two)
+        monkeypatch.setitem(globals(), "PLACED", {"rows-one": ("landed", None), "ssh-one": ("code", (1, 2))})
         sv = kits()
         swb = sv[BOX]["kits"]["/kit/main"]
         swb["bolts"].update({"doctor-rows": {"head": "f" * 40, "head_at": ago(30), "changes": ["rows-one"], "archived": ["rows-one"],
                                              "verdict": "passed (2 run)"},
                              "ssh-fix": {"head": "c" * 40, "head_at": ago(20), "changes": []}})
-        swb["places"]["ssh-one"] = dict(swb["places"]["a"], path="/kit/places/ssh-one", bolt="ssh-fix")
-        mine = view("swb-2-conductor", sv=sv)
-        assert mine[:4] == [f"✓ switchboard-kit  ●  doctor-rows  waits to land  1 of 1 merged  {NO_GIVE}  no card open", "    ●  rows-one  merged",
-                            f"  switchboard-kit  ◑  ssh-fix  0 of 1 merged  {NO_GIVE}", "    ◑  ssh-one  code 1/2"]
+        assert view("swb-2-conductor", sv=sv) == ["  swb-2 holds no bolt"]
+        mine = view("swb-1-conductor", sv=sv)
+        assert mine[:4] == [f"✓ switchboard-kit  ●  doctor-rows  in Flume stream wldn  waits to land  1 of 1 merged  {NO_START}  no card open", "    ●  rows-one  merged",
+                            f"  switchboard-kit  ◑  ssh-fix  in Flume stream wldn  0 of 1 merged  {NO_START}", "    ◑  ssh-one  code 1/2"]
         assert lane(board.board_text(data(sv=sv)), "Construction") == [
-            f"✓ switchboard-kit doctor-rows  swb-2 on chuck-herdr-alpha  waits to land  {NO_GIVE}  no card open", "    rows-one  merged",
-            f"  switchboard-kit ssh-fix  swb-2 on chuck-herdr-alpha  {NO_GIVE}", "    ssh-one  code 1/2"]
+            f"✓ switchboard-kit doctor-rows  swb-1 on chuck-herdr-alpha  in Flume stream wldn  waits to land  {NO_START}  no card open", "    rows-one  merged",
+            f"  switchboard-kit ssh-fix  swb-1 on chuck-herdr-alpha  in Flume stream wldn  {NO_START}", "    ssh-one  code 1/2"]
 
     def test_each_bolt_is_marked_from_its_kits_landing_row_and_ops_band_draws_the_row_with_its_card(self, monkeypatch):
         """Two proven bolts of one kit are one landing row, land/<kit> (crew-rail "Two bolts of one kit"): each bolt's
         marker is that row's, its card main-level ops's, which ops's band draws, the row naming both, and the card above
         ops's prompt; the operator counts the row once (code.8)."""
-        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", "swb-1"), ("ssh-fix", "switchboard-kit", "swb-2")],
+        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", True), ("ssh-fix", "switchboard-kit", True)],
                                   units=[("rows-one", "switchboard-kit", "doctor-rows", []), ("ssh-one", "switchboard-kit", "ssh-fix", [])]))
         monkeypatch.setitem(globals(), "the_plan", lambda: two)
+        monkeypatch.setitem(globals(), "PLACED", {"rows-one": ("landed", None), "ssh-one": ("landed", None)})
         sv = kits()
         sv[BOX]["kits"]["/kit/main"]["bolts"].update({
             "doctor-rows": {"head": "f" * 40, "head_at": ago(30), "changes": ["rows-one"], "archived": ["rows-one"], "verdict": "passed (2 run)"},
@@ -1341,7 +1386,7 @@ class TestViews:
         v = board.agent_views(d)
         assert "".join(t for t, _ in v["cards"]["wldn-ops"][0]).startswith("  your card  land/switchboard-kit  req_k1")
         assert "✓ 1 to approve" in "\n".join(view("wldn-operator", sv=sv, cards=[card]))
-        assert view("swb-1-conductor", sv=sv, cards=[card])[0].endswith(f"doctor-rows  waits to land  1 of 1 merged  {NO_GIVE}  card open, asked by wldn-ops")
+        assert view("swb-1-conductor", sv=sv, cards=[card])[0].endswith(f"doctor-rows  in Flume stream wldn  waits to land  1 of 1 merged  {NO_START}  card open, asked by wldn-ops")
 
     def test_a_unit_waits_on_no_answer_so_it_has_no_marker_even_with_an_old_verify_card_open(self):
         card = dict(label="wldn", card="req_2", key="verify/a/20261012-1200", by="swb-1-conductor", host="mac-studio", at=NOW)
@@ -1355,15 +1400,16 @@ class TestViews:
         assert "✓ proposal 2 by wldn-planner  Tenants get d.  waits on your agreement  no card open" in view("swb-1-conductor", props=WAITS)
         assert not [l for l in view("brd-1-conductor", props=WAITS) if "proposal" in l]
 
-    def test_a_conductor_whose_host_does_not_answer_is_told_and_its_units_are_unknown(self):
+    def test_a_conductor_whose_host_does_not_answer_is_told_and_its_bolt_is_unknown(self):
+        """Its bolt's state and time can't be told; its units' stages are the runner's, read from the branch."""
         mine = view("swb-1-conductor", sv=kits(ok=False))
-        assert mine[0] == ("  switchboard-kit  ??  tenant-environments  unknown  0 of 2 merged  3h 20m; who held its time can't be told: its "
-                           "submissions can't be read: its kit was not read") and mine[1] == "    ?  a  unknown"
+        assert mine[0] == ("  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  unknown  0 of 2 merged  3h 20m; who held its time can't be told: its "
+                           "submissions can't be read: its kit was not read") and mine[1] == "    ◑  a  code 1/2"
         assert f"! {BOX} did not answer (its kits: ssh: timed out)" in mine
         assert not [l for l in view("atl-1-conductor", sv=kits(ok=False)) if "did not answer" in l]
 
     def test_a_bolt_landed_and_still_in_the_plan_is_named_for_attention_to_its_conductor(self):
-        assert view("brd-1-conductor") == [f"! breadboard-kit  ●  board-done  landed  1 of 1 merged  {DONE_TIME}", "    ●  done-one  landed",
+        assert view("brd-1-conductor") == [f"! breadboard-kit  ●  board-done  in Flume stream wldn  landed  1 of 1 merged  {DONE_TIME}", "    ●  done-one  landed",
                                            "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
 
     QUEUED = [dict(entry("bolt.submit", 30, Outcome="queued", Submission="412", Head=S1), On=["bolt/tenant-environments", "team/swb-1"])]
@@ -1373,8 +1419,8 @@ class TestViews:
 
     def test_a_landing_queued_is_said_on_its_bolts_head_line_with_sluices_number(self):
         """crew-board "A landing queued": on the lane and in its conductor's band."""
-        assert view("swb-1-conductor", logs=self.QUEUED)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing queued as #412  0 of 2 merged  {TE_TIME}"
-        assert f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing queued as #412  {TE_TIME}" in lane(
+        assert view("swb-1-conductor", logs=self.QUEUED)[0] == f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  landing queued as #412  0 of 2 merged  {TE_TIME}"
+        assert f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  in Flume stream wldn  landing queued as #412  {TE_TIME}" in lane(
             board.board_text(data(logs=self.QUEUED)), "Construction")
 
     def test_a_close_refused_is_said_on_its_head_line_in_the_attention_gutter_to_its_conductor_and_main_level_ops(self):
@@ -1382,10 +1428,10 @@ class TestViews:
         words of its last refused close, which its conductor's attention names too."""
         said = f"landed on main, not closed: {self.READY}"
         mine = view("swb-1-conductor", logs=self.UNCLOSED)
-        assert mine[0] == f"! switchboard-kit  ◑◔  tenant-environments  {said}  0 of 2 merged  {TE_TIME}"
+        assert mine[0] == f"! switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  {said}  0 of 2 merged  {TE_TIME}"
         assert f"! bolt tenant-environments: it landed on main and was not closed: {self.READY}" in mine
-        assert f"! switchboard-kit  swb-1  ◑◔  tenant-environments  {said}  0 of 2 merged  {TE_TIME}" in view("wldn-ops", logs=self.UNCLOSED)
-        assert f"! switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {said}  {TE_TIME}" in lane(board.board_text(data(logs=self.UNCLOSED)),
+        assert f"! switchboard-kit  swb-1  ◑◔  tenant-environments  in Flume stream wldn  {said}  0 of 2 merged  {TE_TIME}" in view("wldn-ops", logs=self.UNCLOSED)
+        assert f"! switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  in Flume stream wldn  {said}  {TE_TIME}" in lane(board.board_text(data(logs=self.UNCLOSED)),
                                                                                                              "Construction")
         assert not [l for l in view("wldn-ops") if "not closed" in l]
 
@@ -1394,8 +1440,8 @@ class TestViews:
         sluice's state, and says the record's queued again only once sluice's queue no longer shows it."""
         logs = [dict(self.QUEUED[0], Submission="355")]
         sv = queued(STANDING_SUBS)
-        assert view("swb-1-conductor", sv=sv, logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged  {QUEUED_TIME}"
-        assert view("swb-1-conductor", logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing queued as #355  0 of 2 merged  {TE_TIME}"
+        assert view("swb-1-conductor", sv=sv, logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  landing #355 queued  0 of 2 merged  {QUEUED_TIME}"
+        assert view("swb-1-conductor", logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  landing queued as #355  0 of 2 merged  {TE_TIME}"
 
     def test_what_a_held_bolts_landing_is_read_from_the_run_record(self):
         """Decision 5 (board.landing_of): queued while its last bolt.submit is, unclosed while its last bolt.land since
@@ -1411,10 +1457,10 @@ class TestViews:
 
     def test_the_planner_reads_the_plan_in_brief_each_teams_bolt_and_the_proposals_with_whom_they_wait_on(self):
         assert view("wldn-planner", props=WAITS) == [
-            "wldn plan  2 held  1 planned  1 queued  1 proposal open", "  atlas-kit  atl-1  holds no bolt",
-            f"! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged  {DONE_TIME}",
-            f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}",
-            "  switchboard-kit  swb-2  holds no bolt", "✓ proposal 2 by wldn-planner  Tenants get d.  waiting on swb-1-conductor  no card open",
+            "wldn plan  2 held  1 planned  1 queued  1 proposal open", "  atlas-kit  atl-1  holds no bolt  in Flume stream wldn",
+            f"! breadboard-kit  brd-1  ●  board-done  in Flume stream wldn  landed  1 of 1 merged  {DONE_TIME}",
+            f"  switchboard-kit  swb-1  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {TE_TIME}",
+            "  switchboard-kit  swb-2  holds no bolt  in Flume stream wldn", "✓ proposal 2 by wldn-planner  Tenants get d.  waiting on swb-1-conductor  no card open",
             "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit",
             "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
 
@@ -1438,8 +1484,8 @@ class TestViews:
         mine = view("wldn-operator", props=WAITS, signals=SIGS)
         assert mine[:4] == [f"wldn board  read from {BOX}, mac-studio", "Inception  3 signals not moved  1 exploration",
                             "Bolt plan  1 proposal open  1 planned  1 queued", "Construction"]
-        assert mine[4:8] == ["  atlas-kit  atl-1  holds no bolt", f"! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged  {DONE_TIME}",
-                             f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}", "  switchboard-kit  swb-2  holds no bolt"]
+        assert mine[4:8] == ["  atlas-kit  atl-1  holds no bolt  in Flume stream wldn", f"! breadboard-kit  brd-1  ●  board-done  in Flume stream wldn  landed  1 of 1 merged  {DONE_TIME}",
+                             f"  switchboard-kit  swb-1  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {TE_TIME}", "  switchboard-kit  swb-2  holds no bolt  in Flume stream wldn"]
         assert "Operation  0 landed in seven days" in mine and "waits on the user  ✓ 1 to approve" in mine
 
     def test_an_operator_reads_each_environment_with_a_deploy_or_an_operation_waiting_and_counts_their_cards(self):
@@ -1568,20 +1614,21 @@ class TestSubmissions:
         """crew-board "A merge standing in sluice"."""
         sv = queued(STANDING_SUBS)
         assert lane(board.board_text(data(sv=sv)), "Construction")[1:3] == [
-            "    a  code 1/2  #41 under test  https://unit-a--switchboard-kit--box.dev", "    b  planned"]
-        assert view("swb-1-conductor", sv=sv)[1:3] == ["    ◑  a  code 1/2  #41 under test", "    ◔  b  planned"]
+            "    a  code 1/2  #41 under test", "    b  construct"]
+        assert view("swb-1-conductor", sv=sv)[1:3] == ["    ◑  a  code 1/2  #41 under test", "    ◔  b  construct"]
 
     def test_a_landing_standing_in_sluice_is_on_the_bolts_head_line_in_the_lane_and_the_bands(self):
         """crew-board "A landing standing in sluice": the lane, its conductor's band and main-level ops's."""
         sv = queued(STANDING_SUBS)
         assert lane(board.board_text(data(sv=sv)), "Construction")[0] == (
-            f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  landing #355 queued  {QUEUED_TIME}")
-        assert view("swb-1-conductor", sv=sv)[0] == f"  switchboard-kit  ◑◔  tenant-environments  landing #355 queued  0 of 2 merged  {QUEUED_TIME}"
+            f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  in Flume stream wldn  landing #355 queued  {QUEUED_TIME}")
+        assert view("swb-1-conductor", sv=sv)[0] == f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  landing #355 queued  0 of 2 merged  {QUEUED_TIME}"
         assert "  switchboard-kit  tenant-environments  landing #355 queued" in view("wldn-ops", sv=sv)
 
     def test_a_landing_on_ops_landing_row_is_named_with_its_bolt(self, monkeypatch):
-        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", "swb-1")], units=[("rows-one", "switchboard-kit", "doctor-rows", [])]))
+        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", True)], units=[("rows-one", "switchboard-kit", "doctor-rows", [])]))
         monkeypatch.setitem(globals(), "the_plan", lambda: two)
+        monkeypatch.setitem(globals(), "PLACED", {"rows-one": ("landed", None)})
         sv = queued([dict(STANDING_SUBS[2], pull_head="bolt/doctor-rows")])
         sv[BOX]["kits"]["/kit/main"]["bolts"]["doctor-rows"] = {"head": "f" * 40, "head_at": ago(30), "changes": ["rows-one"],
                                                                 "archived": ["rows-one"], "verdict": "passed (2 run)"}
@@ -1594,12 +1641,12 @@ class TestSubmissions:
         """crew-board "A queue that can't be read"."""
         sv = queued(error="sluice overview exited 2: not a repository sluice serves")
         out = lane(board.board_text(data(sv=sv)), "Construction")
-        assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  submissions can't be read: sluice overview "
+        assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  in Flume stream wldn  submissions can't be read: sluice overview "
                           "exited 2: not a repository sluice serves  3h 20m; who held its time can't be told: its submissions can't be read: "
                           "sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in out if "#" in l]
         mine = view("swb-1-conductor", sv=sv)
-        assert mine[0] == ("  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged  3h 20m; who held its time "
+        assert mine[0] == ("  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  submissions can't be read  0 of 2 merged  3h 20m; who held its time "
                            "can't be told: its submissions can't be read: sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in mine if "#" in l]
 
@@ -1609,12 +1656,12 @@ class TestSubmissions:
         the record's number (read.1)."""
         sv = queued(error="sluice overview exited 2: not a repository sluice serves")
         out = lane(board.board_text(data(sv=sv, logs=TestViews.QUEUED)), "Construction")
-        assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  submissions can't be read: sluice overview "
+        assert out[0] == ("  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  in Flume stream wldn  submissions can't be read: sluice overview "
                           "exited 2: not a repository sluice serves  3h 20m; who held its time can't be told: its submissions can't be "
                           "read: sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in out if "#" in l]
         mine = view("swb-1-conductor", sv=sv, logs=TestViews.QUEUED)
-        assert mine[0] == ("  switchboard-kit  ◑◔  tenant-environments  submissions can't be read  0 of 2 merged  3h 20m; who held its time "
+        assert mine[0] == ("  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  submissions can't be read  0 of 2 merged  3h 20m; who held its time "
                            "can't be told: its submissions can't be read: sluice overview exited 2: not a repository sluice serves")
         assert not [l for l in mine if "#" in l]
 
@@ -1624,7 +1671,7 @@ class TestSubmissions:
 
 class TestTime:
     """crew-board "A held bolt's head line shows its age and who held its time" (plan.20): each holder now as the lane,
-    the JSON and the bands draw tenant-environments' head line, given 200 minutes before the board was read."""
+    the JSON and the bands draw tenant-environments' head line, started 200 minutes before the board was read."""
 
     @staticmethod
     def head(**kw):
@@ -1633,9 +1680,9 @@ class TestTime:
     def test_the_team_while_a_stage_runs(self):
         logs = [dict(Act="stage.start", On=["stage/a/code", "unit/a", "agent/swb-1-unit-1"], At=ago(50))]
         said = f"3h 20m: team 50m, nobody 2h 30m; team since {hm(50)}, code on a"
-        assert self.head(logs=logs).endswith(f"swb-1 on {BOX}  {said}")
-        assert view("swb-1-conductor", logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {said}"
-        assert f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {said}" in view("wldn-planner", logs=logs)
+        assert self.head(logs=logs).endswith(f"swb-1 on {BOX}  in Flume stream wldn  {said}")
+        assert view("swb-1-conductor", logs=logs)[0] == f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {said}"
+        assert f"  switchboard-kit  swb-1  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {said}" in view("wldn-planner", logs=logs)
 
     def test_the_kit_while_a_merge_is_under_test(self):
         assert self.head(sv=queued(STANDING_SUBS)).endswith(QUEUED_TIME)
@@ -1661,10 +1708,10 @@ class TestTime:
         sv[BOX]["kits"]["/kit/main"]["decided"] = [{"id": 41, "bolt": "tenant-environments", "branch": "bolt/tenant-environments", "worktree": "unit/a",
                                                     "pull_head": None, "submitted": ago(30), "started": None, "decided": ago(18), "event": "landed"}]
         said = f"3h 20m: team or kit 12m, nobody 3h 08m; stalled since {hm(18)}; team or kit: sluice keeps no start of its checks"
-        assert self.head(sv=sv).endswith(f"swb-1 on {BOX}  {said}")
+        assert self.head(sv=sv).endswith(f"swb-1 on {BOX}  in Flume stream wldn  {said}")
         assert data(sv=sv)["partitions"][0]["construction"][0]["time"]["shares"]["team_or_kit"] == 12
-        assert view("swb-1-conductor", sv=sv)[0] == f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {said}"
-        assert f"  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged  {said}" in view("wldn-planner", sv=sv)
+        assert view("swb-1-conductor", sv=sv)[0] == f"  switchboard-kit  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {said}"
+        assert f"  switchboard-kit  swb-1  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {said}" in view("wldn-planner", sv=sv)
 
     def test_an_age_that_cant_be_told_says_why_and_shows_no_share(self):
         unread = {"wldn": {"wldn/main of WilldanGroup/crew-state": "fetch failed"}}
@@ -1715,38 +1762,37 @@ class TestCards:
 
 def test_a_chore_is_marked_in_a_ledger_a_planned_bolt_and_the_queue(monkeypatch):
     """A chore stands among the units in build order, its kind in the JSON and `chore` before its stage in the text
-    (plan.11); its place is read from the kit's chore places."""
+    (plan.11); a started bolt's chore at the stage its host's runner carries its place at, bump submitted."""
     import sys
-    text = plan_text(bolts=[("apex-zones", "switchboard-kit", None), ("tenant-environments", "switchboard-kit", "swb-1")],
+    text = plan_text(bolts=[("apex-zones", "switchboard-kit", None), ("tenant-environments", "switchboard-kit", True)],
                      units=[("pin", "switchboard-kit", "apex-zones", [], "chore"), ("a", "switchboard-kit", "tenant-environments", []),
                             ("bump", "switchboard-kit", "tenant-environments", [], "chore"), ("tidy", "switchboard-kit", None, [], "chore")])
     monkeypatch.setattr(sys.modules[__name__], "the_plan", lambda: plan.Plan(text))
+    monkeypatch.setitem(globals(), "PLACED", dict(PLACED, bump=("submitted", None)))
     sv = kits()
-    sv[BOX]["kits"]["/kit/main"].update(chores=[], chore_places={"bump": {"path": "/kit/places/chore-bump", "head": "c" * 40, "head_at": ago(5),
-                                                                         "ahead": 1, "bolt": "tenant-environments"}})
     d = data(sv=sv)
     ledger = next(b for b in d["partitions"][0]["construction"] if b["bolt"] == "tenant-environments")
-    assert [(u["unit"], u["kind"], u["stage"], u["slot"]) for u in ledger["units"]] == [("a", "unit", "code", None), ("bump", "chore", "verify", None)]
+    assert [(u["unit"], u["kind"], u["stage"], u["slot"]) for u in ledger["units"]] == [("a", "unit", "code", None), ("bump", "chore", "submitted", None)]
     out = board.board_text(d)
-    assert "    bump  chore verify" in lane(out, "Construction")
+    assert "    bump  chore submitted #413" in lane(out, "Construction")
     assert lane(out, "Bolt plan") == ["  switchboard-kit apex-zones  Goal of apex-zones.", "    pin  chore ready", "  switchboard-kit tidy  chore queued"]
     # Its conductor's view, the mod's band, draws the chore in its ledger as the board does (code.8).
     mine = view("swb-1-conductor", sv=sv)
-    assert mine[:3] == [f"  switchboard-kit  ◑◕  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2", "    ◕  bump  chore verify"]
+    assert mine[:3] == [f"  switchboard-kit  ◑◕  tenant-environments  in Flume stream wldn  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2", "    ◕  bump  chore submitted #413"]
 
 
 class TestCrossed:
     """crew-board "Construction shows a crossed team's bolts from the runner's records" and "The planner's and ops's bands
     show what a crossed team's places wait on them for" (Decision 14 of teams-cross-to-flume-as-their-bolts-land, code.8):
-    crw-4 holds x, given through Flume, a launched as request 1 and b after a as request 2; crw-5, in stream madswan too,
-    holds y, given before it was given through Flume; deneb's runner as each case gives it."""
+    x started, its work running with crw-4, the first of the teams building crew in stream madswan, a launched as
+    request 1 and b after a as request 2; y planned and not started; deneb's runner as each case gives it."""
 
     @pytest.fixture(autouse=True)
     def writer(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
 
     def data(self, runners, extra=(), kit=None, bolts=None):
-        """The board of madswan, its runner as given and extra requests appended to those the give wrote; kit what deneb's
+        """The board of madswan, its runner as given and extra requests appended to those the start wrote; kit what deneb's
         read of crew holds beside, and bolts each bolt's facts there."""
         from facts import crew_read, crossed_fleet_read, launched
         fleet = crossed_fleet_read(**{"crw-5": "madswan"})
@@ -1767,24 +1813,23 @@ class TestCrossed:
         """crew-board "A crossed team's ledger": x on deneb in stream madswan, a at code, b waiting on a, and no slot line."""
         from facts import ran
         d = self.data(ran({1: "code"}, held=[2]))
-        assert lane(board.board_text(d), "Construction")[:3] == [
-            "  crew x  crw-4 on deneb  in Flume stream madswan  its age can't be told: the run record of the last 60 days holds no give of it",
+        assert lane(board.board_text(d), "Construction") == [
+            "  crew x  crw-4 on deneb  in Flume stream madswan  its age can't be told: the run record of the last 60 days holds no start of it",
             "    a  code 6/26", "    b  waiting  on a"]
         assert {t["team"]: t["stream"] for t in d["partitions"][0]["teams"]} == {"crw-4": "madswan", "crw-5": "madswan"}
-        assert lane(board.board_text(d), "Construction")[3].startswith("  crew y  crw-5 on deneb  in Flume stream madswan")
+        assert [b["bolt"] for b in d["partitions"][0]["bolt_plan"]["planned"]] == ["y"]
 
     def test_a_started_bolts_ledger_shows_no_server(self, monkeypatch):
         """crew-board "A started bolt's work shows no server": a server running in x's own worktree, as a bolt given before
         record 0026 had one, is drawn for no part of x, its places being Flume's (_open.md: the runner reports a place's
-        addresses), where y, given before, has it drawn."""
+        addresses)."""
         from facts import ran
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
         site = {"here": "https://bolt--crew.local"}
-        kit = dict(sites={"/crew/bolts/x": site, "/crew/bolts/y": site}, routes=[{"name": "bolt--crew", "url": "https://bolt--crew.local"}])
-        d = self.data(ran({1: "code"}, held=[2]), kit=kit, bolts={"x": {"worktree": "/crew/bolts/x"}, "y": {"worktree": "/crew/bolts/y"}})
-        x, y = (next(b for b in d["partitions"][0]["construction"] if b["bolt"] == n) for n in "xy")
+        kit = dict(sites={"/crew/bolts/x": site}, routes=[{"name": "bolt--crew", "url": "https://bolt--crew.local"}])
+        d = self.data(ran({1: "code"}, held=[2]), kit=kit, bolts={"x": {"worktree": "/crew/bolts/x"}})
+        x = next(b for b in d["partitions"][0]["construction"] if b["bolt"] == "x")
         assert x["url"] is None and {u["url"] for u in x["units"]} == {None}
-        assert y["url"] == "https://bolt--crew.local"
         assert "server" not in "\n".join(lane(board.board_text(d), "Construction")[:3])
 
     def test_a_question_in_the_planners_band(self):

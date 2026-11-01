@@ -68,7 +68,7 @@ open(f, "w").write(p.text())
 PY
 commit_all "$w" "plan: by hand"; push_state "$w"
 flume_world
-crew bolt give swb-1 b1 >/dev/null; crew bolt give brd-1 d1 >/dev/null
+crew bolt start b1 >/dev/null; crew bolt start d1 >/dev/null
 mkdir -p "$(space mac-studio willdan)/willdan-blueprints/main"
 crew main up wldn >/dev/null 2>&1
 # A batch every two changes. The runner's records carry each place at 12:01Z on 2026-10-31, so the partition's clock is
@@ -174,7 +174,7 @@ eq "$(entries $box card.close | jq -r '[.Card, .Key, .State, .Outcome] | join(" 
 ok "a batch card's one session reads the summary and every unit's change, archived at its bolt's commit, from its team's host, the link on its card and the same again while it serves; the rail's refresh tells the planner once that it was sent, with none of the user's words, crew card wait is refused naming the read, and the planner's crew card read returns the words and closes the card, which forgets the session"
 
 # m1 is given to atl-1 on mac-studio, and z1's place lands on it there.
-crew bolt give atl-1 m1 >/dev/null
+crew bolt start m1 >/dev/null
 k=$ak flume_lands mac-studio unit z1 m1
 z1at=$(git -C "$ak" rev-parse origin/bolt/m1)
 

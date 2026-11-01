@@ -1524,7 +1524,7 @@ class TestWhoReads:
         pl = type("P", (), {"work_of": lambda s, b: [type("U", (), {"name": lambda s, n=f"{b}-{i}": n})() for i in range(len(bolts[b]))]})()
         read = []
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: pl)
-        monkeypatch.setattr(plan, "held_by", lambda p, team: [type("B", (), {"name": lambda s, n=b: n, "get": lambda s, k: None})() for b in bolts])
+        monkeypatch.setattr(plan, "team_bolts", lambda fleet, p, team: [type("B", (), {"name": lambda s, n=b: n, "get": lambda s, k: None})() for b in bolts])
         monkeypatch.setattr(plan, "stages_for", lambda fleet, p, bs: type("S", (), {"of": lambda s, u: {"stage": bolts[u.split("-")[0]][int(u.split("-")[1])]}})())
         monkeypatch.setattr(plan, "landing_now", lambda t, b: (f"/k/places/land-{b}", False, False))
         monkeypatch.setattr(plan, "landing_marked", lambda t, b: b == "d")
@@ -1566,7 +1566,8 @@ def test_a_close_by_a_read_records_its_bolt_land_in_ops_name_with_its_why(monkey
     """Decision 4: crew bolt land's code, run by a read, writes its bolt.land by main-level ops with the Why the read
     gives it, whatever names the command uses for its own reads on the way, and with the bolt's age and split as any
     landing of a held bolt carries them (plan.20)."""
-    P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "swb-1", "Repo": "k"}, "work_of": lambda s, b: [], "units": lambda s: []})
+    P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Path": "flume", "Repo": "k"}, "work_of": lambda s, b: [], "units": lambda s: [],
+                       "bolts": lambda s: []})
     wrote = []
     monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, P()))
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
@@ -1576,7 +1577,6 @@ def test_a_close_by_a_read_records_its_bolt_land_in_ops_name_with_its_why(monkey
     monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [])
     monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append((subject, k.get("by"), k.get("why"))))
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
-    monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
     monkeypatch.setattr(plan, "sweep_on", lambda *a, **k: None)
     spent = dict(Age="200", Split="team 150, kit 20, user 0, hold 0, nobody 30")
     monkeypatch.setattr(plan, "landing_time", lambda fleet, t, pl, b, entries, now: spent)
@@ -1875,10 +1875,7 @@ class TestTheLandingsPoint:
         pr = plan.pull_of("swb-1-unit-2 (pull/23)", "WilldanGroup/switchboard-kit")
         facts = plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", "2026-10-17T10:00:00Z", set(), {}, {"a": 4, "b": 5}, 2, pr)
         assert facts == dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], batches={"a": 4, "b": 5}, head="abc1234",
-                             at="2026-10-17T10:00:00Z", moved=2, pr={"number": 23, "url": "https://github.com/WilldanGroup/switchboard-kit/pull/23"},
-                             frees=None)
-        frees = {"team": "swc-1", "next": "d"}
-        assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, set(), {}, {}, 0, None, frees)["frees"] == frees
+                             at="2026-10-17T10:00:00Z", moved=2, pr={"number": 23, "url": "https://github.com/WilldanGroup/switchboard-kit/pull/23"})
         assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, {"b"}, {}, {"a": 4}, 0, None) is None
 
     def test_its_facts_wait_for_the_users_answer_on_each_batch_card_that_holds_a_units_latest_change(self):
@@ -2216,21 +2213,6 @@ class TestARowsPreview:
         assert plan.preview_ended(code, out, err) == ended
 
 
-class TestWhatAYesFrees:
-    """What a yes to a landing frees of its team (teams.16, plan.yes_frees), shared by its rail row and its card."""
-
-    def test_a_team_holding_no_other_bolt_is_free_already(self):
-        assert plan.yes_frees("doctor-rows", [], "d") is None
-        assert plan.yes_frees("doctor-rows", [("doctor-rows", True)], "d") is None
-
-    def test_while_the_other_is_not_proven_the_team_builds_it(self):
-        assert plan.yes_frees("doctor-rows", [("ssh-fix", False)], "d") == ("builds", "ssh-fix")
-
-    def test_once_the_other_is_proven_a_yes_frees_the_team_for_its_next_planned_bolt_or_for_none(self):
-        assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], "d") == ("frees", "d")
-        assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], None) == ("frees", None)
-
-
 DRAFT = dict(number=99, draft=True, head=TIP, url="https://github.com/o/k/pull/99")
 READY = dict(DRAFT, draft=False)
 TAKES = '[branches.main]\nrequired = ["#check-full"]\nremote = "origin"\n\n[branches.main.pull_requests]\nreviews = 0\n'
@@ -2556,7 +2538,6 @@ class TestACrossedBoltLands:
         assert work == [("a", "unit", "merged"), ("b", "unit", "merged"), ("c", "chore", "merged")]
         assert plan.landing_unready(work, "d" * 40, self.GREEN, []) is None
         assert st.bolt_state(st.plan.bolt("x")) == "waits"
-        assert [w for w, _, _, _, unread in plan.proven_facts(st, st.plan, [st.plan.bolt("x")])] == ["x"]
 
     def test_a_piece_still_in_code_keeps_it_unproven(self):
         st = self.stages({1: "landed", 2: "code", 3: "landed"})

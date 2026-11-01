@@ -41,7 +41,7 @@ def runnerless(label, host, tips):
     if host in tips:
         return None
     return (f"no runner answers on {host}: {runner_branch(label, host)} does not exist, so nothing would launch the bolt's "
-            "work there; a give waits for the runner (flywheel-runner) to serve the partition there")
+            "work there; a start waits for the runner (flywheel-runner) to serve the partition there")
 
 
 def crossed_refusal(team, host, what):
@@ -663,7 +663,7 @@ def takers(plan, teams, label, bolt):
     held by no team in a kit one of them builds is theirs whenever it is planned, a team holding no bound; none for a
     bolt a team holds."""
     b = plan.bolt(bolt)
-    if b is None or b.get("Team"):
+    if b is None or b.get("Path") == "flume":
         return []
     return crossed_builders(teams, label, b.get("Repo"))
 
@@ -825,26 +825,36 @@ def fixes_in_flight(requests, reads, label, bolt):
 
 # ------------------------------------------------------------------------------------------------ a fix of main
 
-def main_fixer(teams, label, kit, main_host):
-    """The team on whose host a fix of a kit's red main runs (Decision 11, state.3; Decision 15 of
-    the-team-machinery-leaves), as (its name, None), or (None, why): among the partition's teams that build the kit in a
-    Flume stream (crossed_builders), the first by name on the one host they run on, or on the partition's main-level
-    host (main_host) where they run on several, since the place wants the host and its stream and nothing else of a
-    team. Refused when they run on several hosts, none of them the main level's, naming them, which the user settles
-    (read.1); and when no team builds the kit in a stream, its red main's fix then being a bolt of one chore, proposed
-    first among the planned, as state.3 has it until one does."""
+def kit_builder(teams, label, kit, main_host):
+    """The team on whose host a kit's work runs, in its stream (Decision 14 of the-team-machinery-leaves, until 5.2 reads
+    the host from the runner's record), as (its name, None), or (None, why): among the partition's teams that build the
+    kit in a Flume stream (crossed_builders), the first by name on the one host they run on, or on the partition's
+    main-level host (main_host) where they run on several, since the work wants the host and its stream and nothing
+    else of a team. Refused when they run on several hosts, none of them the main level's, naming them, which the user
+    settles (read.1); and when no team builds the kit in a stream, why None, for the caller to say what that leaves."""
     names = crossed_builders(teams, label, kit)
     if not names:
-        return None, (f"no team of {label} builds {kit} in a Flume stream, so a fix of its red main is no Flume place: it is a bolt "
-                      "of one chore, proposed first among the planned, which the dispatcher gives to the next team that frees "
-                      f"(state.3); tell {label}-planner, who proposes it")
+        return None, None
     hosts = sorted({teams[n]["machine"] for n in names})
     if len(hosts) > 1:
         here = [n for n in names if teams[n]["machine"] == main_host]
         return (here[0], None) if here else (None, (
             f"{' and '.join(names)} build {kit} through Flume on {' and '.join(hosts)}, none of them {label}'s main-level host "
-            f"{main_host}, so crew can't tell the one host a fix of its main runs on"))
+            f"{main_host}, so crew can't tell the one host {kit}'s work runs on"))
     return names[0], None
+
+
+def main_fixer(teams, label, kit, main_host):
+    """The team on whose host a fix of a kit's red main runs (Decision 11, state.3; Decision 15 of
+    the-team-machinery-leaves), as (its name, None), or (None, why): the kit's (kit_builder); when no team builds the
+    kit in a stream, its red main's fix is a bolt of one chore, proposed first among the planned, as state.3 has it
+    until one does."""
+    name, why = kit_builder(teams, label, kit, main_host)
+    if name is None and why is None:
+        return None, (f"no team of {label} builds {kit} in a Flume stream, so a fix of its red main is no Flume place: it is a bolt "
+                      "of one chore, proposed first among the planned, which the dispatcher gives to the next team that frees "
+                      f"(state.3); tell {label}-planner, who proposes it")
+    return name, why
 
 
 def main_priority(plan):

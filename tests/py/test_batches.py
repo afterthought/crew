@@ -8,22 +8,28 @@ import datetime
 
 import pytest
 
-from facts import FLEET, START, at, card_closed, constructed, plan_of, reviewed, told
+from facts import FLEET, START, at, card_closed, constructed, plan_of, plan_text, reviewed, told
 from facts import told as told_entry
 
 import plan
 
-PLAN = plan_of(bolts={"b1": "swb-1", "b2": "swb-2", "queued": None},
-               units={"x1": "b1", "x2": "b1", "y1": "b2", "z1": "queued", "w1": None})
+# b1 started in switchboard-kit, which swb-1 builds, b2 in breadboard-kit, which swb-2 builds, and queued planned.
+PLAN = plan.Plan(plan_text(bolts=[("b1", "switchboard-kit", True), ("b2", "breadboard-kit", True), ("queued", "switchboard-kit", None)],
+                           units=[("x1", "switchboard-kit", "b1", []), ("x2", "switchboard-kit", "b1", []), ("y1", "breadboard-kit", "b2", []),
+                                  ("z1", "switchboard-kit", "queued", []), ("w1", "switchboard-kit", None, [])]))
+# The team each started bolt's work runs with, as batch_check gives it to due_changes.
+TEAMS = {b.name(): plan.team_name(FLEET, b) for b in PLAN.bolts() if plan.started(b)}
 EVERY_5 = {"every": 5, "hours": 4}
 HOUR = datetime.timedelta(hours=1)
 
 
 class TestDue:
     def test_each_unit_whose_last_construct_no_batch_has_held_is_due_in_the_plans_order(self):
+        """Each due change names the team its started bolt's work runs with, by its kit, and none where not given."""
         entries = [constructed("y1", "aaa1"), constructed("x1", "bbb1"), constructed("x2", "ccc1", 5)]
-        assert [(u, team, sha) for u, team, sha, _ in plan.due_changes(PLAN, entries)] == [
+        assert [(u, team, sha) for u, team, sha, _ in plan.due_changes(PLAN, entries, teams=TEAMS)] == [
             ("x1", "swb-1", "bbb1"), ("x2", "swb-1", "ccc1"), ("y1", "swb-2", "aaa1")]
+        assert [team for _, team, _, _ in plan.due_changes(PLAN, entries)] == [None, None, None]
 
     def test_a_change_a_batch_held_is_not_due_and_constructed_again_it_is(self):
         entries = [constructed("x1", "bbb1"), reviewed(1, [("x1", "swb-1", "bbb1")], 10)]
@@ -31,7 +37,7 @@ class TestDue:
         entries.append(constructed("x1", "bbb2", 20))
         assert [(u, sha) for u, _, sha, _ in plan.due_changes(PLAN, entries)] == [("x1", "bbb2")]
 
-    def test_units_of_no_bolt_a_team_holds_are_not_due(self):
+    def test_units_of_no_started_bolt_are_not_due(self):
         assert plan.due_changes(PLAN, [constructed("z1", "ddd1"), constructed("w1", "eee1")]) == []
 
     def test_a_construct_that_stopped_or_was_refused_delivers_no_change(self):
@@ -461,14 +467,15 @@ class TestBatchFacts:
 
 
 def test_the_rails_sweep_reckons_a_batch_for_the_teams_on_its_host():
-    """The rail's sweep reckons each partition's batch for its teams on this host holding a bolt, in the plan's order
-    (briefs.12), so a bolt whose units have all merged reaches the planner with no conductor waiting; a team elsewhere,
-    and a partition whose plan was not read, are not reckoned here."""
-    teams = {"swb-1": {"machine": "mac-studio"}, "swb-2": {"machine": "chuck-herdr-alpha"}}
+    """The rail's sweep reckons each partition's batch for its teams on this host a started bolt's work runs with, in
+    the plan's order (briefs.12), so a bolt whose units have all merged reaches the planner with no conductor waiting; a
+    team elsewhere, and a partition whose plan was not read, are not reckoned here."""
+    fleet = dict(FLEET, teams=dict(FLEET["teams"], **{"swb-1": dict(FLEET["teams"]["swb-1"], machine="mac-studio")}))
     found = [("wldn", None, None, PLAN), ("swancloud", None, None, None)]
-    assert plan.batch_reckoners(found, teams, "mac-studio") == {"wldn": ["swb-1"]}
-    assert plan.batch_reckoners(found, teams, "chuck-herdr-alpha") == {"wldn": ["swb-2"]}
-    assert plan.batch_reckoners(found, teams, "deneb") == {}
+    assert plan.batch_reckoners(fleet, found, "mac-studio") == {"wldn": ["swb-1"]}
+    assert plan.batch_reckoners(fleet, found, "chuck-herdr-alpha") == {"wldn": ["swb-2"]}
+    assert plan.batch_reckoners(fleet, found, "deneb") == {}
+    assert plan.batch_reckoners(FLEET, found, "chuck-herdr-alpha") == {"wldn": ["swb-1", "swb-2"]}
 
 
 def test_the_followers_reckoning_takes_its_read_and_tells_the_planner_once(monkeypatch):
@@ -482,7 +489,7 @@ def test_the_followers_reckoning_takes_its_read_and_tells_the_planner_once(monke
     for read_again in ("plan_of", "partition_entries", "stages_for", "survey"):
         monkeypatch.setattr(plan, read_again, lambda *a, **k: pytest.fail("the reckoning read again"))
     found = [("wldn", "WilldanGroup/crew-state", "a" * 40, PLAN)]
-    read = {"found": found, "logs": {"wldn": [constructed("x1", "bbb1")]}, "unread": {"wldn": {}}, "sv": {}}
+    read = {"found": found, "logs": {"wldn": [constructed("x1", "bbb1")]}, "unread": {"wldn": {}}, "sv": {}, "runs": {"wldn": ([], {})}}
     assert plan.reckon_batches(FLEET, found, read) == {"wldn": True} and told == ["wldn-planner"] and emitted == ["batch.due"]
     assert plan.reckon_batches(FLEET, found, dict(read, logs={"wldn": read["logs"]["wldn"] + [told_entry()]})) == {} and told == ["wldn-planner"]
     assert plan.reckon_batches(FLEET, found, read, skip={"wldn"}) == {} and told == ["wldn-planner"]
@@ -533,7 +540,8 @@ class TestCrossed:
         st = self.stages({1: "landed", 2: "code"})
         crossed = plan.crossed_changes(st.plan, st)
         assert crossed == {"a": (self.LANDED, "2026-10-31T12:02:00Z")}
-        assert [(u, team, sha) for u, team, sha, _ in plan.due_changes(st.plan, [], crossed)] == [("a", "crw-4", self.LANDED)]
+        teams = {"x": plan.team_name(st.fleet, st.plan.bolt("x"))}
+        assert [(u, team, sha) for u, team, sha, _ in plan.due_changes(st.plan, [], crossed, teams)] == [("a", "crw-4", self.LANDED)]
 
     def test_constructed_but_not_landed_is_not_yet_due(self):
         """review-batches "Constructed but not landed": b's construct has delivered and its place is in code."""

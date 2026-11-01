@@ -2,8 +2,8 @@
 commits, a signal's and a capture's markdown by its frontmatter as one record, so a value that breaks the record is
 refused, named by its file and line, and nothing is pushed (plan.1, signals.4); a Move the moves file's enum does not
 allow is refused (the route a unit add --signal writes); a hand edit that duplicates a key is refused by name
-(read.1, crew bolts naming the commit); a bolt given to a crossed team is marked Path: flume, the one Path the
-plan takes; and requests.rec and a runner's branch files are refused for what their descriptors do not allow."""
+(read.1, crew bolts naming the commit); a started bolt is marked Path: flume, the one Path the plan takes, and a new
+branch allows no Team or Agreed while an old branch's records still pass; and requests.rec and a runner's branch files are refused for what their descriptors do not allow."""
 import json
 import re
 
@@ -101,15 +101,33 @@ def test_an_ask_or_a_role_record_the_headers_do_not_allow_is_refused(path, drop,
         plan.checked({path: pl.text()})
 
 
-def test_a_bolt_given_to_a_crossed_team_is_marked_flume_and_no_other_path_passes():
-    """A give to a crossed team marks its bolt Path: flume beside Team (the change teams-cross-to-flume-as-their-bolts-land,
-    Decision 2): plan.checked takes it, and refuses a Path the Bolt set's enum does not hold (plan.1)."""
-    bolt = "Bolt: x\nRepo: crew\nGoal: Cross.\nTeam: crw-4\nPath: flume\n\n"
+def test_a_started_bolt_is_marked_flume_and_no_other_path_passes():
+    """crew bolt start marks its bolt Path: flume (Decision 14 of the-team-machinery-leaves): plan.checked takes it, and
+    refuses a Path the Bolt set's enum does not hold (plan.1)."""
+    bolt = "Bolt: x\nRepo: crew\nGoal: Start.\nPath: flume\n\n"
     text = plan.HEADER.replace("%rec: Unit", bolt + "%rec: Unit")
     plan.recfix(text, "plan.rec")
     assert [b.get("Path") for b in plan.Plan(text).bolts()] == ["flume"]
     with pytest.raises(Refusal, match="^plan.rec fails recfix --check"):
         plan.recfix(text.replace("Path: flume", "Path: other"), "plan.rec")
+
+
+def test_a_new_branch_allows_no_team_or_agreement_and_an_old_branchs_records_still_pass():
+    """bolt-plan (Decision 9 of the-team-machinery-leaves): a new state branch's descriptors (HEADER, PROPOSALS) allow
+    no Bolt's Team and no Proposal's Agreed, so recfix --check refuses a record that carries one; a branch whose own
+    descriptor allows Team keeps allowing it when crew brings it in step (plan.in_step, still_allowed), so a bolt still
+    carrying Team passes, nothing stripped from it (plan.1, state.2)."""
+    bolt = "Bolt: x\nRepo: crew\nGoal: Start.\nTeam: crw-4\nPath: flume\n\n"
+    with pytest.raises(Refusal, match="^plan.rec fails recfix --check"):
+        plan.recfix(plan.HEADER.replace("%rec: Unit", bolt + "%rec: Unit"), "plan.rec")
+    proposal = "\nProposal: 1\nCase: Why.\nDo: bolt start x\nAgreed: crw-4-conductor\nState: open\nOpened: 2026-10-31\nBy: madswan-planner\n"
+    with pytest.raises(Refusal, match="^proposals.rec fails recfix --check"):
+        plan.recfix(plan.PROPOSALS + proposal, "proposals.rec")
+    old = plan.Plan(plan.HEADER.replace("%allowed: Bolt Repo Goal Source Path", "%allowed: Bolt Repo Goal Team Source Path")
+                    .replace("%rec: Unit", bolt + "%rec: Unit"))
+    assert not plan.in_step(old) or "Team" in old.text()
+    plan.recfix(old.text(), "plan.rec")
+    assert [b.get("Team") for b in old.bolts()] == ["crw-4"]
 
 
 def launch_rec(n, work="unit/a", after=(), **more):
@@ -179,11 +197,11 @@ def test_a_request_is_written_in_the_commit_of_the_plan_write_that_occasions_it_
     ref = f"{state.LABEL}/main"
     before = state.git("rev-parse", ref)
 
-    def give(w):
-        w.plan.insert(plan.Rec("Bolt", [("Bolt", "b"), ("Repo", "afterthought/crew"), ("Goal", "Cross."), ("Team", "crw-4"), ("Path", "flume")]))
+    def start(w):
+        w.plan.insert(plan.Rec("Bolt", [("Bolt", "b"), ("Repo", "afterthought/crew"), ("Goal", "Start."), ("Path", "flume")]))
         assert launch_of_a(w) == 1
         return []
-    sha = plan.write(state.fleet, state.LABEL, give, "plan(bolt b): give to crw-4")
+    sha = plan.write(state.fleet, state.LABEL, start, "plan(b): start the bolt")
     assert state.git("rev-parse", ref) == sha and state.git("rev-list", "--count", f"{before}..{sha}") == "1"
     assert state.git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split() == ["plan.rec", "requests.rec"]
     assert len(state.git("log", "-1", "--format=%(trailers:key=Crew-Entry,valueonly)", sha).split()) == 1

@@ -392,6 +392,8 @@ def drawn(before, after, argvs):
         if key == ("bolt", "new"):
             kits[a.bolt], goals[a.bolt] = a.repo, a.goal
             secs, b = [("bolt", a.bolt)], block("NEW BOLT", a.bolt, wrap(a.goal, SAYS, 3))
+        elif key == ("bolt", "start"):
+            secs, b = [("bolt", a.bolt)], block("START", a.bolt, wrap("its work launched through Flume", SAYS))
         elif key == ("bolt", "order"):
             counts["moved"] += 1
             bolt_moves[a.bolt] = bolt_moves.get(a.bolt, 0) + 1
@@ -668,8 +670,8 @@ def landing_card(f):
     the batches; the reading linked first, then sluice's pull request when the submission has one. f: bolt, kit,
     units, chores, batches ({unit: the batch it was read in}), head, at (sluice's time), moved (landings on main since
     the bolt was cut), pr ({number, url}) or None, offers (the environments whose deploy will be offered on a card),
-    link (the reading session's) or None, preview (a preview of the head as preview_said takes it) or None, frees
-    ({team, next}, when its team holds another bolt proven too) or None, follows, and approved, on a card that follows
+    link (the reading session's) or None, preview (a preview of the head as preview_said takes it) or None, follows,
+    and approved, on a card that follows
     one the user answered at another head, the head they approved, "" when crew holds no record of it (head_anew).
     A preview's addresses follow the reading in its details and links, each on its face as a link after the reading's
     and before the pull request, as many as the card's artifacts leave room for (record 0031 §3).
@@ -697,10 +699,6 @@ def landing_card(f):
                 "main has not moved since the bolt was cut.")
     if "forecast" in f:  # a row of its kit's landings card (rail-cards "The landings card forecasts each row's conflicts")
         said.append(forecast_said(f["forecast"], f.get("forecast_why"), f.get("would_main")))
-    frees = f.get("frees")
-    if frees:  # its team holds another bolt, proven too, so a yes frees it (teams.16)
-        said.append(f"A yes frees {frees['team']} for {frees['next']}, which waits behind this landing." if frees.get("next")
-                    else f"A yes frees {frees['team']}, and nothing is planned for it.")
     offers = list(f.get("offers") or [])
     then = ("After it lands: main-level ops lands it through sluice and every host takes it"
             + (f"; {joined(offers)}'s deploy will be offered on a card." if offers else "."))
@@ -803,7 +801,7 @@ def row_counts(r):
 
 def row_paragraph(n, r):
     """A landings row on the card's face, as Markdown: its place, bolt and conductor, its units and chores one a line,
-    its batches, sluice's verdict and when, how far main moved, what a yes frees, its forecast, what stopped its last
+    its batches, sluice's verdict and when, how far main moved, its forecast, what stopped its last
     landing at its head (stopped_said), and its reading, preview and pull request as links."""
     units, chores = list(r["units"]), list(r.get("chores") or [])
     moved = r.get("moved") or 0
@@ -813,10 +811,6 @@ def row_paragraph(n, r):
     _, read, green, _ = row_bits(r)
     said = ([stopped_said(r)] if r.get("stopped") else []) + ([f"Read in {read[8:]}."] if read else []) + [f"sluice is {green}."]
     said.append(f"main has moved {plural(moved, 'landing')} since it was cut." if moved else "main has not moved since it was cut.")
-    frees = r.get("frees")
-    if frees:
-        said.append(f"A yes frees {frees['team']} for {frees['next']}." if frees.get("next") else
-                    f"A yes frees {frees['team']}, and nothing is planned for it.")
     said.append(forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main")))
     lines.append(" ".join(said))
     links = ([f"[Read {r['bolt']}]({r['link']})"] if r.get("link") else
@@ -1534,7 +1528,7 @@ def revision(got, kind_changed=False, questions=False, anew=False):
     questions under its new title, as proposal 140's did over proposal 139's rows on 2026-10-18. Once they have
     answered it, which Pending You changes no longer, picked up or acked since or not, "leave", the card left as it
     is, since an answered card is final for what it asked and the act their answer calls for goes on (record 0031 §1
-    and §3): a change to what it offers, a reading's link, a preview's addresses, a note on what a yes frees, never
+    and §3): a change to what it offers, a reading's link, a preview's addresses, never
     closes it or asks again; only when what it asks changed, its kind or anew, a head that moved after the answer among
     them (head_anew), "follow", the new card following it (Pending You's guide, "Follow up with a new card"), or
     "ended" when Pending You has ended it already (ended), as it has a card withdrawn or expired unanswered."""

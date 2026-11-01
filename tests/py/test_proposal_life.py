@@ -14,15 +14,23 @@ from facts import FLEET, FactsWrite, apply, plan_text
 
 import cards
 import plan
+import runner
 
 KIT, TE, CP = "switchboard-kit", "tenant-environments", "console-pages"
 TODAY = "2026-10-12"
 
 
-def write():
-    return FactsWrite(plan_text(
+def write(team=None):
+    """wldn's plan with tenant-environments started and console-pages planned, and requests.rec as a started bolt's
+    launches leave it; with team, tenant-environments carries a Team field naming it, as a branch's records written
+    before teams left still do (bolt-plan "A flywheel keeps one plan"), which the conductors' agreement reads until it
+    leaves."""
+    text = plan_text(
         bolts=[(TE, KIT, "swb-1"), (CP, KIT, None)],
-        units=[("the-deploy-names-its-host-tenant", KIT, TE, []), ("the-deploy-is-logged", KIT, TE, []), ("queued-one", KIT, None, [])]))
+        units=[("the-deploy-names-its-host-tenant", KIT, TE, []), ("the-deploy-is-logged", KIT, TE, []), ("queued-one", KIT, None, [])])
+    if team:
+        text = text.replace(f"Goal: Goal of {TE}.\n", f"Goal: Goal of {TE}.\nTeam: {team}\n")
+    return FactsWrite(text, files={"requests.rec": runner.REQUESTS})
 
 
 def args(*dos):
@@ -113,26 +121,27 @@ class TestAgreement:
         return p
 
     def test_the_conductor_of_a_bolt_it_touches_agrees_once(self):
-        assert plan.agreements_wanted(write().plan, self.DOS, self.p(), 1, "conductor", "swb-1") == ["swb-1"]
-        assert plan.agreements_wanted(write().plan, self.DOS, self.p(["swb-1"]), 1, "conductor", "swb-1") == []
+        assert plan.agreements_wanted(write("swb-1").plan, self.DOS, self.p(), 1, "conductor", "swb-1") == ["swb-1"]
+        assert plan.agreements_wanted(write("swb-1").plan, self.DOS, self.p(["swb-1"]), 1, "conductor", "swb-1") == []
 
     def test_a_conductor_whose_bolt_it_does_not_touch_is_refused(self):
-        assert refusal(plan.agreements_wanted, write().plan, self.DOS, self.p(), 1, "conductor", "swb-2") == (
+        assert refusal(plan.agreements_wanted, write("swb-1").plan, self.DOS, self.p(), 1, "conductor", "swb-2") == (
             "proposal 1 touches no bolt swb-2 holds: it touches the bolts of swb-1")
 
     def test_no_other_agent_agrees(self):
-        assert refusal(plan.agreements_wanted, write().plan, self.DOS, self.p(), 1, "design", "wldn", None, "wldn-design") == (
+        assert refusal(plan.agreements_wanted, write("swb-1").plan, self.DOS, self.p(), 1, "design", "wldn", None, "wldn-design") == (
             "wldn-design does not agree to proposals: the conductor of a bolt a proposal touches agrees to it")
 
     def test_the_user_agrees_for_every_team_it_touches_or_one_named(self):
-        assert plan.agreements_wanted(write().plan, self.DOS, self.p(), 1, "user", None) == ["swb-1"]
-        assert refusal(plan.agreements_wanted, write().plan, self.DOS, self.p(), 1, "user", None, "swb-2") == "proposal 1 touches no bolt swb-2 holds"
+        assert plan.agreements_wanted(write("swb-1").plan, self.DOS, self.p(), 1, "user", None) == ["swb-1"]
+        assert refusal(plan.agreements_wanted, write("swb-1").plan, self.DOS, self.p(), 1, "user", None, "swb-2") == (
+            "proposal 1 touches no bolt swb-2 holds")
 
     def test_approval_waits_on_each_conductor_whose_bolt_is_held_now(self):
-        assert plan.agreement_missing(write().plan, self.DOS, self.p(), 1) == (
+        assert plan.agreement_missing(write("swb-1").plan, self.DOS, self.p(), 1) == (
             "proposal 1 waits on the agreement of swb-1-conductor: crew plan agree 1")
-        assert plan.agreement_missing(write().plan, self.DOS, self.p(["swb-1"]), 1) is None
-        given = write().plan
+        assert plan.agreement_missing(write("swb-1").plan, self.DOS, self.p(["swb-1"]), 1) is None
+        given = write("swb-1").plan
         given.bolt(CP).set("Team", "swb-2")
         dos = args('unit add a-page "The console has a page." --bolt console-pages')
         assert plan.agreement_missing(given, dos, self.p(), 1) == "proposal 1 waits on the agreement of swb-2-conductor: crew plan agree 1"
@@ -150,11 +159,11 @@ class TestPage:
            'unit add a-plan-only-deploy-is-checked "A plan-only deploy is checked." --bolt deploy-checks',
            'unit move queued-one deploy-checks']
 
-    def page(self, dos, agreed=()):
+    def page(self, dos, agreed=(), team=None):
         p = plan.proposal(proposals_with(("Two findings about the deploy belong together.", dos)), 1, "wldn")
         for t in agreed:
             p.add("Agreed", t, after="Do")
-        d = plan.describe(FLEET, "wldn", write().plan, p, alone=True)
+        d = plan.describe(FLEET, "wldn", write(team).plan, p, alone=True)
         return d, plan.page(d, "wldn")
 
     def test_each_change_reads_in_plain_words_with_the_command_approval_runs(self):
@@ -169,13 +178,14 @@ class TestPage:
         assert "crew plan approve" not in out
         assert d["changes"][2]["do"] == "unit move queued-one deploy-checks"
 
-    def test_work_a_held_bolt_needs_says_so_and_waits_on_its_conductor(self):
-        d, out = self.page(['unit add zone-first "The tenant\'s zone exists." --bolt tenant-environments --unblocks tenant-environments'])
-        assert "1. **New unit `zone-first`** in bolt `tenant-environments`, held by swb-1" in out
+    def test_work_a_started_bolt_needs_says_so_and_waits_on_its_conductor(self):
+        d, out = self.page(['unit add zone-first "The tenant\'s zone exists." --bolt tenant-environments --unblocks tenant-environments'],
+                           team="swb-1")
+        assert "1. **New unit `zone-first`** in bolt `tenant-environments`, started" in out
         assert "   Unblocks: bolt `tenant-environments`, which can't be proven or land without it" in out
         assert "   Bolt's goal: Goal of tenant-environments." in out
         assert "- swb-1-conductor, to agree, or tell wldn-planner why not" in out
-        assert "- agreed: swb-1" in self.page([d["changes"][0]["do"]], ["swb-1"])[1]
+        assert "- agreed: swb-1" in self.page([d["changes"][0]["do"]], ["swb-1"], team="swb-1")[1]
 
     def test_a_closed_proposal_says_when_and_why(self):
         p = plan.proposal(proposals_with(("x", ["unit order queued-one --first"])), 1, "wldn")
@@ -191,12 +201,13 @@ class TestAmendment:
     A, = args('unit amend the-deploy-is-logged "The deploy writes a log the operator can search."')
 
     def test_a_unit_with_a_change_shows_both_intents_its_stage_and_what_follows(self):
-        assert plan.amendment_lines(write().plan, self.A, {"stage": "code", "worktree": "/kit/places/x"}) == [
-            "**Amend unit `the-deploy-is-logged`** in bolt `tenant-environments` (swb-1), now in code",
+        s = {"stage": "code", "worktree": None, "flume": {"stage": "code", "place": "/flume/places/change--x"}}
+        assert plan.amendment_lines(write().plan, self.A, s) == [
+            "**Amend unit `the-deploy-is-logged`** in bolt `tenant-environments` (started), now in code",
             "Intent, as it stands: Unit the-deploy-is-logged.",
             "Intent, as proposed:  The deploy writes a log the operator can search.",
-            "On approval: construct runs again at once in swb-1's slot, and once that has committed the unit goes on from "
-            "its tasks with no approval asked, its revised change due for the next batch."]
+            "On approval: Flume runs its construct again with the new intent, and the unit goes on from its tasks with no "
+            "approval asked, its revised change due for the next batch."]
 
     def test_one_with_no_change_yet_only_has_its_intent_replaced(self):
         assert plan.amendment_lines(write().plan, self.A, {"stage": "ready", "worktree": None})[-1] == (
@@ -216,7 +227,7 @@ class TestAmendment:
             "On approval: its launch, which Flume has not started, is dropped and launched again carrying the new intent.")
 
     def test_drawn_alone_it_reads_no_stage(self):
-        assert plan.amendment_lines(write().plan, self.A, None) == ["**Amend unit `the-deploy-is-logged`** in bolt `tenant-environments` (swb-1)"]
+        assert plan.amendment_lines(write().plan, self.A, None) == ["**Amend unit `the-deploy-is-logged`** in bolt `tenant-environments` (started)"]
 
 
 class TestAnswers:
@@ -413,8 +424,8 @@ class TestRaise:
         for name in ("row_card_post", "row_card_change", "row_card_close"):
             monkeypatch.setattr(plan, name, act(name))
 
-    def raised(self, pl, n, event, by_host="mac-studio", entries=(), **said):
-        w = write()
+    def raised(self, pl, n, event, by_host="mac-studio", entries=(), team=None, **said):
+        w = write(team)
         w.files["proposals.rec"] = pl.text()
         return plan.raise_proposal_at(CARDED, "wldn", w, n, event, self.Acts(by_host, entries), **said)
 
@@ -437,13 +448,16 @@ class TestRaise:
         assert (name, owner, facts["n"], facts["first"], note) == ("row_card_change", "wldn-planner", 2, 1, "Rewritten as proposal 2 after your note")
         assert build(facts)["key"] == "proposal/1" and build(facts)["boxes"][0]["unit"] == "b-new"
 
-    def test_an_agreement_on_a_host_that_holds_no_card_changes_nothing_there(self, capsys):
+    def test_an_agreement_on_a_host_that_holds_no_card_changes_nothing_there(self, capsys, monkeypatch):
+        """The card is drawn with the unit launched in the started bolt as approval would launch it, by the agreeing
+        conductor."""
+        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
         dos = ['unit add zone-first "The zone exists." --bolt tenant-environments --unblocks tenant-environments']
-        assert self.raised(proposals_with(("Zone.", dos)), 1, "agree", "chuck-herdr-alpha", agreed=["swb-1"]) is None
+        assert self.raised(proposals_with(("Zone.", dos)), 1, "agree", "chuck-herdr-alpha", team="swb-1", agreed=["swb-1"]) is None
         assert self.called == []
         assert capsys.readouterr().out == "card proposal/1 not changed here: wldn-planner holds it on mac-studio, and chuck-herdr-alpha holds none\n"
         held = [{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": "req_9"}]
-        self.raised(proposals_with(("Zone.", dos)), 1, "agree", "chuck-herdr-alpha", held, agreed=["swb-1"])
+        self.raised(proposals_with(("Zone.", dos)), 1, "agree", "chuck-herdr-alpha", held, team="swb-1", agreed=["swb-1"])
         assert [(c[0], c[1][5]) for c in self.called] == [("row_card_change", "No longer waits on swb-1-conductor")]
         assert self.called[0][1][4]["waiting"] == ["swb-1"]
 
@@ -690,8 +704,9 @@ def test_an_agreement_on_a_card_with_questions_withdraws_it_while_it_waits_and_p
     bears rarely."""
     from test_card_commands import Acts
     monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+    monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
     dos = [f'unit add z-{i} "z-{i}." --bolt tenant-environments' for i in range(1, 7)]
-    w = write()
+    w = write("swb-1")
     w.files["proposals.rec"] = proposals_with(("Zone.", dos)).text()
     held = [{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": "req_p1"}]
     acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None), "cancel_request": ({"version": 4}, None),

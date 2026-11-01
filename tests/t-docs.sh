@@ -1,7 +1,7 @@
 # README, the crew skill and crew's usage name the same commands: every command in the README is in the usage,
 # and none of the removed ones is in any of them. CLAUDE.md names how an agent runs crew's tools through the shell
 # per command, and no role brief or crew skill does (tests.7); a landing pushes nothing and levels no host in each of
-# them (docs.2, plan.18), and a give, a land and a drop go through sluice's branch create and delete, a dropped bolt's
+# them (docs.2, plan.18), and a start, a land and a drop go through sluice's branch create and delete, a dropped bolt's
 # branch kept while main lacks its tip (plan.19); CLAUDE.md
 # says a host loads crew live from crew/live/plugin or released at a tag swancloud pins, never from a checkout on main,
 # which nobody pulls or levels (plan.18, plan.19); a checkout carries the .envrc a person's direnv enters the shell
@@ -33,7 +33,7 @@ ok "every command in the README is in crew's usage"
 for gone in assign release opsx fable explorer verifier coder-; do
   for doc in usage readme skill; do lacks "${!doc}" "$gone"; done
 done
-for gone in assign release opsx; do expect_fail "A team holds as many bolts as it is given" crew $gone swb-1; done
+for gone in assign release opsx; do expect_fail "every bolt, unit and chore of the plans" crew $gone swb-1; done
 for doc in usage readme skill; do lacks "${!doc}" "unit approve"; lacks "${!doc}" "review/<unit>"; done
 for doc in usage readme skill; do has "${!doc}" "crew review"; done
 for gone in "unit run" "unit wait" "unit free" "chore run" "chore wait" "chore free" "crew needs" "fix <team>"; do
@@ -76,14 +76,15 @@ done
 for doc in readme skill; do has "${!doc}" "origin/bolt/<bolt>"; done
 for doc in usage readme skill; do has "${!doc}" "while main lacks its tip"; lacks "${!doc}" "a dropped bolt's whatever it holds"; done
 has "$usage" "land and drop have sluice delete it"; has "$skill" "\`crew bolt land\` and \`crew bolt drop\` have sluice delete"
-has "$readme" "for a bolt a team holds, it then has sluice delete the bolt's branch"
-ok "the README, the skill and the usage say a give has sluice make the bolt's branch on GitHub and a land and a drop have sluice delete it, a dropped bolt's kept while main lacks its tip, a give refused below sluice 0.20.0, every place cut from the bolt on GitHub, and a bolt made before local until it lands"
+has "$readme" "for a started bolt, it then has sluice delete the bolt's branch"
+ok "the README, the skill and the usage say a start has sluice make the bolt's branch on GitHub and a land and a drop have sluice delete it, a dropped bolt's kept while main lacks its tip, a start refused below sluice 0.20.0, every place cut from the bolt on GitHub, and a bolt made before local until it lands"
 
 for doc in usage readme skill; do
-  has "${!doc}" '<bolt> <name> "<what is wrong>"'; has "${!doc}" "never refused for the bolts"; has "${!doc}" "waits to land"; lacks "${!doc}" "one more"
+  has "${!doc}" '<bolt> <name> "<what is wrong>"'; has "${!doc}" "start"; has "${!doc}" "started already"; has "${!doc}" "waits to land"
+  for gone in "bolt give" "crew bolt give" "one more" "a give" "never refused for the bolts"; do lacks "${!doc}" "$gone"; done
 done
 expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge --merge
-ok "the README, the skill and the usage say a give is never refused for the bolts a team holds, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
+ok "the README, the skill and the usage say a bolt's work is started by crew bolt start, refused for one started already, and name no give, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
 
 for doc in usage readme skill; do
   for want in "version 2, 3 or 4" "in Flume stream" "Path: flume" "still closes" \

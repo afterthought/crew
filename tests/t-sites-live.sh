@@ -18,7 +18,7 @@ git -C "$ak" remote add origin https://github.com/WilldanGroup/atlas-kit.git
 export CREW_LABEL=wldn
 crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
 crew unit add map-one "Map one." --bolt atlas-maps >/dev/null
-crew bolt give atl-1 >/dev/null 2>&1
+crew bolt start atlas-maps >/dev/null 2>&1
 pm=$(place "$ak" atlas-maps map-one)
 name=$(cd "$pm" && devurl | awk '$1 == "here" {print $2}' | sed -e 's#^https://##' -e 's#\.[a-z]*$##')
 eq "$name" "unit-map-one--atlas-kit"

@@ -176,7 +176,8 @@ def e(act, minutes, *on, **fields):
 
 
 def given(minutes=0):
-    return e("bolt.give", minutes, "bolt/b", "team/swb-1")
+    """The bolt's start, minutes after START."""
+    return e("bolt.start", minutes, "bolt/b")
 
 
 def facts_of(entries, standing=(), decided=(), unread=None):
@@ -188,8 +189,9 @@ def mins(m):
     return START + datetime.timedelta(minutes=m)
 
 
-def test_the_give_is_the_newest_and_its_stages_pair_with_their_ends():
-    entries = [given(-500), e("bolt.give", -100, "bolt/b", "team/swb-1", Refused="its team is down"), given(0),
+def test_the_start_is_the_newest_and_its_stages_pair_with_their_ends():
+    """An older crew's give of b, a start of it refused, and its start."""
+    entries = [e("bolt.give", -500, "bolt/b", "team/swb-1"), e("bolt.start", -100, "bolt/b", Refused="its host is held"), given(0),
                e("stage.start", 5, "stage/a/code", "unit/a", "agent/swb-1-unit-1"),
                e("stage.start", 6, "stage/c/code", "chore/c", "agent/swb-1-unit-2"),
                e("stage.end", 30, "stage/a/code", "unit/a", "agent/swb-1-unit-1"),
@@ -300,10 +302,14 @@ def test_a_landing_by_pull_request_is_the_bolts_by_the_number_its_queued_submit_
     assert facts_of([given(0)], decided=decided)["submissions"] == [], "a landing by pull request was taken with no submit naming it"
 
 
-def test_a_give_that_cant_be_read_is_said_and_shows_no_share():
-    """The run record holds no give of b in the days the board reads."""
-    got = plan.time_at(facts_of([e("bolt.give", 0, "bolt/o", "team/swb-2")]), mins(10))
-    assert got == {"unknown": "its age can't be told: the run record of the last 60 days holds no give of it"}
+def test_an_older_crews_give_is_the_start_where_the_record_holds_no_start():
+    assert facts_of([e("bolt.give", 0, "bolt/b", "team/swb-1")])["start"] == mins(0)
+
+
+def test_a_start_that_cant_be_read_is_said_and_shows_no_share():
+    """The run record holds no start of b, nor an older crew's give of it, in the days the board reads."""
+    got = plan.time_at(facts_of([e("bolt.start", 0, "bolt/o"), e("bolt.give", 0, "bolt/o", "team/swb-2")]), mins(10))
+    assert got == {"unknown": "its age can't be told: the run record of the last 60 days holds no start of it"}
 
 
 def test_a_record_that_cant_be_read_is_said():

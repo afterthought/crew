@@ -1,14 +1,13 @@
-"""crew bolt new|order|drop on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
-reads given; which bolt a give hands a team (plan.to_give) and when a team may take one (plan.give_refusal), and when a bolt lands (plan.land_refusal),
-held by a team or by none (plan.unheld_stages, plan.unheld_refusal, plan.builder); and what a give checks and says
-around sluice's create of the bolt's branch (plan.give_check, plan.made_said, plan.given_said, plan.ungiven_said).
-The branch and worktree give makes and land removes, and the commits every write makes, are the journey's
-(t-journey-units and t-journey-land)."""
+"""crew bolt new|order|drop|start on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
+reads given; when a bolt lands (plan.land_refusal), started or not (plan.unheld_stages, plan.unheld_refusal,
+plan.builder); and what a start checks and says around sluice's create of the bolt's branch (plan.kit_team,
+plan.start_check, plan.give_check, plan.made_said, plan.started_said, plan.unstarted_said). The branch a start makes
+and land removes, and the commits every write makes, are the journey's (t-journey-units and t-journey-land)."""
 import base64
 import pathlib
 
 import pytest
-from facts import FactsWrite, apply, known, plan_text, units_of
+from facts import FLEET, FactsWrite, apply, known, plan_text, units_of
 
 import plan
 
@@ -79,77 +78,6 @@ class TestDrop:
             "cannot tell unit lint-once's stage: its host did not answer")
 
 
-class TestGive:
-    def test_the_team_gets_its_kits_first_bolt_no_team_holds_or_the_one_named(self):
-        p = fresh().plan
-        assert plan.to_give(p, None, "swb-2", [KIT], "wldn").name() == "console-pages"
-        assert plan.to_give(p, p.bolt("board-builds"), "brd-1", [BOARD], "wldn").name() == "board-builds"
-
-    def test_a_team_holding_two_kits_takes_a_bolt_of_either_the_first_free_in_the_plans_order(self):
-        """A team holds its kits (record 0035): slc-1 and flm-1 both hold agentplot/weir."""
-        p = fresh().plan
-        first = next(b.name() for b in p.bolts() if b.get("Repo") in (KIT, BOARD) and not b.get("Team"))
-        assert plan.to_give(p, None, "swb-2", [KIT, BOARD], "wldn").name() == first
-        assert plan.to_give(p, p.bolt("board-builds"), "swb-2", [KIT, BOARD], "wldn").name() == "board-builds"
-
-    @pytest.mark.parametrize("bolt, team, said", [
-        ("board-builds", "swb-2", "bolt board-builds is in breadboard-kit, and swb-2 builds switchboard-kit"),
-        ("tenant-environments", "swb-2", "bolt tenant-environments is held by swb-1")])
-    def test_a_bolt_of_another_kit_or_held_is_refused(self, bolt, team, said):
-        p = fresh().plan
-        with pytest.raises(plan.Refusal, match=said):
-            plan.to_give(p, p.bolt(bolt), team, [KIT], "wldn")
-
-    def test_with_none_free_it_says_so(self):
-        with pytest.raises(plan.Refusal, match="wldn/main has no planned bolt in rocs-kit for rcs-1"):
-            plan.to_give(fresh().plan, None, "rcs-1", ["rocs-kit"], "wldn")
-
-
-class TestGiveRefusal:
-    """A team builds one bolt and holds at most one more, proven and waiting to land (teams.16): a give is refused only
-    while a bolt it holds is not proven, or it holds two (plan.give_refusal)."""
-    GREEN = "passed (3 run, 1 replayed)"
-    HEAD = "abc1234def5678"
-
-    def held(self, *stages, name="tenant-environments", verdict=GREEN, unread=None, kind="unit"):
-        return (name, [(f"u{i}", kind, s) for i, s in enumerate(stages)], self.HEAD, verdict, unread)
-
-    def test_a_team_holding_no_bolt_is_given_one(self):
-        assert plan.give_refusal("swb-1", []) is None
-
-    def test_a_unit_not_merged_refuses_naming_it_and_its_stage(self):
-        assert plan.give_refusal("swb-1", [self.held("merged", "code")]) == "bolt tenant-environments's unit u1 has not merged (code)"
-
-    def test_a_chore_not_merged_and_a_stage_crew_cannot_tell_refuse_too(self):
-        assert plan.give_refusal("swb-1", [self.held("verify", kind="chore")]) == "bolt tenant-environments's chore u0 has not merged (verify)"
-        assert plan.give_refusal("swb-1", [self.held("unknown")]) == "bolt tenant-environments's unit u0 has not merged (unknown)"
-
-    def test_every_unit_merged_and_the_verdict_passed_is_proven(self):
-        assert plan.give_refusal("swb-1", [self.held("merged", "merged")]) is None
-
-    def test_merged_with_a_head_that_is_no_landing_of_sluices_refuses_with_the_verifications_words(self):
-        assert plan.give_refusal("swb-1", [self.held("merged", verdict="")]) == (
-            "bolt tenant-environments's verification is not green: its head abc1234 is no landing of sluice's, so it has no verdict")
-
-    def test_merged_and_green_with_a_fix_in_flight_is_proven_since_fixes_are_no_input(self):
-        """A carrying fix is what the proven bolt keeps of the team, so it refuses nothing (teams.16)."""
-        assert plan.give_refusal("swb-1", [self.held("merged", "landed")]) is None
-
-    def test_every_unit_landed_is_proven_whatever_its_head(self):
-        assert plan.give_refusal("swb-1", [self.held("landed", "landed", verdict="")]) is None
-
-    def test_a_bolt_with_no_units_refuses(self):
-        assert plan.give_refusal("swb-1", [self.held()]) == "bolt tenant-environments holds no units or chores yet"
-
-    def test_a_kit_not_read_refuses_with_why(self):
-        assert plan.give_refusal("swb-1", [self.held("merged", unread="sb-1 did not answer")]) == (
-            "can't tell whether bolt tenant-environments is proven: sb-1 did not answer")
-
-    def test_two_bolts_held_refuses_naming_the_older_whose_landing_frees_the_team(self):
-        held = [self.held("merged", name="doctor-rows"), self.held("merged", name="ssh-fix")]
-        assert plan.give_refusal("swc-1", held) == "swc-1 holds doctor-rows and ssh-fix; doctor-rows waits to land, and its landing frees swc-1"
-
-
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
 WHERE = "/kit/main/.config/sluice.toml"
 POLICY = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
@@ -170,8 +98,8 @@ def deleted(name, policy=POLICY):
 
 
 class TestDropDeletes:
-    """bolt-plan "A bolt is created, given, dropped and landed through crew" (plan.19, record 0003): a drop of a bolt a
-    team holds has sluice delete its branch, asked on the team's host once its worktrees are gone; what is said of it
+    """bolt-plan "A bolt is created, dropped and landed through crew" (plan.19, record 0003): a drop of a started bolt
+    has sluice delete its branch, asked on its kit's host; what is said of it
     (plan.dropped_said). That it is marked dropped and recorded once is the journey's (t-journey-land)."""
     HOST = "chuck-herdr-alpha"
     KEPT = "it is the drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip"
@@ -180,7 +108,7 @@ class TestDropDeletes:
         return plan.dropped_said("b", self.HOST, 0, deleted(name, policy), "", again)
 
     def test_a_dropped_bolt_whose_tip_main_holds_is_deleted_from_github(self):
-        """bolt-plan "Dropping a bolt a team holds"."""
+        """bolt-plan "Dropping a bolt in flight"."""
         assert self.said("delete.json") == "sluice deleted bolt/b from GitHub at 22eef85"
 
     def test_a_dropped_bolt_made_before_is_deleted_from_its_host(self):
@@ -224,21 +152,92 @@ class TestDropDeletes:
             "bolt/b is still kept: #1 still queued on bolt/b; wait for them to land, or withdraw them")
 
 
-class TestGiveThroughSluice:
-    """bolt-plan "A bolt is created, given, dropped and landed through crew" (plan.19): what a give checks before sluice
-    makes the branch, every refusal coming before the plan write, so the plan is unchanged and no branch made; what
-    sluice's create says; and a write refused after it, which has sluice delete the branch again."""
+def kitted(**flume):
+    """wldn's fleet (facts.FLEET) with each team's kit checked out on its host, each team in the stream given (flume,
+    {team: stream or False}), else in wldn's."""
+    teams = {n: dict(t, flume=flume.get(n, t["flume"]), kit=dict(t["kit"], main=f"/w/{t['kit']['name']}/main", dir=f"/w/{t['kit']['name']}"))
+             for n, t in FLEET["teams"].items()}
+    return dict(FLEET, teams=teams)
+
+
+class TestStart:
+    """bolt-plan "A bolt's work starts by crew bolt start" (Decision 14 of the-team-machinery-leaves; plan.19): the start
+    runs on the host of the team building the bolt's kit in a Flume stream (plan.kit_team), and is refused, with the
+    plan unchanged and no branch made, for a bolt started already, a kit no team builds in a stream, a held host, or a
+    host with no runner branch (plan.start_check), before the kit's policy and sluice are read. Its launches are the
+    cross tests' (test_cross.py); its commit and branch the cross journey's (t-journey-cross)."""
+    HOST = "chuck-herdr-alpha"
+
+    @pytest.fixture
+    def reads(self, monkeypatch):
+        """What start_check reads, each answered as the case sets it (self.held, self.tips, self.policy), every read
+        recorded in order."""
+        import crew
+        self.read, self.held, self.tips = [], None, {self.HOST: "a" * 40}
+        self.policy = (POLICY, "origin/main", "c" * 40, "sluice 0.36.4")
+        monkeypatch.setattr(crew, "held_on", lambda fleet, host: self.read.append(("hold", host)) or self.held)
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("WilldanGroup/crew-state", f"{label}/main"))
+        monkeypatch.setattr(plan, "runner_tips", lambda repo, label: self.read.append(("runners", repo, label)) or self.tips)
+        monkeypatch.setattr(plan, "kit_policy", lambda fleet, t: self.read.append(("policy", t["kit"]["main"])) or self.policy)
+
+    def checked(self, fleet=None):
+        fleet = fleet or kitted()
+        return plan.start_check(fleet, "wldn", plan.kit_team(fleet, "wldn", KIT), "b")
+
+    def test_a_bolts_work_runs_on_the_host_of_the_team_building_its_kit_in_a_stream(self):
+        assert [(t["name"], t["machine"], t["flume"], t["kit"]["name"]) for t in (plan.kit_team(kitted(), "wldn", k) for k in (KIT, BOARD))] == [
+            ("swb-1", self.HOST, "wldn", KIT), ("swb-2", self.HOST, "wldn", BOARD)]
+
+    def test_a_bolt_started_already_is_refused(self):
+        assert refusal(fresh(), "bolt start tenant-environments") == "bolt tenant-environments is started already"
+
+    def test_a_kit_no_team_builds_in_a_stream_is_refused_naming_it(self):
+        w = fresh()
+        fleet = kitted(**{"swb-1": False})
+        with pytest.raises(plan.Refusal) as e:
+            apply(w, "bolt start console-pages", ctx=known(w, fleet=fleet))
+        assert str(e.value) == f"no team of wldn builds {KIT} in a Flume stream, so crew can't tell where its work runs"
+        assert not plan.started(w.plan.bolt("console-pages"))
+
+    def test_a_held_host_is_refused_before_anything_else_is_read(self, reads):
+        self.held = {"by": "chuck", "why": "upgrading herdr", "at": "2026-10-31T10:00:00Z"}
+        with pytest.raises(plan.Refusal) as e:
+            self.checked()
+        assert str(e.value) == (f"{self.HOST} is held by chuck since 2026-10-31T10:00:00Z: upgrading herdr. crew starts no agent there "
+                                f"until crew go {self.HOST}")
+        assert self.read == [("hold", self.HOST)]
+
+    def test_a_host_with_no_runner_branch_is_refused_before_the_kit_is_read(self, reads):
+        self.tips = {"mac-studio": "a" * 40}
+        with pytest.raises(plan.Refusal) as e:
+            self.checked()
+        assert str(e.value).startswith(f"no runner answers on {self.HOST}: wldn/runner/{self.HOST} does not exist, so nothing would "
+                                       "launch the bolt's work there")
+        assert self.read == [("hold", self.HOST), ("runners", "WilldanGroup/crew-state", "wldn")]
+
+    def test_a_free_host_with_its_runner_answering_has_the_kits_policy_and_sluice_checked(self, reads):
+        assert self.checked() == "origin"
+        assert self.read[-1] == ("policy", f"/w/{KIT}/main")
+        self.policy = ('[branches."bolt/*"]\nrequired = ["#check-full"]\n', "origin/main", "c" * 40, "sluice 0.36.4")
+        with pytest.raises(plan.Refusal, match=f"^{KIT} starts bolts only on GitHub"):
+            self.checked()
+
+
+class TestStartThroughSluice:
+    """bolt-plan "A bolt's work starts by crew bolt start" (plan.19): what a start checks of the kit before sluice makes
+    the branch, every refusal coming before the plan write, so the plan is unchanged and no branch made; what sluice's
+    create says; and a write refused after it, which has sluice delete the branch again."""
 
     def check(self, text=POLICY, version="sluice 0.36.4 "):
         return plan.give_check(KIT, WHERE, "origin/main", text, "b", version, "chuck-herdr-alpha")
 
-    def test_a_kit_on_github_with_a_sluice_that_makes_branches_gives_on_its_remote(self):
+    def test_a_kit_on_github_with_a_sluice_that_makes_branches_starts_on_its_remote(self):
         assert self.check() == "origin"
 
     def test_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
         with pytest.raises(plan.Refusal) as e:
             self.check('[branches."bolt/*"]\nrequired = ["#check-full"]\n')
-        assert str(e.value).startswith(f"{KIT} gives bolts only on GitHub, and its {WHERE} on origin/main names no remote")
+        assert str(e.value).startswith(f"{KIT} starts bolts only on GitHub, and its {WHERE} on origin/main names no remote")
 
     def test_a_kit_with_no_bolt_checks_is_refused_first(self):
         with pytest.raises(plan.Refusal, match="names no checks for its bolt branches"):
@@ -248,7 +247,7 @@ class TestGiveThroughSluice:
     def test_a_host_whose_sluice_is_older_or_unread_is_refused(self, version, said):
         with pytest.raises(plan.Refusal) as e:
             self.check(version=version)
-        assert str(e.value) == ("a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice "
+        assert str(e.value) == ("a bolt is started through sluice 0.20.0 or later, which has `branch create`, and sluice "
                                 f"--version on chuck-herdr-alpha said: {said}")
 
     MADE = "c0da39bae0a5d89da0febc3f46f58607c2ad08a7"
@@ -270,22 +269,22 @@ class TestGiveThroughSluice:
         assert self.refused() == self.PRESENT
 
     @pytest.mark.parametrize("own", [MADE, None])
-    def test_a_branch_a_give_left_at_mains_tip_with_no_commit_of_its_own_is_taken_and_the_give_goes_on(self, own):
-        """A give that failed after sluice made the branch leaves it on GitHub at main's tip, and the host's own copy
-        there too or none: the give run again takes it rather than refuse it as already there."""
+    def test_a_branch_a_start_left_at_mains_tip_with_no_commit_of_its_own_is_taken_and_the_start_goes_on(self, own):
+        """A start that failed after sluice made the branch leaves it on GitHub at main's tip, and the host's own copy
+        there too or none: the start run again takes it rather than refuse it as already there."""
         assert self.made(own=own, there=self.MADE, main=self.MADE) == (self.MADE, True)
 
     def test_a_branch_with_commits_of_its_own_is_still_refused_by_name(self):
         assert self.refused(own=self.OWN, there=self.OWN, main=self.MADE) == (
-            f"{self.PRESENT}; bolt/b on origin is at 22eef85 and origin's main at c0da39b, so it is no branch a give left "
-            "empty at main, and crew gives no bolt onto it")
+            f"{self.PRESENT}; bolt/b on origin is at 22eef85 and origin's main at c0da39b, so it is no branch a start left "
+            "empty at main, and crew starts no bolt onto it")
 
     def test_a_branch_whose_hosts_copy_stands_elsewhere_is_refused_by_name(self):
         assert self.refused(own=self.OWN, there=self.MADE, main=self.MADE) == (
-            f"{self.PRESENT}; chuck-herdr-alpha's own bolt/b is at 22eef85, not at origin's c0da39b, and crew gives no "
+            f"{self.PRESENT}; chuck-herdr-alpha's own bolt/b is at 22eef85, not at origin's c0da39b, and crew starts no "
             "bolt onto it")
         assert self.refused(own=self.OWN, there=None, main=self.MADE) == (
-            f"{self.PRESENT}; chuck-herdr-alpha's own bolt/b is at 22eef85 and origin has none, and crew gives no bolt "
+            f"{self.PRESENT}; chuck-herdr-alpha's own bolt/b is at 22eef85 and origin has none, and crew starts no bolt "
             "onto it")
 
     def test_a_branch_crew_cannot_read_on_its_remote_is_refused_with_gits_words(self):
@@ -295,36 +294,27 @@ class TestGiveThroughSluice:
     def test_a_refusal_that_finds_no_branch_is_sluices_words_alone(self):
         assert self.refused(own=None, there=None, main=self.MADE) == self.PRESENT
 
-    def test_a_give_names_github_the_commit_and_the_teams_host(self):
-        assert plan.given_said("swb-1", "b", KIT, "origin", self.MADE, "chuck-herdr-alpha") == (
-            f"swb-1 holds b: sluice made bolt/b on GitHub (origin) from {KIT}'s main at c0da39b, built on chuck-herdr-alpha "
+    def test_a_start_names_github_the_commit_and_the_kits_host(self):
+        assert plan.started_said("b", KIT, "origin", self.MADE, "chuck-herdr-alpha") == (
+            f"b is started: sluice made bolt/b on GitHub (origin) from {KIT}'s main at c0da39b, built on chuck-herdr-alpha "
             "and merged into only through sluice")
 
-    def test_a_give_that_took_the_branch_says_so(self):
-        assert plan.given_said("swb-1", "b", KIT, "origin", self.MADE, "chuck-herdr-alpha", adopted=True) == (
-            "swb-1 holds b: crew took bolt/b, which sluice made on GitHub (origin) for a give that did not finish, at "
+    def test_a_start_that_took_the_branch_says_so(self):
+        assert plan.started_said("b", KIT, "origin", self.MADE, "chuck-herdr-alpha", adopted=True) == (
+            "b is started: crew took bolt/b, which sluice made on GitHub (origin) for a start that did not finish, at "
             f"{KIT}'s main c0da39b, built on chuck-herdr-alpha and merged into only through sluice")
 
     def test_a_write_refused_after_the_create_has_sluice_delete_the_branch_again(self):
-        why = "swb-1 holds bolt c since 1234567"
-        assert plan.ungiven_said("b", why, deleted("delete.json"), 0) == (
-            f"{why}; sluice deleted bolt/b again, so nothing of the give is left")
+        assert plan.unstarted_said("b", deleted("delete.json"), 0) == "sluice deleted bolt/b again, so nothing of the start is left"
 
     def test_a_delete_sluice_refuses_then_names_the_branch_left_standing(self):
-        why = "swb-1 holds bolt c since 1234567"
-        assert plan.ungiven_said("b", why, deleted("delete-queued.json"), 0) == (
-            f"{why}; and bolt/b, which sluice made for the give, still stands, since sluice did not delete it: #1 still "
-            "queued on bolt/b; wait for them to land, or withdraw them")
-        assert plan.ungiven_said("b", why, "", 255).endswith("since sluice did not delete it: its delete exited 255: nothing was said")
+        assert plan.unstarted_said("b", deleted("delete-queued.json"), 0) == (
+            "bolt/b, which sluice made for the start, still stands, since sluice did not delete it: #1 still queued on "
+            "bolt/b; wait for them to land, or withdraw them")
+        assert plan.unstarted_said("b", "", 255).endswith("since sluice did not delete it: its delete exited 255: nothing was said")
 
 
 class TestLand:
-    def test_a_landing_says_which_bolt_the_team_still_builds_or_that_it_holds_none(self):
-        """A team may hold a bolt beside the one that lands (teams.16)."""
-        head = "0123456789abcdef"
-        assert plan.landed_line("doctor-rows", "swancloud", head, "swc-1", ["ssh-fix"]) == "doctor-rows has landed at swancloud's 0123456; swc-1 builds ssh-fix"
-        assert plan.landed_line("doctor-rows", "swancloud", head, "swc-1", []) == "doctor-rows has landed at swancloud's 0123456 and swc-1 holds no bolt"
-
     def land(self, stages, outside=(), of=None):
         return plan.land_refusal("console-pages", ["a-console-page", "a-console-filter"],
                                  of or (lambda u: {"stage": stages[u], "why": "its host did not answer"}), list(outside), "wldn")
@@ -408,27 +398,27 @@ class TestWhereABoltIsRead:
     def test_kit_matches_branches_as_gather_does(self):
         assert plan.kit.branch_table is plan.gather.branch_table
 
-    def test_a_bolt_whose_policy_crew_cant_read_is_unknown_for_all_that_has_not_landed(self):
-        """bolt-plan "A policy crew can't read": nothing is read from the host's bolt/b in its place."""
+    def test_a_started_bolt_whose_policy_crew_cant_read_is_unknown(self, monkeypatch):
+        """bolt-plan "A policy crew can't read": nothing is read from the host's bolt/b in its place, so the bolt's state is
+        unknown; its pieces read their stages from the runner's records, landed once main holds them."""
+        from facts import crew_read, crossed_fleet_read, launched, ran
+        monkeypatch.setenv("CREW_AGENT", "madswan-planner")
         why = ".config/sluice.toml at origin/bolt/b is not TOML, so crew can't read bolt b: Expected ']'"
-        fleet = {"partitions": {"wldn": {"teams": ["swb-1"]}},
-                 "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
-        p = plan.Plan(plan_text(bolts=[("b", KIT, "swb-1")], units=[("a", KIT, "b", []), ("done", KIT, "b", []), ("bump", KIT, "b", [], "chore")]))
-        k = {"ok": True, "main": ["done"], "chores": [], "places": {"a": {"path": "/kit/places/a", "tasks": [2, 2], "planning": True, "open": [], "head": "h"}},
-             "chore_places": {}, "fixes": [], "bolts": {"b": {"exists": False, "at": None, "changes": [], "archived": [], "open": {}, "chores": [],
-                                                              "head": None, "head_at": None, "verdict": None, "error": why}}}
-        st = plan.Stages(fleet, p, {"box": {"ok": True, "kits": {"/kit/main": k}}})
-        assert (st.of("a")["stage"], st.of("a")["why"]) == ("unknown", why)
-        assert (st.of("bump")["stage"], st.of("bump")["why"]) == ("unknown", why)
+        fleet = crossed_fleet_read()
+        p, requests = launched(["b"], work=[("a", "b", [], "unit", []), ("done", "b", [], "unit", [])], fleet=fleet)
+        unread = {"exists": False, "head": None, "head_at": None, "verdict": None, "error": why}
+        st = plan.Stages(fleet, p, crew_read(main=["done"], bolts={"b": unread}), runs={"madswan": (requests, ran({1: "code", 2: "landed"}))})
+        assert (st.of("a")["stage"], st.of("a")["worktree"]) == ("code", None)
         assert st.of("done")["stage"] == "landed"
         assert st.bolt_state(p.bolt("b")) == "unknown"
 
 
 class TestWhenABoltIsFetched:
     """bolt-plan "A bolt on GitHub is fetched where a decision rests on it" (plan.18, plan.19, design Decision 3): crew
-    bolts and a give's proven check ask each kit's GitHub fetched first; every other read fetches nothing."""
-    FLEET = {"partitions": {"wldn": {"teams": ["swb-1"]}},
-             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "flume": False,
+    bolts asks each kit's GitHub fetched first; every other read fetches nothing. b is started, its work running on box,
+    where swb-1 builds its kit in stream wldn."""
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "teams": ["swb-1"]}},
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "flume": "wldn",
                                  "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
     KIT_READ = {"ok": True, "main": [], "chores": [], "places": {}, "chore_places": {}, "fixes": [],
                 "bolts": {"b": {"exists": True, "at": "origin/bolt/b", "changes": [], "archived": [], "open": {}, "chores": [],
@@ -455,6 +445,7 @@ class TestWhenABoltIsFetched:
         asks = self.asked(monkeypatch)
         p = self.plan()
         monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("wldn", "o/state", "f" * 40, p)])
+        monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
         with pytest.raises(SystemExit) as e:
             plan.bolts_view(self.FLEET, argparse.Namespace(label="wldn", bolt=None, json=True))
         assert e.value.code == 0
@@ -480,15 +471,15 @@ class TestWhenABoltIsFetched:
         why = "cannot fetch /kit/main from GitHub: fatal: unable to access 'https://github.com/o/k/': Could not resolve host"
         monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: ({"/kit/main": {"ok": False, "error": why}}, None))
         st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
-        assert (st.of("a")["stage"], st.of("a")["why"]) == ("unknown", f"box: {why}")
+        assert st.kit(self.plan().bolt("b")) == (None, f"box: {why}")
         assert st.bolt_state(self.plan().bolt("b")) == "unknown"
 
 
 class TestCrewBoltsCrossed:
-    """crew bolts, text and JSON, reads a piece's stage from the runner's records and says each team's stream
+    """crew bolts, text and JSON, reads a piece's stage from the runner's records and says the stream it runs in
     (Decisions 8 and 14 of teams-cross-to-flume-as-their-bolts-land; bolt-plan "A started bolt's work reads its stage
-    from the runner's records"): crw-4 holds x, given through Flume, its a in code and b after a held; crw-5, in stream
-    madswan too, holds y, given before it was given through Flume."""
+    from the runner's records"): x is started, its work running with crw-4, the first by name of the two teams building
+    crew in stream madswan on deneb, its a in code and b after a held; y is planned, not started."""
 
     @pytest.fixture(autouse=True)
     def writer(self, monkeypatch):
@@ -520,12 +511,6 @@ class TestCrewBoltsCrossed:
         assert "x  crew  crw-4 @ deneb, in Flume stream madswan  active" in out
         assert f"  {'a':<40} {'code 6/26':<12} flume/change--teams-cross-to-flume-as-their-bolts-land" in out
         assert f"  {'b':<40} {'waiting':<12}   on a" in out
-
-    def test_every_teams_head_line_names_its_stream(self):
-        from facts import ran
-        d = self.data(ran())
-        assert self.bolts(d)["y"]["stream"] == "madswan"
-        assert "y  crew  crw-5 @ deneb, in Flume stream madswan  active" in plan.bolts_text(d).splitlines()
 
     def test_a_runner_crew_cant_read_is_named_and_its_work_reads_unknown(self):
         """bolt-plan "The runner's host is silent"."""

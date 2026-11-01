@@ -71,7 +71,7 @@ open(f, "w").write(p.text())
 PY
 commit_all "$w" "plan: by hand"; push_state "$w"
 flume_world
-crew bolt give swb-1 b1 >/dev/null
+crew bolt start b1 >/dev/null
 
 # ask <agent> <tool> <args as JSON>: a Pending You call from the agent's session through Pending You's own tools, as
 # Claude Code makes it on the box: crew's card hook before it, which may deny it, then the stub's answer, then the hook

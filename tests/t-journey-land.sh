@@ -80,8 +80,8 @@ crew bolt new tenant-environments "Tenants hold environments." --repo switchboar
 crew unit add a "Unit a." --bolt tenant-environments >/dev/null
 crew bolt new console-pages "The console lists them." --repo switchboard-kit >/dev/null
 crew unit add c "Unit c." --bolt console-pages >/dev/null
-crew bolt give swb-1 tenant-environments >/dev/null
-crew bolt give swb-2 console-pages >/dev/null
+crew bolt start tenant-environments >/dev/null
+crew bolt start console-pages >/dev/null
 # sluice forecasts tenant-environments against main with no conflict (teams.21)
 printf '{"conflict":null,"head":"%s","onto":"%s","ahead":[]}\n' "$(git -C "$k" rev-parse origin/bolt/tenant-environments)" \
   "$(git -C "$k" rev-parse main)" > "$T/sluice-check-bolt-tenant-environments.json"
@@ -390,7 +390,7 @@ ok "the bolt, submitted again on the user's word once its checks can run, lands 
 # said by the landing, and recorded once in main-level ops's name, though the waiter's read and the submission's own
 # each tried it; its head line on the board says it landed on main and was not closed, in those words.
 crew bolt new zone-lists "The zone list grows." --repo switchboard-kit >/dev/null
-crew bolt give swb-1 zone-lists >/dev/null
+crew bolt start zone-lists >/dev/null
 crew chore add tidy-zones "Tidy the zone list." --bolt zone-lists >/dev/null
 # on_bolt <bolt> <line> <subject>: a commit on the bolt's branch, pushed as sluice pushes a landing on a bolt on GitHub
 on_bolt() { git -C "$k" worktree add -q "$T/$1" "bolt/$1" && echo "$2" >> "$T/$1/zones.txt" &&
@@ -474,7 +474,7 @@ spared() {
 leave() { rm -f "$T/sluice-wait-holds"; kill $(submitters $$ "((far|near)-reach|north south east)") 2>/dev/null || true; }
 trap 'leave; [[ -z $decoy ]] || kill "$decoy" 2>/dev/null || true' EXIT
 crew bolt new far-reach "The zones reach far." --repo switchboard-kit >/dev/null
-crew bolt give swb-1 far-reach >/dev/null 2>&1
+crew bolt start far-reach >/dev/null 2>&1
 on_bolt far-reach far "feat: far zones" || fail "the bolt took no commit"
 touch "$T/sluice-wait-holds"  # sluice has not decided
 (export CREW_AGENT=wldn-ops; crew bolt submit far-reach > "$T/far-reach.out" 2>&1) &
@@ -505,7 +505,7 @@ ok "a landing outlives the submitter that queued it: its waiter on the box calls
 # main-level ops's crew bolt land, whose read of it from sluice's record comes first, recording it landed and closing
 # the bolt, so that close is said and no second one made.
 crew bolt new near-reach "The zones reach near." --repo switchboard-kit >/dev/null
-crew bolt give swb-1 near-reach >/dev/null 2>&1
+crew bolt start near-reach >/dev/null 2>&1
 on_bolt near-reach near "feat: near zones" || fail "the bolt took no commit"
 touch "$T/sluice-wait-holds"
 (export CREW_AGENT=wldn-ops; crew bolt submit near-reach > "$T/near-reach.out" 2>&1) &
@@ -538,7 +538,7 @@ role_stream wldn ops wldn-main; role_stream wldn planner wldn-main; role_stream 
 run_ops() { HOST=$box FLUME_PLACE=$T/flume/places/crew-ops--wldn "$@"; }
 asks() { git --git-dir "$ws" show wldn/main:asks.rec | recsel -t Ask "$@"; }
 crew bolt new run-lands "The run's zones." --repo switchboard-kit >/dev/null
-crew bolt give swb-1 run-lands >/dev/null 2>&1 || fail "swb-1 was not given run-lands"
+crew bolt start run-lands >/dev/null 2>&1 || fail "run-lands was not started"
 on_bolt run-lands "run lands" "feat: the run's zones" || fail "the bolt took no commit"
 touch "$T/sluice-wait-holds"
 run_ops expect_ok crew bolt submit run-lands
@@ -551,7 +551,7 @@ until_ok closed run-lands || fail "the waiter's read did not close run-lands:"$'
 eq "$(asks -e "Names = 'bolt/run-lands'" -P Role,What,Key | tr -s '\n' ' ')" "planner landed landed/run-lands design landed landed/run-lands "
 eq "$(git --git-dir "$ws" log -1 --format=%s "$(act_tip)" -- asks.rec)" "plan(run-lands): land the bolt (wldn-ops)"
 crew bolt new run-held "The run's other zones." --repo switchboard-kit >/dev/null
-crew bolt give swb-1 run-held >/dev/null 2>&1 || fail "swb-1 was not given run-held"
+crew bolt start run-held >/dev/null 2>&1 || fail "run-held was not started"
 on_bolt run-held "run held" "feat: the run's other zones" || fail "the bolt took no commit"
 git -C "$k" pull -q origin main; echo "main's own" >> "$k/zones.txt"; commit_all "$k" "feat: main's zones"; push "$k"
 run_ops crew bolt submit run-held >/dev/null 2>&1 || fail "a landing queued from ops's run failed its command"
@@ -571,7 +571,7 @@ expect_fail "unit done-x has not landed on main: it is ready" crew bolt land don
 mkdir -p "$k/openspec/changes/archive/2026-10-12-done-x"; echo "# done-x" > "$k/openspec/changes/archive/2026-10-12-done-x/proposal.md"
 commit_all "$k" "chore(openspec): archive done-x"; push "$k"
 expect_ok crew bolt land done-outside
-eq "$(tail -1 <<<"$out")" "done-outside has landed at switchboard-kit's $(git -C "$k" rev-parse main | cut -c1-7); no team held it"
+eq "$(tail -1 <<<"$out")" "done-outside has landed at switchboard-kit's $(git -C "$k" rev-parse main | cut -c1-7); it was never started"
 eq "$(field mac-studio bolt.land Head bolt/done-outside) $(plan -t Bolt -e "Bolt = 'done-outside'" -c)" "$(git -C "$k" rev-parse main) 0"
 ok "a bolt no team holds lands once its unit's change is on its kit's main, recording the commit main holds"
 
@@ -579,7 +579,7 @@ ok "a bolt no team holds lands once its unit's change is on its kit's main, reco
 # named in sluice's words. Its chore's Flume place landed on the bolt, and a landing carried the bolt's work to main.
 crew bolt new queued-one "Landed with a submission queued." --repo switchboard-kit >/dev/null
 crew chore add q1 "Chore q1." --bolt queued-one >/dev/null
-crew bolt give swb-1 queued-one >/dev/null 2>&1
+crew bolt start queued-one >/dev/null 2>&1
 flume_lands $box chore q1 queued-one
 git -C "$k" merge -q --no-edit origin/bolt/queued-one && push "$k"
 echo 3 > "$T/sluice-queued-bolt-queued-one"
@@ -607,14 +607,20 @@ open(f, "w").write(p.text())
 PY
   commit_all "$w" "plan: by hand"; push_state "$w"
 }
-by_hand 'p.insert(plan.Rec("Bolt", [("Bolt", "made-before"), ("Repo", "switchboard-kit"), ("Goal", "Made before."), ("Team", "swb-1")]))
-p.insert(plan.Rec("Unit", [("Unit", "mb"), ("Repo", "switchboard-kit"), ("Bolt", "made-before"), ("Intent", "Unit mb.")]))'
+# It is started, its chore launched as a start launches it (runner.reach), with no branch made for it.
+by_hand 'p.insert(plan.Rec("Bolt", [("Bolt", "made-before"), ("Repo", "switchboard-kit"), ("Goal", "Made before."), ("Path", "flume")]))
+p.insert(plan.Rec("Unit", [("Unit", "mb"), ("Repo", "switchboard-kit"), ("Bolt", "made-before"), ("Kind", "chore"), ("Intent", "Chore mb.")]))
+import crew, importlib, os, runner
+os.environ["HOME"] = "'"$(home_of mac-studio)"'"; importlib.reload(crew)  # the teams file mac-studio holds
+rf = os.path.join(os.path.dirname(f), "requests.rec"); rq = plan.Plan(open(rf).read())
+for act, host, work, given in runner.reach(p, rq.recs("Request"), "made-before", plan.kit_team(crew.load(), "wldn", "switchboard-kit")):
+    rq.insert(plan.Rec("Request", runner.request_fields(runner.next_request(rq.recs("Request")), act, host, work, given, "2026-10-31T12:00:00Z", "chuck@mac-studio")))
+open(rf, "w").write(rq.text())'
 git -C "$k" branch -q --no-track bolt/made-before main; git -C "$k" config branch.bolt/made-before.crew given
-on_branch "$k" bolt/made-before "chore: bolts kept on the host" .config/sluice.toml $'[branches."bolt/*"]\nrequired = ["#check-full"]\n'
-mkdir -p "$k/openspec/changes/archive/2026-10-22-mb"; echo "# mb" > "$k/openspec/changes/archive/2026-10-22-mb/proposal.md"
-commit_all "$k" "chore(openspec): archive mb"; push "$k"
+on_branch "$k" bolt/made-before $'chore(mb): bolts kept on the host\n\nChore: mb' .config/sluice.toml $'[branches."bolt/*"]\nrequired = ["#check-full"]\n'
 git -C "$k" update-ref refs/heads/bolt/made-before "$(git -C "$k" commit-tree "main^{tree}" -p bolt/made-before -p main -m "chore(land): #20 chore/bolts-on-github")"
 git -C "$k" push -q origin bolt/made-before  # as sluice pushes the branch its landing's pull request opens from
+runner_writes $box "$(request_of chore/mb)" "$T/flume/mb" "$(landed_status "$T/flume/mb" "$(git -C "$k" rev-parse bolt/made-before)")"
 : > "$CREW_TEST_LOG"
 expect_ok crew bolt submit made-before
 has "$out" "sluice deleted bolt/made-before from GitHub at"
@@ -635,14 +641,14 @@ ok "dropping a held bolt has sluice delete its branch from GitHub and the host, 
 # A dropped bolt holding a merge main lacks: sluice refuses its delete, and the branch is kept on GitHub and the host,
 # marked dropped, named as the drop's unmerged work in sluice's words and recorded once.
 crew bolt new kept-work "Work dropped before it landed." --repo switchboard-kit >/dev/null
-crew bolt give swb-2 kept-work >/dev/null
+crew bolt start kept-work >/dev/null
 on_bolt kept-work kept "feat: work merged into the bolt" || fail "the bolt took no merge"
 tip=$(git -C "$k" rev-parse bolt/kept-work)
 expect_ok crew bolt drop kept-work "not this quarter"
 has "$out" "bolt/kept-work is kept on GitHub at ${tip:0:7}: bolt kept-work was dropped, and sluice did not delete it: bolt/kept-work at $tip has not landed into main; submit it there first; it is the drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip"
 github bolt/kept-work || fail "the refused delete removed bolt/kept-work from GitHub"
 eq "$(git -C "$k" rev-parse bolt/kept-work) $(git -C "$k" config branch.bolt/kept-work.crew)" "$tip dropped"
-eq "$(field $box branch.kept Head bolt/kept-work team/swb-2) | $(field $box branch.kept Why bolt/kept-work)" \
+eq "$(field $box branch.kept Head bolt/kept-work team/swb-1) | $(field $box branch.kept Why bolt/kept-work)" \
   "${tip:0:7} | bolt kept-work was dropped, and main does not hold its tip (sluice)"
 eq "$(record_of $box | grep -c "^On: bolt/kept-work")" "1"
 ok "a dropped bolt holding a merge main lacks is kept on GitHub and the host, marked, named in sluice's words and recorded once"
@@ -654,7 +660,7 @@ git -C "$k" merge -q --no-edit bolt/kept-work && push "$k"  # a landing that car
 # names, and lands on the bolt, so the bolt reads proven at sluice's green head.
 for b in north south east; do crew bolt new "$b" "The $b regions." --repo switchboard-kit >/dev/null; done
 crew chore add north-regions "North's regions." --bolt north >/dev/null; crew chore add south-regions "South's regions." --bolt south >/dev/null
-crew bolt give swb-1 north >/dev/null 2>&1; crew bolt give swb-2 south >/dev/null 2>&1
+crew bolt start north >/dev/null 2>&1; crew bolt start south >/dev/null 2>&1
 flume_lands $box chore north-regions north regions.txt
 flume_lands $box chore south-regions south regions.txt
 : > "$CREW_TEST_LOG"
@@ -683,7 +689,7 @@ ok "two proven bolts of one kit are one landings card in main-level ops's name, 
 # naming south, and the card the user answered is left as it is, their send standing for south as it takes main in.
 # The landings' sweep has sluice delete the dropped bolt's branch kept before, main holding its tip.
 crew chore add east-files "East's files." --bolt east >/dev/null
-crew bolt give swb-1 east >/dev/null 2>&1
+crew bolt start east >/dev/null 2>&1
 flume_lands $box chore east-files east east.txt
 : > "$CREW_TEST_LOG"
 expect_ok on_box _land-card wldn switchboard-kit
@@ -773,10 +779,10 @@ ok "a ticked bolt taking main in keeps the user's send through its take-main fix
 # first, so a list of two becomes an approval of west alone, followed; a second crew rail, main not having moved,
 # raises nothing.
 crew bolt new west "The west regions." --repo switchboard-kit >/dev/null
-crew chore add west-files "West's files." --bolt west >/dev/null; crew bolt give swb-1 west >/dev/null 2>&1
+crew chore add west-files "West's files." --bolt west >/dev/null; crew bolt start west >/dev/null 2>&1
 flume_lands $box chore west-files west west.txt
 crew bolt new far "The far regions." --repo switchboard-kit >/dev/null
-crew chore add far-files "Far's files." --bolt far >/dev/null; crew bolt give swb-1 far >/dev/null 2>&1
+crew chore add far-files "Far's files." --bolt far >/dev/null; crew bolt start far >/dev/null 2>&1
 flume_lands $box chore far-files far far.txt
 expect_ok on_box _land-card wldn switchboard-kit
 kit=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
@@ -805,7 +811,7 @@ ok "main moving under a proven row makes crew rail on the main level's host rais
 # saying it would take main first, and records the forecast as found while left. The user ticks west on the card that
 # follows: crew card read leaves west out of the command that lands, saying it takes main first, its send standing.
 crew bolt new near "The near regions." --repo switchboard-kit >/dev/null
-crew chore add near-files "Near's files." --bolt near >/dev/null; crew bolt give swb-2 near >/dev/null 2>&1
+crew chore add near-files "Near's files." --bolt near >/dev/null; crew bolt start near >/dev/null 2>&1
 flume_lands $box chore near-files near near.txt
 expect_ok on_box _land-card wldn switchboard-kit
 two=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | tail -1 | cut -d' ' -f3)

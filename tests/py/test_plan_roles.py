@@ -1,7 +1,7 @@
 """Who writes the plan directly (roles.1): plan.may_write for each kind of agent and command, and plan.conductor_scope,
-which keeps a conductor to the bolt its team holds. The user writes everything; the planner only through proposals; a
-dispatcher gives bolts; a conductor narrows, orders and sets dependencies within its own bolt; the design agent queues;
-the main level's ops lands. A role's run, named from its Flume place, writes as its role, and any other place names
+which keeps a conductor to the bolt its team holds. The user writes everything, and alone starts a bolt directly; the
+planner only through proposals; a conductor narrows, orders and sets dependencies within its own bolt; the design agent
+queues; the main level's ops lands. A role's run, named from its Flume place, writes as its role, and any other place names
 nobody (role-runs "A run is named as its role"). That a refused write leaves a Refused entry is the proposals journey's
 (t-journey-plan)."""
 import argparse
@@ -28,14 +28,14 @@ def may(monkeypatch, agent, key, bolt=None):
 
 
 @pytest.mark.parametrize("agent, key, bolt", [
-    ("chuck@mac-studio", ("bolt", "new"), None), ("wldn-dispatch-chuck-herdr-alpha", ("bolt", "give"), None),
+    ("chuck@mac-studio", ("bolt", "new"), None), ("chuck@mac-studio", ("bolt", "start"), None),
     ("swb-1-conductor", ("unit", "order"), None), ("swb-1-conductor", ("unit", "after"), None), ("swb-1-conductor", ("unit", "split"), None),
     ("wldn-design", ("unit", "add"), None), ("wldn-ops", ("bolt", "land"), None)])
 def test_each_writes_what_its_role_writes(monkeypatch, agent, key, bolt):
     assert may(monkeypatch, agent, key, bolt) is None
 
 
-@pytest.mark.parametrize("key", [("unit", "add"), ("bolt", "new")])
+@pytest.mark.parametrize("key", [("unit", "add"), ("bolt", "new"), ("bolt", "start")])
 def test_the_planner_writes_through_a_proposal(monkeypatch, key):
     assert may(monkeypatch, "wldn-planner", key) == f"the planner changes the plan through a proposal: crew plan propose, not crew {' '.join(key)}"
 
@@ -47,15 +47,23 @@ def test_the_planner_writes_through_a_proposal(monkeypatch, key):
     ("wldn-design", ("bolt", "new"), None, "wldn-design does not write the plan with crew bolt new: tell wldn-planner, who proposes it"),
     ("swb-1-unit-1", ("unit", "order"), None, "swb-1-unit-1 does not write the plan with crew unit order: tell wldn-planner, who proposes it"),
     ("wldn-operator", ("unit", "drop"), None, "wldn-operator does not write the plan with crew unit drop: tell wldn-planner, who proposes it"),
-    ("wldn-ops", ("bolt", "new"), None, "wldn-ops does not write the plan with crew bolt new: tell wldn-planner, who proposes it")])
+    ("wldn-ops", ("bolt", "new"), None, "wldn-ops does not write the plan with crew bolt new: tell wldn-planner, who proposes it"),
+    ("wldn-ops", ("bolt", "start"), None, "wldn-ops does not start a bolt: the user starts it, or approves wldn-planner\'s proposal holding crew bolt start; tell wldn-planner, who proposes it"),
+    ("wldn-dispatch-chuck-herdr-alpha", ("bolt", "start"), None,
+     "wldn-dispatch-chuck-herdr-alpha does not start a bolt: the user starts it, or approves wldn-planner\'s proposal holding crew bolt start; tell wldn-planner, who proposes it")])
 def test_any_other_write_is_refused_naming_the_planner(monkeypatch, agent, key, bolt, said):
     assert may(monkeypatch, agent, key, bolt) == said
 
 
 def test_a_conductor_writes_only_units_of_its_own_bolt(monkeypatch):
+    """Each bolt carries a Team field, as a branch's records written before teams left still do (bolt-plan "A flywheel
+    keeps one plan"), which the conductor's scope reads until the team's standing agents leave."""
     monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
-    w = FactsWrite(plan_text(bolts=[("tenant-environments", KIT, "swb-1"), ("console-pages", KIT, "swb-2")],
-                             units=[("a", KIT, "tenant-environments", []), ("b", KIT, "tenant-environments", []), ("c", KIT, "console-pages", [])]))
+    text = plan_text(bolts=[("tenant-environments", KIT, "swb-1"), ("console-pages", KIT, "swb-2")],
+                     units=[("a", KIT, "tenant-environments", []), ("b", KIT, "tenant-environments", []), ("c", KIT, "console-pages", [])])
+    for b, t in (("tenant-environments", "swb-1"), ("console-pages", "swb-2")):
+        text = text.replace(f"Goal: Goal of {b}.\n", f"Goal: Goal of {b}.\nTeam: {t}\n")
+    w = FactsWrite(text)
     apply(w, "unit order b --first", "unit after a b", ctx=known(w))
     assert [u.name() for u in w.plan.units_of("tenant-environments")] == ["b", "a"]
     with pytest.raises(plan.Refusal, match="swb-1-conductor writes only units and chores of the bolt swb-1 holds, and c is in bolt console-pages: tell wldn-planner"):
