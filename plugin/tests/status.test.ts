@@ -154,3 +154,39 @@ test("main-level ops's band draws a fix of main in flight with its stage", async
   expect(await ui.find({ type: 'Text', text: /^swancloud operations {2}1 fix in flight$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ {2}crew {2}fix main--a-test-reads-its-fixture {2}code 2\/5 {2}on deneb$/ })).toBeDefined()
 })
+
+// crew-board "A role that runs as its kind has its view" (Decision 15 of roles-run-as-flume-kinds): a role's run, which
+// Flume starts with no environment of crew's, finds its view by its run's name from its place, crew-<role>--<label>, and
+// draws its turn and the asks that wait above its role's view, as board.py's run_rows draws them.
+const RUN = '/home/chuck/.local/state/flume/places/crew-planner--swancloud'
+const runView = (waits, took) => [
+  [['swancloud-planner run', 'bold'], ['  ', null], ['in stream swancloud-main', null], ['  ', null], ['turn 1 took ' + took.length, null], ['  ', null], [waits, null]],
+  ...took.map((t) => [['  ', null], [t, null], ['  ', null], ['tell from swancloud-design', null]]),
+  [['swancloud plan', 'bold'], ['  ', null], ['1 held', null]],
+]
+
+test("a role's run draws its turn and an ask that waits above its role's view, named from its place", async ($, on) => {
+  const views = { ...VIEWS, views: { ...VIEWS.views, 'swancloud-planner': runView('1 ask waits, for 4m', ['ask 1', 'ask 2']) } }
+  const ui = await band($, on, { env: { FLUME_PLACE: RUN }, views })
+  const lines = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
+  const at = (pattern) => lines.findIndex((l) => pattern.test(l))
+  expect(at(/^swancloud-planner run {2}in stream swancloud-main {2}turn 1 took 2 {2}1 ask waits, for 4m$/)).toBeGreaterThanOrEqual(0)
+  expect(at(/^ {2}ask 1 {2}tell from swancloud-design$/)).toBeGreaterThan(at(/^swancloud-planner run/))
+  expect(at(/^ {2}ask 2 {2}tell from swancloud-design$/)).toBeGreaterThan(at(/^ {2}ask 1/))
+  expect(at(/^swancloud plan {2}1 held$/)).toBeGreaterThan(at(/^ {2}ask 2/))
+  expect(await ui.find({ type: 'Text', text: /curation-and-holds/ })).toBeUndefined()
+})
+
+test("a role's run with nothing waiting says so", async ($, on) => {
+  const views = { ...VIEWS, views: { 'swancloud-planner': runView('nothing waits', ['ask 1']) } }
+  const ui = await band($, on, { env: { FLUME_PLACE: RUN + '/' }, views })
+  expect(await ui.find({ type: 'Text', text: /^swancloud-planner run {2}in stream swancloud-main {2}turn 1 took 1 {2}nothing waits$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ {2}ask 1 {2}tell from swancloud-design$/ })).toBeDefined()
+})
+
+test("a place of another kind is no role's run and draws no band", async ($, on) => {
+  const views = { ...VIEWS, views: { 'swancloud-planner': runView('nothing waits', ['ask 1']) } }
+  const ui = await band($, on, { env: { FLUME_PLACE: '/home/chuck/.local/state/flume/places/change--a-unit' }, views })
+  expect(await ui.find({ type: 'Text', text: /swancloud-planner run/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /drawn by Claude Code/ })).toBeDefined()
+})

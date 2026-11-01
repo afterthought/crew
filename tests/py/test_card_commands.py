@@ -1447,3 +1447,54 @@ def test_a_batch_cards_close_hands_its_previews_release_on_and_no_other_card_doe
                          [post(key, "wldn-planner", "req_7")], caller="wldn-planner")
         plan.row_card_close(None, "wldn", "wldn-planner", key, reason="the batch was read", acts=acts)
         assert acts.batch_released == released
+
+
+# --------------------------------------------------------------------- a card's change, as Pending You's notice names it
+# plan.card_ask, what crew _answered makes of a change on a card that `pendingyou watch` hands it (design Decision 5 of
+# roles-run-as-flume-kinds): an ask of the role whose run the card's asker is, keyed by the card's request and version,
+# reading nothing else of the card; and board.answers_watched, whether the host's follower runs that notice at all.
+import board  # noqa: E402
+
+STANDS = {r: False for r in crew.KIND_ROLES}
+KFLEET = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "flume": dict(STANDS, planner="madswan-main", ops="madswan-main")},
+                         "wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "flume": STANDS}}}
+
+
+def test_a_change_on_a_runs_card_asks_its_role_by_the_cards_request_and_version():
+    """role-runs "A card's answer, an opening and a batch are asks": a deploy approved from the phone."""
+    assert plan.card_ask(KFLEET, "madswan-ops", "req_eafa10ee554b41edbce6", "3", "answer_ready") == dict(
+        label="madswan", role="ops", names="card/req_eafa10ee554b41edbce6", key="card/req_eafa10ee554b41edbce6/3",
+        words="the user answered it")
+
+
+def test_a_later_change_on_the_card_is_keyed_apart_and_says_what_came():
+    first = plan.card_ask(KFLEET, "madswan-planner", "req_1", "3", "answer_ready")
+    later = plan.card_ask(KFLEET, "madswan-planner", "req_1", "4", "message_ready")
+    assert (first["key"], later["key"]) == ("card/req_1/3", "card/req_1/4")
+    assert later["words"] == "a message came on it"
+    assert plan.card_ask(KFLEET, "madswan-planner", "req_1", "5", "")["words"] == "Pending You's notice named it with no event"
+
+
+@pytest.mark.parametrize("name", ["wldn-planner", "madswan-design", "crw-1-conductor", "chuck@deneb", "madswan", "", None])
+def test_a_card_in_any_other_name_asks_nothing(name):
+    """role-runs "A standing agent's card": a standing role's, a team's agent's and the user's own stay the wake mod's."""
+    assert plan.card_ask(KFLEET, name, "req_1", "3", "answer_ready") is None
+
+
+@pytest.mark.parametrize("card, version", [("", "3"), ("req_a b", "3"), ("card/x", "3"), ("req_1", ""), ("req_1", "v3"), ("req_1", None)])
+def test_a_notice_crew_cannot_read_is_refused(card, version):
+    with pytest.raises(crew.Refusal):
+        plan.card_ask(KFLEET, "madswan-planner", card, version, "answer_ready")
+
+
+def test_the_follower_hears_the_notice_only_where_a_role_whose_main_level_is_here_runs_as_its_kind():
+    """role-runs "The follower hears Pending You's notice while a role here runs as its kind"."""
+    assert board.answers_watched(KFLEET, "deneb")
+    assert not board.answers_watched(KFLEET, "chuck-herdr-alpha")
+    assert not board.answers_watched(KFLEET, "mac-studio")
+    assert not board.answers_watched({"partitions": {"madswan": dict(KFLEET["partitions"]["madswan"], flume=STANDS)}}, "deneb")
+
+
+def test_the_notice_runs_crew_answered_through_pending_yous_watch():
+    argv = board.notice_argv()
+    assert argv[:3] == ["pendingyou", "watch", "--"] and argv[-2:] == [str(crew.HOME / "plugin/bin/crew"), "_answered"]

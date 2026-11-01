@@ -78,11 +78,19 @@ for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "
 ok "the README, the skill and the usage say a team may hold one more bolt that waits to land, and crew fix names its bolt with --bolt"
 
 for doc in usage readme skill; do
-  for want in "version 2 or 3" "due to cross once <bolt> lands" "in Flume stream" "Path: flume" "team.cross" "still closes" \
+  for want in "version 2, 3 or 4" "due to cross once <bolt> lands" "in Flume stream" "Path: flume" "team.cross" "still closes" \
     "however they went down" "closes what the hold left" \
     "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
 done
 ok "the README, the skill and the usage say a team's setting and path, its crossing however its roles went down and after a hold, what a crossed team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix"
+
+for doc in usage readme skill; do
+  for want in "runs as its kind" "every role stands" "asks.rec" "roles.rec" "crew-<role>--<label>" "end --report <path>" \
+    "open <role>" "land <repo> <name> --brief-file <file>" "delivered [--label L]" "pendingyou watch -- crew _answered" \
+    "ended at its next stop" "never restarted"; do has "${!doc}" "$want"; done
+done
+for doc in usage readme; do has "${!doc}" "turns/<role>.md"; done
+ok "the README, the skill and the usage say a partition's flume, a role that runs as its kind, its asks in asks.rec and its record in roles.rec, crew role start, end, open and land, crew review delivered, the follower's notice of a card's change, and a standing agent of such a role ended at its stop"
 
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)

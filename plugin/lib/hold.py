@@ -20,7 +20,8 @@
                                  handed to crew _renew, which restarts it once it is idle with nothing of its own
                                  running in the background; a team's conductor and ops once their team has crossed to
                                  Flume are due an end, which crew _renew gives them the same way, never a restart, and
-                                 the team is closed once both are down
+                                 the team is closed once both are down; a main level's agent whose role now runs as
+                                 its kind is passed over, its next turn's end ending it, never restarted
 
 Each runs on the host it acts on (code.3): crew _hold set|status|wait, crew _go and crew _update there, and crew
 _renew <agent> on the agent's host, which crew's Stop hook hands it to at the end of the agent's turn (hooks/stop).
@@ -355,7 +356,10 @@ def update_here(fleet, a):
     commit, version = crew.crew_version()
     for name in crew.agents_here(fleet, a.label):
         due, why, started = crew.due_of(fleet, name, commit=commit)
-        if due:
+        if due and why == crew.KIND_SAID:  # passed over (design Decision 14): its own stop, or crew main up, ends it
+            print(f"{name} is passed over, never restarted: {why}; while it is up, the end of its next turn ends it, "
+                  f"as crew main up {crew.label_of_agent(fleet, name)} does")
+        elif due:
             hand(name)
             print(f"{name} is due ({why}): " + ("it is ended once it is idle, never restarted" if why == crew.CROSSED_SAID else
                                                 f"it is restarted on crew {version or (commit or '?')[:7]} once it is idle"))
@@ -387,7 +391,9 @@ def renew(fleet, a):
     as it was, still due, when it never does, with a mark naming the session its exit was typed into; and one a later
     restart finds those keys ended (renew_exited) is started with no stop. A crossed team's conductor or ops, due an
     end (crew.end_due), is ended in the same way once idle and never started again (cross_end); one not up has
-    nothing to end, and once neither is up its team's crossing is closed (close_crossing), however they went down."""
+    nothing to end, and once neither is up its team's crossing is closed (close_crossing), however they went down. A
+    main level's agent whose role now runs as its kind is ended so too, its pane left with nothing started in it
+    (kind_end)."""
     name = a.agent
     host, _ = crew.place_of_agent(fleet, name)
     host == crew.this_host() or fail(f"{name} runs on {host}: crew _renew runs there")
@@ -409,8 +415,11 @@ def renew(fleet, a):
         if not due:
             print(f"{name} is not due a restart" + (f": {why}" if why else ""))
             return
-        ending = why == crew.CROSSED_SAID
+        ending = why in (crew.CROSSED_SAID, crew.KIND_SAID)
         status, asking, unread = crew.waits_on_question(fleet, name)
+        if status is None and not unread and why == crew.KIND_SAID:
+            print(f"{name} is not up, so nothing of it is left to end: {why}")
+            return
         if status is None and not unread and ending:
             print(f"{name} is not up, so its team's crossing to Flume has nothing of it to end")
             team, _ = holding(fleet, name)
@@ -435,6 +444,9 @@ def renew(fleet, a):
         crew.nap(5)
     agents, role = holding(fleet, name)
     agents.ensure()
+    if why == crew.KIND_SAID:
+        kind_end(fleet, agents, role)
+        return
     if ending:
         cross_end(fleet, agents, role)
         return
@@ -528,6 +540,30 @@ def cross_end(fleet, team, role):
         team.record("agent.end", f"cross({team.name}): end {name}", [role])
         print(f"{name} is ended: {team.name} has crossed to Flume, whose places run its work")
         close_crossing(fleet, team)
+
+
+def kind_end(fleet, main, role):
+    """A main level's standing agent ended once idle and never started again, its partition now running its role as its
+    kind (design Decision 14 of roles-run-as-flume-kinds; host-holds-and-updates "A standing agent of a role that now
+    runs as its kind is ended at its next stop"): its exit typed as a restart's is, watched for when slow, its pane left
+    with nothing started in it, and recorded (agent.end). Nothing starts it again: it stands in no session of the main
+    level (crew.main_sessions), so neither crew main up nor crew revive does. A host held meanwhile ends nothing
+    (teams.19)."""
+    name, host = main.agent_of(role), crew.this_host()
+    if crew.held():
+        print(f"{host} is held; crew go {host} hands {name} its end")
+        return
+    why = main.stop(role, waits=True)  # renew_ready: nothing runs in its background but crew's waits, which end here
+    if why == crew.working_said(name):  # it went to work since herdr read it idle, and nothing was typed to it
+        print(why, file=sys.stderr)
+        return
+    if why:  # its exit was typed and it has not gone yet: the keys may still end it
+        print(f"{name} did not exit at once; crew watches for its exit")
+        if not main.exited(role, EXITING):
+            print(f"{why}; it runs on as it was, still due its end: the end of its next turn hands it back", file=sys.stderr)
+            return
+    main.record("agent.end", f"main({main.label}): end {name}, which runs as its kind", [role])
+    print(f"{name} is ended: {crew.KIND_SAID}, so nothing starts it again; its pane is left")
 
 
 def close_crossing(fleet, team):

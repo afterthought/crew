@@ -12,7 +12,7 @@ set -euo pipefail
 CREW=$(cd "$TESTS/.." && pwd -P)
 export CREW_TEST_ROOT=$T CREW_TEST_LOG=$T/calls.log CREW_TEST_CLAUDE_LOG=$T/claude.log
 export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
-unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH HERDR_SESSION SLUICE_BRANCH GIT_DIR GIT_WORK_TREE
+unset CREW_AGENT CREW_LABEL FLUME_PLACE FLUME_AGENT FLUME_STAGE HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH HERDR_SESSION SLUICE_BRANCH GIT_DIR GIT_WORK_TREE
 # A suite an agent starts carries its Claude session's process id, which crew's waits end with (teams.24): a test's
 # wait runs in no session but one the test names.
 unset CLAUDE_PID
@@ -64,38 +64,43 @@ merge_as() {
 }
 launches() { cat "$CREW_TEST_CLAUDE_LOG"; }
 
-fixtures() {  # the teams file (version $1, default 2) and the hosts file, written into every host's HOME
-  local v=${1:-2} h
+fixtures() {  # the teams file (version $1, default 4) and the hosts file, written into every host's HOME
+  local v=${1:-4} h
   for h in mac-studio chuck-herdr-alpha; do
     mkdir -p "$(home_of $h)/.config/crew" "$(home_of $h)/.config/swancloud"
     hosts_json > "$(home_of $h)/.config/swancloud/herdr-hosts.json"
-    if [[ $v == 1 ]]; then teams_v1; else teams_json; fi > "$(home_of $h)/.config/crew/teams.json"
+    if [[ $v == 1 ]]; then teams_v1; else teams_json "$v"; fi > "$(home_of $h)/.config/crew/teams.json"
   done
 }
 
-teams_json() { cat <<'EOF'
-{ "version": 2,
+# teams_json [<version>]: the teams file at that version, 4 unless named: every team on today's path and every
+# partition's main-level roles standing, `flume` false throughout, which a file below 4, or below 3 for a team, does
+# not read
+teams_json() { printf '{ "version": %s,\n' "${1:-4}"; cat <<'EOF'
   "partitions": [
     { "label": "wldn", "partition": "clients/willdan", "blueprints": ["WilldanGroup/willdan-blueprints"],
       "state": "WilldanGroup/crew-state", "review": {"every": 5, "hours": 4},
-      "machine": "chuck-herdr-alpha", "session": "wldn-3" },
+      "machine": "chuck-herdr-alpha", "session": "wldn-3",
+      "flume": {"design": false, "planner": false, "reviewer": false, "ops": false, "operator": false} },
     { "label": "madswan", "partition": "business", "blueprints": ["afterthought/blueprints", "agentplot/blueprints"],
       "state": "afterthought/crew-state", "review": {"every": 5, "hours": 4},
-      "machine": "mac-studio", "session": "madswan-1" },
+      "machine": "mac-studio", "session": "madswan-1",
+      "flume": {"design": false, "planner": false, "reviewer": false, "ops": false, "operator": false} },
     { "label": "swancloud", "partition": "personal", "blueprints": ["afterthought/blueprints"],
       "state": "afterthought/crew-state", "review": {"every": 5, "hours": 4},
-      "machine": "mac-studio", "session": "swancloud-1" } ],
+      "machine": "mac-studio", "session": "swancloud-1",
+      "flume": {"design": false, "planner": false, "reviewer": false, "ops": false, "operator": false} } ],
   "teams": [
     { "name": "swb-1", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
-      "units": 4, "repos": ["switchboard-kit", "willdan-blueprints"] },
+      "units": 4, "repos": ["switchboard-kit", "willdan-blueprints"], "flume": false },
     { "name": "swb-2", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
-      "units": 2, "repos": ["switchboard-kit", "willdan-blueprints"] },
+      "units": 2, "repos": ["switchboard-kit", "willdan-blueprints"], "flume": false },
     { "name": "brd-1", "system": "Breadboard", "machine": "chuck-herdr-alpha", "session": "wldn-2",
-      "units": 2, "repos": ["breadboard-kit", "willdan-blueprints"] },
+      "units": 2, "repos": ["breadboard-kit", "willdan-blueprints"], "flume": false },
     { "name": "atl-1", "system": "Atlas", "machine": "mac-studio", "session": "wldn-5",
-      "units": 2, "repos": ["atlas-kit", "willdan-blueprints"] },
+      "units": 2, "repos": ["atlas-kit", "willdan-blueprints"], "flume": false },
     { "name": "apk-1", "system": "Flywheel", "machine": "mac-studio", "session": "madswan-2",
-      "units": 4, "repos": ["flywheel-next", "blueprints"] } ] }
+      "units": 4, "repos": ["flywheel-next", "blueprints"], "flume": false } ] }
 EOF
 }
 
@@ -171,7 +176,7 @@ world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
   local h
   gitconfig "$HOME"
   for h in mac-studio chuck-herdr-alpha; do mkdir -p "$(home_of $h)" "$T/hosts/$h/work"; gitconfig "$(home_of $h)"; done
-  fixtures "${1:-2}"
+  fixtures "${1:-4}"
   mkdir -p "$(space chuck-herdr-alpha willdan)/crew" "$(space mac-studio madswan)/crew"
   ln -s "$CREW" "$(space chuck-herdr-alpha willdan)/crew/main"
   ln -s "$CREW" "$(space mac-studio madswan)/crew/main"
@@ -296,6 +301,9 @@ json.dump(d, open(f, "w"), indent=1)' "$f" "$2"
 }
 team() { echo "[t for t in d['teams'] if t['name'] == '$1'][0]"; }
 part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }
+# role_stream <label> <role> <stream|false>: on every host, the partition's main-level role set to run as its kind in
+# that Flume stream, or to stand (record 0047 move 6)
+role_stream() { local s="'$3'"; [[ $3 == false ]] && s=False; edit teams "$(part "$1")['flume']['$2'] = $s"; }
 
 # race <owner/name> <host> <agent> <crew args...>: the next push to that remote first lets this crew write land,
 # run as <agent> on <host> from the remote's pre-receive hook, so the push in flight finds the branch moved.

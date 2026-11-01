@@ -20,6 +20,8 @@
   crew.py found <agent>               an agent of this host as herdr lists it, one JSON object, its name given back in
                                       the pane crew keeps for it when herdr dropped it there from the session crew
                                       started (read_agent from another host)
+  crew.py run-name                    the name and partition of the role's run FLUME_PLACE is, as shell assignments of
+                                      CREW_AGENT and CREW_LABEL; nothing for a place that is no run
 
 The agents themselves, a team's and a main level's, are started, greeted and ended by plan.py's commands, through
 Agents and Team here.
@@ -28,13 +30,18 @@ Each role is an agent definition, roles/<role>.md: frontmatter naming its model 
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
 import collections, functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+# Run as the command, this module is the crew the modules it imports import, so a refusal raised in plan.py, which a
+# tell to a role that runs as its kind writes its ask through, is the Refusal main catches.
+if __name__ == "__main__":
+    sys.modules.setdefault("crew", sys.modules[__name__])
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
 HOSTS = pathlib.Path.home() / ".config/swancloud/herdr-hosts.json"
 TEAMS = pathlib.Path.home() / ".config/crew/teams.json"
-# The versions of the teams file crew reads: 2, and 3, which names each team's Flume setting (record 0050 part 2).
-VERSIONS = (2, 3)
+# The versions of the teams file crew reads: 2; 3, which names each team's Flume setting (record 0050 part 2); and 4,
+# which names, on each partition, the Flume setting of each of its main-level roles (record 0047 move 6).
+VERSIONS = (2, 3, 4)
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 # The roles a team's entry may override, and those a partition's entry may: each is a definition in roles/.
@@ -43,6 +50,9 @@ MAIN_ROLES = ("design", "planner", "main-ops", "dispatcher", "operator", "review
 # A main level's standing roles, each in the session its partition names for it (record 0035): the design agent, the
 # planner, ops and the operator, the partition's one door. The reviewer opens beside the planner unless named apart.
 MAIN_STANDING = ("design", "planner", "ops", "operator")
+# A main level's roles that may run as Flume kinds crew's release carries (record 0047 move 6), each by the name its
+# agent takes, <label>-<role>: a version-4 partition's `flume` names every one, false while it stands.
+KIND_ROLES = ("design", "planner", "reviewer", "ops", "operator")
 # What tells whether an agent waits on a question crew's own hook saw it open: piped to the agent's host, whose crew may be older.
 QUESTIONS = (LIB / "questions.py").read_text()
 # What reads whether an agent's session received a prompt crew sent: piped to the agent's host the same way.
@@ -133,20 +143,45 @@ def roles_of(entry, what, allowed, sessions=False):
     return roles
 
 
+def role_settings(entry, what, version):
+    """A partition's `flume`, the Flume setting of each of its main-level roles (record 0047 move 6): in a version-4
+    file every role of KIND_ROLES named, and no other, each False while it stands or the name of the Flume stream its
+    runs run in on the main level's host; below version 4 every role stands, the file's schema holding no setting."""
+    if version < 4:
+        return {r: False for r in KIND_ROLES}
+    fix = f"regenerate {TEAMS} from the machine's configuration (swancloud's lib/crew-teams.nix)"
+    "flume" in entry or fail(f"{what} in {TEAMS} has no 'flume', which names each of its roles, " + ", ".join(KIND_ROLES)
+                             + f", false or the name of a Flume stream its host declares: {fix}")
+    flume = entry["flume"]
+    isinstance(flume, dict) or fail(f"{what} in {TEAMS}: 'flume' names each of its roles, not {json.dumps(flume)}: {fix}")
+    for role in flume:
+        role in KIND_ROLES or fail(f"{what} in {TEAMS}: 'flume' names {role}, which crew has no kind for. roles: "
+                                   + " ".join(KIND_ROLES) + f": {fix}")
+    for role in KIND_ROLES:
+        role in flume or fail(f"{what} in {TEAMS}: 'flume' leaves out {role}: {fix}")
+        s = flume[role]
+        s is False or isinstance(s, str) and NAME.match(s) or fail(
+            f"{what} in {TEAMS}: flume.{role} is false, or the name of a Flume stream its host declares, not {json.dumps(s)}: {fix}")
+    return dict(flume)
+
+
 @functools.lru_cache(maxsize=None)
 def load():
     """The partitions and teams, written by the machine's own configuration (swancloud's lib/crew-teams.nix),
     never by crew. Every entry is checked here, against the hosts file, before any is used, once a process: a later
     call is answered with the same fleet. A team's `flume` is its Flume setting (record 0050 part 2): False while it
     runs today's path, or the name of the Flume stream its work runs in on its host. Version 3 names it on every team;
-    version 2's schema has no setting, so every team of a version-2 file is on today's path, False."""
+    version 2's schema has no setting, so every team of a version-2 file is on today's path, False. A partition's
+    `flume` is the same setting for each of its main-level roles (record 0047 move 6), False while the role stands or
+    the stream its runs run in on the main level's host: version 4 names it on every partition, every role of
+    KIND_ROLES and no other; below 4 every role stands, False."""
     if not TEAMS.exists():
         fail(f"{TEAMS} is missing; the machine's configuration writes it")
     data = json.loads(TEAMS.read_text())
     version = data.get("version")
     if type(version) is not int or version not in VERSIONS:
-        fail(f"{TEAMS} is version {version}, and crew reads only versions " + " and ".join(map(str, VERSIONS)) + ". It must be "
-             f"regenerated by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing.")
+        fail(f"{TEAMS} is version {version}, and crew reads only versions " + ", ".join(map(str, VERSIONS[:-1])) + f" and {VERSIONS[-1]}. "
+             f"It must be regenerated by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing.")
     hosts = read_hosts()
     parts = {}
     for p in data.get("partitions") or fail(f"{TEAMS} lists no partitions"):
@@ -186,7 +221,7 @@ def load():
                 rs.get("partition") == name or fail(f"{what}'s {defn} runs in {machine}'s session {o['session']}, which is in "
                                                      f"partition {rs.get('partition')}, not {name}")
         parts[label] = dict(p, label=label, partition=name, ssh=host["ssh"], dir=sess["dir"], checkout=checkout(sess, blueprints[0]),
-                            roles=roles, teams=[])
+                            roles=roles, teams=[], flume=role_settings(p, what, version))
         parts[label]["sessions"] = {r: role_session(parts[label], r) for r in MAIN_STANDING + ("reviewer",)}
     by_name = {p["partition"]: p for p in parts.values()}
     teams = {}
@@ -205,7 +240,7 @@ def load():
         for gone in ("coders", "base"):
             gone not in t or fail(f"{what} in {TEAMS} still has '{gone}', which version {version} has no place for")
         flume = False
-        if version == 3:
+        if version >= 3:
             "flume" in t or fail(f"{what} in {TEAMS} has no 'flume': it is false, or the name of a Flume stream its host declares")
             flume = t["flume"]
             flume is False or isinstance(flume, str) and NAME.match(flume) or fail(
@@ -267,6 +302,75 @@ def held_team(fleet, t):
 
 def partition_of(fleet, label):
     return fleet["partitions"].get(label) or fail(f"no partition '{label}'. partitions: " + " ".join(fleet["partitions"]))
+
+
+def role_stream(fleet, label, role):
+    """The Flume stream a partition's main-level role runs in as its kind (record 0047 move 6), or False while it
+    stands, as the partition's `flume` names it."""
+    role in KIND_ROLES or fail(f"{role} is no main-level role that runs as a kind. roles: " + " ".join(KIND_ROLES))
+    return partition_of(fleet, label)["flume"][role]
+
+
+def kind_role_of(fleet, name):
+    """The partition and role an agent name is, (label, role), where the name is <label>-<role> and its partition
+    runs that role as its kind; None for any other name, a role that stands among them."""
+    for label, p in fleet["partitions"].items():
+        for role in KIND_ROLES:
+            if name == f"{label}-{role}" and p["flume"][role] is not False:
+                return label, role
+    return None
+
+
+# The place a role's run is, as its role record names it: <Kind>--<Name>, crew-<role>--<label>.
+RUN_PLACE = re.compile(r"crew-([a-z]+)--([a-z0-9][a-z0-9-]*)")
+
+
+def run_of(fleet, place):
+    """The role's run a Flume place is (record 0047 move 6), (label, role), from its path alone: its folder is
+    crew-<role>--<label>, the place the role record names, and its partition runs that role as its kind. None for any
+    other place, a change's or a fix's among them, and for one so named whose role stands."""
+    m = RUN_PLACE.fullmatch(pathlib.PurePath(place or "").name)
+    if not m or m[2] not in fleet["partitions"] or m[1] not in KIND_ROLES:
+        return None
+    return (m[2], m[1]) if fleet["partitions"][m[2]]["flume"][m[1]] is not False else None
+
+
+def run_here(fleet=None):
+    """The role's run this command runs in, (label, role), read from FLUME_PLACE, the place Flume started it in; None
+    elsewhere. The teams file is read only for a place named as a run's."""
+    place = os.environ.get("FLUME_PLACE")
+    if not place or not RUN_PLACE.fullmatch(pathlib.PurePath(place).name):
+        return None
+    return run_of(fleet or load(), place)
+
+
+def caller(fleet=None):
+    """The agent a crew command runs as: CREW_AGENT, which crew gives each agent it starts, else the role's run its
+    place is, named as the role, <label>-<role> (run_here); None for the user."""
+    name = os.environ.get("CREW_AGENT")
+    if name:
+        return name
+    run = run_here(fleet)
+    return f"{run[0]}-{run[1]}" if run else None
+
+
+def caller_label(fleet=None):
+    """The partition a crew command runs as: CREW_LABEL, which crew gives each agent it starts, else the label of the
+    role's run its place is (run_here); None for none."""
+    label = os.environ.get("CREW_LABEL")
+    if label:
+        return label
+    run = run_here(fleet)
+    return run[0] if run else None
+
+
+def run_exports(run):
+    """What plugin/bin/crew sets for a role's run before it runs or forwards any command (code.3): its name and
+    partition as a standing agent's CREW_AGENT and CREW_LABEL, and no Claude session, which a run has none of crew's
+    to read, as shell assignments quoted (teams.9); nothing for a place that is no run."""
+    if not run:
+        return ""
+    return "export " + " ".join(f"{k}={shlex.quote(v)}" for k, v in (("CREW_AGENT", f"{run[0]}-{run[1]}"), ("CREW_LABEL", run[0]), ("CREW_SESSION", "")))
 
 
 def role_session(p, role):
@@ -355,16 +459,25 @@ ROLE_OF = {"bolt": "conductor", "unit": "conductor", "fix": "conductor", "propos
            "signal": "design", "record": "design", "landing": "ops", "deploy": "ops", "operation": "ops"}
 
 
-def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again=""):
+def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again="", ask="tell", reading=None):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
     transcript, never take it for the user's typing. A tell reaches its agent as a prompt or not at all (teams.11):
     an agent that is not up, one waiting on a question in its pane, and one crew can't read that of is reported, with
     nothing typed, and the tell fails. With taken, the text is taken or sent again (send_taken), and a sending not
     taken fails the tell, saying so of what was sent, with again, what to do once it is ready, when it was never
-    taken. A tell is in the run record of the recipient's partition, with its length and never its text."""
+    taken. A tell is in the run record of the recipient's partition, with its length and never its text.
+
+    To a role its partition runs as its kind (record 0047 move 6), with no standing agent of it up, the tell is an ask
+    of the role instead, of the kind ask, from the sender or crew (tell_ask), and does not fail for the agent not being
+    up; a standing agent of it still up is told as today, and one crew can't read is refused (asks_instead). reading,
+    what waits_on_question read of the agent, where the caller already read it."""
     host, session = place_of_agent(fleet, name)
-    why = tell_refusal(name, host, *waits_on_question(fleet, name))
+    status, asking, unread = reading or waits_on_question(fleet, name)
+    run = kind_role_of(fleet, name)
+    if asks_instead(run, status, unread):
+        return tell_ask(fleet, run, text, sender or "crew", ask)
+    why = tell_refusal(name, host, status, asking, unread, run)
     if why:
         print(why, file=sys.stderr)
         return False
@@ -385,15 +498,41 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     return sent
 
 
+def asks_instead(run, status, unread):
+    """Whether a tell is an ask of the role rather than a prompt (role-runs "A tell finds a standing agent of the role
+    first"): the agent is a role its partition runs as its kind, run, and crew read that no standing agent of it is up.
+    One still up is told as today; one crew could not read is refused (tell_refusal), never asked on a guess (read.1)."""
+    return bool(run) and status is None and not unread
+
+
+def tell_ask(fleet, run, text, frm, what="tell"):
+    """A tell to a role that runs as its kind, run (label, role), written as an ask of the role on its partition's
+    flywheel branch (plan.ask_write), from frm, carrying the text, typed into no pane; `asked <label>-<role>` once it is
+    written. Whether it was written: an ask crew could not write is said, as a tell not typed is."""
+    import plan  # plan imports this module
+    name = f"{run[0]}-{run[1]}"
+    try:
+        plan.ask_write(fleet, run[0], run[1], what, frm, words=text)
+    except Refusal as e:
+        print(f"could not ask {name}: {e}; nothing was sent", file=sys.stderr)
+        return False
+    print(f"asked {name}")
+    return True
+
+
 def send(fleet, name, text):
     """Send the text to the door of the team or partition named (briefs.10): a tell to its operator, marked with who
     sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
     the receiving partition's record, with its length and never its text, and no tell entry; one that typed nothing
-    records nothing."""
+    records nothing. To an operator that runs as its kind, with no standing operator up, the send is a `send` ask of it
+    carrying `(sent to <name>)` and the text, its entry the ask's (tell)."""
     import record as rec  # record imports this module
-    label, door, team = send_door(fleet, name, os.environ.get("CREW_AGENT"))
-    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who())
-    if sent:
+    label, door, team = send_door(fleet, name, caller(fleet))
+    run = kind_role_of(fleet, door)
+    reading = waits_on_question(fleet, door) if run else None
+    asked = bool(reading) and asks_instead(run, reading[0], reading[2])
+    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who(), ask="send", reading=reading)
+    if sent and not asked:
         rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
     return sent
 
@@ -447,9 +586,13 @@ def board_tell(fleet, raw):
     return sent
 
 
-def tell_refusal(name, host, status, asking, unread):
+def tell_refusal(name, host, status, asking, unread, run=None):
     """Why a tell types nothing (teams.11), from what crew read of the agent: what it could not read, the agent not
-    up, or waiting on a question in its pane; None when the tell may be typed."""
+    up, or waiting on a question in its pane; None when the tell may be typed. For a role that runs as its kind, run,
+    what crew could not read is whether a standing agent of it is up, so it neither types nor asks."""
+    if unread and run:
+        return (f"could not tell {name} on {host}: {unread}, so crew can't tell whether a standing agent of it is up or "
+                f"its role is to be asked; nothing was sent or asked")
     if unread:
         return f"could not tell {name} on {host}: {unread}, so crew can't tell whether it is waiting on a question; nothing was sent"
     if status is None:
@@ -1220,7 +1363,7 @@ def crew_argv(fleet, host, *args):
     """crew on a host, run as the one asking here: their name, partition and Claude session go with it, so what it
     records names them and not the host that did the work."""
     import record as rec  # record imports this module
-    return ["env", f"CREW_AGENT={rec.who()}", f"CREW_LABEL={os.environ.get('CREW_LABEL', '')}",
+    return ["env", f"CREW_AGENT={rec.who()}", f"CREW_LABEL={caller_label(fleet) or ''}",
             f"CREW_SESSION={rec.session() or ''}", "bash", crew_at(fleet, host), *args]
 
 
@@ -1525,6 +1668,41 @@ def team_tokens(fleet, t, role, self_name):
     return tok
 
 
+# How a main-level role's work reaches it, the brief's {{TURN}} (design Decision 9, role-runs "A run's brief says how a
+# turn goes"): for a role its partition runs as its kind, how a turn goes, with what is the role's own in a turn
+# (TURN_OWN); for one that stands, that its work reaches it in its pane.
+KIND_TURN = (
+    "You run as your kind: no agent of you stands, and each run of you is one turn, a place the host's runner launches "
+    "while anything waits for you, one at a time. Your turn starts with `{{TEAM_CMD}} role start`, which takes everything "
+    "asked of you since your last turn and prints this brief's path, each ask, each place that waits on you and the "
+    "cards the user answered in your name; act on what it took, as this brief says, and end the turn with "
+    "`{{TEAM_CMD}} role end`, as your turn's prompt says. Wait "
+    "in your session on nothing: where this brief says to wait for an answer, a submission, a review or a tell, end your "
+    "turn instead, and the thing reaches your next run as an ask. What is asked after your start waits for your next "
+    "turn. Ask the user only on a card in your own name, {{SELF}}, never by stopping short.")
+TURN_OWN = {
+    "reviewer": " A batch asked of you names the file its summary goes to; once each batch your turn took has its summary "
+                "written, run `{{TEAM_CMD}} review delivered`, which records it, raises its card in the planner's name and "
+                "asks the planner.",
+    "main-ops": " From your run, `{{TEAM_CMD}} bolt submit` returns once each bolt is queued: how each landing ends "
+                "reaches your next run as an ask when it does not land, and the planner's and the design agent's when it "
+                "does.",
+    "planner": " `{{TEAM_CMD}} review {{LABEL}}` asks the reviewer a batch where it runs as its kind, and its delivery "
+               "reaches you as an ask, with the line that adopts its card.",
+}
+STANDING_TURN = ("You stand in your pane, an agent crew started and keeps up: your work reaches you there, as tells marked "
+                 "`[crew tell from <sender>]` or `[crew]`, and as the answers to the cards you adopted.")
+
+
+def turn_said(p, defn):
+    """The brief's {{TURN}} for a partition's main-level role, by its definition: how a turn goes for a role its
+    partition runs as its kind (KIND_TURN, TURN_OWN), else how a standing role's work reaches it; a dispatcher stands."""
+    role = "ops" if defn == "main-ops" else defn
+    if role in KIND_ROLES and p["flume"][role] is not False:
+        return KIND_TURN + TURN_OWN.get(defn, "")
+    return STANDING_TURN
+
+
 def main_tokens(fleet, p, role, self_name):
     label, host, cmd = p["label"], this_host(), f"{HOME}/plugin/bin/crew"
     teams = [fleet["teams"][n] for n in sorted(p["teams"])]
@@ -1557,7 +1735,7 @@ def main_tokens(fleet, p, role, self_name):
         "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
         "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
         "OPERATORS": f"`{label}-operator` on {p['machine']}",
-        "TEAMS_DOORS": ", ".join(doors) or "none",
+        "TEAMS_DOORS": ", ".join(doors) or "none", "TURN": turn_said(p, role),
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
                     "`terminal-browser open <url> --split right`." if fleet["hosts"].get(host, {}).get("kind") == "darwin" else
                     f"{host} is a box, which can't open the dev.swancloud.net names: say so, and give the user the URL "
@@ -1654,6 +1832,14 @@ def main_named(name, label):
     if not name or not label:
         return None
     return next((r for r in MAIN_STANDING + ("reviewer",) if name == f"{label}-{r}"), None)
+
+
+def kind_said(label, role):
+    """Why crew-role starts no standing agent of a role its partition runs as its kind (main-level "A role that runs as
+    its kind is not started by crew-role", design Decision 14): its runs are places the host's runner launches, and the
+    user opens one to talk with crew role open."""
+    return (f"{label}'s {role} runs as its kind, so crew starts no standing agent of it: it is opened with crew role open "
+            f"{role} --label {label}")
 
 
 def main_elsewhere_said(name, label, main, here):
@@ -1962,24 +2148,32 @@ def branch_due(started, branch):
 UNREAD = object()
 # Why a crossed team's conductor or ops is due, an end and never a restart (end_due).
 CROSSED_SAID = "its team has crossed to Flume, whose places run its work"
+# Why a main level's standing agent is due an end and never a restart once its partition runs its role as its kind
+# (end_due; design Decision 14 of roles-run-as-flume-kinds).
+KIND_SAID = "its role now runs as its kind, in Flume runs of its own"
 
 
 def end_due(fleet, name):
-    """Whether a standing agent is due an end rather than a restart (Decision 3 of
-    teams-cross-to-flume-as-their-bolts-land): a team's conductor or ops once its team has crossed to Flume
-    (plan.crossing_path, runner.cross_due), its plan read only when its setting names a stream; never another agent,
-    nor one whose team's plan can't be read, which is said and ends nothing (read.1)."""
+    """Why a standing agent is due an end rather than a restart, or None: a team's conductor or ops once its team has
+    crossed to Flume (Decision 3 of teams-cross-to-flume-as-their-bolts-land; plan.crossing_path, runner.cross_due),
+    its plan read only when its setting names a stream, CROSSED_SAID; and a main level's design agent, planner, ops or
+    operator once its partition runs its role as its kind (kind_role_of; design Decision 14 of
+    roles-run-as-flume-kinds), read from the teams file alone, KIND_SAID. Never another agent, nor one whose team's plan
+    can't be read, which is said and ends nothing (read.1)."""
     t = team_of_agent(fleet, name)
-    role = name[len(t["name"]) + 1:] if t else ""
+    if not t:
+        kind = kind_role_of(fleet, name)
+        return KIND_SAID if kind and kind[1] in MAIN_STANDING else None
+    role = name[len(t["name"]) + 1:]
     if role not in ("conductor", "ops") or t["flume"] is False:
-        return False
+        return None
     import crew as this, plan, runner  # read in this process; plan imports this module by name, which crew.py run as a script is not
     try:
         path = plan.crossing_path(this.load(), t)
     except this.Refusal as e:
         print(f"whether {name} is due an end can't be told: {e}", file=sys.stderr)
-        return False
-    return role in runner.cross_due(path, [role])
+        return None
+    return CROSSED_SAID if role in runner.cross_due(path, [role]) else None
 
 
 def branch_now(fleet, name):
@@ -1992,15 +2186,16 @@ def branch_now(fleet, name):
 
 def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
     """Whether a standing agent of this host is due a restart for crew's update, read: (due, why, what its start
-    recorded). A name that is no standing agent's is never due. A crossed team's conductor or ops is due an end, its
-    why CROSSED_SAID (end_due). With the branch it would carry now (branch_now), one whose team's bolt changed under it
-    is due too (branch_due)."""
+    recorded). A name that is no standing agent's is never due. A crossed team's conductor or ops, and a main level's
+    agent whose role now runs as its kind, is due an end, its why CROSSED_SAID or KIND_SAID (end_due). With the branch
+    it would carry now (branch_now), one whose team's bolt changed under it is due too (branch_due)."""
     started = started or start_of(name)
     role = standing_role(fleet, name)
     if started is None or role is None:
         return False, None, started
-    if end_due(fleet, name):
-        return True, CROSSED_SAID, started
+    ends = end_due(fleet, name)
+    if ends:
+        return True, ends, started
     if branch is not UNREAD:
         due, why = branch_due(started, branch)
         if due:
@@ -2026,9 +2221,11 @@ def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
     (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
     works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
-    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said)."""
+    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said), and on
+    every host when its partition runs it as its kind (kind_said)."""
     if scope not in fleet["teams"] and role in MAIN_STANDING + ("reviewer",):
         p, here = partition_of(fleet, scope), this_host()
+        p["flume"][role] is False or fail(kind_said(p["label"], role))
         p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
@@ -2601,10 +2798,12 @@ class Agents:
 
 
 def main_sessions(p):
-    """A main level's sessions, the main level's own first, each with its standing roles in MAIN_STANDING's order."""
+    """A main level's sessions, the main level's own first, each with its standing roles in MAIN_STANDING's order. A
+    role its partition runs as its kind stands in none (design Decision 14), but the session it stood in is still one,
+    so a standing agent of it left there is ended."""
     by = {}
     for role in MAIN_STANDING:
-        by.setdefault(role_session(p, role), []).append(role)
+        by.setdefault(role_session(p, role), []).extend([role] if p["flume"][role] is False else [])
     return [(s, tuple(by[s])) for s in sorted(by, key=lambda s: (s != p["session"], s))]
 
 
@@ -2774,6 +2973,8 @@ def main(a):
         sys.exit(0 if send(fleet, a[1], a[2]) else 1)
     elif a[:1] == ["found"] and len(a) == 2:
         print(json.dumps(found_here(fleet, a[1])))
+    elif a == ["run-name"]:
+        print(run_exports(run_of(fleet, os.environ.get("FLUME_PLACE"))))
     else:
         sys.exit(__doc__)
 

@@ -78,10 +78,12 @@ class TestRequests:
         assert runner.request_refusal([], rec(1, "reorder")) == "request 1 is a reorder, and a request is a launch, a retry, a drop or a priority"
 
     def test_the_work_is_named_as_crew_names_it(self):
-        for work in ("unit/a", "chore/bump", "fix/b/tidy", "fix/main/crew/red"):
+        for work in ("unit/a", "chore/bump", "fix/b/tidy", "fix/main/crew/red", "role/design/record-0053"):
             assert runner.WORK.match(work)
         assert runner.request_refusal([], rec(1, "launch", "unit/A")) == (
-            "launch 1 serves unit/A, and a request serves unit/<unit>, chore/<chore>, fix/<bolt>/<name> or fix/main/<kit>/<name>")
+            "launch 1 serves unit/A, and a request serves unit/<unit>, chore/<chore>, fix/<bolt>/<name>, fix/main/<kit>/<name> or "
+            "role/<role>/<name>")
+        assert runner.request_refusal([], rec(1, "launch", "role/design")).startswith("launch 1 serves role/design")
         assert runner.request_refusal([], rec(1, "launch", "bolt/b")).startswith("launch 1 serves bolt/b")
 
     def test_an_after_names_launches_of_the_same_bolt_written_before_it(self):
