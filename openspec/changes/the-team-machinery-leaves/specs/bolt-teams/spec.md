@@ -255,7 +255,7 @@ Before it cuts the landing's worktree, `crew bolt submit` SHALL fetch the bolt's
 
 #### Scenario: The two copies have diverged
 - **WHEN** `crew bolt submit b` runs while GitHub's `bolt/b` holds a merge the host's copy lacks and the host's copy holds one GitHub's lacks
-- **THEN** nothing is submitted and no ref is written, and the command says `b` did not land, naming both commits and the merges each lacks, since either submission would drop merges
+- **THEN** nothing is submitted and no ref is written, and the command says `b` did not land, naming both commits and the merges each lacks, since either submission would drop merges, and that the way on is a fix on the bolt that ops starts, `crew fix b <name> "<words>"`, taking the host's merges in
 
 #### Scenario: A bolt that lives on its host
 - **WHEN** `crew bolt submit b` runs on a bolt made on its host before gives went through sluice, whose GitHub copy is absent or names no remote for it, or in a kit with no origin
@@ -270,15 +270,15 @@ Before it cuts the landing's worktree, `crew bolt submit` SHALL fetch the bolt's
 - **THEN** the worktree's files are brought to GitHub's head without writing a ref, and it is submitted clean at that head; when git cannot bring them, nothing is submitted, in git's words
 
 ### Requirement: A landing that did not land is the bolt's only for its own content
-When `crew bolt submit` ends with a bolt not on main, crew SHALL judge it the bolt's only when sluice's record of the landing's own submission has it in conflict, or blamed for a check that ran and failed or that its time limit cut off; never by sluice's exit or words alone. The bolt's SHALL be recorded refused at the head submitted.
+When `crew bolt submit` ends with a bolt not on main, crew SHALL judge it the bolt's only when sluice's record of the landing's own submission has it in conflict, or blamed for a check that ran and failed or that its time limit cut off; never by sluice's exit or words alone. The bolt's SHALL be recorded refused at the head submitted, and crew's words to ops SHALL say what comes next and name no team or conductor: a conflict with what main has landed is taken in by the fix crew launches on the bolt, ops starting nothing; a conflict with a submission queued on main ahead of it is waited out; and a check that failed is a fix on the bolt that ops starts with sluice's words.
 
 #### Scenario: A conflict is the bolt's
 - **WHEN** `crew bolt submit z` waits on its submission and sluice's record has it in conflict on `README.md`
-- **THEN** the command fails, saying `z` did not land and that the conflict is the bolt's, and the run record's `bolt.submit` for `z` carries `Refused` and the head submitted
+- **THEN** the command fails, saying `z` did not land, that the conflict is the bolt's and that crew launches the fix that takes main into it, naming no team or conductor, and the run record's `bolt.submit` for `z` carries `Refused` and the head submitted
 
 #### Scenario: A check that ran and failed
 - **WHEN** sluice's record has the submission failed with `tests:logic` holding a failing result
-- **THEN** the landing is the bolt's and recorded refused, as for a conflict
+- **THEN** the landing is the bolt's and recorded refused, as for a conflict, and crew's words tell ops to start a fix on the bolt with sluice's words, `crew fix z <name> "<sluice's words>"`
 
 ### Requirement: A submission's number is on its bolt's row from the submit
 While a submission stands in sluice's queue, crew SHALL show its number and state on its bolt's row in `crew bolts`, text and JSON, from the first read after the submit, whoever made it, read from sluice's record of the queue on the kit's host: a merge into `bolt/<bolt>` on its unit's, chore's or fix's line, and the bolt's landing on its kit's main, from `bolt/<bolt>` or a pull request opened from it, on the bolt's head line.

@@ -3587,7 +3587,7 @@ def history_read(printed, bolt):
     it: (submissions, None), or (None, why) for a record that can't be read, or a print crew can't read (read.1)."""
     lines = (printed or "").splitlines()
     if len(lines) != 2:
-        return None, f"sluice's record of bolt/{bolt} and main was not printed whole on the team's host"
+        return None, f"sluice's record of bolt/{bolt} and main was not printed whole on the host where its work ran"
     out = []
     for branch, line in zip((f"bolt/{bolt}", "main"), lines):
         words = line.split(" ")
@@ -3984,10 +3984,11 @@ def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, do
     where it is. It is the bolt's, refused, only when sluice's record of the submission says so (landing_blame): the
     record the wait printed or sluice answered with at once (doc, wait_outcome, answer_record), or, when sluice itself
     failed, exiting 3, with the bolt's tip not on main now, its record in sluice's listing (sub, submission_of; again,
-    the times crew has waited on it again): a conflict or a check that ran is the team's to resolve by taking main into
-    the bolt by a submission to the bolt (plan.8), and ops tells the bolt's conductor why in sluice's verdict, SAID, or
-    its record's once sluice itself failed (sub's verdict), which is recorded, a conflict's paths among it (rail-cards
-    "A refused landing is held on its row"), else crew's words for why it did not land and where main is. Anything
+    the times crew has waited on it again): a conflict or a check that ran is the bolt's, held on its row and answered
+    as held_way says, crew launching the take-main fix for a conflict with what main has landed and ops starting the
+    fix of a failed check (Decision 6 of the-team-machinery-leaves, plan.8), and ops is told why in sluice's verdict,
+    SAID, or its record's once sluice itself failed (sub's verdict), which is recorded, a conflict's paths among it
+    (rail-cards "A refused landing is held on its row"), else crew's words for why it did not land and where main is. Anything
     else is stopped, nothing of the bolt's (rail-cards "A landing sluice or its host stopped keeps its box"): recorded
     with what stopped it, the record's words for it (landing_blame), sluice's verdict when it gave no record crew reads,
     or crew's for what it can't tell, and ops told to report it and submit the bolt again once it is cleared, with no
@@ -4052,9 +4053,9 @@ def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, do
     also = f" Beside its verdict, and not why it did not land, sluice said: {beside}." if beside else ""
     if blame == "bolt":
         told = f" sluice's verdict: {verdict}." if verdict else ""
-        return False, (f"bolt/{bolt} did not land: {why}{where}.{told} Tell the bolt's conductor why: a conflict is the bolt's, "
-                       f"and the team takes main into it by a submission to the bolt, then you submit again.{also}{kept}"), (
-            verdict or f"bolt/{bolt} did not land: {why}{where}."), False
+        rec = sub if f["RC"] == "3" else doc
+        return False, (f"bolt/{bolt} did not land: {why}{where}.{told}{held_way(bolt, rec, landing_conflict(said, doc, sub))}"
+                       f"{also}{kept}"), (verdict or f"bolt/{bolt} did not land: {why}{where}."), False
     if cause:  # sluice's record says what stopped it
         told, kept_as = f"{cause.rstrip('.')}{where}", cause
     else:  # sluice gave no record crew reads: in its verdict, else crew's words
@@ -4063,6 +4064,27 @@ def landing_end(bolt, name, host, said, before, marked="", sub=None, again=0, do
         told, kept_as = f"{(verdict or crews).rstrip('.')}{where}", verdict or f"{crews}{where}"
     return (False, f"bolt/{bolt} did not land, and nothing of the bolt's stopped it: {told}.{submit_again(bolt)}{also}{kept}",
             kept_as, True)
+
+
+def held_way(bolt, rec, conflict):
+    """What crew tells ops of a landing refused for the bolt's own content, its row held on its kit's landings card
+    (landing_end; Decision 6 of the-team-machinery-leaves, plan.8), from sluice's record of the submission (rec) and the
+    conflict with what main has landed it was refused for (conflict, landing_conflict): such a conflict is taken in by
+    the fix crew's read of the refusal launches on the bolt (take_main_launch), ops starting nothing, and the user's send
+    still lands the bolt once that fix has moved its head; a conflict with a submission queued on main ahead of it is
+    waited out (teams.21); any other, a check that ran and failed or a run its time limit ended, is a fix on the bolt
+    ops starts with sluice's words, after which the bolt's row asks the user again. Names no team or conductor. A
+    decision of facts alone (code.7)."""
+    if conflict:
+        return (" A conflict with what main has landed is the bolt's: crew launches the fix that takes main into it and "
+                "holds the bolt on its row until that fix moves its head, so start nothing for it; once sluice is green at "
+                "the new head, the send that ticked it still lands it.")
+    if isinstance(rec, dict) and rec.get("state") == "conflict":
+        return (" It meets a submission queued on main ahead of it, which the bolt waits out rather than takes in: its row "
+                f"is held, and once that submission has landed or left main's queue, crew bolt submit {bolt} submits it "
+                "again on the send that stands.")
+    return (" A check that failed is the bolt's: its row is held for a fix on the bolt, which you start with sluice's words, "
+            f"crew fix {bolt} <name> \"<sluice's words>\"; once that fix has merged, the bolt's row asks the user again.")
 
 
 def landing_conflict(said, doc=None, sub=None):
@@ -7758,9 +7780,10 @@ def landing_head(bolt, host, f):
                           "lacks; the landing submits that tip, its push moving GitHub's branch forward"))
     return (f"bolt/{bolt} was not submitted: its two copies have diverged: {host}'s {own[:7]} holds {merges(f['lacks'])} "
             f"GitHub's {there[:7]} lacks, and GitHub's holds {merges(f['beyond'])} {host}'s lacks, so either submission "
-            f"would drop merges. The bolt is its branch on GitHub, so the way on is its team's: its conductor starts a fix "
-            f"(crew fix), whose place is cut from GitHub's head, that takes {host}'s merges in (git merge bolt/{bolt}) and "
-            f"merges into the bolt through sluice; the landing then submits GitHub's head, levelling {host}'s copy to it")
+            f"would drop merges. The bolt is its branch on GitHub, so the way on is a fix on the bolt, which you start, "
+            f"crew fix {bolt} <name> \"<words>\", its words asking it to take {host}'s merges in (git merge bolt/{bolt} "
+            f"there); Flume submits it to the bolt through sluice, and the landing then submits GitHub's head, levelling "
+            f"{host}'s copy to it")
 
 
 def again_words(mark, case=None):

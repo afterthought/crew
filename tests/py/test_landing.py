@@ -76,11 +76,27 @@ def test_a_conflict_lands_nothing_and_is_the_bolts_to_take():
     landed, words = landing(said(2, new=OLD), doc=CONFLICT)
     assert not landed
     assert words.startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was.")
-    assert "the team takes main into it by a submission to the bolt" in words
+    assert words.endswith(" A conflict with what main has landed is the bolt's: crew launches the fix that takes main into it "
+                          "and holds the bolt on its row until that fix moves its head, so start nothing for it; once sluice "
+                          "is green at the new head, the send that ticked it still lands it.")
+    assert "conductor" not in words and "team" not in words
 
 
 def test_checks_that_failed_land_nothing():
-    assert landing(said(1, new=OLD), doc=RAN)[1].startswith("bolt/b did not land: main's checks failed on it")
+    words = landing(said(1, new=OLD), doc=RAN)[1]
+    assert words.startswith("bolt/b did not land: main's checks failed on it")
+    assert words.endswith(" A check that failed is the bolt's: its row is held for a fix on the bolt, which you start with "
+                          "sluice's words, crew fix b <name> \"<sluice's words>\"; once that fix has merged, the bolt's row asks "
+                          "the user again.")
+    assert "conductor" not in words and "team" not in words
+
+
+def test_a_conflict_with_a_submission_queued_on_main_is_waited_out():
+    met = dict(CONFLICT, conflict=dict(CONFLICT["conflict"], **{"with": [{"id": 12, "from": {"worktree": "/c/places/u"}}]}))
+    words = landing(said(2, new=OLD), doc=met)[1]
+    assert words.endswith(" It meets a submission queued on main ahead of it, which the bolt waits out rather than takes in: "
+                          "its row is held, and once that submission has landed or left main's queue, crew bolt submit b "
+                          "submits it again on the send that stands.")
 
 
 def test_a_worktree_git_could_not_remove_is_named_with_gits_words_and_goes_with_the_bolt():
@@ -178,7 +194,7 @@ class TestALandingIsReadFromGitHubsMain:
         sluice itself failing, which its record of the submission decides (TestSluiceItselfFailed); the bolt's to fix
         when the record the wait printed says so (landing_blame)."""
         landed, words = landing(said(rc, new=OLD, github=OLD, held="no", level="''"), doc=dict(ran=RAN, conflict=CONFLICT)[doc])
-        assert not landed and words.startswith(f"bolt/b did not land: {why}, and main is where it was. Tell the bolt's conductor")
+        assert not landed and words.startswith(f"bolt/b did not land: {why}, and main is where it was. ")
 
     @pytest.mark.parametrize("rc, doc, why", [
         (0, None, "the submission exited 0"), (1, None, "the submission exited 1, and sluice gave no record of it crew reads"),
@@ -200,7 +216,7 @@ class TestALandingIsReadFromGitHubsMain:
         landed, words = landing(said(2, new=OLD, github=NEW, held="no", level="''"), doc=CONFLICT)
         assert not landed
         assert words.startswith("bolt/b did not land: sluice refused it or found a conflict; k's main moved to bbbbbbb without it. "
-                                "Tell the bolt's conductor why")
+                                "A conflict with what main has landed is the bolt's")
         assert "main is where it was" not in words
 
     def test_github_cant_be_read_after_the_submission(self):
@@ -406,7 +422,7 @@ class TestSluiceItselfFailed:
     def test_it_did_not_land_for_its_own_content_only_when_its_record_has_it_blamed(self, sub, words):
         landed, said_ = landing(self.TESTING, sub=sub)
         assert not landed and said_.startswith(f"bolt/b did not land: sluice itself failed, and its record has #160 {words}, and "
-                                               "main is where it was. Tell the bolt's conductor why")
+                                               "main is where it was. ")
         assert plan.wait_again(sub, 0) is None
 
     @pytest.mark.parametrize("sub, words", [
@@ -513,7 +529,7 @@ class TestWhatALandingCameTo:
         landed, words, kept_as, stopped = self.end(said(1, new=OLD, github=OLD, held="no", level="''", sluice=verdict), doc=RAN)
         assert (landed, kept_as, stopped) == (False, verdict, False)
         assert words.startswith(f"bolt/b did not land: main's checks failed on it, and main is where it was. sluice's verdict: "
-                                f"{verdict}. Tell the bolt's conductor why")
+                                f"{verdict}. A check that failed is the bolt's")
 
     def test_checks_the_host_could_not_run_are_a_stop(self):
         landed, words, kept_as, stopped = self.end(self.NOT_HELD, doc=NOT_RUN)
@@ -781,8 +797,8 @@ class TestTheSubmission:
         """The chore's case (a-holds-reason-is-sluices-verdict-not-a-side-warning): sluice's wait on #7 prints its record
         in conflict, with the paths it names, and says on standard error only what its round did beside, a place it could
         not release (exec.rs tell_abandoned). The record's verdict is handed to LANDED and recorded, which holds the row
-        (rail-cards "A refused landing is held on its row"), so the conductor reads a conflict, the bolt's to take main
-        in for; the place sluice could not release is said to ops beside it, as not why, and is never recorded."""
+        (rail-cards "A refused landing is held on its row"), so ops reads a conflict, the bolt's, which crew's take-main
+        fix takes main in for; the place sluice could not release is said to ops beside it, as not why, and is never recorded."""
         record = json.dumps(dict(STATUS["submissions"][0], id=7, head=TIP), indent=2)
         verdict = "#7 conflict: README.md, plugin/bin/crew, plugin/lib/plan.py, plugin/skills/crew/SKILL.md"
         tidying = "could not release /k/places/old-unit, whose worktree no longer exists: its release command failed"
@@ -795,7 +811,7 @@ class TestTheSubmission:
         assert (act, on, f["Head"], f["refused"]) == ("bolt.submit", ["bolt/b"], TIP, verdict)
         err = capsys.readouterr().err
         assert (f"bolt/b did not land: sluice refused it or found a conflict, and main is where it was. sluice's verdict: {verdict}. "
-                "Tell the bolt's conductor why: a conflict is the bolt's") in err
+                "A conflict with what main has landed is the bolt's: crew launches the fix that takes main into it") in err
         assert f"Beside its verdict, and not why it did not land, sluice said: {tidying}." in err
 
     def test_checks_the_host_could_not_run_are_recorded_stopped_at_the_head_and_hold_nothing(self, monkeypatch, capsys):
@@ -1145,9 +1161,9 @@ class TestTheSubmission:
         assert self.scripts() == ["MAIN", "COPIES"] and self.closed == [] and self.handed == []
         words = ("bolt/b was not submitted: its two copies have diverged: box's 1111111 holds 1 merge GitHub's 2222222 lacks, "
                  "and GitHub's holds 2 merges box's lacks, so either submission would drop merges. The bolt is its branch "
-                 "on GitHub, so the way on is its team's: its conductor starts a fix (crew fix), whose place is cut from "
-                 "GitHub's head, that takes box's merges in (git merge bolt/b) and merges into the bolt through sluice; the "
-                 "landing then submits GitHub's head, levelling box's copy to it")
+                 "on GitHub, so the way on is a fix on the bolt, which you start, crew fix b <name> \"<words>\", its words "
+                 "asking it to take box's merges in (git merge bolt/b there); Flume submits it to the bolt through sluice, and "
+                 "the landing then submits GitHub's head, levelling box's copy to it")
         assert self.emitted == [("bolt.submit", ["bolt/b"], {"refused": words})]
         assert words in capsys.readouterr().err
 
@@ -1714,14 +1730,14 @@ class TestTheHeadALandingSubmits:
 
     def test_two_copies_that_have_diverged_submit_nothing_and_name_the_fix_as_the_way_on(self):
         """bolt-teams "The two copies have diverged", and plan.19 as read for batch 34's reviewer: the bolt is its branch
-        on GitHub, so the host copy's merges are carried by the team's fix, cut from GitHub's head, and the landing then
+        on GitHub, so the host copy's merges are carried by a fix on the bolt, which ops starts, and the landing then
         submits GitHub's head."""
         assert plan.landing_head("b", "box", copies(held="no", ahead="no", lacks=1, beyond=2)) == (
             "bolt/b was not submitted: its two copies have diverged: box's 1111111 holds 1 merge GitHub's 2222222 lacks, "
             "and GitHub's holds 2 merges box's lacks, so either submission would drop merges. The bolt is its branch "
-            "on GitHub, so the way on is its team's: its conductor starts a fix (crew fix), whose place is cut from "
-            "GitHub's head, that takes box's merges in (git merge bolt/b) and merges into the bolt through sluice; the "
-            "landing then submits GitHub's head, levelling box's copy to it")
+            "on GitHub, so the way on is a fix on the bolt, which you start, crew fix b <name> \"<words>\", its words "
+            "asking it to take box's merges in (git merge bolt/b there); Flume submits it to the bolt through sluice, and "
+            "the landing then submits GitHub's head, levelling box's copy to it")
 
     def test_a_bolt_that_lives_on_its_host_is_submitted_from_its_copy(self):
         """bolt-teams "A bolt that lives on its host": no origin, GitHub without the branch, or GitHub's copy naming no
@@ -2380,7 +2396,7 @@ class TestAgeAndSplit:
         assert plan.history_read(self.printed((1, missing, ""), (0, '{"branch": "main", "submissions": []}', "")), "b") == ([], None)
         refused = self.printed((0, '{"branch": "bolt/b", "submissions": []}', ""), (2, "", "error: unexpected argument '--all' found\n"))
         assert plan.history_read(refused, "b") == (None, "sluice status main exited 2: error: unexpected argument '--all' found")
-        assert plan.history_read("", "b")[1] == "sluice's record of bolt/b and main was not printed whole on the team's host"
+        assert plan.history_read("", "b")[1] == "sluice's record of bolt/b and main was not printed whole on the host where its work ran"
         assert plan.history_read(self.printed((0, '{"submissions": []}', "")) + "\n0 nonsense", "b")[1] == (
             "sluice's record of main was printed as crew can't read it: 0 nonsense")
 
