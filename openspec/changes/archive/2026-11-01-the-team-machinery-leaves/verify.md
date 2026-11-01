@@ -78,3 +78,26 @@ None of these fails a requirement or scenario of the deltas. Each is worth a cho
    - `take_main_launch` (4612) still says "nothing for a bolt given on today's path, whose conductor takes main in".
    - `after_met`'s docstring says "never waiting on a merge (plan.13)". Its `CONSTRUCTED` and `CODED` ladders now serve only a bolt not started, where every After work reads `ready` or `waiting`, so a dependent reads `waiting`, which the deltas want.
 4. **One word in CLAUDE.md.** Line 24 has "whichever worktree or team runs it" of the host's test slots.
+
+## The archive
+
+`openspec archive` merged the 19 deltas into `openspec/specs/`, the change's tasks and this report moving with it to `openspec/changes/archive/2026-11-01-the-team-machinery-leaves/`:
+
+- 50 requirements added, 56 modified, 129 removed and 13 renamed.
+- `openspec validate --specs` passes all 24 specs. No delta heading is left in a main spec.
+- Two spot checks: bolt-teams holds "A landing queued holds its bolt's work", and bolt-plan holds "A unit's stage is read from the runner, or from the plan before its bolt starts" and no longer "A unit's stage is read from the kits".
+
+Six main specs keep a Purpose that still describes teams, since a delta changes requirements and never a spec's Purpose:
+
+- `agent-models`: "how one team or partition overrides them".
+- `bolt-teams`: "a standing conductor and ops, and units built stage by stage by fresh agents".
+- `fleet-page`: "its teams and how busy each is".
+- `main-level`: "a dispatcher on each host that runs them".
+- `plan-proposals`: "with the agreement of any conductor whose bolt it touches".
+- `review-batches`: the reviewer's start as it stood.
+
+Bringing those Purposes level with their requirements is a chore.
+
+## Rules
+
+The design's *Rules this change retires* names each rule or clause the landing retires: `roles.1`, `roles.8`, `code.3`, `code.5`, `code.8`, most of `teams.*`, `plan.4` to `plan.6`, `plan.8` to `plan.11`, `plan.13`, `plan.15` to `plan.17`, `plan.19`, `plan.20`, the `briefs.*` clauses, `record.5`, `record.6`, `signals.5` and `roles.4`. It also names what leaves `_open.md`. The design agent amends those pages after the landing, read from main's log (`docs.7`). The change touches no page under `docs/architecture/` or `docs/adr/`. Decision 16 relies on `plan.8` as it stands: no work joins a bolt whose landing is queued.
