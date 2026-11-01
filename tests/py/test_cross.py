@@ -148,7 +148,8 @@ class TestReach:
         assert requests(w)[1] == launch(2, "unit/q", "q")
 
     def test_launched_work_moved_out_is_refused_naming_its_place_and_drop_then_add(self):
-        """A proposal moves a, launched on crossed crw-4's x, to bolt y."""
+        """A proposal moves a, launched on started x, to bolt y: bolt-teams "A move of launched work", and plan-proposals
+        "A unit with a worktree is moved", refused with nothing rebased."""
         w = launched("x", work=[unit("a")])
         w.plan.insert(plan.Rec("Bolt", [("Bolt", "y"), ("Repo", CREW), ("Goal", "Goal of y.")]))
         with pytest.raises(plan.Refusal, match=r"^unit a is launched as Flume place a on bolt/x \(request 1\), whose base and order are fixed "

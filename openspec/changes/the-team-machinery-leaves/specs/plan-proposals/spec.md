@@ -71,8 +71,8 @@ Landing SHALL be part of every bolt's goal. A unit that a bolt in flight needs b
 - **THEN** the approval is refused, naming that command, and the proposal stays open
 
 #### Scenario: A unit with a worktree is moved
-- **WHEN** an approved proposal moves a unit in construct to another bolt in the same checkout and the rebase conflicts
-- **THEN** the rebase is undone, the approval is refused, and the plan and the proposal are unchanged
+- **WHEN** an approved proposal moves unit `a`, launched as a Flume place on started `x`, to bolt `y`
+- **THEN** the approval is refused, naming `a`'s place and that it is dropped and added again as the way on, crew rebases nothing, and the plan and the proposal are unchanged
 
 #### Scenario: A unit from a signal
 - **WHEN** an approved proposal holds `unit add … --signal <id>`
