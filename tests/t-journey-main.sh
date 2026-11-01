@@ -1,8 +1,8 @@
 # A partition's main level and its console through the crew command on the stubs (tests.11, record 0022), in the
 # teams journey's world (tests/teams.sh): crew main up starts the main level, its operator among it, and nothing else,
 # no dispatcher on any host, each greeted once, one waiting on a question holding back no other; main status lists
-# them; a tell records its length and never its text; crew send reaches the partition's operator, marked
-# with whom it was for, and records its length; a word from the board, piped to crew tell --board as the board's
+# them; a tell records its length and never its text; crew send reaches the partition named by its label's operator,
+# marked with whom it was for, and records its length, and a team's name from before teams left is refused; a word from the board, piped to crew tell --board as the board's
 # listener pipes it, reaches the agent its item's kind goes to marked as the user's from the board and naming the item,
 # and records its length, and one for an agent its kind does not go to types nothing; the console opens its shell tab
 # alone while the host's job follows, a tab named beside it and the rail tab of itself while no follower runs, keeps
@@ -56,16 +56,17 @@ crew tell wldn-planner "Secret words ZQXR" >/dev/null
 eq "$(field mac-studio tell Chars)" "17"
 [[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *ZQXR* ]] || fail "a tell's text is in the run record"
 # crew send: another partition's agent and the user reach the partition's operator, the door, wherever it runs.
-CREW_AGENT=swancloud-planner expect_ok crew send swb-2 "Words QVXJ for the team"
-grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from swancloud-planner\] (sent to swb-2) Words QVXJ for the team'" "$CREW_TEST_LOG" ||
+CREW_AGENT=swancloud-planner expect_ok crew send wldn "Words QVXJ for the partition"
+grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from swancloud-planner\] (sent to wldn) Words QVXJ for the partition'" "$CREW_TEST_LOG" ||
   fail "crew send did not reach wldn-operator marked with its sender and whom it was for"
-eq "$(field mac-studio send On team/swb-2) $(field mac-studio send Chars team/swb-2) $(field mac-studio send Why team/swb-2)" "agent/wldn-operator team/swb-2 23 send swb-2"
+eq "$(field mac-studio send On agent/wldn-operator) $(field mac-studio send Chars agent/wldn-operator) $(field mac-studio send Why agent/wldn-operator)" "agent/wldn-operator 28 send wldn"
 [[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *QVXJ* ]] || fail "a send's text is in the run record"
 expect_ok crew send wldn "For the partition"
 grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from [^]]*@mac-studio\] (sent to wldn) For the partition'" "$CREW_TEST_LOG" ||
   fail "crew send from the user's shell did not reach wldn-operator"
 eq "$(count mac-studio send) $(field mac-studio tell Chars)" "2 17"
-expect_fail "crew send takes a team or a partition, not 'nosuch': teams apk-1 atl-1 brd-1 swb-1 swb-2; partitions madswan swancloud wldn" crew send nosuch "x"
+expect_fail "crew send sends to a partition by its label, not 'swb-2': partitions madswan swancloud wldn" crew send swb-2 "x"
+expect_fail "crew send sends to a partition by its label, not 'nosuch'" crew send nosuch "x"
 eq "$(count mac-studio send)" "2"
 # A word from a proposal's dock, as the board's listener pipes it: the planner is told it as the user's from the board,
 # naming the item (record 0038 §3); one for another agent than the kind's types nothing.

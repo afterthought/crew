@@ -12,8 +12,8 @@
                                       --taken, read back from its transcript and sent once more when not taken
   crew.py tell --board < word.json    a word posted from a dock, {label, key, to, text}, checked and told its item's
                                       agent, marked [crew tell from <user>@board] (on <kind> <name>)
-  crew.py send <team|label> "<text>"  send the text to the partition's operator, the door of the team's partition or
-                                      the label's, marked [crew tell from <sender>] (sent to <team|label>)
+  crew.py send <label> "<text>"       send the text to the partition's operator, its door, marked
+                                      [crew tell from <sender>] (sent to <label>)
   crew.py found <agent>               an agent of this host as herdr lists it, one JSON object, its name given back in
                                       the pane crew keeps for it when herdr dropped it there from the session crew
                                       started (read_agent from another host)
@@ -416,26 +416,22 @@ def label_of_agent(fleet, name):
 
 
 def send_door(fleet, name, caller):
-    """Where crew send delivers (briefs.10, record 0035): a team's partition, or a partition named by its label, as
-    (label, its operator, the team or None). A name that is neither is refused, never placed by a guess (read.1), and so
-    is the operator sending to its own partition, which it carries on with crew tell."""
-    if name in fleet["teams"]:
-        label, team = fleet["teams"][name]["label"], name
-    elif name in fleet["partitions"]:
-        label, team = name, None
-    else:
-        fail(f"crew send takes a team or a partition, not '{name}': teams {' '.join(sorted(fleet['teams'])) or 'none'}; "
-             f"partitions {' '.join(sorted(fleet['partitions'])) or 'none'}")
-    door = f"{label}-operator"
+    """Where crew send delivers (briefs.10, record 0035): a partition named by its label, as (label, its operator). Any
+    other name, a team's from before teams left among them, is refused naming the partitions, never placed by a guess
+    (read.1), and so is the operator sending to its own partition, which it carries on with crew tell."""
+    name in fleet["partitions"] or fail(f"crew send sends to a partition by its label, not '{name}': partitions "
+                                        f"{' '.join(sorted(fleet['partitions'])) or 'none'}")
+    door = f"{name}-operator"
     if caller == door:
-        fail(f"you are {label}'s door: carry it on with `crew tell <agent>`")
-    return label, door, team
+        fail(f"you are {name}'s door: carry it on with `crew tell <agent>`")
+    return name, door
 
 
-# Whom a word from the board goes to, by the role its item's kind names (record 0038 §3): a bolt's, a unit's or a fix's
-# conductor, of the team holding its bolt; a proposal's or a batch's planner; a signal's or a record's design agent; a
-# landing's, a deploy's or an operation's main-level ops; and any other kind's, the partition's operator.
-ROLE_OF = {"bolt": "conductor", "unit": "conductor", "fix": "conductor", "proposal": "planner", "batch": "planner",
+# Whom a word from the board goes to, by the role its item's kind names (record 0038 §3, board-page "A word goes to the
+# agent its item's kind names"): a bolt's, a unit's or chore's, a fix's, a proposal's or a batch's planner; a signal's or
+# a record's design agent; a landing's, a deploy's or an operation's main-level ops; and any other kind's, the
+# partition's operator.
+ROLE_OF = {"bolt": "planner", "unit": "planner", "fix": "planner", "proposal": "planner", "batch": "planner",
            "signal": "design", "record": "design", "landing": "ops", "deploy": "ops", "operation": "ops"}
 
 
@@ -501,19 +497,19 @@ def tell_ask(fleet, run, text, frm, what="tell"):
 
 
 def send(fleet, name, text):
-    """Send the text to the door of the team or partition named (briefs.10): a tell to its operator, marked with who
-    sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
+    """Send the text to the door of the partition named by its label (briefs.10): a tell to its operator, marked with
+    who sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
     the receiving partition's record, with its length and never its text, and no tell entry; one that typed nothing
     records nothing. To an operator that runs as its kind, with no standing operator up, the send is a `send` ask of it
     carrying `(sent to <name>)` and the text, its entry the ask's (tell)."""
     import record as rec  # record imports this module
-    label, door, team = send_door(fleet, name, caller(fleet))
+    label, door = send_door(fleet, name, caller(fleet))
     run = kind_role_of(fleet, door)
     reading = waits_on_question(fleet, door) if run else None
     asked = bool(reading) and asks_instead(run, reading[0], reading[2])
     sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who(), ask="send", reading=reading)
     if sent and not asked:
-        rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
+        rec.emit(label, "send", on=[f"agent/{door}"], why=f"send {name}", Chars=len(text))
     return sent
 
 
@@ -527,8 +523,7 @@ WORD_MOST = 1000
 def board_word(fleet, raw):
     """A word posted from a dock, as the board's listener pipes it (record 0038 §4): one JSON object holding the
     partition, the item's key, the agent and the text, each a string, the agent the one its item's kind goes to in that
-    partition (ROLE_OF), for a bolt's, a unit's or a fix's any conductor of the partition's teams or its operator, since
-    which team holds a bolt is the page's read; the text one line of at most WORD_MOST characters. Returns the agent
+    partition (ROLE_OF); the text one line of at most WORD_MOST characters. Returns the agent
     and the text to tell it, `(on <kind> <name>) <text>`; anything else is refused (read.2)."""
     try:
         w = json.loads(raw)
@@ -543,11 +538,7 @@ def board_word(fleet, raw):
     kind in KINDS or fail(f"a word from the board is on no item of the kind '{kind}': kinds " + " ".join(KINDS))
     role = ROLE_OF.get(kind, "operator")
     a = "an" if kind[0] in "aeio" else "a"
-    if role == "conductor":
-        to in {f"{t['name']}-conductor" for t in fleet["teams"].values() if t["label"] == label} | {f"{label}-operator"} or fail(
-            f"a word on {a} {kind} goes to the conductor of the {label} team holding its bolt, or to {label}-operator, not {to}")
-    else:
-        to == f"{label}-{role}" or fail(f"a word on {a} {kind} goes to {label}-{role}, not {to}")
+    to == f"{label}-{role}" or fail(f"a word on {a} {kind} goes to {label}-{role}, not {to}")
     if "\n" in text or "\r" in text:
         fail("a word from the board is one line")
     text.strip() or fail("a word from the board holds no text")

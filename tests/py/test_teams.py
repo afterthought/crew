@@ -355,6 +355,14 @@ class TestStandingGreeting:
 
 
 class TestPlaces:
+    @pytest.mark.parametrize("name", ["swb-1-conductor", "swb-1-ops", "swb-1-unit-2"])
+    def test_a_teams_agent_is_no_agent_crew_starts_so_a_tell_to_it_is_refused(self, name):
+        """the-team-machinery-leaves Decision 10; main-level "Any agent crew starts is reached by name": crew tell finds
+        a main level's agents alone, and a team's old name is no agent's."""
+        with pytest.raises(crew.Refusal, match=f"no agent {name}: crew starts none by that name"):
+            crew.place_of_agent(FLEET, name)
+        assert crew.label_of_agent(FLEET, name) is None
+
     def test_an_operator_runs_in_the_session_named_for_its_partition(self):
         assert crew.operator_session(FLEET, "wldn", "mac-studio") == {"partition": "clients/willdan"}
         with pytest.raises(crew.Refusal, match=f"{BOX} has no session named wldn"):

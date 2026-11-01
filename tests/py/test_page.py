@@ -541,8 +541,8 @@ class TestWord:
         d = TestDocks().paged()
         to = {k: p["to"] for k, p in d["docks"].items()}
         deploy = next(k for k in to if k.startswith("deploy:"))
-        assert [to[k] for k in ("bolt:tenant-environments", "unit:a", "fix:tenant-environments/edge")] == ["swb-1-conductor"] * 3
-        assert [to[k] for k in ("bolt:apex-zones", "unit:zone-one", "unit:zone-two")] == ["wldn-operator"] * 3
+        assert [to[k] for k in ("bolt:tenant-environments", "unit:a", "fix:tenant-environments/edge")] == ["wldn-planner"] * 3
+        assert [to[k] for k in ("bolt:apex-zones", "unit:zone-one", "unit:zone-two")] == ["wldn-planner"] * 3
         assert (to["proposal:2"], to[f"signal:{TestDocks.SIG}"]) == ("wldn-planner", "wldn-design")
         assert [to[k] for k in ("landing:atlas-maps", deploy, "operation:mac-studio/rotate-key")] == ["wldn-ops"] * 3
         assert [to[k] for k in ("team:swb-1", "subscription:madswan-2")] == ["wldn-operator"] * 2
@@ -567,9 +567,8 @@ class TestWord:
             assert no not in rest
 
     def test_a_kind_with_no_dock_yet_goes_to_its_role_and_any_other_to_the_operator(self):
-        d = TestDocks().paged()
-        assert [page.word_to(k, d, "wldn") for k in ("batch:14", "record:0038", "partition:wldn", "unit:nosuch")] == [
-            "wldn-planner", "wldn-design", "wldn-operator", "wldn-operator"]
+        assert [page.word_to(k, "wldn") for k in ("batch:14", "record:0038", "partition:wldn", "unit:nosuch", "nosuch:x")] == [
+            "wldn-planner", "wldn-design", "wldn-operator", "wldn-planner", "wldn-operator"]
 
 
 def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labelled_by_its_words():

@@ -468,7 +468,7 @@ case $cmd in
   hold | go | update | _hold | _go | _update | _renew) exec python3 "$here/../lib/hold.py" "${args[@]}" ;;
   tell) [[ ${2:-} == --board && $# == 2 ]] && { py tell --board; exit; }
     py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
-  send) py send "${2:?usage: crew send <team or partition> \"<text>\"}" "${3:?usage: crew send <team or partition> \"<text>\"}" ;;
+  send) py send "${2:?usage: crew send <partition> \"<text>\"}" "${3:?usage: crew send <partition> \"<text>\"}" ;;
   _sweep)  # crew _sweep <label> <kit> [--landed <bolt> --outcome <words>] [--units <unit>...]: the kit's read on its
     # host, which a landing or a drop of one of its bolts asks for there: each landing of its bolts nothing recorded read,
     # and crew's own landing places and marked bolt branches whose bolt is over removed; after a landing, sluice asked to

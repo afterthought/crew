@@ -772,23 +772,15 @@ def docks(d, fleet, label):
                  if fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account") == account]
         out[f"subscription:{account}"] = dock("subscription", account, ("Claude account",), parts=[("sessions on it", rows)])
     for key, pg in out.items():
-        pg["to"] = word_to(key, d, label)
+        pg["to"] = word_to(key, label)
     return out
 
 
-def word_to(key, d, label):
-    """The agent a dock's word goes to, by its item's kind (crew.ROLE_OF, record 0038 §3): for a bolt, a unit or a fix,
-    the conductor of the team holding the bolt it is or belongs to as the board gives it, else the partition's operator;
-    for any other kind, its role's agent of the partition."""
-    kind, _, name = key.partition(":")
-    role = crew.ROLE_OF.get(kind, "operator")
-    if role != "conductor":
-        return f"{label}-{role}"
-    B = d["board"]
-    team = next((b.get("team") for b in B["bolt_plan"]["planned"] + B["construction"]
-                 if (kind == "bolt" and b["bolt"] == name) or (kind == "fix" and b["bolt"] == name.partition("/")[0])
-                 or (kind == "unit" and any(u["unit"] == name for u in b["units"]))), None)
-    return f"{team}-conductor" if team else f"{label}-operator"
+def word_to(key, label):
+    """The agent a dock's word goes to, by its item's kind (crew.ROLE_OF, record 0038 §3): its role's agent of the
+    partition, a bolt's, a unit's and a fix's the planner (board-page "A word goes to the agent its item's kind
+    names")."""
+    return f"{label}-{crew.ROLE_OF.get(key.partition(':')[0], 'operator')}"
 
 
 def walk(B, deploys):
