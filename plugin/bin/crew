@@ -135,10 +135,10 @@
 #                                      each host it could not check
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
 #                                      no move has taken, explorations), Bolt plan (proposals, planned bolts, the
-#                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and
-#                                      dev servers) and Operation (bolts landed this week, each environment's deploys
-#                                      and the operations waiting); each rail row a marker on its object, what needs
-#                                      attention at the foot; it answers nothing
+#                                      queue), Construction (each started bolt as a ledger of its units, chores and
+#                                      fixes, where its work runs) and Operation (bolts landed this week, each
+#                                      environment's deploys and the operations waiting); each rail row a marker on its
+#                                      object, what needs attention at the foot; it answers nothing
 #   crew card  session|end <key> [<unit>] [--label L]
 #                                      the plannotator session on what a rail row's card asks the user to read, which
 #                                      crew starts with a batch's card, a landing card and a long proposal's: session

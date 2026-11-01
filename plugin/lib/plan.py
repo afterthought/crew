@@ -3604,7 +3604,7 @@ def history_read(printed, bolt):
     return out, None
 
 
-def landing_split(entries, plan_, b, host, kit_name, history, now, team=None):
+def landing_split(entries, plan_, b, host, kit_name, history, now, label=None):
     """The fields a held bolt's bolt.land entry records of its time (run-record "A bolt's landing entry records its time
     by holder", plan.20), a decision of facts alone (code.7): Age, its whole minutes from its newest start to its
     landing, and Split, those minutes by holder in HOLDERS' order, each named, `team 200, kit 0, team-or-kit 25, user
@@ -3618,7 +3618,7 @@ def landing_split(entries, plan_, b, host, kit_name, history, now, team=None):
     told = max((x["told"] for x in subs or [] if x.get("branch") == "main" and x.get("state") == "landed" and x.get("told")), default=None)
     standing = [x for x in subs or [] if not x.get("told") and x.get("state") in STANDING]
     decided = [dict(x, decided=x.get("told"), started=x.get("started")) for x in subs or [] if x not in standing]
-    tm = time_at(bolt_facts(entries, plan_, b.name(), team, host, kit_name, (standing, None), (None, why) if why else (decided, None)),
+    tm = time_at(bolt_facts(entries, plan_, b.name(), label, host, kit_name, (standing, None), (None, why) if why else (decided, None)),
                  utc(told) if told else now)
     if "unknown" in tm:
         return {}
@@ -3633,7 +3633,7 @@ def landing_time(fleet, t, plan_, b, entries, now):
         history = history_read(host_run(fleet, t["machine"], HISTORY, t["kit"]["main"], b.name()), b.name())
     except Refusal as e:
         history = (None, str(e))
-    return landing_split(entries, plan_, b, t["machine"], t["kit"]["name"], history, now)
+    return landing_split(entries, plan_, b, t["machine"], t["kit"]["name"], history, now, t.get("label"))
 
 
 # A submission's states in sluice 0.36.4 (sluice-core records.rs, State): those it stands in, in the queue or a chain
@@ -9225,11 +9225,10 @@ def flume_place(s):
 HOLDERS = ("team", "kit", "team_or_kit", "user", "hold", "nobody")
 HOLDER_SAID = {"team_or_kit": "team or kit"}  # a holder as its line names it, where its key is not its words
 UNSPLIT = "team or kit: sluice keeps no start of its checks"  # why minutes are the team's or the kit's, said once
-STALLED = 5  # minutes nobody has held a bolt before its row says it is stalled (teams.23's measure)
 
 
 def bolt_time(start, end, stages, submissions, cards, holds):
-    """Where a held bolt's time went (plan.20, record 0044), a decision of facts alone (code.7): from its newest give
+    """Where a started bolt's time went (plan.20, record 0044), a decision of facts alone (code.7): from its newest start
     (start) to end, the time now or its landing, cut at every start and end the facts hold, each piece going to the
     first holder that applies: the team while a stage of its work runs other than a merge; the kit while one of its
     submissions is under test, from the start of its checks to its decision; the team or the kit, unsplit
@@ -9244,8 +9243,7 @@ def bolt_time(start, end, stages, submissions, cards, holds):
     [{submitted, started, decided, state, what, worktree}], worktree the branch it came from, one with no submit, a
     decision alone, placing no minute; cards [{at, until, key}] and holds [{at, until, what}], every time aware and an
     end of None running to end (the design's Decision 3). Returns {age, shares: {holder: minutes}, now: {holder, what,
-    since}, stalled} in whole minutes, since the time the holder at end began to hold the bolt, and stalled once nobody
-    has held it for STALLED minutes."""
+    since}} in whole minutes, since the time the holder at end began to hold the bolt."""
     facts = []
 
     def put(a, b, rank, holder, what):
@@ -9291,18 +9289,18 @@ def bolt_time(start, end, stages, submissions, cards, holds):
         if h != holder:
             break
         since = a
-    return {"age": age, "shares": shares, "now": {"holder": holder, "what": what, "since": since},
-            "stalled": holder == "nobody" and (end - since).total_seconds() >= STALLED * 60}
+    return {"age": age, "shares": shares, "now": {"holder": holder, "what": what, "since": since}}
 
 
-def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, decided, unread=None):
-    """What a held bolt's time is split from (bolt_time), read from what crew already keeps, a decision of facts alone
+def bolt_facts(entries, plan, bolt, label, host, kit_name, submissions, decided, unread=None):
+    """What a started bolt's time is split from (bolt_time), read from what crew already keeps, a decision of facts alone
     (code.7): the partition's run record (entries, oldest first, read from its branch, read.5) and sluice's submissions
     of the kit as its overview gave them, those standing as the gather or the follower's watch read them (submissions,
     gather.submissions_of's (list, why)) and those decided (decided, (list, why)): what the follower kept of each from
     its submit to its decision (board.kept_submissions), or, with no follower, those the overview's recent events name
     (gather.decided_in), or at a landing sluice's record of the bolt's submissions read once (landing_split). The start
-    is the bolt's newest start not refused, bolt.start or an older crew's bolt.give. Its stages are each stage.start of a unit or chore of the bolt's, and each
+    is the run record's newest entry not refused that made the bolt's branch, bolt.start or an older crew's bolt.give
+    (the-team-machinery-leaves Decision 11). Its stages are each stage.start of a unit or chore of the bolt's, and each
     fix.start and fix.merge of a fix of it, fix/<bolt>/<f>, not refused, to the next stage.end naming the same stage and
     agent, or running yet, a merge told by its stage/<u>/merge or by fix.merge, each with its work, the unit's, chore's
     or fix's branch. Its submissions are those submission_rows gives the bolt's lines and its landing, a merge into
@@ -9313,12 +9311,12 @@ def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, decided, 
     left out. Its cards are each card posted and not yet closed, a card lost to its owner and posted again
     under its key counting as one, that is the bolt's: under land/<bolt>; a batch's holding a unit of it; a proposal's
     whose plan.propose names the bolt or its work, or one of its chain does; its kit's landings card, land/<kit>, from
-    the end of its last merge on; a question an agent of the team holding it asked since the give; or one whose post
-    names the bolt or its work. Its holds are its team's host's, each host.hold to its host.go, what for being who held
-    the host (the one hold crew records, the design's Decision 4). Returns {start, stages, submissions, cards, holds}
-    as bolt_time takes them, or {unknown: why} when the give or the run record can't be read, and {unknown: why,
-    start} when the give is read and the submissions are not, or one gives no time it was submitted or decided, so no
-    share is guessed (read.1)."""
+    the end of its last merge on; a question its partition's planner, main-level ops or design agent (label's) asked
+    since its start; or one whose post names the bolt or its work. Its holds are those of the host its work runs on,
+    each host.hold to its host.go, what for being who held the host (the one hold crew records, the design's Decision
+    4). Returns {start, stages, submissions, cards, holds} as bolt_time takes them, or {unknown: why} when the start or
+    the run record can't be read, and {unknown: why, start} when the start is read and the submissions are not, or one
+    gives no time it was submitted or decided, so no share is guessed (read.1)."""
     if unread:
         return {"unknown": "its age can't be told: " + "; ".join(f"{k} could not be read ({v})" for k, v in unread.items())}
     give = next((e for e in reversed(entries) if e.get("Act") in ("bolt.start", "bolt.give") and not e.get("Refused")
@@ -9404,7 +9402,7 @@ def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, decided, 
                 named.add(ps[0])
     named = {first(p) for p in named}
     held_units = {f"batch/{n}": [u for u, *_ in us] for n, _, us in batches(entries)}
-    asking = (f"{team}-conductor", f"{team}-ops") if team else ()  # a team's agents, while a team held it
+    asking = tuple(f"{label}-{r}" for r in ("planner", "ops", "design")) if label else ()  # the askers (ASKERS), by name
     open_, lost, spans, key_of = {}, {}, [], {}
     for e in entries:
         act, card = e.get("Act"), e.get("Card")
@@ -9439,8 +9437,7 @@ def bolt_facts(entries, plan, bolt, team, host, kit_name, submissions, decided, 
             mine, at = last_merge is not None, max(at, last_merge or at)
         else:
             mine = (key == f"land/{bolt}" or key.startswith(f"land/{bolt}/") or ours(c["on"])
-                    or (card_kind(key or None) == "question" and at >= start
-                        and (c["by"] in asking or team is not None and re.fullmatch(rf"{re.escape(team)}-unit-[0-9]+", c["by"] or "") is not None)))
+                    or (card_kind(key or None) == "question" and at >= start and c["by"] in asking))
         if mine:
             cards_.append({"at": at, "until": c["until"], "key": c["key"]})
 
@@ -9470,11 +9467,11 @@ def span(m):
 
 
 def time_said(tm, now):
-    """A held bolt's time as its head line on the board and its land line on the rail end with it (the design's
+    """A started bolt's time as its head line on the board and its land line on the rail end with it (the design's
     Decision 5 of a-bolts-row-shows-its-age-and-who-holds-it): its age, each holder's minutes in HOLDERS' order but a
     holder that held none, and who holds it now and since when, the card's key for the user, the submission for the
-    kit, the stage for the team, what the hold is for, or that it is stalled once nobody has held it STALLED minutes,
-    `3h 05m: team 2h 10m, kit 12m, user 40m; user since 14:02, batch/12`; minutes crew can't split named `team or kit`,
+    kit, the stage for the team, what the hold is for, or nobody, with no word of a stall (teams.23 retires with
+    the-team-machinery-leaves), `3h 05m: team 2h 10m, kit 12m, user 40m; user since 14:02, batch/12`; minutes crew can't split named `team or kit`,
     and why, once (UNSPLIT); or why it can't be told, after its age once that is known (time_at)."""
     if "unknown" in tm:
         return (f"{span(tm['age'])}; " if "age" in tm else "") + tm["unknown"]
@@ -9482,13 +9479,13 @@ def time_said(tm, now):
     n = tm["now"]
     since = utc(n["since"]) if isinstance(n["since"], str) else n["since"]
     at = f"{since.astimezone():%H:%M}" if since.astimezone().date() == now.astimezone().date() else f"{since.astimezone():%Y-%m-%d %H:%M}"
-    who = (f"stalled since {at}" if tm["stalled"] else f"held since {at}: {n['what']}" if n["holder"] == "hold" else
+    who = (f"held since {at}: {n['what']}" if n["holder"] == "hold" else
            f"nobody since {at}" if n["holder"] == "nobody" else f"{HOLDER_SAID.get(n['holder'], n['holder'])} since {at}, {n['what'] or 'a question'}")
     return span(tm["age"]) + (f": {shares}" if shares else "") + f"; {who}" + (f"; {UNSPLIT}" if tm["shares"]["team_or_kit"] else "")
 
 
 def held_time(fleet, entries, unread, plan_, b, k, now):
-    """A held bolt's time to now, as its rows carry it (plan.20): bolt_time's split of bolt_facts' facts, read from the
+    """A started bolt's time to now, as its rows carry it (plan.20): bolt_time's split of bolt_facts' facts, read from the
     partition's run record (entries, oldest first, and unread, its branches that could not be read) and its kit as the
     gather or the host's follower last read it (k, Stages.kit's), its submissions standing and decided as the overview
     gave them and the follower kept them, a kit not read or either not read saying why; since as ISO 8601, so the board's JSON carries it, and the words
@@ -9502,7 +9499,7 @@ def held_time(fleet, entries, unread, plan_, b, k, now):
         if k.get(f"{key}_error"):
             return None, k[f"{key}_error"]
         return (k[key], None) if isinstance(k.get(key), list) else (None, f"{what} was not read")
-    facts = bolt_facts(entries, plan_, b.name(), None, t.get("machine"), b.get("Repo") or ((k or {}).get("kit") or {}).get("name"),
+    facts = bolt_facts(entries, plan_, b.name(), t.get("label"), t.get("machine"), b.get("Repo") or ((k or {}).get("kit") or {}).get("name"),
                        pair("submissions", "sluice's queue"), pair("decided", "what sluice's overview names decided"), unread)
     tm = time_at(facts, now)
     if "now" in tm:
@@ -9511,8 +9508,8 @@ def held_time(fleet, entries, unread, plan_, b, k, now):
 
 
 def time_at(facts, end):
-    """A held bolt's time to end, from its facts (bolt_facts): bolt_time's split, or, when the facts can't be told,
-    {unknown: why}, with its age in minutes once its give was read."""
+    """A started bolt's time to end, from its facts (bolt_facts): bolt_time's split, or, when the facts can't be told,
+    {unknown: why}, with its age in minutes once its start was read."""
     if "unknown" in facts:
         return {"unknown": facts["unknown"], **({"age": int(max(0.0, (end - facts["start"]).total_seconds()) // 60)} if facts.get("start") else {})}
     return bolt_time(facts["start"], end, facts["stages"], facts["submissions"], facts["cards"], facts["holds"])
@@ -10245,7 +10242,7 @@ def rail_record(fleet, found, props, crossed=None):
     and the landings, oldest first, which the board's Operation lane reads (ops.environments); and every entry read,
     {label: entries}, oldest first, which the sweep (sweep_cards) and the board's design band read. crossed, each
     partition's crossed units' changes, {label: crossed_changes'}, which its due and unanswered units count."""
-    times, cards, unread, landings, gives, held, deploys, opses, logs = {}, [], {}, [], {}, {}, [], {}, {}
+    times, cards, unread, landings, held, deploys, opses, logs = {}, [], {}, [], {}, [], {}, {}
     today = datetime.datetime.now(datetime.timezone.utc).date()
     fresh = utc(f"{today - datetime.timedelta(days=CARD_DAYS)}T00:00:00Z")
     for l, _, _, plan in [f for f in found if f[3]]:
@@ -10259,25 +10256,24 @@ def rail_record(fleet, found, props, crossed=None):
         times.update(r["times"])
         cards += r["cards"]
         landings += r["landings"]
-        gives.update(r["gives"])
         held[l] = r["held"]
         import ops  # ops.py imports nothing of this module
         mine = [e for e in entries if (e.get("Act") or "").startswith("ops.") and e.get("Host") == fleet["partitions"][l]["machine"]]
         deploys += [dict(r, at=utc(r["at"]), doc=None) for r in ops.rows(fleet, l, mine)]
         opses[l] = sorted(mine + [e for e in entries if e.get("Act") == "bolt.land"], key=lambda e: (e["At"], e["Id"]))
-    return times, cards, unread, landings, gives, held, deploys, opses, logs
+    return times, cards, unread, landings, held, deploys, opses, logs
 
 
 def record_reading(l, entries, plan, fresh, missing=None, crossed=None):
     """What the rail reads of one partition's run record entries, as rail_record gives it: when each proposal was
     proposed, the cards open (posted since fresh and not closed, the same owner's newer card under a key replacing its
-    older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
+    older, lost to it), the landings, and what the batches hold, the due units
     None while its branch could not be read (missing), as are the units whose latest change waits on the user's
     answer to its batch's card (awaiting_answer). A close refused leaves its card open; a card's close as lost to its
     owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed while
     its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row, or once its
     batch waits on nothing (batch_settled), whose words are held as settled. crossed, as due_changes takes it."""
-    times, posted, closed, landings, gives = {}, {}, set(), [], {}
+    times, posted, closed, landings = {}, {}, set(), []
     for e in entries:
         act = e.get("Act")
         if act == "plan.propose" and not e.get("Refused"):
@@ -10299,11 +10295,6 @@ def record_reading(l, entries, plan, fresh, missing=None, crossed=None):
             if bolt:
                 landings.append(dict(label=l, bolt=bolt, units=[o.split("/", 1)[1] for o in e["On"] if o.startswith(("unit/", "chore/"))], at=utc(e["At"]),
                                      by=e.get("By"), host=e.get("Host")))
-        elif act == "bolt.give" and not e.get("Refused"):
-            bolt = next((o[5:] for o in e["On"] if o.startswith("bolt/")), None)
-            team = next((o[5:] for o in e["On"] if o.startswith("team/")), None)
-            if bolt and team:
-                gives[(l, bolt)] = team
     settled = batch_settled(entries)
     closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries) | set(settled)  # a batch card posted again reopens its row
     held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
@@ -10311,7 +10302,7 @@ def record_reading(l, entries, plan, fresh, missing=None, crossed=None):
                 unanswered=None if missing else awaiting_answer(entries, crossed), refused=refusals(entries), stopped=stops(entries),
                 forecasts=[e for e in entries if e.get("Act") == "forecast"],
                 left=[e for e in entries if e.get("Act") in ("landing.left", "bolt.leave", "bolt.submit")])
-    return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
+    return dict(times=times, cards=list(posted.values()), landings=landings, held=held)
 
 
 def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
@@ -10872,9 +10863,9 @@ def rail_read(fleet, labels, board=False, sweep=False):
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     crossed = {l: crossed_changes(p, Stages(fleet, p, sv, runs, l)) for l, _, _, p in found if p and l in runs}
-    times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props, crossed)
+    times, cards_, unread, landings, batched, deploys, opses, logs = rail_record(fleet, found, props, crossed)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
-                gives=gives, ops=opses, logs=logs, batched=batched, runs=runs, kits=kits,
+                ops=opses, logs=logs, batched=batched, runs=runs, kits=kits,
                 rows=rail_rows(fleet, found, sv, props, times, batched, runs) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
@@ -11284,7 +11275,7 @@ def card_row(fleet, label, key):
     props = open_proposals(fleet, [label], found) if kind == "proposal" and plan else []
     batched = {}
     if kind == "batch" and plan:
-        _, _, unread, _, _, batched, *_ = rail_record(fleet, found, [])
+        _, _, unread, _, batched, *_ = rail_record(fleet, found, [])
         not unread.get(label) or fail(f"crew can't tell whether {key}'s card is still open: "
                                       + "; ".join(f"{h} did not answer" for h in sorted(unread[label])))
     row = next((r for r in rail_rows(fleet, found, sv, props, {}, batched) if r["key"] == key), None)

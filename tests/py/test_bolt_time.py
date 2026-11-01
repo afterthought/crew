@@ -1,23 +1,24 @@
-"""A held bolt's age and who held its time (plan.20, record 0044; crew-board "Each minute of a bolt's life goes to one
-holder" and "A held bolt's head line shows its age and who held its time"): the split, plan.bolt_time, a decision of
-facts alone, each case a scenario of the crew-board delta; and what it is split from, plan.bolt_facts, read from the
-run record and sluice's submissions as its overview gave them and the follower kept them."""
+"""A started bolt's age and who held its time (plan.20, record 0044; crew-board "Each minute of a bolt's life goes to
+one holder" and "A held bolt's head line shows its age and who held its time"): the split, plan.bolt_time, a decision
+of facts alone, each case a scenario of the crew-board delta; and what it is split from, plan.bolt_facts, read from the
+run record and sluice's submissions as its overview gave them and the follower kept them, from the run record's entry
+that made the bolt's branch (Decision 11 of the-team-machinery-leaves)."""
 import datetime
 
 from facts import START, at, plan_text
 
 import plan
 
-GIVE = datetime.datetime(2026, 10, 27, 11, 0, tzinfo=datetime.timezone.utc)
+STARTED = datetime.datetime(2026, 10, 27, 11, 0, tzinfo=datetime.timezone.utc)
 
 
 def t(minutes):
-    """A time, minutes after the bolt's give."""
-    return GIVE + datetime.timedelta(minutes=minutes)
+    """A time, minutes after the bolt's start."""
+    return STARTED + datetime.timedelta(minutes=minutes)
 
 
 def split(end, stages=(), submissions=(), cards=(), holds=()):
-    return plan.bolt_time(GIVE, t(end), list(stages), list(submissions), list(cards), list(holds))
+    return plan.bolt_time(STARTED, t(end), list(stages), list(submissions), list(cards), list(holds))
 
 
 def shares(**minutes):
@@ -27,12 +28,12 @@ def shares(**minutes):
 # ------------------------------------------------------------------------------------------------ one holder a minute
 
 def test_a_team_at_work():
-    """Given three hours ago, a code stage ran two hours, a batch card holding its unit was open forty minutes with
+    """Started three hours ago, a code stage ran two hours, a batch card holding its unit was open forty minutes with
     nothing running, and nothing held it twenty minutes."""
     got = split(180, stages=[{"start": t(0), "end": t(120), "merge": False, "what": "code on a"}],
                 cards=[{"at": t(120), "until": t(160), "key": "batch/12"}])
     assert got["age"] == 180 and got["shares"] == shares(team=120, user=40, nobody=20)
-    assert got["now"] == {"holder": "nobody", "what": None, "since": t(160)} and got["stalled"]
+    assert got["now"] == {"holder": "nobody", "what": None, "since": t(160)}
 
 
 def test_a_merge_under_test():
@@ -115,19 +116,16 @@ def test_a_card_counts_only_while_nothing_moves_and_a_hold_only_while_no_one_els
     assert got["now"] == {"holder": "hold", "what": "its host deneb is held by chuck", "since": t(40)}
 
 
-# ---------------------------------------------------------------------------------------------- stalled, or a moment
+# ------------------------------------------------------------------------------------------------------------- nobody
 
-def test_stalled_once_nobody_has_held_it_five_minutes():
-    """Nothing of b has run, stood in sluice, had a card open or been held for seven minutes."""
-    got = split(27, stages=[{"start": t(0), "end": t(20), "merge": False}])
-    assert got["shares"] == shares(team=20, nobody=7)
-    assert got["now"] == {"holder": "nobody", "what": None, "since": t(20)} and got["stalled"]
-
-
-def test_nobody_for_a_moment_is_not_stalled():
-    """A stage of b ended two minutes ago and nothing has started since."""
-    got = split(22, stages=[{"start": t(0), "end": t(20), "merge": False}])
-    assert got["now"]["holder"] == "nobody" and got["now"]["since"] == t(20) and not got["stalled"]
+def test_nobody_however_long_is_said_as_nobody_and_never_stalled():
+    """Nothing of b has run, stood in sluice, had a card open or been held for seven minutes, then two: nobody holds it
+    since the stage ended, and no word of a stall is said (teams.23 retires with the-team-machinery-leaves)."""
+    for end in (27, 22):
+        got = split(end, stages=[{"start": t(0), "end": t(20), "merge": False}])
+        assert got["shares"] == shares(team=20, nobody=end - 20)
+        assert got["now"] == {"holder": "nobody", "what": None, "since": t(20)} and "stalled" not in got
+        assert plan.time_said(got, t(end)).endswith(f"; nobody since {t(20).astimezone():%H:%M}")
 
 
 # ------------------------------------------------------------------------------------------------------- the edges
@@ -135,7 +133,7 @@ def test_nobody_for_a_moment_is_not_stalled():
 def test_the_shares_sum_to_the_age():
     """Pieces that are not whole minutes still give whole minutes that add up."""
     sec = datetime.timedelta(seconds=1)
-    got = plan.bolt_time(GIVE, t(10) + 50 * sec, [{"start": t(0) + 20 * sec, "end": t(3) + 40 * sec, "merge": False}],
+    got = plan.bolt_time(STARTED, t(10) + 50 * sec, [{"start": t(0) + 20 * sec, "end": t(3) + 40 * sec, "merge": False}],
                          [{"submitted": t(4), "started": None, "decided": t(6) + 30 * sec, "state": "landed"},
                           {"submitted": t(6) + 40 * sec, "started": t(6) + 50 * sec, "decided": t(7) + 10 * sec, "state": "landed"}],
                          [{"at": t(7) + 20 * sec, "until": None, "key": "land/b"}], [])
@@ -147,7 +145,7 @@ def test_a_stage_with_no_end_runs_to_the_end():
     assert got["shares"] == shares(nobody=15, team=30) and got["now"]["what"] == "verify on a"
 
 
-def test_a_card_closed_before_the_give_is_left_out_and_one_open_across_it_counts_from_the_give():
+def test_a_card_closed_before_the_start_is_left_out_and_one_open_across_it_counts_from_the_start():
     got = split(30, cards=[{"at": t(-60), "until": t(-10), "key": "batch/3"}, {"at": t(-5), "until": t(10), "key": "batch/4"}])
     assert got["shares"] == shares(user=10, nobody=20)
 
@@ -157,15 +155,15 @@ def test_a_submission_standing_not_under_test_is_the_teams():
     assert got["shares"] == shares(nobody=5, team=15)
 
 
-def test_a_bolt_given_this_minute_is_nobodys_and_not_stalled():
+def test_a_bolt_started_this_minute_is_nobodys():
     got = split(0)
-    assert got == {"age": 0, "shares": shares(), "now": {"holder": "nobody", "what": None, "since": GIVE}, "stalled": False}
+    assert got == {"age": 0, "shares": shares(), "now": {"holder": "nobody", "what": None, "since": STARTED}}
 
 
 # ------------------------------------------------------------------------------------- each holder from what crew keeps
 
 
-PLAN = plan.Plan(plan_text(bolts=[("b", "switchboard-kit", "swb-1"), ("o", "switchboard-kit", "swb-2")],
+PLAN = plan.Plan(plan_text(bolts=[("b", "switchboard-kit", True), ("o", "switchboard-kit", True)],
                            units=[("a", "switchboard-kit", "b", []), ("c", "switchboard-kit", "b", [], "chore"),
                                   ("x", "switchboard-kit", "o", [])]))
 
@@ -181,7 +179,7 @@ def given(minutes=0):
 
 
 def facts_of(entries, standing=(), decided=(), unread=None):
-    return plan.bolt_facts(entries, PLAN, "b", "swb-1", "chuck-herdr-alpha", "switchboard-kit", (list(standing), None),
+    return plan.bolt_facts(entries, PLAN, "b", "wldn", "chuck-herdr-alpha", "switchboard-kit", (list(standing), None),
                            (list(decided), None), unread)
 
 
@@ -223,19 +221,23 @@ def test_the_users_card():
     assert got["now"] == {"holder": "user", "what": "land/switchboard-kit", "since": mins(60)}
 
 
-def test_a_question_from_the_team_while_it_holds_the_bolt_is_the_users():
-    """swb-1's unit stopped short and swb-1-conductor's question is open, with nothing of its bolt running."""
-    entries = [e("card.post", -20, Card="req_9", Key=None, By="swb-1-conductor"), given(0),
-               e("card.post", 10, Card="req_3", Key=None, By="swb-1-conductor"),
-               e("card.post", 12, Card="req_4", Key="ask/swb-2", By="swb-2-conductor"),
-               e("card.post", 14, Card="req_5", Key=None, By="swb-1-unit-2")]
+def test_a_question_a_main_level_role_asked_since_the_start_is_the_users():
+    """a's place stopped short and the planner's question to the user is open, with nothing of b running: a question of
+    the partition's planner, main-level ops or design agent since b's start is b's; one asked before it, one of another
+    partition's planner and an old conductor's are not."""
+    entries = [e("card.post", -20, Card="req_9", Key=None, By="wldn-planner"), given(0),
+               e("card.post", 10, Card="req_3", Key=None, By="wldn-planner"),
+               e("card.post", 12, Card="req_4", Key="ask/madswan", By="madswan-planner"),
+               e("card.post", 13, Card="req_6", Key=None, By="swb-1-conductor"),
+               e("card.post", 14, Card="req_5", Key=None, By="wldn-ops"),
+               e("card.post", 15, Card="req_7", Key=None, By="wldn-design")]
     got = facts_of(entries)
-    assert [c["key"] for c in got["cards"]] == [None, None]
-    assert [c["at"] for c in got["cards"]] == [mins(10), mins(14)]
+    assert [c["key"] for c in got["cards"]] == [None, None, None]
+    assert [c["at"] for c in got["cards"]] == [mins(10), mins(14), mins(15)]
 
 
 def test_a_held_host():
-    """Nothing of b runs and no card of it is open, while its team's host was held at 14:02 and not let go."""
+    """Nothing of b runs and no card of it is open, while the host its work runs on was held at 14:02 and not let go."""
     entries = [given(0), e("host.hold", 10, "host/chuck-herdr-alpha", By="chuck"), e("host.go", 20, "host/chuck-herdr-alpha", By="chuck"),
                e("host.hold", 30, "host/mac-studio", By="chuck"), e("host.hold", 40, "host/chuck-herdr-alpha", By="chuck")]
     got = plan.time_at(facts_of(entries), mins(50))
@@ -244,8 +246,8 @@ def test_a_held_host():
 
 
 def test_a_batch_card_a_proposal_card_and_a_card_whose_post_names_the_work_are_the_bolts():
-    entries = [given(0), e("review.batch", 1, Batch="12", Units="a:swb-1@abc1234 x:swb-2@def5678"),
-               e("review.batch", 1, Batch="13", Units="x:swb-2@def5678"),
+    entries = [given(0), e("review.batch", 1, Batch="12", Units="a:b@abc1234 x:o@def5678"),
+               e("review.batch", 1, Batch="13", Units="x:o@def5678"),
                e("card.post", 2, "batch/12", Card="req_b12", Key="batch/12", By="wldn-planner"),
                e("card.post", 2, "batch/13", Card="req_b13", Key="batch/13", By="wldn-planner"),
                e("plan.propose", 3, "proposal/7", "unit/a", "bolt/b"), e("plan.propose", 4, "proposal/8", "unit/x"),
@@ -257,9 +259,9 @@ def test_a_batch_card_a_proposal_card_and_a_card_whose_post_names_the_work_are_t
 
 
 def test_a_card_lost_to_its_owner_and_posted_again_counts_as_one_open_card():
-    entries = [given(0), e("card.post", 10, Card="req_1", Key="land/b", By="swb-1-conductor"),
+    entries = [given(0), e("card.post", 10, Card="req_1", Key="land/b", By="wldn-ops"),
                e("card.close", 20, Card="req_1", Key="land/b", State="lost"),
-               e("card.post", 25, Card="req_2", Key="land/b", By="swb-1-conductor"),
+               e("card.post", 25, Card="req_2", Key="land/b", By="wldn-ops"),
                e("card.close", 40, Card="req_2", Key="land/b", State="closed")]
     assert [(c["at"], c["until"]) for c in facts_of(entries)["cards"]] == [(mins(10), mins(40))]
 
@@ -296,8 +298,8 @@ def test_a_landing_by_pull_request_is_the_bolts_by_the_number_its_queued_submit_
                 "decided": at(45), "event": "landed"},
                {"id": 53, "bolt": None, "branch": "main", "worktree": "pull/10", "pull_head": None, "submitted": at(31), "started": None,
                 "decided": at(46), "event": "landed"}]
-    submit = e("bolt.submit", 30, "bolt/b", "team/swb-1", Outcome="queued", Submission="52")
-    other = e("bolt.submit", 31, "bolt/o", "team/swb-2", Outcome="queued", Submission="53")
+    submit = e("bolt.submit", 30, "bolt/b", Outcome="queued", Submission="52")
+    other = e("bolt.submit", 31, "bolt/o", Outcome="queued", Submission="53")
     assert [x["what"] for x in facts_of([given(0), submit, other], decided=decided)["submissions"]] == ["#52"]
     assert facts_of([given(0)], decided=decided)["submissions"] == [], "a landing by pull request was taken with no submit naming it"
 
@@ -318,7 +320,7 @@ def test_a_record_that_cant_be_read_is_said():
 
 
 def test_submissions_that_cant_be_read_keep_the_age_and_tell_no_share():
-    got = plan.bolt_facts([given(0)], PLAN, "b", "swb-1", "chuck-herdr-alpha", "switchboard-kit", ([], None),
+    got = plan.bolt_facts([given(0)], PLAN, "b", "wldn", "chuck-herdr-alpha", "switchboard-kit", ([], None),
                           (None, "its overview watch ended (sluice overview --watch exited 1)"))
     assert plan.time_at(got, mins(65)) == {
         "unknown": "who held its time can't be told: its submissions can't be read: its overview watch ended (sluice overview --watch exited 1)",

@@ -401,7 +401,7 @@ class TestTheBranchAlone:
         monkeypatch.setattr(crew, "on_machine", lambda *a, **k: pytest.fail(f"a host was asked for the run record: {a}"))
         monkeypatch.setattr(plan.record, "on_branch", lambda fleet, label, since, tips=None: entries)
         found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
-        times, cards_, unread, _, _, held, _, _, logs = plan.rail_record(FLEET, found, [])
+        times, cards_, unread, _, held, _, _, logs = plan.rail_record(FLEET, found, [])
         return cards_, unread, held
 
     def test_a_card_the_planner_closed_on_a_host_that_does_not_answer_is_read_closed(self, monkeypatch):
@@ -503,13 +503,12 @@ class TestRecord:
         r = self.read([refused, post("req_1", "batch/1", minutes=1), dict(refused, On=["batch/2"])])
         assert ([c["card"] for c in r["cards"]], r["held"]["posts"]) == (["req_1"], {"batch/1"})
 
-    def test_a_proposal_is_timed_by_its_first_entry_and_a_bolt_by_its_last_give(self):
+    def test_a_proposal_is_timed_by_its_first_entry_and_no_bolt_by_a_give(self):
+        """No team was given the bolt (the-team-machinery-leaves): an old bolt.give on the branch is read for nothing."""
         r = self.read([{"Act": "plan.propose", "On": ["proposal/1"], "At": "2026-10-12T10:00:00Z"},
                        {"Act": "plan.propose", "On": ["proposal/1"], "At": "2026-10-12T11:00:00Z"},
-                       {"Act": "bolt.give", "On": ["bolt/apex-zones", "team/swb-2"], "At": "2026-10-12T11:00:00Z"},
-                       {"Act": "bolt.give", "On": ["bolt/apex-zones", "team/swb-1"], "At": "2026-10-12T12:00:00Z", "Refused": "x"}])
-        assert r["times"] == {("wldn", "proposal/1"): plan.utc("2026-10-12T10:00:00Z")}
-        assert r["gives"] == {("wldn", "apex-zones"): "swb-2"}
+                       {"Act": "bolt.give", "On": ["bolt/apex-zones", "team/swb-2"], "At": "2026-10-12T11:00:00Z"}])
+        assert r["times"] == {("wldn", "proposal/1"): plan.utc("2026-10-12T10:00:00Z")} and "gives" not in r
 
     def test_while_a_host_of_the_record_does_not_answer_no_unit_is_known_due(self):
         held = plan.record_reading("wldn", [], the_plan(), START, missing={"mac-studio": "x"})["held"]
@@ -1597,7 +1596,7 @@ class TestLandTime:
         sv[BOX]["kits"]["/kit/main"].update(submissions=[], decided=[])
         found, ran = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())], runs()
         return dict(found=found, rows=plan.rail_rows(FLEET, found, sv, [], {}, None, ran), cards=[], sv=sv, unread={}, errors={}, props=[],
-                    landings=[], gives={}, signals={"wldn": ([], {})}, ops={"wldn": []}, logs={"wldn": list(self.LOGS)}, runs=ran,
+                    landings=[], signals={"wldn": ([], {})}, ops={"wldn": []}, logs={"wldn": list(self.LOGS)}, runs=ran,
                     kits=kits_of(found))
 
     def test_a_bolt_waiting_on_the_users_yes_says_its_age_the_users_share_and_that_the_user_holds_it(self):

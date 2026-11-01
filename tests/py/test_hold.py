@@ -410,7 +410,7 @@ class TestTranscript:
 
 class TestBands:
     HERE = {"host": "deneb", "version": "v0.13.0", "held": None,
-            "agents": {"wldn-planner": {"version": "v0.12.1", "due": True}, "wldn-dispatch-deneb": {"version": "v0.13.0", "due": False},
+            "agents": {"wldn-planner": {"version": "v0.12.1", "due": True}, "wldn-operator": {"version": "v0.13.0", "due": False},
                        "wldn-ops": {"version": None, "due": True}}}
 
     def test_each_agent_says_the_crew_it_started_on_and_the_one_it_takes_at_its_next_stop(self):
@@ -418,14 +418,17 @@ class TestBands:
         assert board.crew_said({"version": "v0.12.1", "due": True}, "v0.13.0") == "crew v0.12.1 → v0.13.0 at its next stop"
         assert board.crew_said({"version": None, "due": True}, None) == "an older crew → crew as it now is at its next stop"
 
-    def test_a_band_ends_its_first_line_with_its_crew_and_an_agent_with_no_view_has_its_crew_alone(self):
+    def test_a_band_ends_its_first_line_with_its_crew_and_one_with_no_recorded_start_is_drawn_as_it_is(self):
+        """Each main-level role here with a recorded start (crew.agents_here); no team agent or dispatcher has a band
+        (Decision 11 of the-team-machinery-leaves)."""
         from test_board import data
         v = board.agent_views(dict(data(), here=self.HERE))["views"]
         first = "".join(s for s, _ in v["wldn-planner"][0])
         assert first.endswith("  crew v0.12.1 → v0.13.0 at its next stop")
-        assert v["wldn-dispatch-deneb"] == [[("crew v0.13.0", "dim")]]
+        assert v["wldn-operator"][0][-1] == ("crew v0.13.0", "dim")
         assert "".join(s for s, _ in v["wldn-ops"][0]).endswith("an older crew → v0.13.0 at its next stop")
-        assert v["swb-1-conductor"] == board.agent_views(data())["views"]["swb-1-conductor"]
+        assert v["wldn-design"] == board.agent_views(data())["views"]["wldn-design"]
+        assert sorted(v) == ["wldn-design", "wldn-operator", "wldn-ops", "wldn-planner"]
 
     def test_every_band_on_a_held_host_opens_with_the_hold(self):
         from test_board import data
