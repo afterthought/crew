@@ -61,5 +61,5 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 
 ## 9. The suite
 
-- [ ] 9.1 `tests/moon.yml` matches the tests after `tests/moon-tasks`, with no task for a deleted test and no read of a deleted path (`tests.10`; Task notes 9.1); verify `tests/suite t-suite` ends with "0 failed".
+- [x] 9.1 `tests/moon.yml` matches the tests after `tests/moon-tasks`, with no task for a deleted test and no read of a deleted path (`tests.10`; Task notes 9.1); verify `tests/suite t-suite` ends with "0 failed".
 - [ ] 9.2 The tests the change affects pass (Task notes 9.2); verify `tests/suite --affected` ends with "0 failed".
