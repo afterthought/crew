@@ -50,6 +50,7 @@ Built after `teams-cross-to-flume-as-their-bolts-land` (design *What this change
 - [x] 10.1 `crew main up`, `down`, `status` and `crew revive` start, greet and bring back no role that runs as its kind, `main up` writes its role record and ends its standing agent once not working, and `main status` says how it runs (design Decision 14; Task notes 10.1); passes `tests/py/test_teams.py`, and the moon task `tests:t-journey-main` ends with "0 failed".
 - [x] 10.2 A standing agent whose role now runs as its kind is ended at its next stop and never restarted, and `crew update` passes it over (design Decision 14; Task notes 10.2); passes `tests/py/test_hold.py`, and the moon tasks `tests:t-hold` and `tests:t-session-hook` end with "0 failed".
 - [x] 10.3 `crew-role` refuses a role that runs as its kind, naming `crew role open`, and starts no Claude (design Decision 14; Task notes 10.3); the moon task `tests:t-roles` ends with "0 failed".
+- [x] 10.4 `crew main up` removes the role record of a role that stands again though no role of its partition runs as its kind now, and writes nothing where the branch holds no record, is not there or can't be read, saying so for the last (design Decision 14; Task notes 10.4); passes `tests/py/test_asks.py` under the moon task `tests:logic`.
 
 ## 11. Views
 

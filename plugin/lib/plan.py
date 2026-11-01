@@ -13025,14 +13025,25 @@ def moved_role(fleet, label, ms):
 def kinds_up(fleet, label, ms):
     """What crew main up does for the roles its partition runs as its kind, none of which it starts or greets (design
     Decision 14, main-level "The main level is one herdr workspace"): roles.rec on the flywheel's branch written to
-    match the teams file where anything is due (asks.roles_due), in a commit of its own; and a standing agent of such a
-    role still up ended and its tab closed, or, while it works, left and said so."""
+    match the teams file where anything is due (asks.roles_due), in a commit of its own, the record of a role that
+    stands again removed though none runs as its kind now (role-runs "The planner stands again"); and a standing agent
+    of such a role still up ended and its tab closed, or, while it works, left and said so. With none running as its
+    kind, a branch not there yet holds no record, and one crew can't read keeps what it holds, said, and up goes on
+    (read.1), as it did before any role ran as its kind (roles.8)."""
     p = crew.partition_of(fleet, label)
     kinds = [r for r in crew.MAIN_STANDING + ("reviewer",) if p["flume"][r] is not False]
-    if not kinds:
-        return
     repo, ref = state_of(fleet, label)
-    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    if kinds:
+        tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    else:
+        try:
+            tip = fetch(repo, ref)
+        except Refusal as e:
+            print(f"{e}: crew can't tell whether {label}'s roles.rec holds a role that stands again, and removes nothing",
+                  file=sys.stderr)
+            return
+        if not tip:
+            return
     metas = {r: crew.definition(asks.definition_of(r))[0] for r in kinds}
     due, gone = asks.roles_due(asks.parse_roles(show(repo, tip, "roles.rec")), p, metas)
     def change(w):

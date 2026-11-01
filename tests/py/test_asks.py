@@ -484,6 +484,53 @@ def end(b, report, words):
     plan.role_end(b.fleet, argparse.Namespace(report=str(report), words=words))
 
 
+def fleet_of(p):
+    return {"partitions": {"madswan": p}, "teams": {}, "hosts": {}}
+
+
+def roles_held(p):
+    """roles.rec as roles_lines writes it for a partition."""
+    import plan
+    w = written()
+    plan.roles_lines(w, fleet_of(p), "madswan")
+    return w.files["roles.rec"]
+
+
+class TestMainUp:
+    """plan.kinds_up, crew main up's part for roles.rec with no standing agent up (design Decision 14; role-runs "Role
+    records follow the teams file"): the file brought to match the teams file in a commit of its own."""
+
+    @pytest.mark.parametrize("now, left", [({}, []), ({"ops": "madswan-ops"}, ["ops"])])
+    def test_a_role_that_stands_again_leaves_roles_rec_though_it_was_the_last_to_run_as_its_kind(self, monkeypatch, now, left):
+        """role-runs, The planner stands again: madswan's planner moved back, the last role running as its kind, or ops
+        still running so."""
+        import plan
+        stood = fleet_of(madswan(**now))
+        b = on_branch(monkeypatch, stood, {"roles.rec": roles_held(madswan(planner="madswan-main", **now))})
+        monkeypatch.setattr(plan, "fetch", lambda repo, ref: "t" * 40)
+        plan.kinds_up(stood, "madswan", [])
+        assert [r["Role"] for r in asks.parse_roles(b.files["roles.rec"])] == left
+        assert len(b.writes) == 1 and b.writes[0].startswith("roles(madswan): to match the teams file (")
+        assert [(act, on) for act, on, *_ in b.entries] == [("main.up", ["agent/madswan-planner"])]
+
+    def test_with_none_running_as_its_kind_no_record_no_branch_or_a_branch_unread_writes_nothing(self, monkeypatch, capsys):
+        import plan
+        stood = fleet_of(madswan())
+        b = on_branch(monkeypatch, stood, {})
+        for tip in ("t" * 40, None):
+            monkeypatch.setattr(plan, "fetch", lambda repo, ref, tip=tip: tip)
+            plan.kinds_up(stood, "madswan", [])
+        b.files["roles.rec"] = roles_held(madswan(planner="madswan-main"))
+
+        def unread(repo, ref):
+            raise plan.Refusal("could not fetch madswan/main of afterthought/madswan-state over https: no route")
+        monkeypatch.setattr(plan, "fetch", unread)
+        plan.kinds_up(stood, "madswan", [])
+        assert b.writes == [] and b.entries == [] and "Role: planner" in b.files["roles.rec"]
+        assert ("no route: crew can't tell whether madswan's roles.rec holds a role that stands again, and removes nothing"
+                in capsys.readouterr().err)
+
+
 class TestStart:
     """crew role start (design Decision 7; role-runs "A run's start takes everything pending", "A run's start gives its
     brief and what it took" and "A start takes again what a lost run took")."""
