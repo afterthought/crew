@@ -6747,7 +6747,7 @@ def describe(fleet, label, plan, p, alone=False, signal_of=None):
         changes.append({"do": a.do, "lines": lines, "bolts": per[i]})
     return {"proposal": int(p.get("Proposal")), "state": p.get("State"), "by": p.get("By"), "opened": p.get("Opened"),
             "closed": p.get("Closed"), "reason": p.get("Reason"), "replaces": p.get("Replaces"), "case": p.get("Case"),
-            "changes": changes}
+            "changes": changes, "waits": ["the user"] if p.get("State") == "open" else []}
 
 
 def code_span(text):

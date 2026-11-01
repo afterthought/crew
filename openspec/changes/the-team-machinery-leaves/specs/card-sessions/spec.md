@@ -1,3 +1,24 @@
+## ADDED Requirements
+
+### Requirement: A later try of a card's reading is recorded
+Each try of a batch's, a long proposal's or a bolt's reading that is not part of its card's post or change, by `crew card session` starting it anew or by the rail's sweep, SHALL append one `card.reading` entry to the run record on the reading's key, in the name of its owner, the planner's for a batch's and a proposal's and main-level ops's for a bolt's, `land/<bolt>`, done, or refused with crew's own message saying why. The sweep's try of a kit's landings card is its raise, recorded as the card's change.
+
+#### Scenario: A try that refuses
+- **WHEN** the rail's sweep tries batch 3's reading and plannotator does not list it within its start time
+- **THEN** a `card.reading` entry for `batch/3` holds that reason in crew's words, and the card is not changed
+
+#### Scenario: A link given again
+- **WHEN** the planner runs `crew card session batch/3` while its session runs
+- **THEN** no entry is appended
+
+#### Scenario: A landing's reading started by hand
+- **WHEN** wldn-ops runs `crew card session land/y`, no session of `land/y` runs, and the reading opens
+- **THEN** a done `card.reading` entry for `land/y` is appended in wldn-ops's name
+
+#### Scenario: A landing's try off the host its work runs on
+- **WHEN** the planner on mac-studio runs `crew card session land/y --label wldn`, and the runner that took `y`'s work runs on the box
+- **THEN** it is refused as before, and no entry is appended, since no reading was tried
+
 ## MODIFIED Requirements
 
 ### Requirement: A session is started only where its link can be answered
@@ -8,7 +29,7 @@ crew SHALL start no session, and SHALL say why, when the key is no row's or the 
 - **THEN** it is refused as a key with no row, and no session is started
 
 #### Scenario: A batch's session on another host
-- **WHEN** a conductor on the box runs `crew card session batch/3 --label wldn`, and the partition's main level is on mac-studio
+- **WHEN** wldn-ops on the box runs `crew card session batch/3 --label wldn`, and the partition's main level is on mac-studio
 - **THEN** it is refused, naming mac-studio, and no session is started
 
 #### Scenario: A landing's session on another host
@@ -69,21 +90,8 @@ When a bolt's reading refuses to open as crew puts its row on the kit's landings
 - **WHEN** `y`'s row is put on the card again after a fix, by the rail's sweep, or at a preview's end, and its first start fails
 - **THEN** crew tries the reading a second time before the card is posted or changed, as at a merge's end
 
+## REMOVED Requirements
+
 ### Requirement: A later try of a reading is recorded
-Each try of a batch's, a long proposal's or a bolt's reading that is not part of its card's post or change, by `crew card session` starting it anew or by the rail's sweep, SHALL append one `card.reading` entry to the run record on the reading's key, in the name of its owner, the planner's for a batch's and a proposal's and main-level ops's for a bolt's, `land/<bolt>`, done, or refused with crew's own message saying why. The sweep's try of a kit's landings card is its raise, recorded as the card's change.
-
-#### Scenario: A try that refuses
-- **WHEN** the rail's sweep tries batch 3's reading and plannotator does not list it within its start time
-- **THEN** a `card.reading` entry for `batch/3` holds that reason in crew's words, and the card is not changed
-
-#### Scenario: A link given again
-- **WHEN** the planner runs `crew card session batch/3` while its session runs
-- **THEN** no entry is appended
-
-#### Scenario: A landing's reading started by hand
-- **WHEN** wldn-ops runs `crew card session land/y`, no session of `land/y` runs, and the reading opens
-- **THEN** a done `card.reading` entry for `land/y` is appended in wldn-ops's name
-
-#### Scenario: A landing's try off its team's host
-- **WHEN** the planner on mac-studio runs `crew card session land/y --label wldn`, and the runner that took `y`'s work runs on the box
-- **THEN** it is refused as before, and no entry is appended, since no reading was tried
+**Reason**: Record 0047 move 5: a landing's reading runs where the bolt's work runs, as the runner that took it reported, not on a team's host, so its scenario's name changes with it.
+**Migration**: "A later try of a card's reading is recorded", added by this change.

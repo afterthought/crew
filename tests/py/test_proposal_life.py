@@ -133,6 +133,7 @@ class TestPage:
             assert line in out.splitlines()
         assert "crew plan approve" not in out
         assert d["changes"][2]["do"] == "unit move queued-one deploy-checks"
+        assert d["waits"] == ["the user"], "plan-proposals: --json gives the same, naming the user it waits on"
 
     def test_work_a_started_bolt_needs_says_so_and_waits_on_the_user_alone(self):
         d, out = self.page(['unit add zone-first "The tenant\'s zone exists." --bolt tenant-environments --unblocks tenant-environments'])
