@@ -1426,6 +1426,13 @@ class Sluice:
         raise AssertionError(args)
 
 
+def kept_made(unit, stage, line):
+    """A line kept for a unit under a stage on this host, as a conductor's wait kept it (plan.made_kept reads it)."""
+    d = plan.MADE / "swancloud" / unit
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{stage}.jsonl").write_text(f"{line}\n")
+
+
 class TestBroughtUp:
     @pytest.mark.parametrize("policy, why", [
         ((False, None), "land/crew's row y carries no preview: its kit's policy at abc1234 declares none, so nothing is brought up"),
@@ -1464,7 +1471,7 @@ class TestBroughtUp:
         """rail-cards "A line naming a branch sluice does not land"."""
         why = "no [branches] table in .config/sluice.toml on unit/a names it"
         s = Sluice(monkeypatch, tmp_path, refuse=why)
-        plan.made_keep("swancloud", "a", "code", [DEMO])
+        kept_made("a", "code", DEMO)
         plan.card_preview_here(PFLEET, "swancloud", "batch/7", "a/demo", "crw-1", False)
         assert [(r["key"], r["thing"], r["branch"], r["head"]) for r in s.handed] == [("batch/7", "a/demo", "unit/a", "abc1234")]
         assert s.notes == [("batch/7", "a/demo: Its preview of abc1234 could not be brought up")]
@@ -1475,7 +1482,7 @@ class TestBroughtUp:
     def test_a_batch_cards_close_releases_what_was_brought_up_from_it(self, monkeypatch, tmp_path):
         """rail-cards "A preview is released ... when the card closes"."""
         s = Sluice(monkeypatch, tmp_path)
-        plan.made_keep("swancloud", "a", "code", [DEMO])
+        kept_made("a", "code", DEMO)
         plan.card_preview_here(PFLEET, "swancloud", "batch/7", "a/demo", "crw-1", False)
         assert plan.preview_release_card("swancloud", "batch/7") == "released a/demo's preview of abc1234 from batch/7, preview/0123456789ab"
         assert s.released == [("/crew/main", "preview/0123456789ab")] and plan.preview_release_card("swancloud", "batch/7") is None

@@ -935,20 +935,6 @@ def taken_within():
     return int(v)
 
 
-def never_started(agent, stage, what, obj, team, how, why):
-    """What crew says of a stage whose prompt its agent never took, sent twice or never ready (how "never"), or of one
-    crew could not tell it took (teams.15, read.1): the stage never started, nothing is left typed, and how to run it
-    again, by the unit's, the chore's or the fix's own command."""
-    name = obj.rsplit("/", 1)[-1]
-    again = (f"crew unit run {what} {stage}" if obj.startswith("unit/") else f"crew chore run {what} {stage}" if obj.startswith("chore/")
-             else f"crew fix {team} {name} --merge" if stage == "merge"
-             else f'crew fix {team} {name} "<what is wrong>"')
-    if how == "never":
-        return f"{agent} never took its {stage} prompt for {what}, {why}; the stage never started and nothing is left typed in its pane: run it again with {again}"
-    return (f"crew could not tell whether {agent} took its {stage} prompt for {what}: {why}; nothing more was sent, and the stage is "
-            f"taken as never started: run it again with {again}")
-
-
 class Pane:
     """An agent's pane as the taken-or-sent-again exchange reads it and types into it (teams.15): herdr on the agent's
     host, and its session's transcript there, read by transcript.py piped to the host; the clock it waits by. A logic
@@ -2060,11 +2046,6 @@ def exit_asks(screen):
     return bool(screen) and all(w in screen for w in EXIT_ASKS)
 
 
-def down_said(team):
-    """What a stage refused on a team taken down says: it runs nothing until it is brought up."""
-    return f"{team} is down; crew up {team} brings it back"
-
-
 def slot_for(team, slots, held, name, lent=()):
     """The slot a unit or fix runs in (teams.1): the one holding it, else the first of the team's slots that holds
     nothing, as (slot, whether it is newly taken); held is the slots file's lines, split. Refused, naming what each
@@ -2189,20 +2170,11 @@ def context_of(lines, window):
 
 def holds_said(s, line):
     """What crew status says a slot holds: from slot_stages' answer for it (s), its unit or fix and that work's stage,
-    with its tasks done and total in code or verify, and a unit carried onto its bolt inside another unit's merge named
-    so, its merge owed (teams.17); from the slots file's line alone, its work and that its stage is unknown; "" for a
-    free slot."""
+    with its tasks done and total in code or verify; from the slots file's line alone, its work and that its stage is
+    unknown; "" for a free slot."""
     if s:
-        return (f"{s['name']}  {s['stage']}" + (f" {s['counts']}" if s.get("counts") and s["stage"] in ("code", "verify") else "")
-                + ("  carried by another's merge, its own merge owed" if s.get("carried") else ""))
+        return f"{s['name']}  {s['stage']}" + (f" {s['counts']}" if s.get("counts") and s["stage"] in ("code", "verify") else "")
     return f"{line[2]}  unknown" if line and len(line) > 2 else ""
-
-
-def carried_said(unit, bolt, stage):
-    """What crew status says of a unit carried onto its bolt inside another unit's merge that no slot holds: its change
-    is open on the bolt and it has not merged, its own merge owed, which archives the change from its place (teams.17)."""
-    return (f"{unit} is carried onto bolt/{bolt} inside another unit's merge, its change open there: it is in {stage}, "
-            f"its own merge owed (crew unit run {unit} merge)")
 
 
 def status_row(*cells):
@@ -2227,19 +2199,6 @@ def clear_refusal(agent, status, force):
     if status is None:
         return f"{agent} is not up."
     return f"{agent} is working; add --force to clear it anyway." if status == "working" and not force else None
-
-
-def stage_agent(teams, who):
-    """The team and the slot, or ops or conductor, of the agent that runs crew needs, from its name (who) and the
-    teams' names, the last team whose name fits; None for a name crew starts no team's agent by."""
-    found = None
-    for t in teams:
-        if who in (f"{t}-ops", f"{t}-conductor"):
-            found = (t, who[len(t) + 1:])
-        else:
-            m = re.fullmatch(rf"{re.escape(t)}-(unit-[1-9][0-9]*)", who)
-            found = (t, m.group(1)) if m else found
-    return found
 
 
 def moved_said(scope, was, session):

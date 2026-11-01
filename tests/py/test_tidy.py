@@ -315,7 +315,6 @@ class TestKept:
         assert plan.kept_why("bolt gone is in no plan", False, (0, "", ""), lambda: None, True) == (
             "bolt gone is in no plan, and its submission is still with sluice")
 
-
     def test_a_clean_one_sluice_has_a_run_in_is_kept_and_named_for_it_and_only_then_is_the_overview_read(self):
         ran = "sluice's overview lists a run in it, `sleep 25`, started 2026-10-22T23:31:30Z"
         assert plan.kept_why("unit a has merged into bolt/t", False, (0, "", ""), lambda: ran) == (
@@ -437,13 +436,6 @@ class TestSlotStage:
 
     def test_a_unit_in_code_counts_its_tasks(self):
         assert self.stage("unit", "a") == ("code", "1/4")
-
-    def test_a_unit_whose_change_the_bolt_holds_open_has_not_merged_and_is_said_carried(self):
-        # wldn, swb-4, 2026-10-13: carried onto its bolt inside another unit's merge (teams.17, signal 45f551aa/01).
-        assert self.stage("unit", "carried") == ("verify", "3/3", True)
-
-    def test_one_whose_place_is_gone_reads_its_stage_from_the_change_on_the_bolt(self):
-        assert self.stage("unit", "carried-gone") == ("code", "2/3", True)
 
     @pytest.mark.parametrize("name, stage", [
         ("fix/t/landed", "landed"), ("fix/gone/never-moved", "landed"), ("fix/t/done", "merged"), ("fix/gone/y", "dropped"),

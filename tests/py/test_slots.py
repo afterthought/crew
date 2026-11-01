@@ -311,38 +311,15 @@ class TestStatus:
         assert crew.holds_said({"name": "a", "stage": "verify", "counts": "3/3"}, ["unit-1", "unit", "a", "/p/a"]) == "a  verify 3/3"
         assert crew.holds_said({"name": "b", "stage": "construct", "counts": "0/2"}, ["unit-2", "unit", "b", "/p/b"]) == "b  construct"
 
-    def test_a_unit_carried_onto_its_bolt_inside_another_merge_is_named_so_its_merge_owed(self):
-        # teams.17: wldn, swb-4, 2026-10-13, signal 45f551aa/01.
-        assert crew.holds_said({"name": "d", "stage": "verify", "counts": "4/4", "carried": True}, ["unit-1", "unit", "d", "/p/d"]) == (
-            "d  verify 4/4  carried by another's merge, its own merge owed")
-        assert crew.carried_said("d", "b1", "verify") == (
-            "d is carried onto bolt/b1 inside another unit's merge, its change open there: it is in verify, its own merge "
-            "owed (crew unit run d merge)")
-
     def test_work_held_whose_stage_was_not_read_is_unknown_and_a_free_slot_holds_nothing(self):
         assert crew.holds_said(None, ["unit-1", "unit", "a", "/p/a"]) == "a  unknown"
         assert crew.holds_said(None, None) == ""
 
 
 class TestRefused:
-    def test_a_team_taken_down_runs_no_stage_until_it_is_brought_up(self):
-        assert crew.down_said("swb-1") == "swb-1 is down; crew up swb-1 brings it back"
 
     def test_a_working_agent_is_ended_only_with_force(self):
         assert crew.working_said("swb-1-unit-4") == "swb-1-unit-4 is working; add --force to end it anyway."
-
-    @pytest.mark.parametrize("how, why, said", [
-        ("never", "sent twice", "swb-1-unit-4 never took its construct prompt for d, sent twice; the stage never started and nothing is "
-                                "left typed in its pane: run it again with crew unit run d construct"),
-        ("unread", "it is no longer up", "crew could not tell whether swb-1-unit-4 took its construct prompt for d: it is no longer up; "
-                                         "nothing more was sent, and the stage is taken as never started: run it again with crew unit run d construct"),
-    ])
-    def test_a_prompt_never_taken_or_not_read_as_taken_starts_no_stage_and_says_how_to_run_it_again(self, how, why, said):
-        assert crew.never_started("swb-1-unit-4", "construct", "d", "unit/d", "swb-1", how, why) == said
-
-    def test_a_fixs_stage_is_run_again_by_the_fixs_own_command(self):
-        assert crew.never_started("swb-1-unit-1", "merge", "fix/te/tidy", "fix/te/tidy", "swb-1", "never", "sent twice").endswith(
-            "run it again with crew fix swb-1 tidy --merge")
 
     @pytest.mark.parametrize("stage, said", [(None, "swb-1-ops started in w1:p2"), ("resume", "swb-1-ops resumed in w1:p2"),
                                              ("code", "swb-1-ops started code in w1:p2")])

@@ -296,14 +296,10 @@ def board_data(fleet, labels, read, now):
                 t = fleet["teams"].get(b.get("Team"))
                 k, _ = st.kit(b) if t else (None, None)
                 k = k or {}
-                held = k.get("slots", {}).get(b.get("Team"), [])
 
                 def url(path):  # none for a started bolt's work, whose places are Flume's (crew-board, _open.md)
                     return (sites.url_of(fleet, here, t["machine"], k.get("sites", {}).get(path, {}), k.get("routes"))[0]
                             if path and k and not crossed else None)
-
-                def slot(kind, name):
-                    return next((s["slot"] for s in held if s.get("kind") == kind and s.get("name") == name), None)
                 state = st.bolt_state(b) if t else "unknown"
                 crossed = t is not None and b.get("Path") == "flume"
                 fixes = [f for f in k.get("fixes", []) if f["bolt"] == b.name()] if not crossed else []
@@ -322,9 +318,9 @@ def board_data(fleet, labels, read, now):
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
-                                            "slot": slot(plan.kind_of(u), u.name()), "submission": subs.get(u.name()),
+                                            "slot": None, "submission": subs.get(u.name()),
                                             "worktree": s["worktree"], "url": url(s["worktree"]), "flume": s.get("flume")})
-                ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "submission": subs.get(f["fix"]),
+                ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": None, "submission": subs.get(f["fix"]),
                                     "worktree": f["path"], "url": url(f["path"]), "flume": None} for f in fixes]
                 ledger["fixes"] += [{"fix": w, "merged": x["stage"] in ("merged", "landed"), "slot": None, "submission": None, "worktree": None,
                                      "url": None, "flume": x} for w, _, x in (st.fixes(b) if crossed else [])]

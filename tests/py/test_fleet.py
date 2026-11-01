@@ -196,30 +196,22 @@ class TestKits:
 
 
 class TestTeams:
-    def test_a_team_at_work_shows_its_bolt_each_slot_and_how_many_are_at_work(self):
-        """fleet-page "A team at work": unit-1 at work on code of x, unit-2 holding y with no stage running, a fix's
-        slot at work, a slot whose start was refused free, 2 of 4 at work, and the conductor waiting on the stages."""
+    def test_a_team_shows_its_bolt_and_each_slot_holding_or_free_none_at_work(self):
+        """fleet-page "A team at work", with crew running no stage: each slot holding its unit, chore or fix with no
+        stage running, or free, none of 4 at work, and the conductor waiting on nothing."""
         crw6 = team_of(of(fleet(), "swancloud"), "crw-6")
         assert (crw6["host"], crw6["session"], crw6["account"], crw6["kits"]) == ("deneb", "swancloud-2", "madswan-2", ["crew"])
         b, = crw6["bolts"]
         assert (b["pips"], b["merged"], b["said"]) == ("●◑◕", "1 of 3 merged", "●◑◕ b · 1 of 3 merged")
-        assert [s["said"] for s in crw6["slots"]] == ["unit-1 at work: code of x", "unit-2 holding y (verify), no stage running",
-                                                     "unit-3 at work: code of fix/b/edge", "unit-4 free"]
-        assert [(s["state"], s.get("kind"), s.get("since")) for s in crw6["slots"]] == [
-            ("work", "unit", "2026-10-23T10:00:00Z"), ("held", "unit", None), ("work", "fix", "2026-10-23T11:00:00Z"), ("free", None, None)]
-        assert (crw6["at_work"], crw6["at_work_said"]) == (2, "2 of 4 slots at work")
-        assert crw6["waits"] == {"on": "stages", "stages": ["code of x", "code of fix/b/edge"], "said": "waits on 2 stages: code of x, code of fix/b/edge"}
+        assert [s["said"] for s in crw6["slots"]] == ["unit-1 holding x (code), no stage running", "unit-2 holding y (verify), no stage running",
+                                                     "unit-3 holding fix/b/edge, no stage running", "unit-4 free"]
+        assert [(s["state"], s.get("kind")) for s in crw6["slots"]] == [("held", "unit"), ("held", "unit"), ("held", "fix"), ("free", None)]
+        assert (crw6["at_work"], crw6["at_work_said"]) == (0, "0 of 4 slots at work")
+        assert crw6["waits"] == {"on": "nothing", "said": "waits on nothing"}
 
-    def test_a_slot_whose_stage_ended_holds_its_chore_and_a_merge_of_a_fix_is_its_merge(self):
+    def test_a_slot_holds_its_chore(self):
         crw7 = team_of(of(fleet(), "swancloud"), "crw-7")
         assert [s["said"] for s in crw7["slots"]] == ["unit-1 holding chore m (verify), no stage running", "unit-2 free"]
-        logs = {"swancloud": LOGS["swancloud"] + [entry("fix.merge", ["fix/b/edge", "bolt/b", "agent/crw-7-unit-2"], "2026-10-23T11:30:00Z")]}
-        crw7 = team_of(of(fleet(logs=logs), "swancloud"), "crw-7")
-        assert crw7["slots"][1]["said"] == "unit-2 at work: merge of fix/b/edge" and crw7["waits"]["said"] == "waits on 1 stage: merge of fix/b/edge"
-
-    def test_a_stage_started_before_the_window_is_not_seen(self):
-        logs = {"swancloud": [entry("stage.start", ["stage/m/code", "chore/m", "agent/crw-7-unit-2"], "2026-10-10T08:00:00Z")]}
-        assert team_of(of(fleet(logs=logs), "swancloud"), "crw-7")["slots"][1]["state"] == "free"
 
     def test_a_team_whose_bolt_waits_to_land_waits_on_the_landing_on_the_users_word(self):
         """fleet-page "A team whose bolt waits to land"."""
@@ -428,20 +420,19 @@ class TestSubscriptions:
             "under a minute ago", "under a minute ago", "2 min ago", "59 min ago", "1 h ago", "1 h 5 min ago", "under a minute ago"]
 
 
-
 class TestOnASubscription:
     def test_two_partitions_on_one_subscription_each_session_with_its_agents_and_its_teams_work(self):
-        """fleet-page "Two partitions on one subscription" and "A session crew runs nothing in": mad-1 with 1 of 4 slots
-        at work in deneb's madswan, swancloud's main level in its swancloud, and swancloud-3 and agentplot-2 running none."""
-        logs = dict(LOGS, madswan=[entry("stage.start", ["stage/k/code", "unit/k", "agent/mad-1-unit-1"], "2026-10-23T11:30:00Z")])
-        m = subs(logs=logs)["madswan"]
+        """fleet-page "Two partitions on one subscription" and "A session crew runs nothing in": mad-1 with none of its
+        slots at work in deneb's madswan, swancloud's main level in its swancloud, and swancloud-3 and agentplot-2 running
+        none."""
+        m = subs()["madswan"]
         assert [(s["host"], s["session"], s["agents"], s["said"]) for s in m["sessions"]] == [
             ("deneb", "madswan", ["mad-1", "madswan-design", "madswan-planner", "madswan-ops", "madswan-operator", "madswan-dispatch-deneb"],
              "mad-1, madswan-design, madswan-planner, madswan-ops, madswan-operator, madswan-dispatch-deneb"),
             ("deneb", "swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"],
              "swancloud-design, swancloud-planner, swancloud-ops, swancloud-operator, swancloud-dispatch-deneb"),
             ("deneb", "swancloud-3", [], "runs no crew agent"), ("deneb", "agentplot-2", [], "runs no crew agent")]
-        assert m["sessions"][0]["teams"] == [{"team": "mad-1", "at_work_said": "1 of 4 slots at work", "waits_said": "waits on 1 stage: code of k"}]
+        assert m["sessions"][0]["teams"] == [{"team": "mad-1", "at_work_said": "0 of 4 slots at work", "waits_said": "waits on nothing"}]
         assert [s["teams"] for s in m["sessions"][1:]] == [[], [], []]
         assert (m["partitions"], m["sessions_said"], m["partitions_said"]) == ([{"label": "madswan", "link": None}, {"label": "swancloud", "link": None}], None, None)
 
@@ -467,7 +458,6 @@ class TestOnASubscription:
         assert page.agents_in(FLEET, "swancloud") == {
             ("deneb", "swancloud-2"): ["crw-6"], ("mac-studio", "swancloud-4"): ["crw-7", "swancloud-dispatch-mac-studio"],
             ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"]}
-
 
 
 class TestTheSection:

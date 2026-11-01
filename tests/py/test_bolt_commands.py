@@ -375,34 +375,6 @@ class TestLand:
             "a-console-filter have not: a batch is due for them (crew review wldn)")
 
 
-class TestQueuedLanding:
-    """bolt-teams "A unit during a queued landing" (plan.8, record 0032 §3): no construct, code or merge starts on a
-    bolt while its landing's worktree stands with LANDING's process alive in it, the submission in sluice's queue."""
-    PATH = "/kit/places/land-b"
-
-    def refusal(self, stage="construct", standing=True, alive=True, kind="unit"):
-        return plan.landing_refusal(kind, "u", stage, "b", self.PATH, standing, alive)
-
-    @pytest.mark.parametrize("stage", ["construct", "code", "merge"])
-    def test_a_unit_during_a_queued_landing_is_refused_naming_the_landing(self, stage):
-        assert self.refusal(stage) == (
-            f"bolt b's landing is queued in sluice, submitted from /kit/places/land-b: unit u's {stage} starts once it has "
-            "landed or been refused, since what merges into bolt/b meanwhile is left out of main's landing")
-
-    def test_a_chores_code_and_merge_wait_alike(self):
-        assert self.refusal("code", kind="chore").startswith("bolt b's landing is queued in sluice, submitted from /kit/places/land-b: chore u's code")
-
-    @pytest.mark.parametrize("stage", ["verify", "settle"])
-    def test_a_stage_that_moves_nothing_toward_the_bolt_starts(self, stage):
-        assert self.refusal(stage) is None
-
-    def test_once_sluices_outcome_is_in_a_worktree_left_standing_holds_nothing(self):
-        # A landing git could not remove, or one stopped, leaves its worktree with no process: the fix that takes main
-        # into a refused bolt starts, as does every unit.
-        assert self.refusal(alive=False) is None
-        assert self.refusal(standing=False, alive=False) is None
-
-
 class TestMergesHoldThePullRequest:
     """A merge into the bolt and a fix's start hold the bolt's landing pull request (bolt-teams "A fix's start holds the
     pull request with the card", "A merge into the bolt does not land it", "A merge that can't hold the pull request

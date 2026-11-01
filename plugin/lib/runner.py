@@ -28,6 +28,7 @@ it is the retry of its submission, made once (send_refusal, sent_of).
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
 import json
+import os
 import re
 
 def runnerless(label, host, tips):
@@ -403,6 +404,20 @@ def stage_of(work, launch, answer, place, read, after=()):
     return dict(res, stage=f["current"])
 
 
+def working(reading):
+    """The places a host's runner carries Flume's status of whose current stage is working, begun with its phase live
+    (flume_facts), from reading, host_read's, read: (each place's folder name, in its launches' order, None), or (None,
+    why one of them can't be read) (read.1)."""
+    out = []
+    for n, p in sorted((reading.get("places") or {}).items()):
+        if p.get("why"):
+            return None, p["why"]
+        f = flume_facts(p.get("status"), p.get("place"))
+        if f is not None and f["phase"] == "live" and f["state"] == "begun":
+            out.append(os.path.basename(p["place"].rstrip("/")))
+    return out, None
+
+
 # --------------------------------------------------------------------------- a bolt given through Flume as it is shown
 
 def stream_said(stream):
@@ -448,9 +463,8 @@ def work_of(u):
 
 
 def brief(u):
-    """A launch's brief for a unit or chore (Decision 5): the work's own words as crew's prompts give them, less what
-    the stage itself is told, which is its kind's: a unit's intent with its sources, as stage_prompt gives construct,
-    and a chore's words, as chore_prompt gives code."""
+    """A launch's brief for a unit or chore (Decision 5): the work's own words, less what the stage itself is told,
+    which is its kind's: a unit's intent with its sources, and a chore's words."""
     sources = u.all("Source") if u.get("Kind") != "chore" else []
     return (u.get("Intent") or "") + (" Sources: " + "; ".join(sources) + "." if sources else "")
 

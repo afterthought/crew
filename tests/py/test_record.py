@@ -267,6 +267,16 @@ class TestTrace:
         assert record.line(entry("x", "2026-10-05T10:00:00Z", "bolt.land", ["bolt/b", "unit/a"], Repo="switchboard-kit", Head="c" * 40)).endswith(
             "bolt/b unit/a → switchboard-kit main at ccccccc")
 
+    def test_a_stage_end_and_a_slot_free_from_before_crew_stopped_driving_stages_print_as_written(self):
+        """crew writes no stage.* entry and no slot.free now (design Decision 8 of the-team-machinery-leaves), and crew
+        trace prints the ones on the branch as written, with what each recorded."""
+        end = entry("20261005T120000Z-box-4-1", "2026-10-05T12:00:00Z", "stage.end", ["stage/u/code", "unit/u", "agent/swb-1-unit-1"],
+                    Result="ticked", Tasks="2/2", Head="ccccccc", Ended="delivered", Delivered="unit/u@ccccccc")
+        free = entry("20261005T121000Z-box-5-1", "2026-10-05T12:10:00Z", "slot.free", ["unit/u", "agent/swb-1-unit-1"], Paths="/kit/places/u")
+        assert [e["Act"] for e in record.lineage(E + [end, free], "unit/u")][-3:] == ["stage.end", "stage.end", "slot.free"]
+        assert record.line(end).endswith("stage/u/code unit/u agent/swb-1-unit-1 → ticked 2/2, delivered unit/u@ccccccc")
+        assert record.line(free).endswith("unit/u agent/swb-1-unit-1 (removed /kit/places/u)")
+
 
 class TestEvents:
     def test_events_are_shown_from_a_time_narrowed_to_one_object_and_a_branch_not_read_named(self):

@@ -59,8 +59,8 @@ def hosts_named(fleet, which):
 
 def crew_wait(command):
     """Whether a background command is one of crew's waits, which only reads and which the agent starts again after a
-    restart: crew unit wait, crew chore wait, crew fix ... --wait, crew review ... --wait, and any other crew command
-    ending in a wait, a card's wait from before crew kept none among them (teams.24)."""
+    restart: crew review ... --wait, and any other crew command ending in a wait, a stage's or a card's wait from
+    before crew kept none among them (teams.24)."""
     return bool(command and re.search(r"(^|[\s/;&|(])crew\s", command) and re.search(r"(^|\s)(--)?wait(\s|$)", command))
 
 
@@ -244,16 +244,15 @@ def tell_each(fleet, names, text):
 
 def take_down(fleet, force):
     """Every crew agent on this host ended, its pane kept, so a restart of herdr brings back only shells, which crew go
-    revives (teams.19): an agent working is left and said unless force, and a slot's stage still owed its end ends with
-    its agent (Agents.stop). Returns what could not be ended."""
+    revives (teams.19): an agent working is left and said unless force (Agents.stop). Returns what could not be
+    ended."""
     left, host = [], crew.this_host()
     for a in agents_on_host(fleet):
         a.force = force
-        end = plan.ending(fleet, a.t) if isinstance(a, crew.Team) else None
         for role in roles_of(a):
             if not a.status(role):
                 continue
-            why = a.stop(role, end)
+            why = a.stop(role)
             if why:
                 left.append(why)
             else:

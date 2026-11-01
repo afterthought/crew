@@ -1,14 +1,11 @@
 """The chore kind (the chores spec, plan.11, signals.7): a Unit record marked Kind: chore, written by the unit's commands
-and hands, its stage read from its kit, its stages decided, ended and freed, counted wherever work in a bolt is, and
-carried by a proposal whose card lets each be left out. That crew chore run takes a slot, makes the place and sends the
-prompt, and that a chore's waits, merge and trace go through the command, is the chores journey's (t-journey-chores);
-that git reads a chore's trailer as crew assumes, the contract tier's."""
+and hands, its stage read from its kit, counted wherever work in a bolt is, and carried by a proposal whose card lets
+each be left out. That git reads a chore's trailer as crew assumes is the contract tier's."""
 import argparse
-import datetime
 
 import pytest
 
-from facts import FLEET, START, FactsWrite, apply, known, owed, plan_text, units_of
+from facts import FLEET, FactsWrite, apply, known, plan_text, units_of
 
 import cards
 import plan
@@ -179,19 +176,6 @@ class TestStage:
     def test_a_chores_stage_is_read_from_its_kit(self, k, stage):
         assert stages(k).of("bump")["stage"] == stage
 
-    @pytest.mark.parametrize("bolt, places, stage, carried", [
-        ({"changes": ["a"], "archived": ["a"]}, {}, "merged", False),
-        ({"changes": ["a"], "archived": [], "open": {"a": [2, 2]}}, {"a": {"path": "/kit/places/a", "tasks": [2, 2], "planning": True, "open": [], "head": "h"}}, "verify", True),
-        ({"changes": ["a"], "archived": [], "open": {"a": [1, 2]}}, {}, "code", True)],
-        ids=["archived on the bolt", "open on it, its place kept", "open on it, its place gone"])
-    def test_a_unit_has_merged_only_once_its_bolt_holds_its_change_archived(self, bolt, places, stage, carried):
-        # teams.17: a unit carried onto its bolt inside another unit's merge reads at its own stage, its merge owed.
-        k = kit()
-        k["bolts"][TE].update(bolt)
-        k["places"] = places
-        s = stages(k).of("a")
-        assert (s["stage"], bool(s.get("carried"))) == (stage, carried)
-
     def test_a_place_that_tracks_no_bolt_is_unknown(self):
         s = stages(kit(places={"bump": place(None)})).of("bump")
         assert (s["stage"], s["why"]) == ("unknown", "chore bump's place /kit/places/chore-bump tracks no bolt crew can read")
@@ -207,18 +191,6 @@ class TestStage:
                       "open": [], "bolt": TE}
         assert stages(dict(kit(), places={"a": unit_place}), text).of("bump")["stage"] == "ready"
 
-    def test_a_dependents_place_takes_each_unmerged_unit_or_chore_it_comes_after_and_its_start_records_the_heads(self):
-        text = plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore"), ("b", KIT, TE, ["a", "bump"]),
-                                             ("pin", KIT, TE, ["bump"], "chore")])
-        unit_place = {"path": "/kit/places/a", "head": "a" * 40, "head_at": "2026-10-12T10:00:00Z", "tasks": (0, 2), "planning": True,
-                      "open": [], "bolt": TE}
-        k = dict(kit(places={"bump": place(1)}), places={"a": unit_place})
-        st = stages(k, text)
-        assert plan.took_from(st, k, st.plan.unit("b")) == ["unit/a", "chore/bump"]
-        assert plan.took_from(st, k, st.plan.chore("pin")) == ["chore/bump"]
-        code = {"Act": "stage.start", "On": ["stage/pin/code", "chore/pin"], "Took": "bump@1111111", "At": "2026-10-12T10:00:00Z", "Id": "x"}
-        assert plan.took_heads("pin", [code]) == {"bump": "1111111"}
-
     @pytest.mark.parametrize("deps, met", [
         ([("unit", "construct")], False), ([("unit", "planned")], True), ([("unit", "merged"), ("chore", "landed")], True),
         ([("chore", "code")], False), ([("chore", "verify")], True), ([("chore", "ready")], False), ([("unit", "unknown")], None)])
@@ -231,69 +203,6 @@ class TestStage:
         assert st.bolt_state(p.bolt(TE)) == "active"
         st = plan.Stages(STAGE_FLEET, p, {"box": {"ok": True, "kits": {"/kit/main": kit(chores=["bump"], changes=["a"])}}})
         assert st.bolt_state(p.bolt(TE)) == "landed"
-
-
-class TestRun:
-    @pytest.mark.parametrize("stage, st, after, verified, said", [
-        ("code", "ready", {}, False, None),
-        ("code", "verify", {}, False, None),
-        ("verify", "verify", {}, False, None),
-        ("merge", "verify", {"a": ("unit", "merged")}, True, None),
-        ("code", "ready", {"a": ("unit", "verify")}, False, None),
-        ("code", "waiting", {"a": ("unit", "construct")}, False, "chore bump is waiting: it comes after a, which has nothing committed to build on yet"),
-        ("merge", "verify", {"a": ("unit", "verify"), "pin": ("chore", "verify")}, True, f"chore bump merges after a, pin, not yet merged into bolt/{TE}"),
-        ("verify", "code", {}, False, f"chore bump has nothing committed beyond bolt/{TE} yet: verify waits for its code"),
-        ("verify", "ready", {}, False, "chore bump has not been coded yet: crew chore run bump code"),
-        ("merge", "code", {}, False, f"chore bump has nothing committed beyond bolt/{TE} yet: it merges once its code is committed and its verify has delivered"),
-        ("merge", "verify", {}, False, "chore bump merges once its verify has delivered: crew chore run bump verify"),
-        ("code", "merged", {}, False, "chore bump has merged into its bolt: a defect in it is a fix (crew fix), and new maintenance a new chore"),
-        ("construct", "ready", {}, False, "a chore has no construct: its stages are code, verify and merge (crew chore run bump code)")])
-    def test_chore_refusal(self, stage, st, after, verified, said):
-        assert plan.chore_refusal("bump", TE, stage, st, after, verified) == said
-
-    @pytest.mark.parametrize("kind, chore, stage, said", [
-        ("chore", False, "construct", "bump is a chore, which has no construct: its stages are code, verify and merge (crew chore run bump code)"),
-        ("chore", False, "code", "bump is a chore: crew chore run bump code"),
-        ("unit", True, "code", "bump is a unit: crew unit run bump code"),
-        ("chore", True, "code", None), ("unit", False, "construct", None)])
-    def test_a_stage_asked_of_the_other_kind_is_refused(self, kind, chore, stage, said):
-        assert plan.run_kind_refusal(kind, chore, "bump", stage) == said
-
-    @pytest.mark.parametrize("stage, words, prompt", [
-        ("code", "", "Chore bump: Biome follows the shell."),
-        ("code", "Fix the finding: x.", "Chore bump: Biome follows the shell. Fix the finding: x."),
-        ("verify", "", "Verify chore bump: Biome follows the shell."),
-        ("merge", "", f"Merge bump into bolt/{TE}: sluice submit bolt/{TE} --no-wait --json")])
-    def test_its_prompts(self, stage, words, prompt):
-        assert plan.chore_prompt(stage, "bump", "Biome follows the shell.", words, TE, plan.merge_command(TE)) == prompt
-
-    def test_a_merge_is_refused_for_each_commit_without_the_trailer(self):
-        commits = [("a1b2c3d", "chore: bump biome", ["bump"]), ("e4f5a6b", "chore: and its lock", []), ("c7d8e9f", "chore: other", ["pin"])]
-        assert plan.untrailed(commits, "bump") == [("e4f5a6b", "chore: and its lock"), ("c7d8e9f", "chore: other")]
-
-    def test_a_unit_waiting_on_a_chore_names_it(self):
-        assert plan.stage_refusal("b", TE, "construct", "ready", None, {"bump": "verify", "a": "planned"}, ("user", None), "swb-1", [],
-                                  False, False, chores={"bump"}) is None
-        assert plan.stage_refusal("b", TE, "construct", "waiting", None, {"bump": "code", "a": "construct"}, ("user", None), "swb-1", [],
-                                  False, False, chores={"bump"}) == (
-            "unit b is waiting: it comes after a, whose change is not committed yet; and chore bump, whose code has not delivered yet")
-
-
-class TestEnds:
-    def test_a_chores_stage_is_owed_on_its_own_objects(self):
-        o = owed("code", name="bump", obj="chore/bump")
-        assert (o.chore, o.fix, o.branch(), o.phrase()) == (True, False, "chore/bump", "code on chore bump")
-        assert o.on() == ["stage/bump/code", "chore/bump", "agent/swb-1-unit-1"] and o.why("delivered") == "chore(bump): code ended"
-
-    def test_code_delivers_a_commit_on_its_branch_since_it_began(self):
-        o = owed("code", name="bump", obj="chore/bump")
-        later = START + datetime.timedelta(minutes=3)
-        assert plan.delivered(o, {"head": "abc1234", "at": later}) == ("chore/bump@abc1234", "its branch is at abc1234")
-        assert plan.delivered(o, {"head": "abc1234", "at": START - datetime.timedelta(minutes=3)}) == (None, "nothing committed since it began")
-
-    def test_merge_delivers_the_bolt_holding_its_trailer(self):
-        o = owed("merge", name="bump", obj="chore/bump")
-        assert plan.delivered(o, {"bolt": TE, "holds": True, "bolt_head": "1234567"}) == (f"bolt/{TE}@1234567", f"bolt/{TE} holds it at 1234567")
 
 
 class TestSlotsAndPlaces:

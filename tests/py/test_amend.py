@@ -1,9 +1,7 @@
-"""A unit amended in flight (plan.6, plan.15, roles.1): crew unit amend on a plan in memory with the unit's stage
-given, who may write it (plan.may_write), plan.construct_again for the construct the amendment hands to its team's
-host, plan.handed_state for where that construct stands for crew unit wait (code.9), plan.amend_told for what its
-conductor is told, and plan.in_step for a plan whose descriptors predate the mark. That the
-amendment's construct starts in the applier's name and its wait clears the mark is the journey's (t-journey-prompts);
-an amendment through a proposal, the proposals journey's (t-journey-plan)."""
+"""A unit amended in flight (plan.6, roles.1): crew unit amend on a plan in memory with the unit's stage given, who
+may write it (plan.may_write), an amendment reaching a started bolt's place as a retry of its construct, and
+plan.in_step for a plan whose descriptors predate the mark. An amendment through a proposal is the proposals journey's
+(t-journey-plan)."""
 import json
 import pathlib
 
@@ -57,60 +55,6 @@ class TestWho:
     def test_the_user_does(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "chuck@mac-studio")
         assert plan.may_write(FLEET, ("unit", "amend"), None) is None
-
-
-class TestConstructAgain:
-    @pytest.mark.parametrize("stage", ["planned", "code", "verify"])
-    def test_an_agent_past_construct_is_ended_where_it_stands(self, stage):
-        assert plan.construct_again("swb-1", "coding", stage, "proposal 4") == [
-            "_construct-again", "swb-1", "coding", "--by", "proposal 4", "--force"]
-
-    def test_a_construct_still_writing_the_change_is_not_ended(self):
-        assert plan.construct_again("swb-1", "coding", "construct", "the user") == [
-            "_construct-again", "swb-1", "coding", "--by", "the user"]
-
-
-class TestHanded:
-    """An amendment's command answers once its construct is handed to the team's host (plan.15, code.9); crew unit wait
-    reads where that construct stands from its marker there."""
-
-    def test_nothing_handed_or_one_that_started_leaves_the_wait_to_the_stage(self):
-        assert plan.handed_state("b", None, False, 100.0) == (None, None)
-
-    def test_one_whose_process_is_alive_or_not_yet_named_is_starting(self):
-        said = "construct on unit b is starting on this host, handed there by proposal 4"
-        assert plan.handed_state("b", {"by": "proposal 4", "at": 100.0, "pid": 7}, True, 500.0) == ("starting", said)
-        assert plan.handed_state("b", {"by": "proposal 4", "at": 100.0}, False, 100.0 + plan.HAND_NAMED - 1) == ("starting", said)
-
-    def test_one_that_could_not_start_says_why(self):
-        assert plan.handed_state("b", {"by": "the user", "at": 1.0, "pid": 7, "failed": "swb-1 is down"}, False, 2.0) == (
-            "failed", "construct did not start on unit b: swb-1 is down")
-
-    def test_one_whose_process_ended_or_never_named_itself_is_gone(self):
-        gone = ("gone", "construct handed to this host for unit b ended before it said whether it started (its words are "
-                        "in /s/handed/b.log): crew unit run b construct runs it")
-        assert plan.handed_state("b", {"by": "the user", "at": 1.0, "pid": 7, "log": "/s/handed/b.log"}, False, 2.0) == gone
-        assert plan.handed_state("b", {"by": "the user", "at": 1.0, "log": "/s/handed/b.log"}, False, 1.0 + plan.HAND_NAMED) == gone
-
-
-class TestTold:
-    def test_the_conductor_waits_for_the_construct_that_started(self):
-        assert plan.amend_told("coding", "the user", "swb-1-unit-1") == (
-            "Unit coding's intent was amended by the user, and construct runs again on it in swb-1-unit-1: wait for it "
-            "(crew unit wait coding); once it has committed, the unit goes on from its tasks.",
-            "construct runs again on unit coding in swb-1-unit-1")
-
-    def test_one_that_did_not_start_says_why_and_names_no_card(self):
-        text, unsaid = plan.amend_told("in-verify", "proposal 1", None, "chuck-herdr-alpha did not answer (ssh: timed out)")
-        assert text == ("Unit in-verify's intent was amended by proposal 1, and construct did not start: chuck-herdr-alpha did "
-                        "not answer (ssh: timed out). Run it once it can (crew unit run in-verify construct); once it has "
-                        "committed, the unit goes on from its tasks.")
-        assert unsaid == "unit in-verify waits, amended, for construct to be run again"
-
-    def test_a_team_taken_down_is_said(self):
-        assert plan.amend_told("c", "the user", None, "swb-1 is down; crew up swb-1 brings it back")[0].endswith(
-            "construct did not start: swb-1 is down; crew up swb-1 brings it back. Run it once it can (crew unit run c "
-            "construct); once it has committed, the unit goes on from its tasks.")
 
 
 def test_a_plan_from_before_the_mark_is_brought_in_step_once():

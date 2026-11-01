@@ -543,19 +543,6 @@ class TestIdentityOnItsHost:
         assert "runs, crew has done nothing. In this session" in said
 
 
-class TestAmended:
-    def test_a_conductor_brought_back_is_told_each_unit_waiting_amended(self):
-        assert plan.amended_said(["amended-one"], []) == (
-            "Unit amended-one was amended and no construct runs on it: run construct on it now (crew unit run amended-one construct).")
-        assert plan.amended_said(["a", "b"], []).startswith("Units a, b were amended and no construct runs on them")
-        assert plan.amended_said([], []) == ""
-
-    def test_a_plan_crew_cannot_read_is_said_rather_than_name_no_unit(self):
-        assert plan.amended_said([], ["wldn/main of WilldanGroup/crew-state could not be read: could not\nfetch wldn/main"]) == (
-            "crew could not read whether a unit of your bolt waits amended (wldn/main of WilldanGroup/crew-state could not be read: "
-            "could not fetch wldn/main): read crew bolts.")
-
-
 def test_a_partition_crew_does_not_know_is_refused_and_one_with_no_teams_has_no_dispatcher():
     with pytest.raises(crew.Refusal, match="no partition 'nope'. partitions: wldn"):
         crew.partition_of(FLEET, "nope")
@@ -594,8 +581,3 @@ class TestStandingCommands:
     def test_clear_is_sent_only_to_an_agent_that_is_up_and_not_working_unless_forced(self, status, force, said):
         assert crew.clear_refusal("swb-1-ops", status, force) == said
 
-    @pytest.mark.parametrize("who, found", [
-        ("swb-1-unit-4", ("swb-1", "unit-4")), ("swb-1-ops", ("swb-1", "ops")), ("swb-1-conductor", ("swb-1", "conductor")),
-        ("swb-2-unit-1", ("swb-2", "unit-1")), ("swb-1-unit-0", None), ("wldn-planner", None), ("chuck@mac-studio", None)])
-    def test_needs_reads_its_team_and_slot_from_the_agents_name(self, who, found):
-        assert crew.stage_agent(["swb-1", "swb-2", "atl-1"], who) == found

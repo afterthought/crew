@@ -91,27 +91,6 @@ class TestPlace:
         assert plan.own_place("/p", on, up, "fix/t/x", "t", "drops a fix") == said + ": crew drops a fix only in its own place"
 
 
-class TestNeverStarted:
-    @pytest.mark.parametrize("stage, what, obj, again", [
-        ("code", "a", "unit/a", "crew unit run a code"),
-        ("fix", "fix/t/edge", "fix/t/edge", 'crew fix swb-1 edge "<what is wrong>"'),
-        ("merge", "fix/t/edge", "fix/t/edge", "crew fix swb-1 edge --merge")])
-    def test_a_prompt_never_taken_names_how_to_run_the_stage_again(self, stage, what, obj, again):
-        assert crew.never_started("swb-1-unit-1", stage, what, obj, "swb-1", "never", "sent twice") == (
-            f"swb-1-unit-1 never took its {stage} prompt for {what}, sent twice; the stage never started and nothing is left "
-            f"typed in its pane: run it again with {again}")
-
-    def test_a_fix_whose_agent_stayed_on_a_question_was_typed_nothing(self):
-        assert crew.never_started("swb-2-unit-3", "fix", "fix/c/n", "fix/c/n", "swb-2", "never", "as it was waiting on a question in its pane") == (
-            "swb-2-unit-3 never took its fix prompt for fix/c/n, as it was waiting on a question in its pane; the stage never "
-            'started and nothing is left typed in its pane: run it again with crew fix swb-2 n "<what is wrong>"')
-
-    def test_one_crew_could_not_tell_was_taken_sends_nothing_more(self):
-        assert crew.never_started("swb-1-unit-1", "merge", "a", "unit/a", "swb-1", "unread", "it is waiting on a question in its pane") == (
-            "crew could not tell whether swb-1-unit-1 took its merge prompt for a: it is waiting on a question in its pane; "
-            "nothing more was sent, and the stage is taken as never started: run it again with crew unit run a merge")
-
-
 class TestUnready:
     """A fix's agent starts in a place that could not be made ready, told what failed (teams.3, record 0028)."""
 

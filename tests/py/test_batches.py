@@ -460,22 +460,6 @@ class TestBatchFacts:
         assert plan.batch_facts(3, held, SUMMARY, {}) is None
 
 
-@pytest.mark.parametrize("stage, fix, then", [
-    ("construct", False, ["batch"]),
-    ("construct", True, []),
-    ("code", False, []),
-    ("verify", False, []),
-    ("merge", False, ["landing", "batch", "tidy"]),
-    ("merge", True, ["landing", "batch", "tidy"]),
-])
-def test_a_merge_reckons_a_batch_as_a_construct_does(stage, fix, then):
-    """A wait's end reckons a batch after a construct's change and after a merge (briefs.12): a bolt whose last unit
-    merged leaves its conductor waiting on nothing, so no later wait would tell the planner its batch is due at once, as
-    on 2026-10-19, when every-deploy-has-its-live-card and swc-1's bolt sat merged two hours with no batch begun; and
-    a merge's end removes its place and branch as it lands, for the same reason (teams.1, plan.9)."""
-    assert plan.after_delivery(stage, fix) == then
-
-
 def test_the_rails_sweep_reckons_a_batch_for_the_teams_on_its_host():
     """The rail's sweep reckons each partition's batch for its teams on this host holding a bolt, in the plan's order
     (briefs.12), so a bolt whose units have all merged reaches the planner with no conductor waiting; a team elsewhere,

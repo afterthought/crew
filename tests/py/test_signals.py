@@ -159,10 +159,6 @@ class TestWhere:
         p = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2"), ("smoke-3", "switchboard-kit", "swb-2")]))
         assert plan.where_of(FLEET, "swb-2-conductor", p) == "team swb-2, bolt smoke-2, bolt smoke-3"
 
-    def test_a_slot_agents_own_stage_prompts_are_its_conductors_and_no_one_elses_are(self):
-        assert plan.stage_by(FLEET, "swb-2-unit-1") == "swb-2-conductor"
-        assert [plan.stage_by(FLEET, n) for n in ("swb-2-ops", "swb-2-conductor", "wldn-planner")] == [None, None, None]
-
     def test_a_session_on_another_host_is_not_read_here(self):
         assert plan.session_here("chuck-herdr-alpha:s-1", "chuck-herdr-alpha") == ("s-1", None)
         assert plan.session_here("mac-studio:s-1", "chuck-herdr-alpha") == ("s-1", "session s-1 is on mac-studio, not chuck-herdr-alpha")

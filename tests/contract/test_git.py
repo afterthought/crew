@@ -9,25 +9,10 @@ import time
 import pytest
 
 
-def test_a_first_parent_log_leaves_out_a_siblings_work_taken_by_a_merge(repo):
-    """plan.undeclared (teams.12): a unit's own paths are its first-parent commits beyond its bolt; a sibling unit's
-    work its place took by a merge, to settle a forecast, is behind the merge's second parent."""
-    repo.commit("main", {"README": "r\n"})
-    repo.git("branch", "bolt")
-    repo.git("checkout", "-q", "-b", "sibling", "bolt")
-    repo.commit("feat(sibling)", {"plugin/lib/plan.py": "sibling\n"})
-    repo.git("checkout", "-q", "-b", "unit", "bolt")
-    repo.commit("feat(unit)", {"docs/unit.md": "unit\n"})
-    repo.git("merge", "-q", "--no-ff", "sibling", "-m", "chore: take sibling's work")
-    mine = repo.git("log", "--format=", "--name-only", "--no-merges", "--first-parent", "unit", "--not", "refs/heads/bolt")
-    every = repo.git("log", "--format=", "--name-only", "--no-merges", "unit", "--not", "refs/heads/bolt")
-    assert set(mine.split()) == {"docs/unit.md"}
-    assert set(every.split()) == {"docs/unit.md", "plugin/lib/plan.py"}
-
-
 def test_merge_tree_names_the_conflicting_paths_and_writes_no_ref(repo):
-    """plan's forecast (teams.12): git merge-tree --write-tree --name-only exits 1 on a conflict and lists the
-    conflicting paths after the tree, and moves no ref."""
+    """plan.forecast_rows, the landings card's forecast of its rows (rail-cards "The landings card forecasts each row's
+    conflicts"): git merge-tree --write-tree --name-only exits 1 on a conflict and lists the conflicting paths after
+    the tree, and moves no ref."""
     repo.commit("main", {"a": "1\n"})
     repo.git("checkout", "-q", "-b", "one")
     repo.commit("one", {"a": "one\n"})
@@ -40,45 +25,6 @@ def test_merge_tree_names_the_conflicting_paths_and_writes_no_ref(repo):
     lines = r.stdout.splitlines()
     assert lines[1] == "a"
     assert repo.git("for-each-ref") == refs
-
-
-def dependency_rebased(repo, own=None):
-    """A dependency a and a dependent b whose place took a's head and added its own commit (own, else one of b's own
-    files); then the bolt moves, a is rebased onto it, new hashes, and its settle revises a's own work. Returns the
-    head b took, which crew records as the construct's Took."""
-    repo.commit("main", {"shared.txt": "one\ntwo\nthree\n"})
-    repo.git("branch", "bolt")
-    repo.git("checkout", "-q", "-b", "a", "bolt")
-    took = repo.commit("feat(a): its change", {"a/design.md": "z\n", "shared.txt": "one\ntwo, as a has it\nthree\n"})
-    repo.git("checkout", "-q", "-b", "b", "a")
-    repo.commit("feat(b): its change", own or {"b/design.md": "y\n"})
-    repo.git("checkout", "-q", "bolt")
-    repo.commit("feat: the bolt's own", {"bolt.txt": "the bolt\n"})
-    repo.git("checkout", "-q", "a")
-    repo.git("rebase", "-q", "bolt")
-    repo.commit("fix(a): settled on the bolt", {"a/design.md": "z, as it stands on the bolt\n",
-                                                "shared.txt": "one\ntwo, as a has it, settled\nthree\n"})
-    assert repo.git("merge-base", "a", "b") != took
-    return took
-
-
-def test_merge_tree_from_the_head_a_dependent_took_leaves_out_its_dependencys_own_work(repo):
-    """plan.forecasts_due through plan.merge_tree (teams.12, plan.13): from their merge base, the bolt both started on,
-    a dependent carrying its dependency's old commits conflicts with the dependency rebased and settled on the
-    dependency's own files; git merge-tree --merge-base=<the head it took> (git 2.40+) compares only what the dependent
-    adds beyond it, and finds no conflict."""
-    import plan
-    took = dependency_rebased(repo)
-    assert plan.merge_tree(str(repo.path), "a", "b") == ["a/design.md", "shared.txt"]
-    assert plan.merge_tree(str(repo.path), "a", "b", took) == []
-
-
-def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overlap(repo):
-    """plan.forecasts_due through plan.merge_tree (teams.12): a dependent whose own commit changes the line its
-    dependency's settle rewrote is forecast to conflict there from the head it took, and only there."""
-    import plan
-    took = dependency_rebased(repo, own={"shared.txt": "one\ntwo, as b has it\nthree\n"})
-    assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
 
 
 def rebase(repo, tmp_path, unit, src, to, upstream=None):
@@ -381,54 +327,9 @@ def settled_and_merged(repo, tmp_path, moved=False, own=None):
     return place, took
 
 
-def test_a_dependents_rebase_replaying_its_settled_dependencys_old_commit_conflicts_on_the_dependencys_own_files(repo, tmp_path):
-    """plan.rebase_dependents (plan.13): rebased onto the bolt alone, a dependent replays the commit of its dependency
-    its place took, which the dependency's settle rewrote, and conflicts on the dependency's own files; with the head it
-    took left out, only its own commit is replayed, and the rebase is clean."""
-    place, took = settled_and_merged(repo, tmp_path)
-    tip = repo.git("rev-parse", "unit/b")
-    r = onto(place, "refs/heads/bolt/t")
-    assert r.returncode == 3 and r.stdout.startswith("conflict ") and "a/design.md" in r.stdout.split()
-    assert repo.git("rev-parse", "unit/b") == tip
-    r = onto(place, "refs/heads/bolt/t", took[:7])
-    assert (r.returncode, r.stdout.strip()) == (0, "rebased")
-    assert repo.git("log", "--format=%s", "bolt/t..unit/b") == "feat(b): its own"
-
-
-def test_a_dependents_rebase_leaves_out_the_bolts_commits_with_the_head_it_took(repo, tmp_path):
-    """plan.ONTO: where the bolt moved between the dependency's place and the dependent's, git rebase --onto the bolt
-    from the head taken alone replays the bolt's commits between them and conflicts where the bolt changed them again;
-    ONTO's upstream, a commit with no ref whose parents are the bolt and that head, leaves out both."""
-    place, took = settled_and_merged(repo, tmp_path, moved=True)
-    r = subprocess.run(["git", "-C", str(place), "rebase", "-q", "--onto", "bolt/t", took], capture_output=True, text=True)
-    assert r.returncode != 0
-    assert unmerged(place) == ["f"]
-    subprocess.run(["git", "-C", str(place), "rebase", "--abort"], check=True)
-    r = onto(place, "refs/heads/bolt/t", took[:7])
-    assert (r.returncode, r.stdout.strip()) == (0, "rebased")
-    assert repo.git("log", "--format=%s", "--no-merges", "bolt/t..unit/b") == "feat(b): its own"
-    assert repo.git("for-each-ref", "--format=%(refname)", "refs/heads").split() == [
-        "refs/heads/bolt/t", "refs/heads/main", "refs/heads/unit/a", "refs/heads/unit/b"]
-
-
 def unmerged(place):
     return subprocess.run(["git", "-C", str(place), "diff", "--name-only", "--diff-filter=U"], capture_output=True,
                           text=True).stdout.split()
-
-
-def test_the_rebase_a_dependent_is_told_makes_crews_upstream_again_and_meets_only_its_own_overlap(repo, tmp_path):
-    """plan.rebase_words (plan.13): crew's rebase of a dependent whose own commit changed the line its dependency's
-    settle rewrote conflicts there; the command the dependent is told makes again the upstream that rebase used, which
-    has no ref, and run in its place by bash meets the same conflict and none on the dependency's own files."""
-    import plan
-    place, took = settled_and_merged(repo, tmp_path, moved=True, own={"shared.txt": "one\ntwo, as b has it\nthree\n"})
-    r = onto(place, "refs/heads/bolt/t", took[:7])
-    assert r.returncode == 3 and r.stdout.split()[1:] == ["shared.txt"]
-    words = plan.rebase_words("t", [f"a@{took[:7]}"])
-    command = words[words.index("(git rebase ") + 1:-1]
-    assert subprocess.run(["bash", "-c", command], cwd=place, capture_output=True, text=True).returncode != 0
-    assert unmerged(place) == ["shared.txt"]
-    subprocess.run(["git", "-C", str(place), "rebase", "--abort"], check=True)
 
 
 def kit_with_github(repo, tmp_path):
@@ -530,28 +431,6 @@ def test_a_kits_policy_is_read_from_githubs_main_ahead_of_the_hosts_own(repo, tm
     assert not (repo.path / ".config" / "sluice.toml").exists()
 
 
-def test_a_legacy_bolts_tip_is_read_with_the_remotes_that_hold_it(repo, tmp_path):
-    """plan.BOLT_TIP and plan.forecast_way (plan.19): the policy is read from the host's own bolt/<bolt>, not main's,
-    as sluice routes a branch by the policy at its tip, and a remote holds the bolt once this host has a tracking ref
-    of it from there, read with no fetch (plan.18); a bolt the host keeps no branch of has no tip."""
-    import plan
-    pushed = kit_with_github(repo, tmp_path)
-    pushed("later")
-    repo.git("branch", "bolt/t")
-    repo.git("switch", "-q", "bolt/t")
-    policy = '[branches."bolt/*"]\nremote = "origin"\nrequired = ["#check-full"]\n'
-    tip = repo.commit("chore: bolts on origin", {".config/sluice.toml": policy})
-    repo.git("switch", "-q", "--detach", "main")
-    r = script("BOLT_TIP", str(repo.path), "t", ".config/sluice.toml")
-    assert r.returncode == 0 and f"TIP={tip}\n" in r.stdout and "TRACKED=\n" in r.stdout, r.stdout + r.stderr
-    assert plan.forecast_way("t", r.stdout) == ("place", None)
-    repo.git("push", "-q", "origin", "bolt/t")
-    repo.git("fetch", "-q", "origin")
-    r = script("BOLT_TIP", str(repo.path), "t", ".config/sluice.toml")
-    assert "TRACKED=origin \n" in r.stdout and plan.forecast_way("t", r.stdout) == ("branch", None), r.stdout
-    assert "TIP=-\n" in script("BOLT_TIP", str(repo.path), "u", ".config/sluice.toml").stdout
-
-
 def forecast_from_place(repo, tmp_path, bolt="t"):
     """plan.FORECAST_PLACE in the kit's main checkout, with a stand-in sluice that records the worktree it was asked
     to forecast from, the branch that worktree is on and its head, and answers with no conflict."""
@@ -569,43 +448,6 @@ def forecast_from_place(repo, tmp_path, bolt="t"):
                        text=True, env=dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}"))
     assert r.returncode == 0, r.stderr
     return path, plan.place_checked(bolt, r.stdout, r.stderr), r.stdout
-
-
-def test_a_legacy_bolt_is_forecast_from_a_place_crew_makes_on_it_with_no_checkout_and_removes(repo, tmp_path):
-    """plan.FORECAST_PLACE (plan.19): with no worktree on bolt/<bolt>, crew makes its own on the branch with no
-    checkout, which sluice reads as on the branch at the bolt's tip, and removes it once sluice has answered, its
-    staged deletions forced; the branch is where it was. One a stopped forecast left there is taken and removed."""
-    import plan
-    repo.commit("main", {"README": "r\n"})
-    tip = repo.commit("feat: bolt work", {"work.txt": "w\n"})
-    repo.git("branch", "bolt/t")
-    repo.git("switch", "-q", "--detach", "HEAD~1")
-    path, (checked, kept), out = forecast_from_place(repo, tmp_path)
-    assert (tmp_path / "asked").read_text() == f"{path} bolt/t {tip}\n"
-    assert plan.bolt_forecast_read(*checked) == ({"conflict": None, "head": tip, "onto": "o", "ahead": []}, None) and kept is None
-    assert not path.exists() and str(path) not in repo.git("worktree", "list")
-    assert repo.git("rev-parse", "bolt/t") == tip
-    repo.git("worktree", "add", "-q", "--no-checkout", str(path), "bolt/t")
-    forecast_from_place(repo, tmp_path)
-    assert not path.exists() and str(path) not in repo.git("worktree", "list")
-
-
-def test_a_worktree_already_on_the_bolt_is_the_place_its_forecast_is_read_from_and_is_kept(repo, tmp_path):
-    """plan.FORECAST_PLACE (plan.19): a worktree on bolt/<bolt> that is not crew's forecast place, the landing's while
-    its submission is with sluice, is forecast from as it stands and left there; a path git cannot make a worktree at
-    is said with git's words, nothing forecast."""
-    repo.commit("main", {"README": "r\n"})
-    repo.git("branch", "bolt/t")
-    land = repo.path.parent / "places" / "land-t"
-    repo.git("worktree", "add", "-q", str(land), "bolt/t")
-    path, (checked, kept), out = forecast_from_place(repo, tmp_path)
-    assert (tmp_path / "asked").read_text().split()[:2] == [str(land), "bolt/t"] and checked[0] == 0 and kept is None
-    assert land.exists() and not path.exists()
-    repo.git("worktree", "remove", str(land))
-    path.mkdir(parents=True)
-    (path / "theirs.txt").write_text("x\n")
-    _, (checked, kept), _ = forecast_from_place(repo, tmp_path)
-    assert checked[0] is None and checked[2].startswith(f"no place on bolt/t could be made to forecast it from: fatal: '{path}' already exists"), checked
 
 
 def test_a_units_change_is_read_from_mains_commit_into_a_folder(repo, tmp_path):
@@ -1177,7 +1019,6 @@ def test_a_submission_sluice_failed_on_is_waited_on_again_while_its_record_has_i
     assert not land.exists() and "land-b" not in repo.git("worktree", "list")
 
 
-
 def test_a_landing_sluice_queued_as_a_pull_request_is_followed_from_its_place_while_it_stands(repo, tmp_path):
     """plan.SUBMIT, plan.submitted_line and plan.landing_now (plan.16, plan.8): to a main that takes pull requests
     sluice 0.36.4 answers a landing's submission with the pull request it opened, its number and no submission. SUBMIT
@@ -1207,24 +1048,6 @@ def test_a_landing_sluice_queued_as_a_pull_request_is_followed_from_its_place_wh
     while plan.landing_now(t, "b")[2] and time.monotonic() < end:
         time.sleep(0.1)
     assert plan.landing_now(t, "b") == (str(land), True, False)
-
-def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):
-    """plan.landed_at (plan.13, teams.17, record 0026): the commit that brought a unit's change to its bolt, which
-    rebase_dependents compares with what a dependent's place holds, is found when sluice landed the unit as a merge
-    commit and the unit's merge archived the change first. git log's default history simplification follows only the
-    first parent of a merge whose tree matches it on the path, and the bolt's side never held openspec/changes/<unit>, so
-    without --full-history the unit's side is pruned and nothing is found."""
-    import plan
-    repo.commit("main", {"README": "r\n"})
-    repo.git("branch", "bolt/b")
-    repo.git("checkout", "-q", "-b", "unit/a", "bolt/b")
-    made = repo.commit("docs(a): the change", {"openspec/changes/a/proposal.md": "p\n"})
-    repo.git("mv", "openspec/changes/a", "openspec/changes/archive-2026-10-13-a")
-    repo.git("commit", "-q", "-m", "docs(openspec): archive a")
-    repo.git("checkout", "-q", "bolt/b")
-    repo.commit("feat: the bolt's own", {"other": "o\n"})
-    repo.git("merge", "-q", "--no-ff", "-m", "chore(land): #1 unit/a", "unit/a")
-    assert plan.landed_at(str(repo.path), "b", "a") == made
 
 
 def test_git_cherry_finds_nothing_of_a_units_own_once_its_commits_reached_the_bolt_rebased(repo):
@@ -1327,54 +1150,6 @@ def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt
     assert again.returncode == 0 and "GITDIR=" in again.stdout and "KEPT=" not in again.stdout
     assert "KEPT=" not in cut(repo, tmp_path, "v")
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/v") == "bolt/b"
-
-
-def test_a_dependent_rebases_onto_and_takes_beside_the_bolt_where_it_is_read_on_github(repo, tmp_path):
-    """plan.ONTO, plan.TAKE and plan.landed_at given GitHub's copy, refs/remotes/origin/bolt/<bolt> (plan.19,
-    gather.bolt_read): with the host's bolt/<bolt> left behind it, a dependent's place is rebased onto GitHub's bolt,
-    a place holding nothing of its own beyond GitHub's bolt takes what it comes after, and the commit that brought a
-    unit's change to the bolt is found on GitHub's."""
-    import plan
-    repo.commit("main", {"README": "r\n"})
-    origin = tmp_path / "github.git"
-    repo.git("branch", "bolt/b")
-    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
-    repo.git("remote", "add", "origin", str(origin))
-    other = tmp_path / "other"
-    subprocess.run(["git", "clone", "-q", "-b", "bolt/b", str(origin), str(other)], check=True)
-    o = lambda *a: subprocess.run(["git", "-C", str(other), *a], check=True, capture_output=True, text=True).stdout.strip()
-    (other / "openspec" / "changes" / "a").mkdir(parents=True)
-    (other / "openspec" / "changes" / "a" / "proposal.md").write_text("p\n")
-    o("add", "-A"); o("commit", "-qm", "docs(a): the change")
-    made = o("rev-parse", "HEAD")
-    (other / "x").write_text("x\n")
-    o("add", "x"); o("commit", "-qm", "feat: the bolt's own")
-    o("push", "-q", "origin", "HEAD:bolt/b")
-    repo.git("fetch", "-q", "origin")
-    github = "refs/remotes/origin/bolt/b"
-    assert repo.git("rev-parse", "bolt/b") != repo.git("rev-parse", github)
-    assert plan.landed_at(str(repo.path), "b", "a", at=github) == made
-    assert plan.landed_at(str(repo.path), "b", "a", at="refs/heads/bolt/b") is None
-    place = tmp_path / "place"
-    repo.git("worktree", "add", "-q", "-b", "unit/c", str(place), "bolt/b")
-    (place / "c").write_text("c\n")
-    subprocess.run(["git", "-C", str(place), "add", "c"], check=True)
-    subprocess.run(["git", "-C", str(place), "commit", "-qm", "feat(c): its own"], check=True)
-    r = onto(place, github)
-    assert (r.returncode, r.stdout.strip()) == (0, "rebased")
-    assert repo.git("merge-base", "--is-ancestor", github, "unit/c") == ""
-    assert repo.git("log", "--format=%s", f"{github}..unit/c") == "feat(c): its own"
-    d = tmp_path / "d"
-    repo.git("worktree", "add", "-q", "-b", "unit/d", str(d), made)
-    (d / "d").write_text("d\n")
-    subprocess.run(["git", "-C", str(d), "add", "d"], check=True)
-    subprocess.run(["git", "-C", str(d), "commit", "-qm", "feat(d): its own"], check=True)
-    fresh = tmp_path / "fresh"
-    repo.git("worktree", "add", "-q", "-b", "unit/e", str(fresh), github)
-    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", "refs/heads/bolt/b", "unit/d"], capture_output=True, text=True)
-    assert (took.returncode, took.stdout) == (0, ""), "read at the host's copy, GitHub's own commit counts as the place's"
-    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", github, "unit/d"], capture_output=True, text=True)
-    assert (took.returncode, took.stdout.split()) == (0, ["d", repo.git("rev-parse", "--short=7", "unit/d")])
 
 
 def work_kit(repo, monkeypatch):

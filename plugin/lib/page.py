@@ -52,8 +52,6 @@ DATA = "/*{{DATA}}*/"
 # The run record's window on the fleet page: record.when's default, the board's.
 WINDOW = datetime.timedelta(days=7)
 NO_ACCOUNT = "no account named in herdr-hosts"
-# What starts a stage in a slot, and the stage a fix's start is; a unit's or chore's names its stage.
-STARTS = {"stage.start": None, "fix.start": "code", "fix.merge": "merge"}
 PARTITIONS = "<!--{{PARTITIONS}}-->"
 # The page's columns, in the flow's order; a chore stands in the units' column (plan.11).
 COLUMNS = ("signals/", "agenda/", "proposal/", ("unit/", "chore/"), "bolt/")
@@ -300,49 +298,19 @@ def landed_said(landing, since):
             + f", {landing['at'][:10]} {landing['at'][11:16]}Z" + (f" by {landing['by']}" if landing["by"] else ""))
 
 
-def running(entries, team):
-    """The stages running in a team's slots, {slot: {stage, kind, name, since}}: each slot's newest start not refused,
-    a unit's or chore's stage.start or a fix's fix.start or fix.merge naming agent/<team>-<slot>, with no stage.end
-    after it, not refused, naming the same stage/ object, or for a fix the same fix/ object, and the same agent. A stage
-    started before the entries begin is not seen."""
-    out = {}
-    for i, e in enumerate(entries):
-        act = e.get("Act")
-        agent = next((o[6:] for o in e["On"] if o.startswith(f"agent/{team}-")), None)
-        if act not in STARTS or e.get("Refused") or not agent:
-            continue
-        if act == "stage.start":
-            obj = next((o for o in e["On"] if o.startswith("stage/")), None)
-            if not obj:
-                continue
-            _, name, stage = obj.split("/", 2)
-            kind = "chore" if f"chore/{name}" in e["On"] else "unit"
-        else:
-            obj = next((o for o in e["On"] if o.startswith("fix/")), None)
-            if not obj:
-                continue
-            name, stage, kind = obj, STARTS[act], "fix"
-        ended = any(x.get("Act") == "stage.end" and not x.get("Refused") and obj in x["On"] and f"agent/{agent}" in x["On"] for x in entries[i + 1:])
-        slot = agent[len(team) + 1:]
-        out.pop(slot, None)
-        if not ended:
-            out[slot] = {"stage": stage, "kind": kind, "name": name, "since": e["At"]}
-    return out
-
-
 def work_named(s):
     return ("chore " if s["kind"] == "chore" else "") + s["name"]
 
 
 def fleet_team(fleet, part, name, entries):
     """A team: its host, session and account, its kits; each bolt it holds with its pips, how many units have merged
-    and its state; each slot at work on a stage (running), holding a unit, chore or fix of its bolt with no stage
-    running, or free; how many are at work; and what its conductor waits on: the stages running, else a bolt that waits
-    to land, on the user's word, with its landing's card open or none, else nothing."""
+    and its state; each slot holding a unit, chore or fix of its bolt, or free, none at work, since crew runs no stage;
+    and what its conductor waits on: a bolt that waits to land, on the user's word, with its landing's card open or
+    none, else nothing."""
     t = fleet["teams"][name]
     account = fleet["hosts"].get(t["machine"], {}).get("sessions", {}).get(t["session"], {}).get("account") or None
     bolts = [b for b in part["construction"] if b["team"] == name]
-    run, held = running(entries, name), {}
+    held = {}
     for b in bolts:
         for u in b["units"]:
             if u["slot"]:
@@ -353,19 +321,14 @@ def fleet_team(fleet, part, name, entries):
     slots = []
     for n in range(1, t["units"] + 1):
         s = f"unit-{n}"
-        if s in run:
-            slots.append(dict(run[s], slot=s, state="work", said=f"{s} at work: {run[s]['stage']} of {work_named(run[s])}"))
-        elif s in held:
+        if s in held:
             h = held[s]
             slots.append(dict(h, slot=s, state="held", said=f"{s} holding {work_named(h)}" + (f" ({h['stage']})" if h["stage"] else "") + ", no stage running"))
         else:
             slots.append({"slot": s, "state": "free", "said": f"{s} free"})
     work = [s for s in slots if s["state"] == "work"]
     landing = next((b for b in bolts if b["state"] == "waits"), None)
-    if work:
-        waits = {"on": "stages", "stages": [f"{s['stage']} of {work_named(s)}" for s in work]}
-        waits["said"] = f"waits on {board.many(len(work), 'stage', 'stages')}: " + ", ".join(waits["stages"])
-    elif landing:
+    if landing:
         card = next((m["card"] for m in landing["markers"] if m["card"]), None)
         waits = {"on": "landing", "bolt": landing["bolt"], "card": card,
                  "said": "waits on the landing, on the user's word, " + ("its card open" if card else "no card open")}

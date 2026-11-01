@@ -2166,22 +2166,6 @@ class TestARowsPreview:
         assert plan.preview_ended(code, out, err) == ended
 
 
-class TestAMergeFreesTheTeam:
-    """A team is free for its next bolt once every bolt it holds reads proven and it holds fewer than two (teams.16):
-    the merge's end tells the dispatchers then, when a bolt is planned for it (plan.free_now)."""
-
-    def test_the_dispatchers_are_told_once_the_give_would_pass_and_a_bolt_is_planned(self):
-        assert plan.free_now(None, "ssh-fix")
-
-    def test_nothing_planned_or_a_give_still_refused_tells_no_one(self):
-        assert not plan.free_now(None, None)
-        assert not plan.free_now("bolt doctor-rows's unit a has not merged (code)", "ssh-fix")
-
-    def test_the_other_bolts_card_says_what_a_yes_now_frees(self):
-        assert plan.frees_note("swc-1", "d") == "A yes now frees swc-1 for d"
-        assert plan.frees_note("swc-1", None) == "A yes now frees swc-1, and nothing is planned for it"
-
-
 class TestWhatAYesFrees:
     """What a yes to a landing frees of its team (teams.16, plan.yes_frees), shared by its rail row and its card."""
 

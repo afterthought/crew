@@ -70,12 +70,11 @@ def kits(ok=True):
     swb = {"ok": True, "main": [], "places": {"a": place("a", (1, 2)), "b": place("b", (0, 2))}, "reports": {},
            "bolts": {"tenant-environments": {"head": "d" * 40, "head_at": ago(200), "changes": [], "worktree": "/kit/bolts/tenant-environments"}},
            "fixes": [{"fix": "fix/tenant-environments/edge", "merged": False, "bolt": "tenant-environments", "path": "/kit/places/fix-edge"}],
-           "slots": {"swb-1": [{"slot": "unit-1", "kind": "unit", "name": "a"}, {"slot": "unit-4", "kind": "fix", "name": "fix/tenant-environments/edge"}]},
            "sites": {"/kit/places/a": {"here": "http://unit-a--switchboard-kit.localhost", "tailnet": "https://unit-a--switchboard-kit--box.dev"}},
            "routes": [{"name": "unit-a--switchboard-kit", "url": "http://unit-a.localhost"}],
            "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}], "submissions": [], "decided": []}
     brd = {"ok": True, "main": ["done-one"], "places": {}, "reports": {}, "bolts": {"board-done": {"head": "e" * 40, "head_at": ago(10), "changes": []}},
-           "fixes": [], "slots": {}, "sites": {}, "routes": [], "submissions": [], "decided": []}
+           "fixes": [], "sites": {}, "routes": [], "submissions": [], "decided": []}
     mac = {"mac-studio": {"ok": True, "kits": {"/a/main": {"ok": True, "main": [], "places": {}, "reports": {}, "bolts": {}, "fixes": []}}}}
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
@@ -165,8 +164,8 @@ class TestText:
     def test_construction_shows_a_held_bolt_as_a_ledger(self):
         con = lane(board.board_text(data()), "Construction")
         assert con[:4] == [f"  switchboard-kit tenant-environments  swb-1 on chuck-herdr-alpha  {TE_TIME}",
-                           "    a  code 1/2  unit-1  https://unit-a--switchboard-kit--box.dev", "    b  planned",
-                           "    fix/tenant-environments/edge  fix  unit-4"]
+                           "    a  code 1/2  https://unit-a--switchboard-kit--box.dev", "    b  planned",
+                           "    fix/tenant-environments/edge  fix"]
         assert f"! breadboard-kit board-done  brd-1 on chuck-herdr-alpha  landed  {DONE_TIME}" in con
 
     def test_a_held_bolt_every_unit_of_which_landed_is_named_for_attention(self):
@@ -1062,7 +1061,7 @@ class TestKept:
     """What the host's follower keeps between its refreshes and serves while it has not moved (the crew-board spec, A
     refresh after a change reads only what moved; plan.12's reading of 2026-10-28)."""
 
-    REQ = {"main": "/kit/main", "dir": "/kit", "bolts": [], "slots": {"swb-1": "~/.local/state/swb-1-team/slots"}}
+    REQ = {"main": "/kit/main", "dir": "/kit", "bolts": []}
     ANSWER = {"ok": True, "main": [], "stamp": "s1"}
 
     def test_a_kit_is_served_only_at_the_stamp_and_request_it_was_read_at(self):
@@ -1264,8 +1263,8 @@ WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-
 
 class TestViews:
     def test_a_conductor_reads_its_bolt_as_a_ledger_a_pip_to_each_unit_then_what_comes_next(self):
-        assert view("swb-1-conductor") == [f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
-                                           "    fix/tenant-environments/edge  fix  unit-4", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
+        assert view("swb-1-conductor") == [f"  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2", "    ◔  b  planned",
+                                           "    fix/tenant-environments/edge  fix", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
 
     def test_a_team_holding_a_bolt_that_waits_to_land_and_one_it_builds_draws_both(self, monkeypatch):
         """A team builds one bolt and may hold one more, proven, that waits to land (teams.16): its conductor's band and
@@ -1279,13 +1278,12 @@ class TestViews:
                                              "verdict": "passed (2 run)"},
                              "ssh-fix": {"head": "c" * 40, "head_at": ago(20), "changes": []}})
         swb["places"]["ssh-one"] = dict(swb["places"]["a"], path="/kit/places/ssh-one", bolt="ssh-fix")
-        swb["slots"]["swb-2"] = [{"slot": "unit-1", "kind": "unit", "name": "ssh-one"}]
         mine = view("swb-2-conductor", sv=sv)
         assert mine[:4] == [f"✓ switchboard-kit  ●  doctor-rows  waits to land  1 of 1 merged  {NO_GIVE}  no card open", "    ●  rows-one  merged",
-                            f"  switchboard-kit  ◑  ssh-fix  0 of 1 merged  {NO_GIVE}", "    ◑  ssh-one  code 1/2  unit-1"]
+                            f"  switchboard-kit  ◑  ssh-fix  0 of 1 merged  {NO_GIVE}", "    ◑  ssh-one  code 1/2"]
         assert lane(board.board_text(data(sv=sv)), "Construction") == [
             f"✓ switchboard-kit doctor-rows  swb-2 on chuck-herdr-alpha  waits to land  {NO_GIVE}  no card open", "    rows-one  merged",
-            f"  switchboard-kit ssh-fix  swb-2 on chuck-herdr-alpha  {NO_GIVE}", "    ssh-one  code 1/2  unit-1"]
+            f"  switchboard-kit ssh-fix  swb-2 on chuck-herdr-alpha  {NO_GIVE}", "    ssh-one  code 1/2"]
 
     def test_each_bolt_is_marked_from_its_kits_landing_row_and_ops_band_draws_the_row_with_its_card(self, monkeypatch):
         """Two proven bolts of one kit are one landing row, land/<kit> (crew-rail "Two bolts of one kit"): each bolt's
@@ -1311,7 +1309,7 @@ class TestViews:
 
     def test_a_unit_waits_on_no_answer_so_it_has_no_marker_even_with_an_old_verify_card_open(self):
         card = dict(label="wldn", card="req_2", key="verify/a/20261012-1200", by="swb-1-conductor", host="mac-studio", at=NOW)
-        assert view("swb-1-conductor", cards=[card])[1] == "    ◑  a  code 1/2  unit-1"
+        assert view("swb-1-conductor", cards=[card])[1] == "    ◑  a  code 1/2"
 
     def test_a_team_holding_no_bolt_says_so_and_what_is_planned_for_its_kit(self):
         assert view("swb-2-conductor") == ["  swb-2 holds no bolt", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
@@ -1529,10 +1527,10 @@ class TestSubmissions:
         """crew-board "A merge standing in sluice"."""
         sv = queued(STANDING_SUBS)
         assert lane(board.board_text(data(sv=sv)), "Construction")[1:4] == [
-            "    a  code 1/2  #41 under test  unit-1  https://unit-a--switchboard-kit--box.dev", "    b  planned",
-            "    fix/tenant-environments/edge  fix  #43 queued  unit-4"]
-        assert view("swb-1-conductor", sv=sv)[1:4] == ["    ◑  a  code 1/2  #41 under test  unit-1", "    ◔  b  planned",
-                                                       "    fix/tenant-environments/edge  fix  #43 queued  unit-4"]
+            "    a  code 1/2  #41 under test  https://unit-a--switchboard-kit--box.dev", "    b  planned",
+            "    fix/tenant-environments/edge  fix  #43 queued"]
+        assert view("swb-1-conductor", sv=sv)[1:4] == ["    ◑  a  code 1/2  #41 under test", "    ◔  b  planned",
+                                                       "    fix/tenant-environments/edge  fix  #43 queued"]
 
     def test_a_landing_standing_in_sluice_is_on_the_bolts_head_line_in_the_lane_and_the_bands(self):
         """crew-board "A landing standing in sluice": the lane, its conductor's band and main-level ops's."""
@@ -1687,16 +1685,15 @@ def test_a_chore_is_marked_in_a_ledger_a_planned_bolt_and_the_queue(monkeypatch)
     sv = kits()
     sv[BOX]["kits"]["/kit/main"].update(chores=[], chore_places={"bump": {"path": "/kit/places/chore-bump", "head": "c" * 40, "head_at": ago(5),
                                                                          "ahead": 1, "bolt": "tenant-environments"}})
-    sv[BOX]["kits"]["/kit/main"]["slots"]["swb-1"].append({"slot": "unit-2", "kind": "chore", "name": "bump"})
     d = data(sv=sv)
     ledger = next(b for b in d["partitions"][0]["construction"] if b["bolt"] == "tenant-environments")
-    assert [(u["unit"], u["kind"], u["stage"], u["slot"]) for u in ledger["units"]] == [("a", "unit", "code", "unit-1"), ("bump", "chore", "verify", "unit-2")]
+    assert [(u["unit"], u["kind"], u["stage"], u["slot"]) for u in ledger["units"]] == [("a", "unit", "code", None), ("bump", "chore", "verify", None)]
     out = board.board_text(d)
-    assert "    bump  chore verify  unit-2" in lane(out, "Construction")
+    assert "    bump  chore verify" in lane(out, "Construction")
     assert lane(out, "Bolt plan") == ["  switchboard-kit apex-zones  Goal of apex-zones.", "    pin  chore ready", "  switchboard-kit tidy  chore queued"]
     # Its conductor's view, the mod's band, draws the chore in its ledger as the board does (code.8).
     mine = view("swb-1-conductor", sv=sv)
-    assert mine[:3] == [f"  switchboard-kit  ◑◕  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2  unit-1", "    ◕  bump  chore verify  unit-2"]
+    assert mine[:3] == [f"  switchboard-kit  ◑◕  tenant-environments  0 of 2 merged  {TE_TIME}", "    ◑  a  code 1/2", "    ◕  bump  chore verify"]
 
 
 class TestCrossed:

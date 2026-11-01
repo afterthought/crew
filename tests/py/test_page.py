@@ -345,13 +345,13 @@ class TestDocks:
         assert B["bolt_plan"]["planned"][0]["dock"] == "bolt:apex-zones" and B["bolt_plan"]["queue"][0]["dock"] == "unit:zone-two"
         assert B["construction"][0]["fixes"][0]["dock"] == "fix:tenant-environments/edge"
 
-    def test_a_units_dock_in_a_ledger_says_its_bolt_as_a_link_its_stage_its_tasks_and_its_slot(self):
+    def test_a_units_dock_in_a_ledger_says_its_bolt_as_a_link_its_stage_and_its_tasks(self):
         """board-page "A unit being built"."""
         a = self.paged()["docks"]["unit:a"]
         assert (a["kind"], a["title"], a["tail"], a["form"]) == ("unit", "a", "unit · in tenant-environments", None)
         facts = {f[0]: f[1:] for f in a["facts"]}
         assert facts["bolt"] == ["tenant-environments", "bolt:tenant-environments"]
-        assert (facts["stage"], facts["tasks"], facts["slot"]) == (["code"], ["1 of 2 tasks"], ["unit-1"])
+        assert (facts["stage"], facts["tasks"]) == (["code"], ["1 of 2 tasks"]) and "slot" not in facts
         assert facts["server"] == ["https://unit-a--switchboard-kit--box.dev"]
 
     def test_the_same_deploy_from_the_operation_lane_and_the_deploys_view_has_one_key(self):
@@ -418,11 +418,11 @@ class TestDocks:
         assert (q["form"], q["tail"]) == ("slip", "unit · queued")
         assert {f[0]: f[1] for f in q["facts"]} == {"repository": "switchboard-kit", "stage": "queued", "sources": "docs/zones.md"}
 
-    def test_a_fix_says_whether_it_merged_its_slot_and_server_and_links_its_bolt(self):
+    def test_a_fix_says_whether_it_merged_and_its_worktree_and_links_its_bolt(self):
         """board-page "A fix"."""
         f = self.paged()["docks"]["fix:tenant-environments/edge"]
         assert (f["title"], f["tail"]) == ("fix/tenant-environments/edge", "fix of tenant-environments")
-        assert {x[0]: x[1] for x in f["facts"]} == {"state": "not merged", "slot": "unit-4", "worktree": "/kit/places/fix-edge"}
+        assert {x[0]: x[1] for x in f["facts"]} == {"state": "not merged", "worktree": "/kit/places/fix-edge"}
         assert f["parts"] == [{"title": "bolt", "rows": [{"text": "tenant-environments", "key": "bolt:tenant-environments"}]}]
         assert f["history"] == []
 
