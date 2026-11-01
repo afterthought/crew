@@ -46,7 +46,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 
 - [x] 6.1 `board.agent_views` gives the planner, the design agent, main-level ops and the operator their views and no other; `crew board --json` lists no teams and no object's `teams`; a ledger shows no slot; a bolt's age runs from the entry that made its branch (design Decision 11; Task notes 6.1); verify `tests/suite logic` ends with "0 failed".
 - [x] 6.2 The cards, the page and the fleet page name no team, slot, conductor or dispatcher, and no line says what a yes frees (crew-board, board-page, fleet-page and rail-cards deltas; Task notes 6.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-board` ends with "0 failed".
-- [ ] 6.3 `plugin/hooks/status.js` draws the views' new shape, and the mod's cases draw main-level ops's and the planner's bands (`code.8`; Task notes 6.3); verify `tests/suite mod` ends with "0 failed".
+- [x] 6.3 `plugin/hooks/status.js` draws the views' new shape, and the mod's cases draw main-level ops's and the planner's bands (`code.8`; Task notes 6.3); verify `tests/suite mod` ends with "0 failed".
 
 ## 7. The teams file holds partitions only
 
