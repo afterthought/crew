@@ -119,6 +119,25 @@ As main is read (plan.18), crew SHALL read a bolt on GitHub as the host last fet
 
 ## MODIFIED Requirements
 
+### Requirement: The file's order and dependencies are the plan
+A bolt's units SHALL be ordered by the file: a bolt's launches SHALL take their priority from the order the bolts appear, and a unit is ahead of every unit after it in its bolt. A unit's `After` SHALL name units or chores of the same bolt that it builds on. Its launch SHALL be held by the runner until each of them has landed on the bolt, so its place is cut from a bolt that holds their work, as bolt-teams "A dependent launches once its After work has landed" has it. A unit with no `Bolt` SHALL be queued work.
+
+#### Scenario: A dependency still in construct
+- **WHEN** unit B of started bolt `x` has `After: A`, and A's construct has not committed
+- **THEN** B's stage is `waiting` on A, and its launch is held
+
+#### Scenario: A dependency constructed
+- **WHEN** unit B has `After: A`, and A's change is committed while A is in code
+- **THEN** B still waits on A, its launch held until A has landed on `bolt/x`
+
+#### Scenario: A dependency not yet merged
+- **WHEN** unit B has `After: A`, and A has not landed on `bolt/x`
+- **THEN** no place of B's is launched, so nothing of B's merges into the bolt before A
+
+#### Scenario: Queued work
+- **WHEN** a unit is added with no bolt
+- **THEN** `crew bolts` lists it under the queue of its repo
+
 ### Requirement: A flywheel keeps one plan in its state repository
 Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal and sources. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`); a Unit record marked `Kind: chore` is a chore, whose intent is its words. The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got. A Bolt record that still carries a `Team` field, written before teams left, SHALL be read as any bolt, the field read by nothing; a new branch's schema SHALL allow no `Team`.
 

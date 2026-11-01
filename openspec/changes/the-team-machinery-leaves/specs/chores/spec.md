@@ -14,19 +14,19 @@ The planner SHALL write a chore only by proposal, the design agent only `chore a
 ## MODIFIED Requirements
 
 ### Requirement: After means for a chore what it means for a unit
-A unit or chore SHALL be `ready` once each `After` has something committed to build on, a unit's change once its construct has finished or a chore's code once its commits are in its place, and `waiting` until then, never waiting on a merge; and it SHALL merge only after each has merged.
+A unit or chore of a started bolt SHALL be launched only once each `After`, a chore as a unit, has landed on the bolt, the runner holding its launch meanwhile, so its place is cut from a bolt that holds their work, as bolt-teams "A dependent launches once its After work has landed" has it; `crew bolts` SHALL show it `waiting` on them until then.
 
 #### Scenario: A unit after a chore
-- **WHEN** unit `b` has `After: bump-biome`, and the chore's code has not yet committed
-- **THEN** `crew bolts` shows `b` waiting
+- **WHEN** unit `b` of started `x` has `After: bump-biome`, and the chore's code has not yet committed
+- **THEN** `crew bolts` shows `b` waiting on `bump-biome`
 
 #### Scenario: The chore's code has delivered
-- **WHEN** the chore's code has committed in its place
-- **THEN** `crew bolts` shows `b` ready
+- **WHEN** the chore's code has committed in its place, and its submission to `bolt/x` has not landed
+- **THEN** `crew bolts` still shows `b` waiting on `bump-biome`, since a dependent waits for its After work to land on the bolt and not for its code
 
 #### Scenario: The chore merges
-- **WHEN** the chore merges into the bolt
-- **THEN** `crew bolts` shows the chore merged and `b` no longer waits on it
+- **WHEN** the chore lands on `bolt/x`
+- **THEN** the runner launches `b`'s place, cut from a bolt that holds the chore's work, and `crew bolts` shows the chore merged and `b` no longer waiting on it
 
 ### Requirement: A chore shows as a chore
 `crew bolts`, its JSON, the board and the page SHALL show a chore among the units of its bolt or queue in build order, marked as a chore. The run record SHALL name it `chore/<name>`, its writes `chore.add`, `chore.order`, `chore.after`, `chore.move` and `chore.drop`, and `crew trace <bare name>` SHALL try a unit, then a chore, then a bolt, then a signal.
