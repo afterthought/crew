@@ -2285,11 +2285,6 @@ class Agents:
     def mark(self, down):
         (self.state / "down").touch() if down else (self.state / "down").unlink(missing_ok=True)
 
-    def owes(self):
-        """Whether its stages file owes any stage an end."""
-        p = self.state / "stages"
-        return p.exists() and p.stat().st_size > 0
-
     def record(self, act, why, roles):
         """One entry for an act on its agents, naming each, and a team's the team (record.1); none when it names none."""
         on = ([f"team/{self.scope}"] if self.kind == "team" else []) + [f"agent/{self.agent_of(r)}" for r in roles]
@@ -2368,20 +2363,16 @@ class Agents:
         else:
             self.first_tab(workspace, label, cwd, role)
 
-    def stop(self, role, ending=None, waits=False, over=False):
+    def stop(self, role, waits=False):
         """End a role's agent before anything else starts in its pane (teams.2): None once it is ended, or when none was
-        up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. A slot's
-        stage still owed an end ends with it first, by ending(role). waits says the agent's only background work is
-        crew's own waits (hold.renew_ready), which its exit then ends: Claude Code's question at the exit (exit_asks)
-        answered with its first option, Exit and stop tasks, so the exit never stops there (teams.19). over says the
-        stage the agent worked for has ended short (crew needs, record 0007): it is ended working too, its exit's
-        question answered as with waits, since what it still runs was that stage's."""
+        up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. waits says
+        the agent's only background work is crew's own waits (hold.renew_ready), which its exit then ends: Claude Code's
+        question at the exit (exit_asks) answered with its first option, Exit and stop tasks, so the exit never stops
+        there (teams.19)."""
         pane = self.pane(role)
         st = self.herdr.status(pane)
-        if st == "working" and not (self.force or over):
+        if st == "working" and not self.force:
             return working_said(self.agent_of(role))
-        if ending and (role.startswith("unit-") or role == "ops") and self.owes():
-            ending(role)
         if not st:
             return None
         if self.herdr.run("agent", "prompt", pane, "/exit").returncode:
@@ -2391,7 +2382,7 @@ class Agents:
             if not self.herdr.status(pane, fresh=True):
                 self.ended.append(role)
                 return None
-            if (waits or over) and not asked:
+            if waits and not asked:
                 r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
                 if r.returncode == 0 and exit_asks(r.stdout):
                     self.herdr.run("agent", "send-keys", pane, "enter")
@@ -2519,11 +2510,11 @@ class Agents:
             self.herdr.run("pane", "close", pane)
         self.drop("panes", role)
 
-    def teardown(self, ending=None):
+    def teardown(self):
         """Every agent of its panes file ended, each pane closed and each workspace of its layout closed; the slots still
         say what is in flight. An agent that could not be ended is said and left."""
         for role, *_ in self.lines("panes"):
-            why = self.stop(role, ending)
+            why = self.stop(role)
             if why:
                 print(why, file=sys.stderr)
         for _, pane, *_ in self.lines("panes"):
@@ -2629,19 +2620,10 @@ class Team(Agents):
             self.herdr.run("tab", "rename", tab, "units")
         self.put("panes", slot, p)
 
-    def take(self, kind, name, place, owed=None):
-        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken). Given
-        owed, the slots whose stage the stages file owes an end, a fix that finds every slot in flight takes one lent
-        (lent_for), the work it holds kept in the lent file until the fix's slot is given back (give_back)."""
-        held, lent = self.lines("slots"), self.lines("lent")
-        try:
-            slot, new = slot_for(self.name, self.slots, held, name, lent)
-        except Refusal:
-            if owed is None:
-                raise
-            slot = lent_for(self.name, self.slots, held, {s: self.status(s) for s in self.slots}, owed)
-            self.write("lent", [l for l in lent if l[0] != slot] + [l for l in held if l[0] == slot])
-            held, new = [l for l in held if l[0] != slot], True
+    def take(self, kind, name, place):
+        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken)."""
+        held = self.lines("slots")
+        slot, new = slot_for(self.name, self.slots, held, name, self.lines("lent"))
         if new:
             self.write("slots", held + [[slot, kind, name, place]])
         return slot, new
@@ -2655,13 +2637,13 @@ class Team(Agents):
             self.drop("lent", slot)
         return back[2] if back else None
 
-    def free(self, slot, ending=None, bolt="", held=None):
+    def free(self, slot, bolt="", held=None):
         """End a slot's agent, close its pane and give the slot back, recorded (teams.1), to the work it was lent from
         when it was lent to a fix (give_back); the units workspace goes with the last slot. None once it is free, else
         what crew says of the agent it could not end (stop). bolt is the bolt a fix given as fix/<name> is of, read from
         its branch when not given. With held, a list, the slot.free entry is put there as (label, on, why, place) for
         the command to write once its tidy has run, naming the place it removed (plan.9)."""
-        why = self.stop(slot, ending)
+        why = self.stop(slot)
         if why:
             return why
         line = self.held(slot)

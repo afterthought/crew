@@ -1605,69 +1605,6 @@ BOLT_AT = REFS + r"""l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/orig
 echo "LOCAL=$l"; echo "TRACKED=$o"; echo "AT_LOCAL=$(pol "$l")"; echo "AT_TRACKED=$(pol "$o")"
 """
 
-# A place: a worktree at a fixed path, on its branch, made on the team's host, its branch tracking its bolt where the
-# bolt lives (plan.19, kit.place_base): given no base, PLACE says where the bolt lives (BOLT_AT) and makes nothing;
-# given origin/bolt/<bolt>, it fetches the bolt from GitHub first, and says FETCHED with git's words, making nothing,
-# when the fetch fails. A new branch is cut from base; a branch already there with no worktree, one a drop kept
-# (plan.10, record 0003), is taken as it stands, then tracks base, and the commit it is at is printed as KEPT.
-PLACE = r"""main=$1 path=$2 branch=$3 bolt=$4 base=$5 file=$6
-cd "$main" || exit 1
-if [ ! -d "$path" ]; then
-  if [ -z "$base" ]; then
-""" + BOLT_AT + r"""    exit 0
-  fi
-  if [ "$base" = "origin/bolt/$bolt" ] && ! err=$(git fetch -q origin "+refs/heads/bolt/$bolt:refs/remotes/origin/bolt/$bolt" 2>&1); then
-    echo "FETCHED=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
-  fi
-  if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then
-    git worktree add -q "$path" "$branch" || exit 1
-    git branch -q --set-upstream-to="$base" "$branch" || exit 1
-    echo "KEPT=$(git rev-parse --short "refs/heads/$branch")"
-  else git worktree add -q --track -b "$branch" "$path" "$base" || exit 1; fi
-fi
-# Where the worktree keeps what crew runs for it, and what its kit declares of its toolchain and tests (kit.py).
-echo "GITDIR=$(git -C "$path" rev-parse --absolute-git-dir)"
-if [ -f "$path/$file" ]; then echo "DECLARATION=$(base64 < "$path/$file" | tr -d '\n')"; else echo "DECLARATION=-"; fi
-"""
-
-# A step of a worktree's readying, run in it with only the variables kit.KEEP names and every LC_* the host has, and
-# stdin closed; with an output file, its stdout kept there.
-IN_PLACE = r"""path=$1 out=$2 keep=$3; shift 3
-cd "$path" || exit 2
-env=()
-for v in $keep $(compgen -e | grep '^LC_'); do if val=$(printenv "$v"); then env+=("$v=$val"); fi; done
-if [ -n "$out" ]; then mkdir -p "$(dirname "$out")" || exit 2; exec env -i "${env[@]}" "$@" </dev/null >"$out"; fi
-exec env -i "${env[@]}" "$@" </dev/null
-"""
-
-
-def make_place(fleet, t, path, branch, bolt, unready=False):
-    """A worktree at a fixed path on its branch, made with git itself on the team's host, its branch tracking the bolt
-    where it lives, origin/bolt/<bolt> after a fetch for a bolt on GitHub (plan.19, PLACE), a new branch cut from it,
-    then made ready through its kit's declaration (plan.17), whether it is new or was already there: the declared
-    toolchain, its output kept in the worktree's git directory, and the runner's setup inside it. A step that fails
-    refuses the command with the worktree made; with unready, as a fix's place is made (teams.3, record 0028), it stops
-    the readying instead, and what failed is returned, None once the worktree is ready; with the commit a kept branch
-    the new worktree was made on is at (PLACE's KEPT), else None. The command's next step reads the kit again."""
-    main, host = t["kit"]["main"], t["machine"]
-    said = host_run(fleet, host, PLACE, main, path, branch, bolt, "", kit.DECLARATION)
-    if "GITDIR=" not in said:
-        said = host_run(fleet, host, PLACE, main, path, branch, bolt, kit.place_base(said, bolt), kit.DECLARATION)
-    gitdir, text = kit.place_said(said, bolt)
-    kept = next((l[len("KEPT="):] for l in said.splitlines() if l.startswith("KEPT=")), None)
-    why = None
-    for what, argv, out in kit.readying(kit.declared(text, f"{path}/{kit.DECLARATION}"), f"{gitdir}/crew/toolchain.sh"):
-        r = crew.on_machine(fleet, t["machine"], ["bash", "-c", IN_PLACE, "crew", path, out or "", " ".join(kit.KEEP), *argv])
-        if r.returncode:
-            why = kit.step_failed(path, what, r.returncode, r.stderr + r.stdout)
-        elif what == "moon --version" and kit.moon_said(r.stdout):
-            why = f"{path} is made but not ready: {kit.moon_said(r.stdout)}"
-        if why:
-            unready or fail(why)
-            break
-    READ.drop_kit(t["machine"], t["kit"]["main"])
-    return why, kept
-
 
 # What a kit's main checkout holds of its mains, on its host, for kit.main_now to decide which is main now (plan.18,
 # code.7): ORIGIN, whether it has an origin remote, which it then fetches, once for the command, and FETCHED, ok or the
@@ -1776,38 +1713,38 @@ def main_held(name, machine, said):
     return sha, why
 
 
-def tidy_after(fleet, t, what, landed=None, dropped=None, units=()):
-    """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
-    has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did; and,
-    after a landing, the bolt's landing card closed there with the words, where its conductor holds it
-    (landing_cards_closed), and the bolt's branch deleted by sluice once the landing's place is gone (land_delete,
+def sweep_on(fleet, t, what, landed=None, dropped=None, units=()):
+    """The team's read on its host after a landing or a drop there (team_tidy, code.3), which reads each landing of its
+    bolts nothing recorded (reap_landings, plan.21): run in this process
+    when that is this host, else crew _tidy there as the one asking, saying what it did: the sweep of crew's own
+    landing place and marked branch of the bolt, and, after a landing, the bolt's landing card closed there with the
+    words (landing_cards_closed) and its branch deleted by sluice once the landing's place is gone (land_delete,
     plan.19), landed being (bolt, the outcome recorded, what Pending You is sent in its place or None, whether the user
-    answered it in a conversation); after a drop (dropped, the bolt), its branch asked of sluice by the tidy's judgment
+    answered it in a conversation); after a drop (dropped, the bolt), its branch asked of sluice by the sweep's judgment
     of it (bolt_branch_asked); after either, what the bolt's units (units) recorded as made, kept there, removed
-    (made_drop). A host that does not answer leaves that to the team's next read, the delete named with its command,
-    and the write stands."""
+    (made_drop). A host that does not answer, or whose read fails, leaves that to the team's next read, the delete
+    named with its command, and the write stands."""
     bolt, outcome, said, here = landed or (None, None, None, False)
+    if t["machine"] == crew.this_host():
+        try:
+            team_tidy(fleet, argparse.Namespace(team=t["name"], force=False, landed=bolt, outcome=outcome, said=said, here=here,
+                                                units=list(units)))
+        except Refusal as e:
+            print(f"{t['name']}'s read after {what} failed ({e}): the team's next read sweeps what is over")
+        return
     more = (["--landed", bolt, "--outcome", outcome] + (["--said", said] if said else []) + (["--here"] if here else [])) if landed else []
     more += ["--units", *units] if units else []
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"], *more))
     READ.drop_kit(t["machine"], t["kit"]["main"])
-    said = tidied(t["name"], what, r.returncode, r.stdout, r.stderr)
-    if said:
-        print(said)
+    if r.returncode:
+        why = "did not answer" if r.returncode == 255 else "failed (" + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1] + ")"
+        print(f"{t['name']}'s host {why}, so what crew made for {what} is not swept yet: the team's next read sweeps it")
+    elif (r.stdout + r.stderr).strip():
+        print((r.stdout + r.stderr).strip())
     if landed and r.returncode == 255:  # nothing ran there, the land's delete among it
         print(deleted_said(landed[0], t["machine"], r.returncode, r.stdout, r.stderr))
     if dropped and r.returncode == 255:  # the team's next read asks it, the bolt's branch marked given and in no plan
         print(dropped_said(dropped, t["machine"], r.returncode, r.stdout, r.stderr))
-
-
-def tidied(team, what, code, out, err):
-    """What a plan write that ended work says of the tidy it asked of the team's host: what the tidy said, or, when the
-    host did not answer (ssh's 255) or the tidy failed, that the team's next read removes what is over; the write
-    stands either way."""
-    if code:
-        why = "did not answer" if code == 255 else "failed (" + ((err or out).strip().splitlines() or [f"exit {code}"])[-1] + ")"
-        return f"{team}'s host {why}, so its worktrees for {what} are not removed yet: the team's next read removes them"
-    return (out + err).strip()
 
 
 # --------------------------------------------------------------------------------------------------- bolts
@@ -3640,7 +3577,7 @@ def bolt_land(fleet, a, by=None, close_why=None):
         if pane and kept is None:
             where = words_kept_where(pane[3], crew.this_host())
             print(f"the user's words to land {a.bolt} {where}: its landing card closes naming {pane[0]}'s pane and the time, without them")
-        tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, outcome, sent, bool(pane)), units=units)
+        sweep_on(fleet, t, f"bolt {a.bolt}", (a.bolt, outcome, sent, bool(pane)), units=units)
         if pane:
             landing_word_drop(label, a.bolt)
     else:
@@ -5533,7 +5470,7 @@ def op_bolt_drop(ctx, a):
 
     def after(repo, sha):  # the bolt's branch asked of sluice there, after its worktrees (plan.19, bolt_branch_asked)
         if team:
-            tidy_after(ctx.fleet, team, f"bolt {a.bolt}", dropped=a.bolt, units=gone)
+            sweep_on(ctx.fleet, team, f"bolt {a.bolt}", dropped=a.bolt, units=gone)
     return Op(label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), "bolt.drop",
               on=[f"bolt/{a.bolt}"], body=a.reason, after=after)
 
@@ -5795,7 +5732,7 @@ def op_unit_drop(ctx, a):
     k = a.cmd
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"{k} {a.unit} has merged into its bolt, so it can't be dropped")
-    # A stage unknown only for its place is not merged: the drop goes, and the tidy after it removes that place.
+    # A stage unknown only for its place is not merged: the drop goes, and crew removes no place of it.
     s["stage"] != "unknown" or s.get("place_unread") or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
     u0 = plan.item(a.unit)
     bolt = u0.get("Bolt")
@@ -5811,10 +5748,10 @@ def op_unit_drop(ctx, a):
             reach_places(ctx.fleet, w, u.get("Bolt"))
         return [bolt] if bolt else []
 
-    def after(repo, sha):
+    def after(repo, sha):  # the team's read, which closes its bolt once landed (plan.21); crew removes no unit's place
         if team:
-            tidy_after(ctx.fleet, team, f"{k} {a.unit}")
-        elif s["worktree"]:
+            sweep_on(ctx.fleet, team, f"{k} {a.unit}")
+        if s["worktree"]:
             print(f"its worktree stays at {s['worktree']}, on {k}/{a.unit}")
     return Op(label, change, f"plan({bolt or 'queue'}): drop {called(a)}", f"{k}.drop", on=[f"{k}/{a.unit}", group_of(u0)],
               body=a.reason, after=after)
@@ -7708,106 +7645,27 @@ def plan_of(fleet, label):
         return None
 
 
-def slot_stages(fleet, t):
-    """Each slot of the team on this host that holds a unit or fix: what it holds and that work's stage, read from the
-    kit and the plan, with its tasks done and total where its change has a task list. Work that has neither landed nor
-    merged is dropped when the plan was read and has no such unit, or no bolt the fix's branch tracks; a unit the plan
-    has outside every bolt the team holds, queued again or moved to another bolt, has left."""
-    path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
-    held = [l.split() for l in (path.read_text().splitlines() if path.exists() else []) if l.strip()]
-    if not held:
-        return []
-    k = survey(fleet, [(t["name"], None)]).get(t["machine"], {})
-    kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
-    plan = plan_of(fleet, t["label"])
-    marks = {u.name(): u.get("Amended") for u in plan.units() if u.get("Amended")} if plan else {}
-    bolts = {b.name() for b in held_by(plan, t["name"])} if plan else set()
-    return [dict(slot=slot, kind=kind, name=name, place=place, **dict(zip(("stage", "counts"), slot_stage(kind, name, kit, plan, bolts, marks))))
-            for slot, kind, name, place in held]
-
-
-def slot_stage(kind, name, kit, plan, bolts, marks):
-    """The stage of the work a slot holds, and its tasks done and total where its change has a task list (teams.1):
-    read from the kit as gathered (kit, unread unless ok) and the plan (None when it could not be read), bolts the
-    names of those the team holds, marks the plan's Amended marks. A fix's stage crew reads as none, since crew starts
-    no fix in a slot; a unit or a chore has landed, merged into its bolt, been dropped from the plan, left the team's
-    bolts, or reads its stage from its place. A unit has merged once its bolt holds its change archived."""
-    if not kit.get("ok"):
-        return "unknown", None
-    if kind == "fix":
-        return "none", None
-    if kind == "chore":
-        pl = kit.get("chore_places", {}).get(name)
-        bolt = (pl or {}).get("bolt") or (plan.chore(name).get("Bolt") if plan and plan.chore(name) else None)
-        if name in kit.get("chores", []):
-            return "landed", None
-        if bolt and name in kit["bolts"].get(bolt, {}).get("chores", []):
-            return "merged", None
-        if plan and not plan.chore(name):
-            return "dropped", None
-        if plan and plan.chore(name).get("Bolt") not in bolts:
-            return "left", None
-        return (chore_stage(name, bolt, kit, pl)[0] or "none") if pl else "none", None
-    pl = kit["places"].get(name)
-    if name in kit["main"]:
-        return "landed", None
-    bolt = (pl or {}).get("bolt") or (plan.unit(name).get("Bolt") if plan and plan.unit(name) else None)
-    if bolt and name in kit["bolts"].get(bolt, {}).get("archived", []):
-        return "merged", None
-    if plan and not plan.unit(name):
-        return "dropped", None
-    if plan and plan.unit(name).get("Bolt") not in bolts:
-        return "left", None
-    if pl:
-        return place_stage(pl, marks.get(name)), "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None
-    return "none", None
-
-
 def tidy(fleet, a):
-    """Each worktree crew made in the team's kit checkout, on this host, whose work is over and that no slot holds:
-    removed with its branch, saying the commit the branch was at, a unit's or chore's branch kept, named and
-    recorded instead when git cherry finds work on it its bolt, or main once the bolt has landed or is gone, lacks
-    (branch_gone, plan.10); or kept and named, with its branch, while it is locked or has uncommitted changes. The
-    removal first releases the place through sluice, `sluice release --worktree <place>`, which runs the kit's policy's
-    release command, ends what its runs left running and frees its ports, so what sluice stood up for it goes too; one
-    sluice does not release, its release command having failed, is kept and named with its branch in sluice's words,
-    and the next read tries it again (release_kept, plan.9). Then it goes through the kit's own `wt remove`, run from
-    the kit's main checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having
-    failed or waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is
-    kept and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
-    alone, the branch is kept and said. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
-    detached there, a bolt given before record 0026, or directly in <kit>/places/ on unit/<its folder>, on
-    chore/<name> in chore-<name>, or on bolt/<bolt> in land-<bolt>, a unit's or chore's place
-    only when it stands at crew's own path for its work and this host's run record holds the work's start (crews_place,
-    host_made), read once and only when such a place is listed; one under <kit>/places/ that is not is a stranger, named
-    each time and left to whoever made it (stranger_said), and while the record can't be read no such place is judged,
-    saying so; nothing else is touched. While its
-    bolt lasts, a bolt's worktree still on its branch is detached at the bolt's tip when it is clean, its branch then
-    marked as crew's, and named as kept on the branch while it is not (bolt_detach, plan.18). A worktree the tidy would
-    detach or remove is left as it is, named, while sluice's overview lists a run in it, or can't be read, read once and
-    only then (run_kept, plan.9; sluice ADR 0024). The landing's place, which
-    git could not remove after its submission or a stopped landing left, goes with its bolt, kept and named while its
-    submission is still with sluice (landing_now), and leaves the bolt's branch to be judged in the same read. A bolt's
-    branch crew marked, which no worktree holds, goes once no plan has the bolt, a landed bolt's only when main holds
-    every commit of it, being kept, named and recorded otherwise (bolt_branch_gone, record 0003), and any other, a
-    dropped bolt's among them, only by sluice's delete, which keeps it, marked dropped, named and recorded, while main
-    lacks its tip, and is asked again once main holds it (bolt_branch_asked, plan.19); crew's marks are read
-    once, before the worktrees are judged, so each place of a landed bolt is judged against main, and a mark whose branch
-    sluice's delete removed is unset then, saying nothing (marks_gone, plan.19). At a landing (a.landed, the bolt), the
-    landing's place gone, sluice is asked to delete the bolt's branch before it is judged (land_delete). The worktrees
-    are listed before the slots and plans are read: a plan has a bolt or a unit, and a slot is taken, before crew
-    makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's work
-    goes in can't be read. Once a worktree is removed, the command's next step reads the kit again. Returns the paths of
-    the worktrees it removed, for the entry of the act in whose command it ran to name (plan.9)."""
+    """The sweep of what crew made in the team's kit checkout, on this host (bolt-teams "crew removes only its own
+    worktrees", plan.9, plan.19): each landing's place, <kit>/places/land-<bolt> on bolt/<bolt>, which git could not
+    remove after its submission or a stopped landing left, goes once no plan has its bolt, kept and named while its
+    submission is still with sluice (landing_now), while it is locked or has uncommitted changes, or while sluice's
+    overview lists a run in it, read once and only then (run_kept); its removal first releases it through sluice,
+    `sluice release --worktree <place>`, a release that failed keeping it in sluice's words (release_kept), and then
+    goes through the kit's own `wt remove`, so its remove hooks run, one wt refuses or leaves standing kept and named,
+    and the bolt's branch it held is judged below. A bolt's branch crew marked, which no worktree holds, goes once no
+    plan has the bolt, a landed bolt's only when main holds every commit of it, being kept, named and recorded otherwise
+    (bolt_branch_gone, record 0003), and any other, a dropped bolt's among them, only by sluice's delete, which keeps
+    it, marked dropped, named and recorded, while main lacks its tip, and is asked again once main holds it
+    (bolt_branch_asked, plan.19); crew's marks are read once, before the worktrees are judged, and a mark whose branch
+    sluice's delete removed is unset then, saying nothing (marks_gone). At a landing (a.landed, the bolt), the landing's
+    place gone, sluice is asked to delete the bolt's branch before it is judged (land_delete). Every other worktree, a
+    place of Flume's among them, is left alone. Nothing is removed when a plan the kit's work goes in can't be read.
+    Once a worktree is removed, the command's next step reads the kit again. Returns the paths of the worktrees it
+    removed."""
     t = at_work(fleet, a.team)
     main, kdir, kit = os.path.realpath(t["kit"]["main"]), os.path.realpath(t["kit"]["dir"]), t["kit"]["name"]
     trees = gather.worktrees(main)
-    held = set()  # each slot's name and place, of every team of this host building in this checkout
-    for o in fleet["teams"].values():
-        if o["machine"] == crew.this_host() and os.path.realpath(o["kit"]["main"]) == main:
-            f = pathlib.Path.home() / f".local/state/{o['name']}-team/slots"
-            for slot, kind, name, place in (l.split()[:4] for l in (f.read_text().splitlines() if f.exists() else []) if len(l.split()) >= 4):
-                held |= {name, os.path.realpath(place)}
     errors, labels = {}, sorted({o["label"] for o in kit_teams(fleet, kit)})
     found = plans(fleet, labels, errors)
     errors.update({f"{l}/main of {repo}": f"{repo} has no {l}/main yet" for l, repo, tip, _ in found if not tip})
@@ -7815,28 +7673,15 @@ def tidy(fleet, a):
         print(unread_plans(errors))
         return []
     bolts = {b.name() for *_, p in found for b in p.bolts() if b.get("Repo") == kit}
-    units = {u.name(): u.get("Bolt") for *_, p in found for u in p.units() if u.get("Repo") == kit}
-    chores = {u.name(): u.get("Bolt") for *_, p in found for u in p.chores() if u.get("Repo") == kit}
     now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as Stages reads it (plan.18)
-    ups, on_main = gather.upstreams(main), set(gather.changes(main, now))
     marks = bolt_marks(main)
     unmark_gone(main, marks)
-    merged_now = []  # the bolt branches main now holds the tip of, read once and only for a dropped bolt's or a legacy one's
+    merged_now = []  # the bolt branches main now holds the tip of, read once and only for a dropped bolt's
 
     def in_main():
         if not merged_now:
             merged_now.append(bolt_merged(main, now))
         return merged_now[0]
-
-    def up_landed(branch):  # whether the bolt the branch tracks, the host's or GitHub's, is marked landed (record 0003)
-        bolt = gather.bolt_ref(ups.get(branch, ""))[0]
-        return bool(bolt) and marks.get(f"bolt/{bolt}") == "landed"
-    chores_on = {}  # each branch's chores, read once each and only for a chore's place
-
-    def chores_of(ref):
-        if ref not in chores_on:
-            chores_on[ref] = set(gather.chores(main, now if ref == "main" else f"refs/heads/{ref}"))
-        return chores_on[ref]
     freed = set()  # the branches of the landings' places removed here
     overview = {}  # the runs sluice's overview lists, by canonical path, read once and only for a worktree that would go
 
@@ -7847,46 +7692,22 @@ def tidy(fleet, a):
             overview.update(runs={os.path.realpath(k): v for k, v in (runs or {}).items()},
                             why=why or (None if runs is not None else f"it is not the {OVERVIEW} sluice 0.36.4 prints"))
         return run_kept(overview["runs"].get(os.path.realpath(p)), overview["why"])
-    made = {}  # the work this host's run record holds a start of, read once and only for a place under places/
-
-    def made_here():
-        if not made:
-            made["works"], made["why"] = host_made(labels)
-            if made["why"]:
-                print(f"no unit's, chore's or fix's place is removed: {made['why']}")
-        return made["works"]
-    removed = []  # the places removed here, for the entry of the act whose command this is (plan.9)
+    removed = []  # the places removed here
     for w in trees:
         path, branch = w["path"], w.get("branch") or ""
-        known = made_here() if place_work(branch, kdir)[0] else None
-        if crews_place(path, branch, kdir, known) is False:
-            print(stranger_said(path, branch, kdir, crew.this_host()))
+        crews = tidy_over(path, branch, kdir, bolts)
+        if crews is None or not crews[1] or not os.path.isdir(path):
             continue
-        crews = tidy_over(path, branch, kdir, ups.get(branch, ""), bolts, units, on_main,
-                          lambda bolt: gather.archived(main, f"bolt/{bolt}"), chores, chores_of, known)
-        if crews is None:
-            continue
-        name, over = crews
-        if not os.path.isdir(path):
-            continue
+        over = crews[1]
 
         def status(p=path):
             r = subprocess.run(["git", "-C", p, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
             return r.returncode, r.stdout, r.stderr
-        detach = bolt_detach(path, branch, kdir, over, w.get("locked"), status, lambda p=path: run_in(p))
-        if detach:
-            print(bolt_detached(main, path, branch) if detach[0] else f"{path} is kept on {branch}: {detach[1]}")
-            continue
-        if not over or name in held or path in held:
-            continue
-        landing = branch.startswith("bolt/") and name == f"land-{branch[5:]}"  # the landing's place (tidy_over)
-        why = kept_why(over, w.get("locked"), None if w.get("locked") else status(), lambda p=path: run_in(p),
-                       landing and landing_now(t, branch[5:])[2])
-        held_too = f", and {branch} with it" if branch else ""  # a bolt's worktree the tidy detached holds no branch
+        why = kept_why(over, w.get("locked"), None if w.get("locked") else status(), lambda p=path: run_in(p), landing_now(t, branch[5:])[2])
         if why:
-            print(f"{path} is kept{held_too}: {why}")
+            print(f"{path} is kept, and {branch} with it: {why}")
             continue
-        kept = f"{path} is kept{held_too}: {over}, and "
+        kept = f"{path} is kept, and {branch} with it: {over}, and "
         # sluice holds the release to the time limit its policy gives a run, as the kit's remove hooks run to their end
         unreleased = release_kept(*sluice_read(main, "release", "--worktree", path, timeout=None))
         if unreleased:
@@ -7907,22 +7728,11 @@ def tidy(fleet, a):
             print(kept + "the kit's wt remove exited 0 and left it there")
             continue
         removed.append(path)
-        if not branch:
-            print(f"{path} is removed: {over}")
-            continue
         if not wt_left_branch(r.stdout, path):
             print(f"{path} is removed, and {branch} is kept: crew could not read what wt remove said of the branch")
             continue
-        if landing:  # the bolt's branch goes below, by crew's mark, now that no worktree holds it
-            print(f"{path} is removed: {over}")
-            freed.add(branch)
-            continue
-        if branch.startswith(("unit/", "chore/")):  # judged by git cherry (plan.10)
-            print(branch_gone(t, main, branch, ups.get(branch, ""), now, path, over, up_landed(branch)))
-            continue
-        mark = marks.get(branch)  # a legacy bolt's worktree, its branch judged by its mark
-        print(bolt_branch_gone(t, main, branch, mark, now, bolts, False, mark == "dropped" and branch in in_main(), path)
-              or f"{path} is removed: {over}")
+        print(f"{path} is removed: {over}")
+        freed.add(branch)  # the bolt's branch goes below, by crew's mark, now that no worktree holds it
     # A bolt is a branch with no worktree (record 0026): each one crew made, by its mark, goes once no plan has the bolt
     # and no worktree holds it, a landed bolt's only when main holds every commit of it, and any other by sluice's delete,
     # a dropped bolt's kept while main lacks its tip (plan.19); a deletion sluice's guard refuses, while a submission to
@@ -7940,21 +7750,6 @@ def tidy(fleet, a):
         if said:
             print(said)
     return removed
-
-
-def host_made(labels):
-    """The work this host's run record holds a start of for the labels (made_works), every day's file read, since a
-    place standing on the host may be as old as its first entry (plan.9): (works, None), or (None, why) when a file could
-    not be read, so no place is judged on a guess (read.1)."""
-    host, entries = crew.this_host(), []
-    for label in labels:
-        d = record.ROOT / label / "runs" / host
-        try:
-            for f in sorted(d.glob("*.rec")):
-                entries += record.parse(f.read_text())
-        except OSError as e:
-            return None, f"{host}'s run record at {d} could not be read: {e.strerror or e}"
-    return made_works(entries), None
 
 
 def bolt_marks(main):
@@ -7993,18 +7788,6 @@ def marks_gone(marks, have):
     return sorted(b for b in marks if b not in have)
 
 
-def branch_target(kind, up, up_exists, up_landed, main_ref):
-    """What a branch whose place goes is compared with by git cherry (plan.10, record 0003), from plain facts: a unit's,
-    a chore's or a fix's bolt, the branch it tracks (up), while that branch exists (up_exists) and is not marked landed
-    (up_landed), else the kit's main now (main_ref, gather.now_ref), the only place its work could have arrived once its
-    bolt has landed or been dropped, since a landed bolt can hold what main lacks, and a fix's bolt goes with its
-    landing (teams.3); None for a fix tracking no bolt, which keeps it (record 0028). Whether the bolt exists is read
-    apart from the upstream, which git still names once the branch is gone."""
-    if kind == "fix" and not up:
-        return None
-    return up if up and up_exists and not up_landed else main_ref
-
-
 def branch_kept(target, cherry):
     """Why a branch is kept when its place goes (plan.10, record 0003, record 0028), with how many commits it holds whose
     patch its target lacks, for the run record, None when git could not count them; or None when it goes: git cherry
@@ -8021,33 +7804,6 @@ def branch_kept(target, cherry):
     n = sum(1 for l in out.splitlines() if l.startswith("+"))
     return (f"it holds {n} commit{'' if n == 1 else 's'} whose patch {named} lacks (git cherry), the user's to keep or "
             "delete", n) if n else None
-
-
-def branch_gone(t, main, branch, up, now, path=None, over="it was dropped", landed=False):
-    """A unit's, chore's or fix's branch once no worktree is on it, its place (path) removed now or before, its work
-    over (over): compared by git cherry, in the kit's main checkout, with its bolt (up, the branch it tracks) while
-    that branch stands and is not marked landed (landed), else with the kit's main now (now), a fix tracking no bolt
-    with nothing (branch_target); deleted when it holds nothing its target lacks, else kept and named, a dropped fix's
-    mark unset, so the user's from then on (branch_kept, plan.10, record 0003), and recorded once on the team's host as
-    branch.kept, from its bolt, bolt/<bolt> whichever of its refs it tracks, when it was compared with it or the bolt has
-    landed, since no later read reaches a branch no worktree is on. What crew says of it (branch_said)."""
-    git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
-    kind = branch.split("/", 1)[0]
-    sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
-    ref = gather.bolt_ref(up)[1] or f"refs/heads/{up}"  # the host's bolt/<bolt> or GitHub's origin/bolt/<bolt>
-    target = branch_target(kind, up, bool(up) and git("rev-parse", "--verify", "-q", ref).returncode == 0, landed, now)
-    r = git("cherry", target, branch) if target else None
-    kept = branch_kept(target, r and (r.returncode, r.stdout, r.stderr))
-    if kept:
-        why, n = kept
-        git("config", "--unset", f"branch.{branch}.crew")
-        why = kept_record(f"bolt {gather.bolt_ref(up)[0]} has landed", target, kept) if landed else over if n else f"{over}, and {why}"
-        bolt = gather.bolt_ref(up)[0]  # recorded as the bolt, whichever of its refs the branch tracks (plan.19)
-        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [f"bolt/{bolt}"] if bolt and (target == up or landed) else [],
-                    why=why, Head=sha, Count=n)
-        return branch_said(branch, path, sha, over, kept)
-    r = git("branch", "-q", "-D", branch)
-    return branch_said(branch, path, sha, over, None, (r.stderr.strip() or f"exit {r.returncode}") if r.returncode else None)
 
 
 def branch_said(branch, path, sha, over, kept, refused=None):
@@ -8163,119 +7919,15 @@ def bolt_merged(main, now):
     return set((gather.run(["git", "for-each-ref", f"--merged={now}", "--format=%(refname:short)", "refs/heads/bolt/"], main) or "").split())
 
 
-def bolt_detach(path, branch, kdir, over, locked, status, run):
-    """Whether the tidy detaches a bolt's worktree from before record 0026 at its bolt's tip, so that no worktree of
-    crew's holds a bolt branch (plan.9, plan.18): None for any worktree but one directly in <kit>/bolts/ on bolt/<its
-    folder> while its bolt lasts (over, None), one whose bolt is over going as any finished worktree does; else (True,
-    None) when it is clean, or (False, why it stays on the branch) when it is locked, git status (status(), read only
-    then: exit, output, error) says it has uncommitted changes, git cannot read it, or, once it is clean, sluice's
-    overview lists a run in it or can't be read (run(), run_kept's words or None, read only then), which is said on
-    every read until it is clean and no run is in it."""
-    if over or os.path.dirname(path) != os.path.join(kdir, "bolts") or branch != f"bolt/{os.path.basename(path)}":
-        return None
-    if locked:
-        return False, "it is locked, and crew detaches it at the bolt's tip once it is not"
-    code, out, err = status()
-    if code:
-        return False, f"git cannot read its status ({err.strip()}), so crew cannot tell it may detach it at the bolt's tip"
-    if out.strip():
-        return False, ("it has uncommitted changes, which are the user's to keep or discard, and crew detaches it at the "
-                       "bolt's tip once it is clean")
-    ran = run()
-    if ran:
-        return False, f"{ran}, and crew detaches it at the bolt's tip once no run is in it"
-    return True, None
-
-
-def bolt_detached(main, path, branch):
-    """A clean bolt's worktree from before record 0026 detached at its bolt's tip (bolt_detach), `git switch --detach`
-    in it, its files as they were; the bolt's branch then marked as crew's in the kit's git config, as a branch the give
-    makes is (BOLT_CREATE), so it goes with the bolt once no worktree holds it (bolt_branch_over). What crew says of it,
-    or why git refused."""
-    git = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True, env=gitenv())
-    r = git("-C", path, "switch", "-q", "--detach")
-    if r.returncode:
-        return f"{path} is kept on {branch}: git could not detach it ({' '.join(r.stderr.split()) or f'exit {r.returncode}'})"
-    git("-C", main, "config", f"branch.{branch}.crew", "given")
-    sha = git("-C", path, "rev-parse", "--short", "HEAD").stdout.strip()
-    return f"{path} is detached at {branch}'s tip, {sha}, so no worktree holds the bolt's branch"
-
-
-def place_work(branch, kdir):
-    """The work a branch of crew's names and the place crew makes for it (plan.9, plan.11): unit/<u> at
-    <kit>/places/<u>, chore/<c> at <kit>/places/chore-<c>; (None, None) for any other branch."""
-    kind, _, name = branch.partition("/")
-    if kind in ("unit", "chore") and crew.NAME.match(name):
-        return branch, os.path.join(kdir, "places", name if kind == "unit" else f"chore-{name}")
-    return None, None
-
-
-def made_works(entries):
-    """The work a host's run record holds a start of (plan.9): each unit's and chore's a stage.start names, unit/<u> or
-    chore/<c>, a refused start among them, since make_place can refuse after it made the place and a refusal is an
-    entry (record.1)."""
-    return {o for e in entries for o in e.get("On") or [] if e.get("Act") == "stage.start" and o.startswith(("unit/", "chore/"))}
-
-
-def crews_place(path, branch, kdir, made):
-    """Whether a worktree directly under <kit>/places/ on a unit/ or chore/ branch is a place crew made (plan.9):
-    True when it stands at crew's own path for the work its branch names (place_work) and this host's run record holds
-    that work's start (made, made_works'), never from its folder's or its branch's name alone; False for a stranger;
-    None for any other worktree, and for every one while the record could not be read (made None, read.1)."""
-    work, own = place_work(branch, kdir)
-    if not work or os.path.dirname(path) != os.path.join(kdir, "places") or made is None:
-        return None
-    return path == own and work in made
-
-
-def stranger_said(path, branch, kdir, host):
-    """What the tidy says of a worktree under <kit>/places/ that is not crew's (crews_place), each time it sees one: left
-    to whoever made it (plan.9, read.4), and why: it is not at crew's place for its branch's work, or the run record of
-    host, the one it stands on, holds no start of that work."""
-    work, own = place_work(branch, kdir)
-    why = f"crew's place for {work} is {own}" if path != own else f"{host}'s run record holds no start of {work}"
-    return f"{path} is not crew's, and is left to whoever made it: {why}"
-
-
-def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, chores=(), chores_of=None, made=frozenset()):
-    """Whether a worktree is one crew made, and whether its work is over (plan.9): None for one crew did not make; else
-    (the name a slot holds its work by, why its work is over or None while it goes on). crew made it when it is
-    directly in <kit>/bolts/ on bolt/<its folder>, or detached there, as the tidy leaves it (bolt_detach), on bolt/<bolt>
-    in <kit>/places/land-<bolt>, the landing's place (bolt_submit), or when it is a place crew made (crews_place, made):
-    at <kit>/places/<unit> on unit/<unit> or <kit>/places/chore-<name> on chore/<name>, made from a bolt (up, its
-    upstream), and this host's run record holds the work's start. A bolt's is over once no plan has the bolt (bolts), and so is its
-    landing's, which the landing ends (plan.19); a unit's once it has landed on main (on_main), merged into its bolt
-    (archived_of(bolt)), no plan has it (units, each unit's bolt by its name, None for one queued) or it has left the
-    bolt its place tracks (left_over), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17),
-    never while the bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)),
-    no plan has it (chores, each chore's bolt by its name) or it has left that bolt."""
-    folder, bolt = os.path.basename(path), gather.bolt_of(up)
-    if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch in (f"bolt/{folder}", ""):
-        return None, None if folder in bolts else f"bolt {folder} is in no plan"
+def tidy_over(path, branch, kdir, bolts):
+    """Whether a worktree is crew's own, and whether its work is over (plan.9, bolt-teams "crew removes only its own
+    worktrees"): None for any but a landing's place, <kit>/places/land-<bolt> on bolt/<bolt> (bolt_submit), the one
+    worktree crew makes, every place of Flume's and every other worktree left alone; else (its folder's name, why it is
+    over once no plan has the bolt, which its landing ends, or None while one does)."""
+    folder = os.path.basename(path)
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("bolt/") and folder == f"land-{branch[5:]}":
         return folder, None if branch[5:] in bolts else f"bolt {branch[5:]} is in no plan"
-    if not crews_place(path, branch, kdir, made):
-        return None
-    if branch.startswith("chore/"):
-        name = branch[6:]
-        return name, (f"chore {name} has landed on main" if name in chores_of("main") else
-                      f"chore {name} has merged into bolt/{bolt}" if bolt and name in chores_of(f"bolt/{bolt}") else
-                      left_over("chore", name, bolt, chores[name]) if name in chores else f"chore {name} is in no plan")
-    if branch == f"unit/{folder}":
-        return folder, (f"unit {folder} has landed on main" if folder in on_main else
-                        f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in archived_of(bolt) else
-                        left_over("unit", folder, bolt, units[folder]) if folder in units else f"unit {folder} is in no plan")
     return None
-
-
-def left_over(kind, name, bolt, now):
-    """Why a unit's or chore's place is over once the plan holds it in another bolt than the one its place tracks
-    (bolt), or in the queue (now, None there), as a slot's work is once it has left its team's bolt (teams.1): its work
-    for that bolt is over. None while
-    it is in that bolt, or when its place tracks no bolt crew can name, which it never removes on a guess (read.1)."""
-    if not bolt or bolt == now:
-        return None
-    return f"{kind} {name} has left bolt/{bolt} for " + (f"bolt/{now}" if now else "the queue")
 
 
 def unread_plans(errors):
@@ -8371,27 +8023,23 @@ def wt_left_branch(out, path):
 # ------------------------------------------------ the end of a team's read, and a bolt's conflict with main
 
 
-def rebase_and_tidy(fleet, t, landed=None):
-    """The end of a team's read: the team's tidy, at a landing (landed, the bolt) having sluice delete the bolt's branch
-    once the landing's place is gone (land_delete); then each bolt the team holds that is local until it lands is said,
-    once (bolts_local_said, plan.19). What either refuses is said on standard error. Returns the paths the tidy
-    removed."""
-    plan = None
+def team_read(fleet, t, landed=None):
+    """A team's read on its host: the landing of each bolt the team holds that may have an outcome or a close nothing
+    recorded read (reap_landings); then the sweep of crew's own worktrees and marked bolt branches, at a landing
+    (landed, the bolt) having sluice delete the bolt's branch once the landing's place is gone (tidy, land_delete); then
+    each bolt the team holds that is local until it lands said, once (bolts_local_said, plan.19). What any of them
+    refuses is said on standard error."""
+    reap_landings(fleet, t)
+    try:
+        tidy(fleet, argparse.Namespace(team=t["name"], landed=landed))
+    except Refusal as e:
+        print(e, file=sys.stderr)
     try:
         plan = plan_of(fleet, t["label"])
-    except Refusal as e:
-        print(e, file=sys.stderr)
-    removed = []
-    try:
-        removed = tidy(fleet, argparse.Namespace(team=t["name"], landed=landed))
-    except Refusal as e:
-        print(e, file=sys.stderr)
-    try:
         for said in bolts_local_said(fleet, t, plan) if plan else []:
             print(said)
     except Refusal as e:
         print(e, file=sys.stderr)
-    return removed
 
 
 def main_conflict(entries, bolt, head):
@@ -8549,46 +8197,6 @@ def stopped(label, act, on, said):
     print(said, file=sys.stderr)
     record.emit(label, act, on, refused=said)
     raise Stopped(1)
-
-
-def reap(fleet, team, landed=None, freed=None):
-    """A team's read on its host (teams.1, record.5): the end of each stage that delivered with nobody waiting recorded,
-    late; each slot freed whose unit or fix has merged into its bolt, been dropped from the plan or left the team's
-    bolt, once its agent is not working, a slot lent to a fix given back to the work it was lent from (crew.reaped);
-    the landing of each bolt the team holds that may have an outcome or a close nothing recorded read (reap_landings);
-    then each dependent whose After unit has merged rebased, and the worktrees whose work is over removed, at a landing
-    (landed, the bolt) the bolt's branch deleted by sluice after them (rebase_and_tidy). Each slot.free, the read's
-    own and those its command held back (freed), is written once the tidy has run, naming the place it removed of the
-    slot's work (freed_recorded, plan.9)."""
-    t, freed, removed = team.t, [] if freed is None else freed, []
-    try:
-        try:
-            held = slot_stages(fleet, t)
-        except Refusal:
-            held = []
-        for s in held:
-            how, said = crew.reaped(team.agent_of(s["slot"]), t["name"], s["name"], s["stage"], team.status(s["slot"]),
-                                    (team.lent(s["slot"]) or [None] * 3)[2])
-            if how == "free":
-                why = team.free(s["slot"], held=freed)
-                if why:
-                    print(why, file=sys.stderr)
-                    continue
-            if said:
-                print(said)
-        reap_landings(fleet, t)
-        removed = rebase_and_tidy(fleet, t, landed)
-    finally:
-        freed_recorded(freed, removed)
-
-
-def freed_recorded(freed, removed):
-    """Each slot.free a command held back until its tidy ran (freed, crew.Team.free's), written now, naming in Paths
-    the place of the slot's work when the tidy removed it (removed, its paths), since a removal is recorded on the entry
-    of the act in whose command it happens (plan.9); a removal no slot.free names is said in the tidy's output alone."""
-    gone = {os.path.realpath(p) for p in removed}
-    for label, on, why, place in freed:
-        record.emit(label, "slot.free", on, why=why, Paths=place if place and os.path.realpath(place) in gone else None)
 
 
 def landing_read_due(now, stages, marked):
@@ -8769,14 +8377,14 @@ def main_fix_change(fleet, w, kit, name, mode, words):
 
 
 def team_status(fleet, a):
-    """crew status <team>, on the team's host: the team's read (reap); then its conductor and ops, each with its pane,
+    """crew status <team>, on the team's host: the team's read (team_read); then its conductor and ops, each with its pane,
     its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of);
     each slot with its pane, its agent's state and what it holds (crew.holds_said); the work waiting in each slot lent
     to a fix (crew.lent_said, teams.1); and, while the team holds two bolts, the one it builds and the one that waits to
     land (two_held_said, teams.16)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
-    reap(fleet, team)
+    team_read(fleet, t)
     print(crew.status_row(f"{t['name']}@{t['machine']}", "pane", "state", "context", "pct", "compacts", "started", "holds"))
     window = int(os.environ.get("WINDOW") or 1000000)
     for role in ("conductor", "ops"):
@@ -8793,12 +8401,8 @@ def team_status(fleet, a):
             except OSError:
                 pass
         print(crew.status_row(team.agent_of(role), pane or "-", st or "not up", *cells, ""))
-    try:
-        held = {s["slot"]: s for s in slot_stages(fleet, t)}
-    except Refusal:
-        held = {}
     for slot in team.slots:
-        holds = crew.holds_said(held.get(slot), team.held(slot))
+        holds = crew.holds_said(None, team.held(slot))
         print(crew.status_row(team.agent_of(slot), team.pane(slot) or "-", (team.status(slot) or "not up") if holds else "free",
                               "-", "-", "-", "-", holds))
     for line in team.lines("lent"):
@@ -8818,8 +8422,7 @@ def two_held_said(team, built, waiting):
 
 def team_tidy(fleet, a):
     """crew _tidy <team> [--landed <bolt> --outcome <words> [--said <words>] [--here]], on the team's host: the team's
-    read (reap), which a plan
-    write that ends work asks for there, and crew rebuild runs once its agents are ended; the conductor's and ops's
+    read (team_read), which a landing or a drop asks for there (sweep_on); the conductor's and ops's
     panes told the branch they work for now, none once the bolt has landed or been dropped, and each whose session
     carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing, the bolt's branch
     deleted by sluice once the landing's place is gone (land_delete, plan.19), and its card closed there with the words
@@ -8827,7 +8430,7 @@ def team_tidy(fleet, a):
     here for its batch's card, removed (made_drop)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
-    reap(fleet, team, a.landed)
+    team_read(fleet, t, a.landed)
     said = made_drop(t["label"], a.units)
     if said:
         print(said)
@@ -8983,7 +8586,6 @@ def team_cmd(fleet, a):
         print(f"{name} is closed")
     elif a.act == "rebuild":  # a slot whose work is over, its agent ended with the rest, is freed rather than kept
         team.teardown()
-        reap(fleet, team)
         team.mark(down=False)
         team.panes()
         started = started_all(team)

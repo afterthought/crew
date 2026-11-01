@@ -1521,7 +1521,7 @@ def test_a_close_by_a_read_records_its_bolt_land_in_ops_name_with_its_why(monkey
     monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append((subject, k.get("by"), k.get("why"))))
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
     monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
-    monkeypatch.setattr(plan, "tidy_after", lambda *a, **k: None)
+    monkeypatch.setattr(plan, "sweep_on", lambda *a, **k: None)
     spent = dict(Age="200", Split="team 150, kit 20, user 0, hold 0, nobody 30")
     monkeypatch.setattr(plan, "landing_time", lambda fleet, t, pl, b, entries, now: spent)
     fields = []

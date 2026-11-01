@@ -67,38 +67,6 @@ class TestLentFor:
                                 "unit-2's agent is working on b; unit-3's stage on c has not ended; unit-4's agent is blocked on d")
 
 
-class TestLending:
-    """The lending kept in the team's files on its host (teams.1, teams.9): the slots file holds the fix, the lent file
-    the work it waits for, which the slot is given back to when the fix's slot is freed."""
-
-    @pytest.fixture
-    def team(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
-        t = {"name": "crw-5", "label": "swancloud", "session": "swancloud", "kit": {"main": "/k"}, "machine": "deneb", "units": 4}
-        team = crew.Team(None, t)
-        team.ensure()
-        team.write("slots", TestLentFor.HELD)
-        team.write("panes", [[s, f"w2:p{n}"] for n, s in enumerate(SLOTS, 1)])
-        team.herdr = crew.Herdr("swancloud")
-        team.herdr.listed["agent"] = [{"pane_id": "w2:p1", "agent_status": "working"}, {"pane_id": "w2:p2", "agent_status": "idle"}]
-        return team
-
-    def test_a_fix_that_finds_every_slot_in_flight_takes_one_lent_and_the_work_goes_on_there_once_it_is_given_back(self, team):
-        assert team.take("fix", "fix/b/tidy", "/p/fix-b--tidy", {"unit-2"}) == ("unit-3", True)
-        assert team.held("unit-3") == ["unit-3", "fix", "fix/b/tidy", "/p/fix-b--tidy"]
-        assert team.lent("unit-3") == ["unit-3", "chore", "c", "/p/chore-c"]
-        with pytest.raises(crew.Refusal, match="c waits in crw-5-unit-3, lent to fix/b/tidy"):
-            team.take("chore", "c", "/p/chore-c")
-        assert team.give_back("unit-3") == "c"
-        assert team.held("unit-3") == ["unit-3", "chore", "c", "/p/chore-c"] and team.lines("lent") == []
-        assert team.take("chore", "c", "/p/chore-c") == ("unit-3", False)
-
-    def test_a_unit_or_chore_never_borrows_a_slot(self, team):
-        with pytest.raises(crew.Refusal, match="all 4 of crw-5's slots are in flight: unit-1 holds a"):
-            team.take("chore", "e", "/p/chore-e")
-        assert team.lines("lent") == []
-
-
 class TestReaped:
     @pytest.mark.parametrize("stage, said", [
         ("merged", "swb-1-unit-1 is free: a has merged into its bolt"),

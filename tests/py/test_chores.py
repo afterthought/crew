@@ -210,28 +210,6 @@ class TestSlotsAndPlaces:
         import crew
         assert crew.held_object("chore", "bump") == "chore/bump" and crew.held_object("unit", "a") == "unit/a"
 
-    def plan(self):
-        return plan.Plan(plan_text(bolts=BOLTS, units=[("bump", KIT, TE, [], "chore"), ("gone", KIT, "console-pages", [], "chore")]))
-
-    @pytest.mark.parametrize("k, name, stage", [
-        (kit(chores=["bump"]), "bump", "landed"), (kit(bolt_chores=["bump"]), "bump", "merged"),
-        (kit(places={"bump": place(1)}), "bump", "verify"), (kit(), "dropped-one", "dropped"), (kit(), "gone", "left")])
-    def test_a_slot_holding_a_chore_reads_its_stage(self, k, name, stage):
-        assert plan.slot_stage("chore", name, k, self.plan(), {TE}, {})[0] == stage
-
-    def test_a_chores_place_is_crews_and_over_once_merged_landed_or_planned_no_more(self):
-        on = {"main": {"landed-one"}, f"bolt/{TE}": {"merged-one"}}
-        over = lambda name, chores=("live",), bolt=TE: plan.tidy_over(
-            f"/kit/places/chore-{name}", f"chore/{name}", "/kit", f"bolt/{TE}", {TE}, {}, set(), lambda b: [],
-            {c: bolt for c in chores}, lambda ref: on.get(ref, set()), made={f"chore/{name}"})  # this host's record started it
-        assert over("landed-one") == ("landed-one", "chore landed-one has landed on main")
-        assert over("merged-one") == ("merged-one", f"chore merged-one has merged into bolt/{TE}")
-        assert over("live") == ("live", None)
-        assert over("gone", ()) == ("gone", "chore gone is in no plan")
-        assert over("live", bolt="console-pages") == ("live", f"chore live has left bolt/{TE} for bolt/console-pages")
-        assert plan.tidy_over("/kit/places/bump", "chore/bump", "/kit", f"bolt/{TE}", {TE}, set(), set(), lambda b: [],
-                              set(), lambda ref: set()) is None
-
 
 class TestBolts:
     def test_a_team_is_given_no_bolt_until_its_chores_merge_and_a_landing_waits_for_them_to_land(self):

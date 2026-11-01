@@ -96,12 +96,6 @@ class TestAPlaceOfABoltItHasLeft:
         s = stages(kit({"bump": chore_place(None, None)}), again(("bump", "chore"))).of("bump")
         assert (s["stage"], s.get("place_unread")) == ("unknown", True)
 
-    @pytest.mark.parametrize("bolt, now, over", [
-        (OLD, NEW, f"chore bump has left bolt/{OLD} for bolt/{NEW}"), (OLD, None, f"chore bump has left bolt/{OLD} for the queue"),
-        (NEW, NEW, None), (None, NEW, None)], ids=["another bolt", "the queue", "its bolt", "no bolt crew can name"])
-    def test_the_tidy_takes_a_place_of_a_bolt_its_work_has_left_as_over(self, bolt, now, over):
-        assert plan.left_over("chore", "bump", bolt, now) == over
-
 
 def unread(name):
     """A stage unknown for its place alone: the place tracks a bolt crew cannot read."""

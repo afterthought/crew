@@ -259,7 +259,7 @@ class TestTheWordsAtAClose:
         monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append(k.get("by")))
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
         monkeypatch.setattr(plan, "landed_line", lambda *a: "landed")
-        monkeypatch.setattr(plan, "tidy_after", lambda fleet, t, what, landed=None, **k: tidied.append(landed))
+        monkeypatch.setattr(plan, "sweep_on", lambda fleet, t, what, landed=None, **k: tidied.append(landed))
         monkeypatch.setattr(plan, "LANDINGS", tmp_path)  # this host keeps no words
         monkeypatch.setattr(plan.crew, "on_machine", lambda *a: pytest.fail(f"the close reached a host: {a[1:]}"))
         monkeypatch.setattr(plan.record, "who", lambda: "crw-5-conductor")
