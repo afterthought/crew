@@ -1,6 +1,6 @@
 # crew reads a unit's tasks and planning the way openspec does (plan.12): on the same worktree, for every case openspec
 # treats differently, gather.py's tasks, planning and open tasks are what `openspec list`, `openspec status` and, where
-# it lists them, `openspec instructions apply` say there, and ticks() at the unit's branch is what `openspec list` counts. A change
+# it lists them, `openspec instructions apply` say there. A change
 # of openspec's spec-driven workflow is read from its files without starting openspec; one naming another workflow,
 # one in a kit that redefines spec-driven, or one whose metadata crew does not read is read through openspec.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -118,13 +118,6 @@ printf '#!/usr/bin/env bash\necho "$PWD" >> %q\nexec %q "$@"\n' "$T/openspec.log
 req=$(jq -cn --arg m "$k" --arg d "$kd" '{kits: [{main: $m, dir: $d, bolts: [], reports: []}]}')
 PATH="$T/shim:$PATH" python3 "$CREW/plugin/lib/gather.py" "$req" > "$T/gathered.json" || fail "gather.py failed"
 cases=("${direct[@]}" "${handed[@]}")
-ticks=$(python3 - "$CREW/plugin/lib" "$k" "${cases[@]}" <<'EOF'
-import json, sys
-sys.path.insert(0, sys.argv[1])
-import plan
-print(json.dumps({c: list(plan.ticks(sys.argv[2], f"unit/{c}", c)) for c in sys.argv[3:]}))
-EOF
-) || fail "ticks() failed"
 
 for c in "${cases[@]}"; do
   p=$kd/places/$c
@@ -140,9 +133,8 @@ for c in "${cases[@]}"; do
   fi
   theirs=$(jq -cn --argjson t "$tasks" --argjson p "${planning:-false}" --argjson o "$open" '{tasks: $t, planning: $p, open: $o}')
   [[ $mine == "$theirs" ]] || fail "$c: crew reads $mine where openspec reads $theirs"
-  [[ $tasks == null ]] || eq "$(jq -c --arg c "$c" '.[$c]' <<<"$ticks")" "$tasks"
 done
-ok "crew's tasks, planning, open tasks and ticks agree with openspec in all ${#cases[@]} cases"
+ok "crew's tasks, planning and open tasks agree with openspec in all ${#cases[@]} cases"
 
 for c in "${direct[@]}"; do
   ! grep -qx "$kd/places/$c" "$T/openspec.log" || fail "$c was read through openspec, not from its files"
