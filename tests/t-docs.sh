@@ -81,10 +81,13 @@ ok "the README, the skill and the usage say a start has sluice make the bolt's b
 
 for doc in usage readme skill; do
   has "${!doc}" '<bolt> <name> "<what is wrong>"'; has "${!doc}" "start"; has "${!doc}" "started already"; has "${!doc}" "waits to land"
-  for gone in "bolt give" "crew bolt give" "one more" "a give" "never refused for the bolts"; do lacks "${!doc}" "$gone"; done
+  for gone in "bolt give" "crew bolt give" "one more" "a give" "never refused for the bolts" "plan agree" "dispatch" "agreement"; do
+    lacks "${!doc}" "$gone"
+  done
+  has "${!doc}" "bolt start"
 done
 expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge --merge
-ok "the README, the skill and the usage say a bolt's work is started by crew bolt start, refused for one started already, and name no give, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
+ok "the README, the skill and the usage say a bolt's work is started by crew bolt start, refused for one started already, and name no give, agreement or dispatcher, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
 
 for doc in usage readme skill; do
   for want in "version 2, 3 or 4" "in Flume stream" "Path: flume" "still closes" \

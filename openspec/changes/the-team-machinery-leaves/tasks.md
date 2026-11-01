@@ -24,7 +24,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 - [x] 3.1 `crew bolt give` is gone and `crew bolt start <bolt>`, which a proposal may hold and the user runs, starts a bolt's work as a crossed team's give did, with no team; no bolt's `Team` is written or read, a new state branch's schema allows no `Team` or `Agreed`, and no landing line or card says what a yes frees (design Decisions 9 and 14; Task notes 3.1); verify `tests/suite logic contract` ends with "0 failed", and `tests/suite t-journey-state` ends with "0 failed".
 - [x] 3.2 A proposal waits on the user alone: `crew plan agree` and the `Agreed` write are gone, no write tells a conductor, and only the planner by proposal, the design agent into a queue, main-level ops's `crew bolt land` and the user write the plan (design Decision 6; Task notes 3.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-plan` ends with "0 failed".
 - [x] 3.3 No dispatcher is started, placed, told or named: `crew main up` starts the main level's standing roles alone, `_dispatch` is gone, and an operation's step names no dispatcher as its doer (main-level delta; Task notes 3.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-main t-journey-ops` ends with "0 failed".
-- [ ] 3.4 The usage header, README and the skill name `crew bolt start` and no give, agreement or dispatcher, together (`docs.2`; Task notes 3.4); verify `tests/suite t-docs` ends with "0 failed".
+- [x] 3.4 The usage header, README and the skill name `crew bolt start` and no give, agreement or dispatcher, together (`docs.2`; Task notes 3.4); verify `tests/suite t-docs` ends with "0 failed".
 
 ## 4. A team's agents, tells and branch hint leave
 
