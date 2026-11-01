@@ -9,6 +9,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 - [x] 1.3 A started bolt's ledger and its `crew sites` entry show no dev server, `crew sites` saying its work runs in Flume's places, and `_open.md` names the runner's interface for a place's addresses (crew-board and crew-sites deltas; the user's ruling of 2026-10-31; Task notes 1.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-board` ends with "0 failed".
 - [x] 1.4 The landings card's raise records a forecast conflict with main once on the bolt, tells no agent and starts nothing, the row taking main first until a fix taking main in moves its head, and no take-main line names a team (rail-cards delta; Task notes 1.4); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-land` ends with "0 failed".
 - [x] 1.5 `crew card read land/<kit>` gives to land only the ticked bolts the plan still holds and the run record holds no landing of since the card was posted, saying each other landed or gone from the plan (main-level delta "Ops lands a bolt on a send that still stands"; Task notes 1.5); verify `tests/suite logic` ends with "0 failed".
+- [x] 1.6 This change's deltas carry the words `roles-run-as-flume-kinds` put in the requirements they change, a tell's and a send's ask of a role that runs as its kind and the main level's roles that run as their kinds, and the teams file moves to version 5, after that change's 4, each partition keeping its `flume` (design *What this change rests on* and Decision 2; the merge of 9913f249 on 2026-10-31); verify `openspec validate the-team-machinery-leaves` passes.
 
 ## 2. Stage driving, the fix slot and crew's places leave
 
@@ -22,7 +23,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 
 - [ ] 3.1 `crew bolt give` is gone and `crew bolt start <bolt>`, which a proposal may hold and the user runs, starts a bolt's work as a crossed team's give did, with no team; no bolt's `Team` is written or read, a new state branch's schema allows no `Team` or `Agreed`, and no landing line or card says what a yes frees (design Decisions 9 and 14; Task notes 3.1); verify `tests/suite logic contract` ends with "0 failed", and `tests/suite t-journey-state` ends with "0 failed".
 - [ ] 3.2 A proposal waits on the user alone: `crew plan agree` and the `Agreed` write are gone, no write tells a conductor, and only the planner by proposal, the design agent into a queue, main-level ops's `crew bolt land` and the user write the plan (design Decision 6; Task notes 3.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-plan` ends with "0 failed".
-- [ ] 3.3 No dispatcher is started, placed, told or named: `crew main up` starts the main level's four alone, `_dispatch` is gone, and an operation's step names no dispatcher as its doer (main-level delta; Task notes 3.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-main t-journey-ops` ends with "0 failed".
+- [ ] 3.3 No dispatcher is started, placed, told or named: `crew main up` starts the main level's standing roles alone, `_dispatch` is gone, and an operation's step names no dispatcher as its doer (main-level delta; Task notes 3.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-main t-journey-ops` ends with "0 failed".
 - [ ] 3.4 The usage header, README and the skill name `crew bolt start` and no give, agreement or dispatcher, together (`docs.2`; Task notes 3.4); verify `tests/suite t-docs` ends with "0 failed".
 
 ## 4. A team's agents, tells and branch hint leave
@@ -47,7 +48,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 
 ## 7. The teams file holds partitions only
 
-- [ ] 7.1 crew reads `teams.json` version 4, partitions only, refuses version 2, 3 or any other naming swancloud's `lib/crew-teams.nix`, and refuses a partition role it has no definition for, `dispatcher` among them (design Decision 2; Task notes 7.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams` ends with "0 failed".
+- [ ] 7.1 crew reads `teams.json` version 5, partitions only, each with its `flume`, refuses version 2, 3, 4 or any other naming swancloud's `lib/crew-teams.nix`, and refuses a partition role it has no definition for, `dispatcher` among them (design Decision 2; Task notes 7.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams` ends with "0 failed".
 - [ ] 7.2 The end-to-end world and the logic facts write and read the new file and plans with no team (Task notes 7.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams t-roles t-docs t-briefs t-journey-state` ends with "0 failed".
 
 ## 8. The briefs
