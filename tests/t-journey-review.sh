@@ -266,12 +266,11 @@ has "$out" "card sessions ended:"$'\n'"  proposal/1 (wldn) on mac-studio: its ro
 gone "$p5"
 ok "a proposal opens in plannotator beside the caller; its card's session is on its page, and once its row is gone a rail read ends it on its host"
 
-# Writes and tells reach the agents they should: the dispatcher up on the box, and the planner the main level started.
-p=$(as $box herdr --session wldn-3 workspace create --cwd / --label "wldn dispatch" | jq -r .result.root_pane.pane_id)
-as $box herdr --session wldn-3 stub agent "$p" wldn-dispatch-chuck-herdr-alpha
+# Writes and tells reach the agents they should: a write tells no one, and a tell reaches the planner the main level
+# started.
 : > "$CREW_TEST_LOG"
 crew bolt new edge-signins "Sign-ins at the edge." --repo switchboard-kit >/dev/null
-has "$(grep "^$box wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha " "$CREW_TEST_LOG")" "plan(edge-signins): add the bolt ($me@mac-studio). bolt edge-signins can be given to swb-1 or swb-2"
+grep -q "agent prompt" "$CREW_TEST_LOG" && fail "a bolt added told an agent"
 CREW_AGENT=wldn-design expect_ok crew tell wldn-planner "The tenant's zone is its own."
 grep -q "^$box wldn-3 agent prompt wldn-planner '\[crew tell from wldn-design\] The tenant'\"'\"'s zone is its own.'" "$CREW_TEST_LOG" || fail "crew tell sent nothing"
 as $box herdr --session wldn-3 stub status wldn-planner blocked
@@ -289,7 +288,7 @@ echo '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","
 : > "$CREW_TEST_LOG"
 expect_ok crew tell wldn-planner "Hold the zone work."
 eq "$(grep "^$box wldn-3 agent prompt wldn-planner " "$CREW_TEST_LOG")" "$box wldn-3 agent prompt wldn-planner '[crew tell from $me@mac-studio] Hold the zone work.'"
-ok "a bolt added tells the dispatcher who can take it; crew tell marks its sender, types nothing to an agent herdr reads blocked or crew's hook saw open a question, and is delivered once the question is answered"
+ok "a bolt added tells no agent; crew tell marks its sender, types nothing to an agent herdr reads blocked or crew's hook saw open a question, and is delivered once the question is answered"
 
 # wldn's reviewer and planner run as their kinds: crew review asks the reviewer the batch, opening no tab; the
 # reviewer's run takes it with crew role start and hands it back with crew review delivered once its summary is

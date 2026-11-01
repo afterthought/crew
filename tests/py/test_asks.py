@@ -345,7 +345,6 @@ class TestWrite:
         monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(""))
         monkeypatch.setattr(plan, "show", lambda repo, tip, path: None)
         monkeypatch.setattr(plan, "land", lambda repo, ref, path, make: made.append(make("t" * 40)) or "c" * 40)
-        monkeypatch.setattr(plan, "notify", lambda fleet, seen, subject: None)
         monkeypatch.setattr(record, "emit", lambda label, act, on=(), frm=(), commit=(), why=None, eid=None, **f: emitted.append((act, on, eid, f)))
         monkeypatch.setattr(plan, "agent", lambda: "madswan-ops")
 
@@ -448,7 +447,6 @@ def on_branch(monkeypatch, fleet, files):
         b.writes.append(msg)
         return "c" * 40
     monkeypatch.setattr(plan, "land", land)
-    monkeypatch.setattr(plan, "notify", lambda fleet, seen, subject: None)
     monkeypatch.setattr(record, "emit", lambda label, act, on=(), frm=(), commit=(), why=None, eid=None, by=None, **f:
                         b.entries.append((act, list(on), why, f)))
     monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))

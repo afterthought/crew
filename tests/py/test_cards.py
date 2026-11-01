@@ -53,39 +53,33 @@ def key(name, k, tool="post_request", label="wldn"):
     return plan.card_refusal(FLEET, name, label, tool, k)
 
 
-ASK = f"{crew.HOME}/plugin/bin/crew"
-
-
 class TestKeys:
-    """rail-cards: a question is asked by four roles in their own name, and crew refuses one from any other role or
+    """rail-cards: a question is asked by three roles in their own name, and crew refuses one from any other role or
     under a row's key (record 0031, briefs.11)."""
 
     def test_the_users_own_card_is_never_checked(self):
         assert key("chuck@mac-studio", "land/tenant-environments") is None
 
-    @pytest.mark.parametrize("name", ["swb-1-conductor", "wldn-planner", "wldn-ops", "wldn-design"])
+    @pytest.mark.parametrize("name", ["wldn-planner", "wldn-ops", "wldn-design"])
     @pytest.mark.parametrize("tool", ["post_request", "update_request", "cancel_request", "ack_answer"])
-    def test_the_four_ask_post_change_and_close_a_question_under_a_key_of_their_own_or_none(self, name, tool):
+    def test_the_three_ask_post_change_and_close_a_question_under_a_key_of_their_own_or_none(self, name, tool):
         assert key(name, f"ask/{name}/hold-the-macs", tool) is None and key(name, None, tool) is None
 
     @pytest.mark.parametrize("name, words", [
-        ("swb-1-unit-2", f"Say what you need with `{ASK} needs`, and your conductor gets it and asks if it must."),
-        ("swb-1-ops", f"Tell swb-1-conductor what you wait on with `{ASK} tell`."),
-        ("wldn-dispatch-mac-studio", f"Ask through wldn-planner with `{ASK} tell`."),
         ("wldn-operator", "The user is in your pane: ask them there."),
         ("crw-9-unit-1", "Tell the partition's operator what you wait on, as your brief says.")])
     def test_any_other_role_asks_nothing_on_a_card_and_is_told_whom_to_ask(self, name, words):
-        """rail-cards: a coder asks; the agent's role cannot be read, as for crw-9-unit-1, whose team the teams file
-        does not name."""
+        """The operator agent posts none, the user being in its pane; an agent crew reads no role of, as crw-9-unit-1,
+        tells the operator."""
         for tool in ("post_request", "update_request", "cancel_request", "ack_answer", "create_area"):
             what = "an area" if tool == "create_area" else "a card"
             assert key(name, f"ask/{name}/x", tool) == (
-                f"crew refuses {what} from {name}: only a conductor, the planner, main-level ops and the design agent ask "
-                f"the user on a card. {words}")
+                f"crew refuses {what} from {name}: only the planner, main-level ops and the design agent ask the user on a "
+                f"card. {words}")
 
     @pytest.mark.parametrize("name, k, said", [
-        ("swb-1-conductor", "land/tenant-environments", "a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, and closed when nothing waits to land on the kit's main"),
-        ("swb-1-conductor", "land/tenant-environments/abc1234", "a kit's landings card is crew's"),
+        ("wldn-ops", "land/tenant-environments", "a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, and closed when nothing waits to land on the kit's main"),
+        ("wldn-ops", "land/tenant-environments/abc1234", "a kit's landings card is crew's"),
         ("wldn-planner", "proposal/4", "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop"),
         ("wldn-planner", "proposal/4:2", "a proposal's card is crew's"),
         ("wldn-planner", "batch/3", "a batch's card is crew's"),
@@ -94,13 +88,13 @@ class TestKeys:
         ("wldn-ops", "op/dev/1", "a step's card is crew's, raised by crew ops step"),
         ("wldn-design", "record/atlas-kit/0021", "a record's card is crew's, raised by crew record"),
         ("wldn-design", "proposal/1", "a proposal's card is crew's")])
-    def test_none_of_the_four_posts_changes_or_closes_crews_own_card(self, name, k, said):
+    def test_none_of_the_three_posts_changes_or_closes_crews_own_card(self, name, k, said):
         for tool, verb in (("post_request", "post"), ("update_request", "change"), ("ack_answer", "close"), ("cancel_request", "close")):
             why = key(name, k, tool)
             assert why.startswith(f"crew refuses {name}'s {verb} of the card under {k}: {said}"), why
             assert why.endswith(f"Ask a question of your own under a key of your own, ask/{name}/<what it is about>.")
 
-    @pytest.mark.parametrize("name", ["swb-1-conductor", "wldn-planner", "wldn-ops", "wldn-design"])
+    @pytest.mark.parametrize("name", ["wldn-planner", "wldn-ops", "wldn-design"])
     def test_an_asker_closes_an_answered_verify_card_and_posts_changes_or_withdraws_none(self, name):
         """A card under verify/<unit>/<stamp>, a row form crew no longer raises (teams.17), was a conductor's own, and
         no event of crew's closes it: its ack passes, so its asker closes it with the user's outcome, and its post,
@@ -124,13 +118,15 @@ class TestKeys:
         assert key("wldn-planner", "batch/2", "cancel_request").startswith("crew refuses wldn-planner's close of the card under batch/2")
 
     def test_a_key_outside_crews_own_is_a_questions_whatever_it_is(self):
-        for k in ("gateway-check", "review/x/abc1234", "landing-of-y", "ask/swb-1-conductor/hold"):
-            assert key("swb-1-conductor", k) is None
+        for k in ("gateway-check", "review/x/abc1234", "landing-of-y", "ask/wldn-ops/hold"):
+            assert key("wldn-ops", k) is None
 
-    def test_an_area_is_made_only_under_a_kit_of_the_agents_own(self):
-        assert key("swb-1-conductor", "create-area:WilldanGroup/switchboard-kit", "create_area") is None
-        assert key("swb-1-conductor", "area:swb-1-conductor", "create_area") == (
-            "crew refuses an area under area:swb-1-conductor: swb-1-conductor makes a kit's area only under create-area:WilldanGroup/switchboard-kit.")
+    def test_an_area_is_made_only_under_a_kit_of_the_askers_partition(self):
+        assert key("wldn-ops", "create-area:WilldanGroup/switchboard-kit", "create_area") is None
+        assert key("wldn-ops", "area:wldn-ops", "create_area") == (
+            "crew refuses an area under area:wldn-ops: wldn-ops makes a kit's area only under create-area:WilldanGroup/atlas-kit, "
+            "create-area:WilldanGroup/breadboard-kit or create-area:WilldanGroup/switchboard-kit.")
+        assert key("madswan-design", "create-area:agentplot/flywheel-next", "create_area", label="madswan") is None
         assert key("wldn-planner", "create-area:WilldanGroup/atlas-kit", "create_area") is None
         assert "only under create-area:WilldanGroup/atlas-kit, create-area:WilldanGroup/breadboard-kit or create-area:WilldanGroup/switchboard-kit" in (
             key("wldn-planner", "create-area:agentplot/flywheel-next", "create_area"))
@@ -258,26 +254,26 @@ class TestNames:
         assert cards.refusal(hooked("whoami", {"name": "swancloud-ops"})) is None
 
     def test_the_hook_refuses_a_stage_agents_card_and_a_card_of_crews_own_and_lets_a_question_through(self, monkeypatch):
-        """rail-cards: a coder asks; a conductor posts its landing card by hand; a conductor closes crew's card; a
-        conductor asks."""
+        """rail-cards: an agent of no asking role asks; an agent posts a landing card by hand; it closes crew's card; it
+        asks."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
         monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
         monkeypatch.setenv("CREW_AGENT", "swb-1-unit-1")
         assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-unit-1/x"})).startswith(
-            "crew refuses a card from swb-1-unit-1: only a conductor, the planner, main-level ops and the design agent ask")
-        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+            "crew refuses a card from swb-1-unit-1: only the planner, main-level ops and the design agent ask")
+        monkeypatch.setenv("CREW_AGENT", "wldn-ops")
         assert "a kit's landings card is crew's, raised in main-level ops's name" in cards.refusal(
-            hooked("post_request", {"idempotencyKey": "land/tenant-environments", "name": "swb-1-conductor"}))
+            hooked("post_request", {"idempotencyKey": "land/tenant-environments", "name": "wldn-ops"}))
         monkeypatch.setattr(cards, "posted", lambda record, label, card: "land/tenant-environments" if card == "req_l1" else None)
         assert "close of the card under land/tenant-environments" in cards.refusal(hooked("cancel_request", {"requestId": "req_l1", "reason": "x"}))
         assert cards.refusal(hooked("cancel_request", {"requestId": "req_q1", "reason": "x"})) is None
-        assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold", "kind": "text"})) is None
+        assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/wldn-ops/hold", "kind": "text"})) is None
 
-    def test_the_hook_lets_a_conductor_ack_its_answered_verify_card_by_the_key_its_record_holds(self, monkeypatch):
-        """crw-2-conductor's ack of req_6d9cca5680a84e08abb2, refused on 2026-10-19 under the key its run record holds
-        (signal 2026-10-19-crw-2-conductor-2bec975e/01), goes through; its withdrawal is still refused."""
+    def test_the_hook_lets_an_asker_ack_an_answered_verify_card_by_the_key_its_record_holds(self, monkeypatch):
+        """An ack like crw-2-conductor's of req_6d9cca5680a84e08abb2, refused on 2026-10-19 under the key its run record
+        holds (signal 2026-10-19-crw-2-conductor-2bec975e/01), goes through; its withdrawal is still refused."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
-        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+        monkeypatch.setenv("CREW_AGENT", "wldn-ops")
         monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
         k = "verify/a-card-lost-to-its-owner-is-posted-again/20261011-2238"
         monkeypatch.setattr(cards, "posted", lambda record, label, card: k if card == "req_v1" else None)
@@ -286,10 +282,10 @@ class TestNames:
             hooked("cancel_request", {"requestId": "req_v1", "reason": "x"}))
 
     @pytest.mark.parametrize("agent, row, said", [
-        ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a kit's landings card is crew's"),
+        ("wldn-planner", "batch/7", "a batch's card is crew's"), ("wldn-ops", "land/b1", "a kit's landings card is crew's"),
         ("wldn-ops", "op/a/1", "a step's card is crew's")])
     def test_the_hook_refuses_an_agents_post_under_crews_key_as_crew_sends_it(self, monkeypatch, agent, row, said):
-        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key qualified
+        """rail-cards: an agent posts under a row's key as crew sends it: a row's key qualified
         by its partition's label (cards.post_key, batch/7 as batch/7@wldn), and its revision."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
         monkeypatch.setenv("CREW_AGENT", agent)
@@ -303,7 +299,7 @@ class TestNames:
     def test_a_close_the_run_record_cannot_key_is_refused_and_a_question_reads_no_plan(self, monkeypatch):
         """rail-cards: crew's record of its cards cannot be read; the plan cannot be read."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
-        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+        monkeypatch.setenv("CREW_AGENT", "wldn-ops")
         monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
 
         def unread(*a, **k):
@@ -313,7 +309,7 @@ class TestNames:
             "crew could not check this card: wldn's run record on mac-studio can't be read. Try it again later.")
         monkeypatch.setattr(plan, "fetch", unread)
         monkeypatch.setattr(plan, "read", unread)
-        assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold-the-macs"})) is None
+        assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/wldn-ops/hold-the-macs"})) is None
 
     def test_the_name_is_checked_before_and_apart_from_the_cards_key(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "wldn-planner")

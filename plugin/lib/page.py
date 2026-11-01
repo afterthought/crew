@@ -715,7 +715,7 @@ def docks(d, fleet, label):
         node = f"proposal/{x['proposal']}"
         out[x["dock"]] = dock("proposal", x["case"] or f"proposal {x['proposal']}",
                               (f"proposal {x['proposal']}", x["by"] and f"by {x['by']}", x["opened"] and f"opened {x['opened']}"), form="sheet",
-                              facts=[("waiting on", ", ".join(f"{t}-conductor" for t in x["waiting"]))], markers=x["markers"],
+                              facts=[("waiting on", "the user")], markers=x["markers"],
                               parts=[("teams", [{"text": t, "key": link(f"team:{t}")} for t in x["teams"]]),
                                      ("units and bolts", joined(node, "out") if node in nodes else [])],
                               history=d["histories"].get(node, []))

@@ -92,9 +92,8 @@ def text(rs, cards=(), sv=None, unread=None, **more):
     return plan.rail_text(FLEET, ["wldn"], read, NOW)
 
 
-def proposal(n, waiting=(), opened="2026-10-12"):
-    return {"label": "wldn", "proposal": n, "by": "chuck@mac-studio", "case": f"The console gets bolt {n}.\nMore.", "waiting": list(waiting),
-            "opened": opened}
+def proposal(n, opened="2026-10-12"):
+    return {"label": "wldn", "proposal": n, "by": "chuck@mac-studio", "case": f"The console gets bolt {n}.\nMore.", "opened": opened}
 
 
 # tenant-environments' units at work in their places: early in construct, checked in code at 6/26, stale submitted.
@@ -250,11 +249,11 @@ class TestRows:
                                     "lands once you have answered batches 8 and 9"]
         assert land["cmds"] == []
 
-    def test_a_proposal_is_timed_by_its_entry_else_its_opened_date_naming_whom_it_waits_on(self):
-        p1, p2 = [r for r in rows([proposal(1), proposal(2, ["swb-1"])], times={("wldn", "proposal/1"): NOW}) if r["group"] == "proposals"]
+    def test_a_proposal_is_timed_by_its_entry_else_its_opened_date_and_waits_on_the_user_alone(self):
+        p1, p2 = [r for r in rows([proposal(1), proposal(2)], times={("wldn", "proposal/1"): NOW}) if r["group"] == "proposals"]
         assert (p1["at"], p1.get("date"), p2["date"]) == (NOW, None, "2026-10-12")
         assert p1["what"] == ["proposal 1 (wldn), by chuck@mac-studio: The console gets bolt 1."]
-        assert p2["what"][1] == "still needs the agreement of swb-1-conductor"
+        assert p2["what"] == ["proposal 2 (wldn), by chuck@mac-studio: The console gets bolt 2."]
         assert p1["cmds"] == [("read", "crew plan proposed 1 --label wldn"), ("open", "crew plan proposed 1 --label wldn --open"),
                               ("answer", "crew plan approve 1 --label wldn")]
 

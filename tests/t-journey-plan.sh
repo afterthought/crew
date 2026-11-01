@@ -1,7 +1,7 @@
 # The plan changed through proposals, and the writes that race on its branch, through the crew command on the stubs
 # (tests.11, record 0022), every team's work running in Flume places (Decision 1 of the-team-machinery-leaves): a give
 # fetches the bolt's branch sluice made and launches its units; the planner proposes and crew raises its card, one
-# touching a held bolt waits for its recorded agreement, the user approves, leaves units out on the card and answers
+# touching a started bolt waiting on the user alone, the user approves, leaves units out on the card and answers
 # it, each closing the card, a proposal is dropped and replaced, its card withdrawn or changed in place, one resting on
 # a record its kit's main does not hold accepted is refused, a unit from a signal is routed, a move of launched work is
 # refused, an amendment of a launched unit, approved or the user's own, retries its construct with its words, and two
@@ -92,17 +92,13 @@ expect_ok crew plan proposed
 has "$out" "wldn 1"; has "$out" "waiting on the user"
 ok "a proposal is written open, the plan unchanged, crew raises its card in the planner's name with the line that adopts it, and it reads as the user would read it"
 
-# The planner on its own host, where its card is posted and changed, proposes work for the bolt swb-1 holds.
+# The planner on its own host, where its card is posted and changed, proposes work for a started bolt.
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew plan propose "$(proposal 'Case: The tenant bolt cannot land until its zone exists.' \
   'Do: unit add zone-first "The tenant'"'"'s zone exists." --bolt tenant-environments --unblocks tenant-environments')"
-has "$out" "proposal 2 is open, waiting on swb-1-conductor, then the user"
-expect_fail "proposal 2 waits on the agreement of swb-1-conductor" crew plan approve 2
-: > "$CREW_TEST_LOG"
-HOST=$box CREW_AGENT= expect_ok crew plan agree 2
-eq "$(props -t Proposal -e "Proposal = 2" -P Agreed)" "swb-1"
-[[ -n $(told_planner "swb-1 agrees to proposal 2.") ]] || fail "the planner was not told of the agreement"
-has "$out" "card proposal/2: req_stub-1 changed, now version 2"
+has "$out" "proposal 2 is open, waiting on the user"
+grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "a proposal told a conductor"
+expect_fail "invalid choice: 'agree'" crew plan agree 2
 before=$(tip); : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew plan approve 2
 eq "$(tail -1 <<<"$out")" "card proposal/2: req_stub-1 withdrawn"
@@ -111,7 +107,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -P Unit | head -1)" "zone-f
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v '^runs/')" $'plan.rec\nproposals.rec\nrequests.rec'
 eq "$(acts_since "$before")" "1"
 eq "$(requests -e "Work = 'unit/zone-first'" -P Act,Base,Stream | row)" "launch bolt/tenant-environments wldn"
-ok "a proposal touching a held bolt waits for its recorded agreement, changing its card, and is applied in one commit, which launches the unit it adds"
+ok "a proposal touching a started bolt waits on the user alone, tells no conductor, and is applied in one commit, which launches the unit it adds"
 
 before=$(tip); : > "$CREW_TEST_LOG"
 CREW_AGENT= expect_ok crew plan approve 1
@@ -122,9 +118,8 @@ eq "$(plan -t Unit -e "Bolt = 'deploy-checks'" -P Unit)" $'a-plan-only-deploy-is
 eq "$(field $box unit.add From unit/zone-first)" "proposal/2"
 has "$(field $box unit.add Commit unit/zone-first)" "WilldanGroup/crew-state@"
 trace=$(crew trace unit/zone-first)
-eq "$(grep -v 'refused:' <<<"$trace" | awk '{print $3}' | head -7 | tr '\n' ' ')" "plan.propose card.post plan.agree card.update plan.approve unit.add card.close "
-has "$trace" "refused: proposal 2 waits on the agreement of swb-1-conductor"
-ok "the user's approval tells the planner what was applied and closes its card; each step is recorded, and a unit's trace shows the proposal, the agreement and the approval, each with its card's act"
+eq "$(awk '{print $3}' <<<"$trace" | head -5 | tr '\n' ' ')" "plan.propose card.post plan.approve unit.add card.close "
+ok "the user's approval tells the planner what was applied and closes its card; each step is recorded, and a unit's trace shows the proposal and the approval, each with its card's act"
 
 : > "$CREW_TEST_LOG"
 crew plan propose "$(proposal 'Case: The console starts with a page.' 'Do: unit add a-page "The console has a page." --bolt console-pages')" >/dev/null
@@ -219,8 +214,7 @@ crew plan propose "$(proposal 'Case: The deploy should fail on a warning as well
 n=$(last)
 expect_ok crew plan proposed "$n"
 has "$out" "   Intent, as it stands: The deploy writes the host tenant."
-has "$out" "**Amend unit \`in-verify\`** in bolt \`tenant-environments\` (swb-1), now in verify"
-CREW_AGENT= crew plan agree "$n" >/dev/null
+has "$out" "**Amend unit \`in-verify\`** in bolt \`tenant-environments\` (started), now in verify"
 before=$(tip)
 expect_ok crew plan approve "$n"
 eq "$(acts_since "$before")" "1"

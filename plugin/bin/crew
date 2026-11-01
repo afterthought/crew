@@ -129,8 +129,9 @@
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
 #                                      same hands, and built in its bolt as a Flume place of the chore kind
-#   crew plan  propose|proposed|agree|approve|answer|drop ...
-#                                      the planner's proposals: a change to the plan, applied once the user approves it,
+#   crew plan  propose|proposed|approve|answer|drop ...
+#                                      the planner's proposals: a change to the plan, waiting on the user alone and applied
+#                                      once the user approves it,
 #                                      crew raising its Pending You card at propose; approve --clear leaves out the new
 #                                      units the user cleared; answer records the card's answers and applies the
 #                                      approval once it holds them all

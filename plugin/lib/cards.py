@@ -1197,7 +1197,7 @@ def proposal_card(f):
     note to keep what it drops or amends, or more than CARD_NEW, which link its reading session; a paragraph per new
     and dropped unit on its face as inline Markdown; the change drawn at twice the density and as text. f: n, first
     (the first proposal of its chain, its key's), state, case, before and after (the plan at the tip and as its
-    commands leave it), argvs (its commands, parsed), waiting ([teams whose conductor has yet to agree]), session (the
+    commands leave it), argvs (its commands, parsed), session (the
     reading session's link) or None. Also handed back: the boxes, each {id, unit, is: new, ticked: true}, and whether
     the card needs its reading session."""
     n, argvs = f["n"], list(f["argvs"])
@@ -1254,11 +1254,9 @@ def proposal_card(f):
                                 for k, q in enumerate(lists, 1)]))
     if shape != "approve" and also:
         how += " What it drops or amends applies with it."
-    waiting = [f"{t}-conductor" for t in f.get("waiting") or []]
     case = prose(f["case"], 10 ** 6)
     said = ((f"Read it all in one session: {f['session']}\n\n" if f.get("session") else "")
-            + f"{SENTENCE.split(case)[0] if case else ''} {how}"
-            + (f" It waits on {joined(waiting)} to agree." if waiting else ""))
+            + f"{SENTENCE.split(case)[0] if case else ''} {how}")
     paragraphs = []
     for u, a in units.items():
         if a.sub == "drop":
@@ -1273,7 +1271,7 @@ def proposal_card(f):
                        "\n\n".join(paragraphs))] if paragraphs else [])
     shown += [{"kind": "image", "title": "The change, once approved", "ref": f"proposal-{n}.png", "upload": True, "caption": CAPTION},
               {"kind": "code", "lang": "text", "title": "The change, in text", "ref": f"proposal-{n}.txt", "lines": d["lines"]}]
-    background = f["case"].strip() + (f"\n\nWaiting on {joined(waiting)} to agree." if waiting else "")
+    background = f["case"].strip()
     links = [(f"Read proposal {n}", f["session"])] if f.get("session") else ()
     out = built(f"proposal/{f.get('first') or n}", title, said, background, links, shown, picture=picture.draw(d["sections"]), **form)
     out.update(boxes=[{k: r[k] for k in ("id", "unit", "is", "ticked")} for r in rows], session=session)

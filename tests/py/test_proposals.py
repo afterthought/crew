@@ -1,7 +1,7 @@
-"""A proposal's commands (plan.3, plan.4): how its Do lines parse (plan.do_args), which conductors must agree
-(plan.touched_by, plan.held_teams), the units the user may leave out and what is applied without them (plan.new_units,
-plan.kept), the plan its commands leave, applied in order to the plan in memory, and a start it holds checked and
-approved (plan.check_ops, plan.apply_all). Writing, recording and telling the planner are the proposals journey's
+"""A proposal's commands (plan.3, plan.4): how its Do lines parse (plan.do_args), the bolts each touches
+(plan.touched_by), the units the user may leave out and what is applied without them (plan.new_units, plan.kept), the
+plan its commands leave, applied in order to the plan in memory, and a start it holds checked and approved
+(plan.check_ops, plan.apply_all). Writing, recording and telling the planner are the proposals journey's
 (t-journey-plan)."""
 import pytest
 from facts import FLEET, FactsWrite, apply, plan_text, units_of
@@ -20,14 +20,6 @@ def refused(fn, *a):
     with pytest.raises(plan.Refusal) as e:
         fn(*a)
     return str(e.value), getattr(e.value, "recorded", None)
-
-
-def carrying(text, teams):
-    """plan.rec text with each bolt in teams, {bolt: team}, carrying a Team field as a branch's records written before
-    teams left still do (bolt-plan "A flywheel keeps one plan"), which the conductors' agreement reads until it leaves."""
-    for b, t in teams.items():
-        text = text.replace(f"Goal: Goal of {b}.\n", f"Goal: Goal of {b}.\nTeam: {t}\n")
-    return text
 
 
 class TestDoLines:
@@ -50,18 +42,14 @@ class TestDoLines:
         assert (a.cmd, a.sub, a.unit, a.label) == ("unit", "add", "y", "wldn")
 
 
-class TestAgreement:
-    PLAN = plan.Plan(carrying(plan_text(bolts=[("held", KIT, "swb-1"), ("free", KIT, None), ("other", KIT, "swb-2")],
-                                        units=[("h1", KIT, "held", []), ("f1", KIT, "free", []), ("q1", KIT, None, [])]),
-                              {"held": "swb-1", "other": "swb-2"}))
+class TestTouched:
+    PLAN = plan.Plan(plan_text(bolts=[("held", KIT, True), ("free", KIT, None), ("other", KIT, True)],
+                               units=[("h1", KIT, "held", []), ("f1", KIT, "free", []), ("q1", KIT, None, [])]))
 
     def test_each_command_touches_the_bolts_it_changes(self):
         touched = plan.touched_by(self.PLAN, args(f'unit add n "N." --bolt free', "unit move q1 held", "unit move h1 queue",
                                                   'bolt new b "B." --repo switchboard-kit', 'unit drop f1 "Gone."'))
         assert touched == [["free"], ["held"], ["held"], [], ["free"]]
-
-    def test_only_the_conductors_of_held_bolts_it_touches_must_agree(self):
-        assert plan.held_teams(self.PLAN, plan.flat(plan.touched_by(self.PLAN, args("unit move q1 held", 'unit add n "N." --bolt free')))) == ["swb-1"]
 
 
 class TestLeftOut:

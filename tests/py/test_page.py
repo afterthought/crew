@@ -402,7 +402,7 @@ class TestDocks:
         """board-page "A proposal waiting"."""
         p = self.paged()["docks"]["proposal:2"]
         assert (p["form"], p["title"], p["tail"]) == ("sheet", "Tenants get d.", "proposal 2 · by wldn-planner · opened 2026-10-12")
-        assert p["facts"] == [["waiting on", "swb-1-conductor"]]
+        assert p["facts"] == [["waiting on", "the user"]]
         assert [(m["glyph"], m["card"]["by"]) for m in p["markers"]] == [("✓", "wldn-planner")]
         assert {"title": "units and bolts", "rows": [{"text": "unit d"}]} in p["parts"]
         assert {"title": "teams", "rows": [{"text": "swb-1", "key": "team:swb-1"}]} in p["parts"]

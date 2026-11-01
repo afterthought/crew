@@ -84,7 +84,6 @@ five times. A write that changes several files is one commit; its run-record ent
                                              one it replaces
   crew plan proposed [<n>] [--json] [--open] the open proposals, or one as the user reads it; --open writes that to a
                                              file on this host and opens it in plannotator
-  crew plan agree <n> [--team <team>]        a conductor's agreement to a proposal that touches its bolt
   crew plan card <n>                         the proposal's Pending You card as JSON, from the branch alone, and its
                                              picture, a PNG crew draws, written on this host
   crew plan approve <n> [--clear <unit>...]  the proposal applied as read, in one commit, but for the new units the
@@ -328,9 +327,6 @@ class Plan:
     def group(self, u):
         """The work built in order with this unit or chore: its bolt's, or its repo's queue."""
         return self.work_of(u.get("Bolt")) if u.get("Bolt") else self.queue(u.get("Repo"))
-
-    def teams(self):
-        return {b.name(): b.get("Team") for b in self.bolts()}
 
     def remove(self, rec):
         self.paras.remove(rec)
@@ -908,7 +904,6 @@ class Write:
     def __init__(self, repo, label, tip, plan):
         self.repo, self.label, self.tip, self.plan, self.subject = repo, label, tip, plan, None
         self.files = {}  # every other file the change replaced, {path: text}, committed with the plan
-        self.quiet = set()  # teams the write's own command greets, so notify leaves them be
         self.on, self.frm = [], []  # objects only the change can name, for the write's run-record entry
         self.asked, self.held = [], []  # the asks the change wrote in its commit (ask_lines), and the keys it found held
         self.why, self.fields = None, {}  # the entry's Why and fields where only the tip the change is applied to says them
@@ -954,7 +949,7 @@ def message(subject, body, eid):
 
 def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None, by=None, why=None):
     """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
-    with crew's, commit every file it changed, each checked first, and push, replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
+    with crew's, commit every file it changed, each checked first, and push, replaying on a refused push. change returns the bolts it touched.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
     the change added to them, with the act's own fields, and reaches the branch as the commit after it (read.5); by, the
     role an act of crew's own is in the name of, and why, the entry's Why in place of the subject's (record.emit), which
@@ -969,16 +964,14 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
         w = Write(repo, label, tip, read(repo, ref, tip))
         in_step(w.plan)
-        before = w.plan.teams()
         touched = change(w) or []
         check(w.plan)
         if "requests.rec" in w.files:
             appended(w)
         files = {"plan.rec": w.plan.text(), **w.files}
-        seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
+        seen.update(touched=touched, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm, asked=w.asked, held=w.held,
-                    why=w.why, fields=w.fields,
-                    takers=planned_takers(fleet, label, w.plan, [b for b in touched if b not in before]))
+                    why=w.why, fields=w.fields)
         return files, message(seen["subject"], body, [seen["eid"]] + [eid for eid, _ in w.asked])
     sha = land(repo, ref, None, make)
     print(f"{ref} {sha[:7]}: {seen['subject']}")
@@ -986,7 +979,6 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], why or seen["why"] or record.subject(seen["subject"]),
                     eid=seen["eid"], by=by, **{**(fields or {}), **seen["fields"]})
     asked(label, f"{repo}@{sha}", seen["asked"], seen["held"])
-    notify(fleet, seen, seen["subject"])
     return sha
 
 
@@ -1029,21 +1021,6 @@ def either(rows):
     return rows[0] if len(rows) == 1 else ", ".join(rows[:-1]) + " or " + rows[-1]
 
 
-def notify(fleet, seen, subject):
-    """Tell the conductor of each team holding a bolt the write touched, before or after, unless that conductor wrote it,
-    or the write's own command greets it instead; crew closes a row's card itself at the event that ends it, so no
-    write names a card to close. Tell the partition's dispatchers that are up of a bolt
-    added, or of one landed or dropped that frees a team, so a free team gets its next bolt, unless one of them wrote
-    it."""
-    tells, shown, dispatch = notices(fleet["teams"], seen, agent(), subject)
-    for to, text in tells:
-        crew.tell(fleet, to, text)
-    for line in shown:
-        print(line)
-    if dispatch:
-        tell_dispatchers(fleet, seen["label"], dispatch_said(subject, seen.get("takers") or {}))
-
-
 def planned_takers(fleet, label, plan, added):
     """Of the bolts a write added (added, by name), each held by no team in a kit a team builds in a Flume stream, with
     those teams (runner.takers; Decisions 3 and 5 of teams-cross-to-flume-as-their-bolts-land): {bolt: [team]}."""
@@ -1066,23 +1043,6 @@ def tell_dispatchers(fleet, label, text):
         d = f"{label}-dispatch-{host}"
         if d != agent() and crew.agent_status(fleet, d):
             crew.tell(fleet, d, text)
-
-
-def notices(teams, seen, me, subject):
-    """Who a write tells, as facts (teams.7): each conductor of a team holding a bolt the write touched, before or after
-    it, unless it wrote it (me) or the write's own command greets it (seen["quiet"]), sent the subject, nothing more,
-    since crew closes a row's card itself; and whether the dispatchers hear of it, a bolt added or one a team held
-    landed or dropped. Returns
-    ([(conductor, text)], [lines shown], whether the dispatchers are told)."""
-    before, after, touched = seen["before"], seen["after"], seen["touched"]
-    tells, shown = [], []
-    for t in sorted(x for x in {before.get(b) for b in touched} | {after.get(b) for b in touched}
-                    if x and x not in seen["quiet"] and x in teams):
-        if f"{t}-conductor" != me:
-            tells.append((f"{t}-conductor", subject))
-    added = [b for b in touched if b not in before and b in after]
-    freed = [b for b in touched if b not in after and before.get(b)]
-    return tells, shown, bool(added or freed)
 
 
 def push_now(fleet, label):
@@ -4995,36 +4955,26 @@ PLAN_WRITES = {("bolt", "new"), ("bolt", "start"), ("bolt", "order"), ("bolt", "
 
 
 def role(fleet, name):
-    """What an agent crew started is, from its name alone: (kind, its partition's label or its team), or ("user", None)
-    for no agent at all, or for the user's <user>@<host>, which a command run again on a team's host carries."""
+    """What an agent crew started is, from its name alone: (kind, its partition's label), or ("user", None) for no agent
+    at all, or for the user's <user>@<host>, which a command run again on another host carries."""
     if not name or "@" in name:
         return "user", None
     for label in fleet["partitions"]:
         for kind, n in (("planner", f"{label}-planner"), ("design", f"{label}-design"), ("main-ops", f"{label}-ops")):
             if name == n:
                 return kind, label
-        if name.startswith(f"{label}-dispatch-"):
-            return "dispatcher", label
         if name == f"{label}-operator" or name.startswith(f"{label}-operator-"):  # the latter, a host's before record 0035
             return "operator", label
-    for t in fleet["teams"]:
-        if name == f"{t}-conductor":
-            return "conductor", t
-        if name == f"{t}-ops" or re.fullmatch(rf"{re.escape(t)}-unit-[1-9][0-9]*", name):
-            return "team", t
     return "other", None
 
 
 def planner_of(fleet, kind, of):
-    label = fleet["teams"][of]["label"] if kind in ("conductor", "team") else of
-    return f"{label}-planner" if label in fleet["partitions"] else "the partition's planner"
+    return f"{of}-planner" if of in fleet["partitions"] else "the partition's planner"
 
 
 def may_write(fleet, key, a):
-    """Who writes the plan directly. The user writes everything. The planner changes it only by a proposal; a
-    conductor narrows, orders and sets dependencies within the bolt its team holds (checked once its unit is found);
-    the design agent queues; a dispatcher
-    gives bolts; the main level's ops lands them. A chore's commands are written by the same hands as the unit's of the
+    """Who writes the plan directly. The user writes everything. The planner changes it only by a proposal; the design
+    agent queues; the main level's ops lands bolts (roles.1). A chore's commands are written by the same hands as the unit's of the
     same name (plan.11). Any other plan write by an agent crew started is refused, naming the planner. A command that
     writes a request for a runner, crew answer and crew main fix, is its own row of the table (may_request), as crew
     fix is once it finds its bolt given through Flume (flume_fix). A role's run writes as its role (crew.caller)."""
@@ -5040,9 +4990,7 @@ def may_write(fleet, key, a):
     if key == ("bolt", "start"):  # the user's choice of what runs (Decision 14 of the-team-machinery-leaves)
         fail(f"{name} does not start a bolt: the user starts it, or approves {planner_of(fleet, kind, of)}'s proposal holding "
              f"crew bolt start; tell {planner_of(fleet, kind, of)}, who proposes it")
-    if ((kind == "conductor" and as_unit in (("unit", "split"), ("unit", "order"), ("unit", "after")))
-            or (kind == "design" and as_unit == ("unit", "add") and not a.bolt)
-            or (kind == "dispatcher" and key == ("bolt", "give")) or (kind == "main-ops" and key == ("bolt", "land"))):
+    if (kind == "design" and as_unit == ("unit", "add") and not a.bolt) or (kind == "main-ops" and key == ("bolt", "land")):
         return
     fail(f"{name} does not write the plan with crew {cmd}" + (" --bolt" if as_unit == ("unit", "add") and a.bolt else "")
          + f": tell {planner_of(fleet, kind, of)}, who proposes it")
@@ -5066,8 +5014,7 @@ def may_request(fleet, what):
     kind, of = role(fleet, name)
     if kind == "user" or kind in REQUESTERS[what]:
         return
-    label = fleet["teams"][of]["label"] if kind in ("conductor", "team") else of
-    first = REQUESTERS[what][0]
+    label, first = of, REQUESTERS[what][0]
     to = f"{label}-{'ops' if first == 'main-ops' else first}" if label in fleet["partitions"] else f"the partition's {ROLE_SAID[first].removeprefix('the ')}"
     fail(f"{name} does not run crew {what}: " + ", ".join(ROLE_SAID[r] for r in REQUESTERS[what]) + f" and the user do; tell {to}")
 
@@ -5405,19 +5352,8 @@ def op_unit_add(ctx, a):
               on=[f"{k}/{a.unit}", f"bolt/{a.bolt}" if a.bolt else f"queue/{kit}"], frm=[f"signals/{a.signal}"] if a.signal else [], after=after)
 
 
-def conductor_scope(ctx, plan, a):
-    """A conductor narrows, orders and sets dependencies only within the bolt its team holds, of units and chores alike."""
-    kind, team = role(ctx.fleet, crew.caller(ctx.fleet))
-    if ctx.direct and kind == "conductor":
-        b = plan.item(a.unit).get("Bolt")
-        b and plan.bolt(b).get("Team") == team or fail(
-            f"{team}-conductor writes only units and chores of the bolt {team} holds, and {a.unit} is in {f'bolt {b}' if b else 'the queue'}: "
-            f"tell {ctx.fleet['teams'][team]['label']}-planner")
-
-
 def op_unit_split(ctx, a):
     label, plan = the_work(ctx, a)
-    conductor_scope(ctx, plan, a)
     s = ctx.stage(plan, a.unit)
     s["stage"] not in LATER or fail(f"unit {a.unit} is in {s['stage']}, so it is no longer split; add the remainder as a new unit instead (crew unit add)")
     s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
@@ -5496,7 +5432,6 @@ def amend_place(fleet, w, u, by):
 
 def op_unit_order(ctx, a):
     label, plan = the_work(ctx, a)
-    conductor_scope(ctx, plan, a)
     u0, k = plan.item(a.unit), a.cmd
 
     def change(w):
@@ -5519,7 +5454,6 @@ def op_unit_order(ctx, a):
 
 def op_unit_after(ctx, a):
     label, plan = the_work(ctx, a)
-    conductor_scope(ctx, plan, a)
     a.none or a.deps or fail("name the units or chores it comes after, or --none")
     u0, k = plan.item(a.unit), a.cmd
 
@@ -6252,11 +6186,6 @@ def touched_by(plan, argvs):
     return out
 
 
-def held_teams(plan, bolts):
-    """The teams holding, in a plan, any of the given bolts: their conductors agree to a proposal that touches them."""
-    return sorted({plan.bolt(b).get("Team") for b in bolts if plan.bolt(b) and plan.bolt(b).get("Team")})
-
-
 def flat(lists):
     return list(dict.fromkeys(x for l in lists for x in l))
 
@@ -6454,7 +6383,7 @@ def proposal_records(fleet, label, scratch, argvs):
 
 def plan_propose(fleet, a):
     """crew plan propose <file> [--replaces <n>]: the planner's proposal, checked against the plan at the tip, written
-    open with the next number; the conductor of each bolt in flight it touches is told. Refused, with nothing written,
+    open with the next number, waiting on the user alone. Refused, with nothing written,
     when a bolt it creates, or a unit or chore it adds or moves into a bolt, names a decision record its main on GitHub
     does not hold accepted (proposal_records, unaccepted). Once it is written, crew raises its card in the planner's
     name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
@@ -6473,26 +6402,17 @@ def plan_propose(fleet, a):
         scratch = check_ops(fleet, label, w, argvs, n)
         said = unaccepted(*proposal_records(fleet, label, scratch, argvs))
         not said or fail(said)
-        per = touched_by(w.plan, argvs)
         seen["old_by"] = open_proposal(pl, n, case, dos, agent(), datetime.date.today().isoformat(), a.replaces, label)
         w.replace("proposals.rec", pl.text())
         w.subject = f"plan(proposal {n}): propose: {summary(argvs)}"
         w.on += [f"proposal/{n}"] + objects(argvs) + ([f"proposal/{a.replaces}"] if a.replaces else [])
-        seen.update(n=n, per=per, w=w, held={b: w.plan.bolt(b).get("Team") for b in flat(per) if w.plan.bolt(b) and w.plan.bolt(b).get("Team")})
+        seen.update(n=n, w=w)
         return []
     write(fleet, label, change, "plan: propose", act="plan.propose")
-    n, held = seen["n"], seen["held"]
+    n = seen["n"]
     if a.replaces:
         print(f"proposal {a.replaces} is dropped, replaced by proposal {n}")
-    teams = sorted(set(held.values()))
-    for team in teams:
-        cmds = "; ".join(d for d, t in zip(dos, seen["per"]) if any(held.get(b) == team for b in t))
-        if not crew.tell(fleet, f"{team}-conductor", f"Proposal {n} would change your bolt: {cmds}. Read it with "
-                         f"crew plan proposed {n} --label {label}. Agree with crew plan agree {n} --label {label}, "
-                         f"or tell {label}-planner why not."):
-            print(f"{team}-conductor is not up: proposal {n} is written and waits for its agreement")
-    waits = [f"{t}-conductor" for t in teams] + ["the user"]
-    print(f"proposal {n} is open, waiting on " + ", then ".join(waits) + f": crew plan proposed {n} --label {label}")
+    print(f"proposal {n} is open, waiting on the user: crew plan proposed {n} --label {label}")
     if kind != "planner" and a.replaces and seen.get("old_by") == f"{label}-planner":
         tell_planner(fleet, label, f"Proposal {a.replaces} was replaced by proposal {n}, by {agent()}.")
     raise_proposal_at(fleet, label, seen["w"], n, "replace" if a.replaces else "propose")
@@ -6510,7 +6430,7 @@ def next_proposal(pl):
 
 def open_proposal(pl, n, case, dos, by, today, replaces=None, label=None):
     """Proposal n written open in proposals.rec (pl), its case and commands as given (plan.4); one it replaces, which
-    must be open, is dropped with the reason that it was replaced, and agreements stay with it. Returns who wrote the
+    must be open, is dropped with the reason that it was replaced. Returns who wrote the
     one replaced."""
     old_by = None
     if replaces:
@@ -6537,28 +6457,6 @@ def proposal_chain(pl, n):
         out.insert(0, back)
 
 
-def agreements_wanted(plan, argvs, p, n, kind, of, team=None, name=None):
-    """The teams whose agreement this caller records on proposal n, those it touches that have not agreed (plan.4): a
-    conductor's own team, which must hold a bolt the proposal touches; the user's, any team named, or every team the
-    proposal touches. Only a conductor or the user agrees."""
-    kind in ("conductor", "user") or fail(f"{name} does not agree to proposals: the conductor of a bolt a proposal touches agrees to it")
-    held = held_teams(plan, flat(touched_by(plan, argvs)))
-    if kind == "conductor":
-        of in held or fail(f"proposal {n} touches no bolt {of} holds" + (f": it touches the bolts of {', '.join(held)}" if held else ""))
-        want = [of]
-    else:
-        team is None or team in held or fail(f"proposal {n} touches no bolt {team} holds")
-        want = [team] if team else held
-    return [t for t in want if t not in p.all("Agreed")]
-
-
-def agreement_missing(plan, argvs, p, n):
-    """Why proposal n can't be approved yet, or None: the conductor of a bolt it touches, held now, has not agreed."""
-    missing = [t for t in held_teams(plan, flat(touched_by(plan, argvs))) if t not in p.all("Agreed")]
-    return (f"proposal {n} waits on the agreement of " + ", ".join(f"{t}-conductor" for t in missing) + f": crew plan agree {n}"
-            if missing else None)
-
-
 def closed_refusal(p, n):
     """Why proposal n can't be approved because it is closed, said with its reason and recorded without it (record.3),
     or None while it is open."""
@@ -6566,19 +6464,6 @@ def closed_refusal(p, n):
         return None
     state = f"proposal {n} is {p.get('State')}"
     return state + (f": {p.get('Reason')}" if p.get("Reason") else ""), state
-
-
-def agree_closed(p, n):
-    """What crew answers an agreement to proposal n with when the plan as it stands once the agreement is written
-    shows the proposal (p) closed: that it is closed and how, approved or dropped with its reason, and that crew raises
-    no card for it and changes none, since the agreement's write still showed it open and a card raised from that
-    would reach the user in the planner's name for a closed proposal (wldn's proposal 553 on 2026-10-24: swb-1 agreed
-    at 35d07471, the planner dropped it at bc2c3b1 four seconds on, and the agreement then posted its card again until
-    the rail's sweep withdrew it; signal 2026-10-24-swancloud-planner-04891322/01). None while it is open."""
-    why = closed_refusal(p, n)
-    if why is None:
-        return None
-    return why[0] + ("" if why[0][-1:] in ".!?" else ".") + " It is closed, so crew raises no card for it and changes none."
 
 
 def close(p, state, today, reason=None, cleared=()):
@@ -6594,56 +6479,10 @@ def close(p, state, today, reason=None, cleared=()):
         p.add("Cleared", u, after="Closed")
 
 
-def plan_agree(fleet, a):
-    """crew plan agree <n> [--team <team>]: the conductor's recorded agreement to a proposal that touches the bolt its
-    team holds; the user may agree for any team the proposal touches."""
-    label = proposal_label(fleet, a, a.n)
-    CONTEXT["label"] = label
-    name = crew.caller(fleet)
-    kind, of = role(fleet, name)
-    w0, _, p0, argvs = at_tip(fleet, label, a.n)
-    p0.get("State") == "open" or fail(f"proposal {a.n} is {p0.get('State')}, so there is nothing to agree to")
-    wanted = lambda w, p: agreements_wanted(w.plan, argvs, p, a.n, kind, of, a.team, name)
-    if not wanted(w0, p0):
-        print(f"proposal {a.n} already has the agreement" + (f" of {of}" if kind == "conductor" else " of every team it touches"))
-        return
-    seen = {}
-
-    def change(w):
-        pl = proposals(w)
-        p = proposal(pl, a.n, label)
-        p.get("State") == "open" or fail(f"proposal {a.n} is {p.get('State')}, so there is nothing to agree to")
-        new = wanted(w, p)
-        for t in new:
-            p.add("Agreed", t, after="Do")
-        w.replace("proposals.rec", pl.text())
-        w.subject = f"plan(proposal {a.n}): " + ", ".join(new) + " agree" + ("s" if len(new) == 1 else "")
-        w.on += [f"proposal/{a.n}"] + [f"team/{t}" for t in new]
-        seen.update(new=new, w=w)
-        return []
-    write(fleet, label, change, "plan: agree", act="plan.agree")
-    tell_planner(fleet, label, f"{', '.join(seen['new'])} agree{'s' if len(seen['new']) == 1 else ''} to proposal {a.n}.")
-    raise_agreed(fleet, label, a.n, seen["new"])
-
-
-def raise_agreed(fleet, label, n, agreed, acts=None):
-    """Proposal n's card once the agreements of the teams agreed are written (raise_proposal_at, agree), raised on the
-    plan as it stands, the branch's tip fetched anew: an approval or a drop can land between the agreement's write and
-    its raise, so a proposal the tip shows closed raises no card and changes none, and the agreement answers that it is
-    closed and how (agree_closed). The fetch is the one past the command's first (plan.12), as the sweep's raise makes
-    (raise_proposal). The card's id, or None."""
-    w = tip_write(fleet, label, fresh=True)
-    closed = agree_closed(proposal(proposals(w), n, label), n)
-    if closed:
-        print(closed)
-        return None
-    return raise_proposal_at(fleet, label, w, n, "agree", acts, agreed=agreed)
-
-
 def plan_approve(fleet, a):
     """crew plan approve <n> [--clear <unit>...]: the proposal's commands applied in order to the plan at the tip, and
-    the proposal closed as approved, in one commit; refused, with nothing changed, when a command no longer applies or
-    a conductor whose bolt it touches has not agreed. A rebase it prepares is undone if the approval is refused. With
+    the proposal closed as approved, in one commit; refused, with nothing changed, when a command no longer applies: it
+    waits on the user alone. A rebase it prepares is undone if the approval is refused. With
     --clear, the commands that concern only the units the user left out are not applied, a command left in that names
     one refuses the whole, and the proposal records each as Cleared (plan.3). Then crew closes the proposal's card with
     what was applied, and the planner is told it when someone else approved (raise_proposal_at)."""
@@ -6653,15 +6492,10 @@ def plan_approve(fleet, a):
     repo = w0.repo
     cleared = list(dict.fromkeys(getattr(a, "clear", None) or []))
 
-    def agreed(w, p):
-        why = agreement_missing(w.plan, argvs, p, a.n)
-        not why or fail(why)
-
     def opened(p):
         why = closed_refusal(p, a.n)
         not why or refuse(*why)
     opened(p0)
-    agreed(w0, p0)
     applied = kept(argvs, cleared, a.n)
     ops0 = apply_all(fleet, label, w0, applied, a.n)[0]  # checked at the tip, to know what to prepare
     undos, seen = [], {}
@@ -6674,7 +6508,6 @@ def plan_approve(fleet, a):
             pl = proposals(w)
             p = proposal(pl, a.n, label)
             opened(p)
-            agreed(w, p)
             ops, told = apply_all(fleet, label, w, applied, a.n)
             if cleared:  # a branch's proposals.rec keeps the descriptor it was made with, from before Cleared
                 in_step(pl, PROPOSALS)
@@ -6780,8 +6613,8 @@ def amendment_lines(plan, a, s):
 
 def describe(fleet, label, plan, p, alone=False, signal_of=None):
     """A proposal as the user reads it: each change in plain words, with what the user is comparing beside it (a unit's
-    intent and sources, the goal and team of the bolt it would join, an amended unit's intent before and after), and
-    who has yet to agree. alone, it reads nothing but the plan and the proposal: no kit for an amended unit's stage and
+    intent and sources, the goal of the bolt it would join and whether it is started, an amended unit's intent before
+    and after). alone, it reads nothing but the plan and the proposal: no kit for an amended unit's stage and
     no signal, as a proposal's card is drawn (plan.12). signal_of(id) gives a unit's signal as signal_text reads it."""
     signal_of = signal_of or (lambda sig: signal_text(fleet, label, sig))
     argvs = [do_args(label, d) for d in p.all("Do")]
@@ -6849,11 +6682,9 @@ def describe(fleet, label, plan, p, alone=False, signal_of=None):
         elif key == ("unit", "drop"):
             lines = [f"**Drop {noun} `{a.unit}`**", f"{says}: {intent_of(a.unit)}", f"Reason: {a.reason}"]
         changes.append({"do": a.do, "lines": lines, "bolts": per[i]})
-    held = held_teams(plan, flat(per))
-    agreed = p.all("Agreed")
     return {"proposal": int(p.get("Proposal")), "state": p.get("State"), "by": p.get("By"), "opened": p.get("Opened"),
             "closed": p.get("Closed"), "reason": p.get("Reason"), "replaces": p.get("Replaces"), "case": p.get("Case"),
-            "changes": changes, "agreed": agreed, "waiting": [t for t in held if t not in agreed]}
+            "changes": changes}
 
 
 def code_span(text):
@@ -6881,9 +6712,6 @@ def page(d, label):
         out += [f"Closed {d['closed']}" + (f": {d['reason']}" if d["reason"] else "") + "."]
         return "\n".join(out).rstrip() + "\n"
     out += ["## Waiting on", ""]
-    out += [f"- {t}-conductor, to agree, or tell {label}-planner why not" for t in d["waiting"]]
-    if d["agreed"]:
-        out.append("- agreed: " + ", ".join(d["agreed"]))
     out.append("- the user, to approve it or say what to change")
     return "\n".join(out) + "\n"
 
@@ -6932,7 +6760,7 @@ def plan_proposed(fleet, a):
                 fail(f"plannotator-tui is not on this host's path; the proposal is written to {f}")
         print(json.dumps(d, indent=1) if a.json else page(d, label), end="" if not a.json else "\n")
         return
-    rows = [dict(d, waits=[f"{t}-conductor" for t in d["waiting"]] + ["the user"])
+    rows = [dict(d, waits=["the user"])
             for d in open_proposals(fleet, [label] if label else list(fleet["partitions"]))]
     if a.json:
         print(json.dumps(rows, indent=1))
@@ -7127,15 +6955,14 @@ def proposal_facts(fleet, label, w, n):
     """What proposal n's card is built from (record 0031 §5), as card_model reads it, from the write w as it left the
     branch and no kit (plan.12): the plan at the tip and as the proposal's commands leave it, applied to a copy as
     check_ops applies them; the proposal's number, state, case and commands, parsed; its chain's first, whose key the
-    card is under; the teams whose conductor has yet to agree; and no reading session. A closed proposal's facts hold
+    card is under; and no reading session. A closed proposal's facts hold
     no plan after it, and the builder refuses them."""
     pl = proposals(w)
     p = proposal(pl, n, label)
     argvs = [do_args(label, d) for d in p.all("Do")]
     after = check_ops(fleet, label, w, argvs, n, Drawn).plan if p.get("State") == "open" else w.plan
-    waiting = [t for t in held_teams(w.plan, flat(touched_by(w.plan, argvs))) if t not in p.all("Agreed")]
     return dict(n=n, first=proposal_chain(pl, n)[0], state=p.get("State"), case=p.get("Case"), before=w.plan,
-                after=after, argvs=argvs, waiting=waiting, session=None)
+                after=after, argvs=argvs, session=None)
 
 
 def named_kit(plan, argvs):
@@ -7169,9 +6996,9 @@ SWEPT = "Raised again as the plan stands"  # the change note of a proposal's car
 DROPPED = "Dropped on your note, nothing of it applied"
 
 
-def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=(), outcome=None, reason=None, by=None):
+def proposal_act(event, n, mine, was_mine=False, held=True, home=True, outcome=None, reason=None, by=None):
     """Which act proposal n's card takes at its event (record 0031 §1), from facts alone: ("post",) when it is
-    accepted, ("change", note) when it is rewritten (replace), a conductor agrees, the rail's sweep finds its card
+    accepted, ("change", note) when it is rewritten (replace), the rail's sweep finds its card
     missing or lost (sweep), or its reading opens after the card was raised without it (relink, reading_again),
     ("close", outcome, reason) when it is approved, or dropped, its card acked with DROPPED
     once the user answered it and withdrawn with the reason while it waits, or None when it has no card of
@@ -7190,11 +7017,10 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
         return ("change", SWEPT)
     if event == "relink":
         return ("change", RELINKED)
-    if event in ("replace", "agree"):
+    if event == "replace":
         if not held and not home:
             return ("skip",)
-        return ("change", f"Rewritten as proposal {n} after your note" if event == "replace" else
-                "No longer waits on " + either([f"{t}-conductor" for t in agreed]))
+        return ("change", f"Rewritten as proposal {n} after your note")
     return ("close", outcome, None) if event == "approve" else ("close", DROPPED, reason)
 
 
@@ -7255,14 +7081,14 @@ def raise_proposal(fleet, row, acts=None, event="sweep"):
     return None
 
 
-def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None, dead=False):
+def raise_proposal_at(fleet, label, w, n, event, acts=None, outcome=None, reason=None, dead=False):
     """Proposal n's card at its event (record 0031 §1, briefs.11), once the event's write is made (code.9), from the
     write w as it left the branch: the act proposal_act decides; the card built by the proposal's builder from
     proposal_facts, and posted, changed or closed by the act in the planner's name under its chain's key,
     proposal/<first>, filed in the area of the kit of the first bolt or unit its commands name. A rewrite whose card
     takes another form than the replaced proposal's (cards.proposal_form: a hold-to-approve, a choice, one list or
     lists), which update_request never changes, has the card followed as a card whose kind changed; a rewrite asks
-    anew, and follows a card the user answered, where an agreement or the sweep's raise leaves it as it is, its answer
+    anew, and follows a card the user answered, where the sweep's raise leaves it as it is, its answer
     going on to the approval (row_card_change); the card that follows says what the rewrite changed against the
     proposal it replaces (cards.proposal_since), and one that changes neither its commands nor its case is withheld,
     the user's answer standing (card_posted). With dead, an older copy this host can't reach standing, the card is
@@ -7275,10 +7101,10 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
     replaced = proposal(pl, int(p.get("Replaces")), label) if (p.get("Replaces") or "").isdigit() else None
     was = replaced.get("By") if replaced else None
     key = f"proposal/{proposal_chain(pl, n)[0]}"
-    near = event in ("replace", "agree")
+    near = event == "replace"
     act = proposal_act(event, n, p.get("By") == owner, was == owner,
                        held=near and cards.card_under(acts.entries(label), key, owner) is not None,
-                       home=acts.host() == part["machine"], agreed=agreed, outcome=outcome, reason=reason, by=p.get("By"))
+                       home=acts.host() == part["machine"], outcome=outcome, reason=reason, by=p.get("By"))
     if act is None:
         return None
     if act[0] == "skip":
@@ -7449,22 +7275,10 @@ def quoted(excerpt, position):
 
 
 def where_of(fleet, name, plan):
-    """Where an agent was working, read without asking it: its team, each bolt the team holds and, for a slot's stage,
-    the unit or fix its slot holds; the main level; None for an agent crew has no role for."""
-    kind, of = role(fleet, name)
-    if kind in ("planner", "design", "main-ops", "dispatcher", "operator"):
-        return "main level"
-    if kind not in ("conductor", "team"):
-        return None
-    out = [f"team {of}"] + [f"bolt {b.name()}" for b in team_bolts(fleet, plan, fleet["teams"][of])]
-    slot = re.fullmatch(rf"{re.escape(of)}-(unit-[1-9][0-9]*)", name)
-    if slot:
-        try:
-            held = crew.slot_of(fleet["teams"][of], slot.group(1))
-            out.append(f"fix {held['name'].rsplit('/', 1)[-1]}" if held["kind"] == "fix" else f"unit {held['name']}")
-        except Refusal:
-            pass
-    return ", ".join(out)
+    """Where an agent was working, read without asking it: the main level for a main-level role; None for an agent crew
+    has no role for."""
+    kind, _ = role(fleet, name)
+    return "main level" if kind in ("planner", "design", "main-ops", "operator") else None
 
 
 def bank(path, line):
@@ -10710,8 +10524,6 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
     for d in props:
         l, n = d["label"], d["proposal"]
         what = [f"proposal {n} ({l}), by {d['by']}: {d['case'].splitlines()[0][:70]}"]
-        if d["waiting"]:
-            what.append("still needs the agreement of " + ", ".join(f"{t}-conductor" for t in d["waiting"]))
         at = times.get((l, f"proposal/{n}"))
         rows.append(dict(group="proposals", label=l, key=f"proposal/{d.get('first') or n}", at=at or utc(f"{d['opened']}T00:00:00Z"),
                          date=None if at else d["opened"], what=what, doc=("page", l, n),
@@ -11452,7 +11264,7 @@ CARD_GRACE = 120  # seconds a session is left alone after it starts, since the r
 
 
 # The roles that ask the user a question of their own on a card, by the kind role() gives them (record 0031, briefs.11).
-ASKERS = ("conductor", "planner", "main-ops", "design")
+ASKERS = ("planner", "main-ops", "design")
 # The first part of every key crew raises a card under: a rail row's, a decision record's, and a verify report's,
 # which no row has had since teams.17. No agent's question takes one (crews_key).
 CREWS = {"proposal": "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop",
@@ -11476,7 +11288,7 @@ def crews_key(key):
 def card_refusal(fleet, name, label, tool, key):
     """Whether a crew agent's Pending You call may go through (briefs.11, record 0031): None to let it, else the
     refusal's words. The user's own name is never checked. A card's post, change or close is a question's, the agent's
-    own, only from a conductor, the planner, main-level ops or the design agent (ASKERS), and never under crew's own
+    own, only from the planner, main-level ops or the design agent (ASKERS), and never under crew's own
     key (crews_key). A post's key is its idempotencyKey, judged by its form alone, with or without the partition's
     @<label>, :<n> or the fill of a short key (cards.post_key), and no plan read. A change or a close carries a request id and no key, so its key is
     the one this host's run record holds the card under, crew's raises and the agents' own posts alike, read locally
@@ -11486,28 +11298,19 @@ def card_refusal(fleet, name, label, tool, key):
     answered card under a verify report's key, verify/<unit>/<stamp>, a row form crew no longer raises (teams.17),
     which a conductor posted before it and no event of crew's closes, the same departure: its post, change or
     withdrawal there is refused (signal 2026-10-19-crw-2-conductor-2bec975e/01). An area is made only under
-    create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
-    partition, read from the teams file. Everything else passes: a question's form, and its key but crew's, are its
+    create-area:<owner>/<kit> for a kit of any team of the asker's partition, read from the teams file. Everything else passes: a question's form, and its key but crew's, are its
     asker's. A decision of the role, the call and the key alone (code.7)."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
     what = "an area" if tool == "create_area" else "a card"
-    cmd = f"{crew.HOME}/plugin/bin/crew"
     if kind not in ASKERS:
-        if kind == "team":
-            left = (f"Tell {of}-conductor what you wait on with `{cmd} tell`." if name == f"{of}-ops"
-                    else f"Say what you need with `{cmd} needs`, and your conductor gets it and asks if it must.")
-        elif kind == "dispatcher":
-            left = f"Ask through {of}-planner with `{cmd} tell`."
-        elif kind == "operator":
-            left = "The user is in your pane: ask them there."
-        else:
-            left = "Tell the partition's operator what you wait on, as your brief says."
-        return (f"crew refuses {what} from {name}: only a conductor, the planner, main-level ops and the design agent ask "
-                f"the user on a card. {left}")
+        left = ("The user is in your pane: ask them there." if kind == "operator" else
+                "Tell the partition's operator what you wait on, as your brief says.")
+        return (f"crew refuses {what} from {name}: only the planner, main-level ops and the design agent ask the user on a "
+                f"card. {left}")
     if tool == "create_area":
-        teams = [of] if kind == "conductor" else crew.partition_of(fleet, label)["teams"]
+        teams = crew.partition_of(fleet, label)["teams"]
         mine = sorted({f"create-area:{fleet['teams'][t]['kit']['repo']}" for t in teams})
         if key in mine:
             return None
@@ -15271,10 +15074,6 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--label")
     x.add_argument("--json", action="store_true")
     x.add_argument("--open", action="store_true")
-    x = pp.add_parser("agree")
-    x.add_argument("n", type=int)
-    x.add_argument("--team")
-    x.add_argument("--label")
     x = pp.add_parser("approve")
     x.add_argument("n", type=int)
     x.add_argument("--clear", nargs="+", action="extend", default=[], metavar="UNIT")
@@ -15412,7 +15211,7 @@ COMMANDS = {
     ("_answered", None): card_answered,
     ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show, ("signal-land", None): signal_land,
-    ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
+    ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "answer"): plan_answer,
 }
 # The commands on a team and on a main level, each one process on the host its agents run on.
@@ -15427,7 +15226,7 @@ ACTS = {
     ("chore", "add"): "chore.add", ("chore", "order"): "chore.order", ("chore", "after"): "chore.after", ("chore", "move"): "chore.move",
     ("chore", "drop"): "chore.drop",
     ("signal", None): "capture", ("signal-move", None): "signal.move", ("signal-land", None): "capture",
-    ("plan", "propose"): "plan.propose", ("plan", "agree"): "plan.agree", ("plan", "approve"): "plan.approve",
+    ("plan", "propose"): "plan.propose", ("plan", "approve"): "plan.approve",
     ("plan", "drop"): "plan.drop", ("answer", None): "stage.answer",
 }
 

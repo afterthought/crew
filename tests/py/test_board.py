@@ -213,7 +213,7 @@ class TestText:
         assert att == ["! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
 
     def test_a_rail_row_is_a_marker_on_its_object_with_its_card(self):
-        props = [{"label": "wldn", "proposal": 1, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "The console gets a bolt.", "waiting": [],
+        props = [{"label": "wldn", "proposal": 1, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "The console gets a bolt.",
                   "changes": [{"do": 'bolt new console-two "x" --repo switchboard-kit', "bolts": ["console-two"]}]}]
         card = dict(label="wldn", card="req_1", key="proposal/1", by="wldn-planner", host="mac-studio", at=NOW)
         bp = lane(board.board_text(data(props=props, cards=[card])), "Bolt plan")
@@ -221,7 +221,7 @@ class TestText:
 
     def test_a_rewritten_proposals_marker_is_its_chains_card(self):
         props = [{"label": "wldn", "proposal": 2, "first": 1, "by": "wldn-planner", "opened": "2026-10-12", "case": "The console, again.",
-                  "waiting": [], "changes": [{"do": 'bolt new console-two "x" --repo switchboard-kit', "bolts": ["console-two"]}]}]
+                  "changes": [{"do": 'bolt new console-two "x" --repo switchboard-kit', "bolts": ["console-two"]}]}]
         card = dict(label="wldn", card="req_1", key="proposal/1", by="wldn-planner", host="mac-studio", at=NOW)
         bp = lane(board.board_text(data(props=props, cards=[card])), "Bolt plan")
         assert bp[0] == "✓ proposal 2 by wldn-planner  The console, again.  card open, asked by wldn-planner"
@@ -307,10 +307,6 @@ class TestData:
         assert p["bolt_plan"]["planned"][0]["teams"] == ["swb-1", "swb-2"] and p["bolt_plan"]["queue"][0]["teams"] == ["swb-1", "swb-2"]
         assert p["inception"]["explorations"][0]["teams"] == ["swb-1", "swb-2"]
         assert [s["teams"] for s in p["inception"]["signals"]] == [[], [], []]
-
-    def test_a_signal_a_teams_agent_captured_is_its_teams(self):
-        sig = dict(SIGS[0], captured_by="swb-1-conductor")
-        assert data(signals=[sig])["partitions"][0]["inception"]["signals"][0]["teams"] == ["swb-1"]
 
     def test_the_hosts_are_named_with_whether_they_answered(self):
         assert data()["partitions"][0]["hosts"] == {BOX: True, "mac-studio": True}
@@ -1290,7 +1286,7 @@ class TestRailFrame:
 
 class TestMore:
     def test_a_proposal_adding_to_a_started_bolt_belongs_to_the_team_its_work_runs_with(self):
-        props = [{"label": "wldn", "proposal": 2, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "Tenants get d.", "waiting": [],
+        props = [{"label": "wldn", "proposal": 2, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "Tenants get d.",
                   "changes": [{"do": 'unit add d "Unit d." --bolt tenant-environments', "bolts": ["tenant-environments"]}]}]
         assert data(props=props)["partitions"][0]["bolt_plan"]["proposals"][0]["teams"] == ["swb-1"]
 
@@ -1300,7 +1296,7 @@ class TestMore:
         assert "2 not moved, the oldest captured 5h" in line and line.endswith(" ago")
 
     def test_the_board_answers_nothing_it_offers_no_approving_or_telling_command(self):
-        props = [{"label": "wldn", "proposal": 1, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "The console.", "waiting": [],
+        props = [{"label": "wldn", "proposal": 1, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "The console.",
                   "changes": [{"do": 'bolt new console-two "x" --repo switchboard-kit', "bolts": ["console-two"]}]}]
         out = board.board_text(data(props=props, signals=SIGS))
         for no in ("crew plan approve", "crew unit approve", "crew tell"):
@@ -1335,7 +1331,7 @@ def view(name, **kw):
     return ["".join(s for s, _ in line) for line in board.agent_views(data(**kw))["views"][name]]
 
 
-WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-10-12", "case": "Tenants get d.", "waiting": ["swb-1"],
+WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-10-12", "case": "Tenants get d.",
           "changes": [{"do": 'unit add d "Unit d." --bolt tenant-environments', "bolts": ["tenant-environments"]}]}]
 
 
@@ -1396,8 +1392,8 @@ class TestViews:
         assert view("swb-2-conductor") == ["  swb-2 holds no bolt", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
         assert view("atl-1-conductor") == ["  atl-1 holds no bolt"]
 
-    def test_a_proposal_waiting_on_a_conductors_agreement_is_in_its_view_alone(self):
-        assert "✓ proposal 2 by wldn-planner  Tenants get d.  waits on your agreement  no card open" in view("swb-1-conductor", props=WAITS)
+    def test_a_proposal_touching_a_teams_bolt_is_in_its_view_alone_and_waits_on_no_agreement(self):
+        assert "✓ proposal 2 by wldn-planner  Tenants get d.  no card open" in view("swb-1-conductor", props=WAITS)
         assert not [l for l in view("brd-1-conductor", props=WAITS) if "proposal" in l]
 
     def test_a_conductor_whose_host_does_not_answer_is_told_and_its_bolt_is_unknown(self):
@@ -1455,12 +1451,12 @@ class TestViews:
         assert board.landing_of(refused_before, b) is None
         assert board.landing_of(self.UNCLOSED, "ssh-fix") is None
 
-    def test_the_planner_reads_the_plan_in_brief_each_teams_bolt_and_the_proposals_with_whom_they_wait_on(self):
+    def test_the_planner_reads_the_plan_in_brief_each_teams_bolt_and_the_proposals(self):
         assert view("wldn-planner", props=WAITS) == [
             "wldn plan  2 held  1 planned  1 queued  1 proposal open", "  atlas-kit  atl-1  holds no bolt  in Flume stream wldn",
             f"! breadboard-kit  brd-1  ●  board-done  in Flume stream wldn  landed  1 of 1 merged  {DONE_TIME}",
             f"  switchboard-kit  swb-1  ◑◔  tenant-environments  in Flume stream wldn  0 of 2 merged  {TE_TIME}",
-            "  switchboard-kit  swb-2  holds no bolt  in Flume stream wldn", "✓ proposal 2 by wldn-planner  Tenants get d.  waiting on swb-1-conductor  no card open",
+            "  switchboard-kit  swb-2  holds no bolt  in Flume stream wldn", "✓ proposal 2 by wldn-planner  Tenants get d.  no card open",
             "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit",
             "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
 

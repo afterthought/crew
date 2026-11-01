@@ -133,25 +133,16 @@ class TestWho:
         except plan.Refusal as e:
             return str(e)
 
-    @pytest.mark.parametrize("agent, key, bolt", [("swb-1-conductor", ("chore", "order"), None), ("swb-1-conductor", ("chore", "after"), None),
-                                                  ("wldn-design", ("chore", "add"), None), ("chuck@mac-studio", ("chore", "drop"), None)])
+    @pytest.mark.parametrize("agent, key, bolt", [("wldn-design", ("chore", "add"), None), ("chuck@mac-studio", ("chore", "drop"), None)])
     def test_a_chore_is_written_by_the_hands_that_write_a_unit(self, monkeypatch, agent, key, bolt):
         assert self.may(monkeypatch, agent, key, bolt) is None
 
     @pytest.mark.parametrize("agent, key, bolt, said", [
         ("wldn-planner", ("chore", "add"), None, "the planner changes the plan through a proposal: crew plan propose, not crew chore add"),
-        ("swb-1-conductor", ("chore", "add"), TE, "swb-1-conductor does not write the plan with crew chore add --bolt: tell wldn-planner, who proposes it"),
         ("wldn-design", ("chore", "add"), TE, "wldn-design does not write the plan with crew chore add --bolt: tell wldn-planner, who proposes it"),
-        ("swb-1-conductor", ("chore", "move"), None, "swb-1-conductor does not write the plan with crew chore move: tell wldn-planner, who proposes it")])
+        ("wldn-ops", ("chore", "move"), None, "wldn-ops does not write the plan with crew chore move: tell wldn-planner, who proposes it")])
     def test_any_other_chore_write_is_refused_naming_the_planner(self, monkeypatch, agent, key, bolt, said):
         assert self.may(monkeypatch, agent, key, bolt) == said
-
-    def test_a_conductor_orders_only_the_chores_of_its_own_bolt(self, monkeypatch):
-        monkeypatch.setenv("CREW_AGENT", "swb-2-conductor")
-        w = fresh()
-        with pytest.raises(plan.Refusal, match="swb-2-conductor writes only units and chores of the bolt swb-2 holds, and bump is in bolt "
-                                               "tenant-environments"):
-            apply(w, "chore order bump --first", ctx=known(w))
 
 
 class TestStage:
@@ -210,7 +201,7 @@ def proposal_card(*dos):
     p = plan.proposal(pl, 1, "wldn")
     base = lambda: FactsWrite(plan_text(bolts=[("deploys", KIT, None)], units=[("a-first", KIT, "deploys", [])]))
     return p, cards.proposal_card(dict(n=1, state="open", case="Upkeep.", before=base().plan, after=apply(base(), *dos).plan,
-                                       argvs=[plan.do_args("wldn", d) for d in dos], waiting=[], session=None))
+                                       argvs=[plan.do_args("wldn", d) for d in dos], session=None))
 
 
 class TestProposals:

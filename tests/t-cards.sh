@@ -98,7 +98,7 @@ PY
 # its pane.
 : > "$CREW_TEST_LOG"
 out=$(ask wldn-operator post_request '{"name": "wldn-operator", "idempotencyKey": "ask/wldn-operator/zones", "title": "Which zone?"}')
-eq "$out" "denied: crew refuses a card from wldn-operator: only a conductor, the planner, main-level ops and the design agent ask the user on a card. The user is in your pane: ask them there."
+eq "$out" "denied: crew refuses a card from wldn-operator: only the planner, main-level ops and the design agent ask the user on a card. The user is in your pane: ask them there."
 eq "$(py_calls)" ""
 ok "crew's card hook refuses the operator's card before it reaches Pending You, saying the user is in its pane"
 

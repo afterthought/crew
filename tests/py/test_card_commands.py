@@ -356,7 +356,7 @@ def test_a_reply_naming_no_card_is_recorded_as_unread_never_taken_as_empty():
 def test_a_cards_picture_is_put_to_the_upload_url_its_post_returned_with_its_content_type(capsys):
     case = "One more unit."
     facts = dict(n=4, state="open", case=case, before=plan.Plan(PLAN), after=plan.Plan(PLAN_AFTER),
-                 argvs=[plan.do_args("wldn", 'unit add g-one "One unit." --repo switchboard-kit')], waiting=[])
+                 argvs=[plan.do_args("wldn", 'unit add g-one "One unit." --repo switchboard-kit')])
     up = dict(POSTED, uploads=[{"title": "The change, once approved", "uploadUrl": "https://up.example/p", "expiresAt": "x"}])
     acts = Acts({"match_area": (MATCHED, None), "post_request": (up, None)}, caller="wldn-planner")
     plan.row_card_post(None, "wldn", "wldn-planner", cards.proposal_card, facts, WHERE, acts)

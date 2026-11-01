@@ -52,7 +52,7 @@ class TestAmend:
 class TestWho:
     @pytest.mark.parametrize("agent, said", [
         ("wldn-planner", "the planner changes the plan through a proposal: crew plan propose, not crew unit amend"),
-        ("swb-1-conductor", "swb-1-conductor does not write the plan with crew unit amend: tell wldn-planner, who proposes it")])
+        ("wldn-design", "wldn-design does not write the plan with crew unit amend: tell wldn-planner, who proposes it")])
     def test_only_the_user_amends_directly(self, monkeypatch, agent, said):
         monkeypatch.setenv("CREW_AGENT", agent)
         with pytest.raises(plan.Refusal, match=said):

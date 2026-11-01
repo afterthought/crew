@@ -296,11 +296,8 @@ def board_data(fleet, labels, read, now):
                     out += building(bolts.get(a.bolt, (None, None))[1] if a.cmd == "bolt" else units.get(a.unit))
             return ordered(out)
 
-        def captured(s):
-            kind, of = plan.role(fleet, s["captured_by"])
-            return [of] if kind in ("conductor", "team") and of in p["teams"] else []
         proposals = [{"proposal": d["proposal"], "by": d["by"], "opened": d["opened"], "case": (d["case"] or "").splitlines()[0] if d["case"] else None,
-                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"]), logs), "teams": proposal_teams(d)}
+                      "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"]), logs), "teams": proposal_teams(d)}
                      for d in read["props"] if d["label"] == l]
         planned, queue, construction = [], [], []
         runs = (read.get("runs") or {}).get(l)
@@ -359,7 +356,7 @@ def board_data(fleet, labels, read, now):
                       "cards": [{"key": c["key"], "card": c["card"], "by": c["by"], "host": c["host"], "at": iso(c["at"]),
                                  "kind": plan.card_kind(c["key"])} for c in mine],
                       "records": records_proposed(logs, mine),
-                      "inception": {"signals": sorted((dict(s, teams=captured(s)) for s in sigs),
+                      "inception": {"signals": sorted((dict(s, teams=[]) for s in sigs),
                                                       key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
                                     "explorations": explorations},
                       "bolt_plan": {"proposals": proposals, "planned": planned, "queue": queue},
@@ -578,8 +575,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Bolt plan")
         bp = p["bolt_plan"]
         for d in bp["proposals"]:
-            line(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or "",
-                        "waiting on " + ", ".join(f"{t}-conductor" for t in d["waiting"]) if d["waiting"] else ""), gutter(d["markers"]), 0, d["markers"])
+            line(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or ""), gutter(d["markers"]), 0, d["markers"])
         for b in bp["planned"]:
             line(fields(named(b["repo"], b["bolt"]), b["goal"] or ""), " ")
             for u in b["units"]:
@@ -756,13 +752,8 @@ def team_rows(p):
 
 
 def proposal_row(d, team=None):
-    """An open proposal: who made it, its case, and the conductors it waits on, to a conductor whether it waits on
-    its own agreement; its marker in the gutter."""
-    if team:
-        waits = "waits on your agreement" if team in d["waiting"] else ""
-    else:
-        waits = "waiting on " + ", ".join(f"{t}-conductor" for t in d["waiting"]) if d["waiting"] else ""
-    return row(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or "", waits), gutter(d["markers"]), 0, d["markers"])
+    """An open proposal: who made it and its case; its marker in the gutter."""
+    return row(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or ""), gutter(d["markers"]), 0, d["markers"])
 
 
 def next_rows(p, team=None):
@@ -792,7 +783,7 @@ def conductor_view(p, team):
     host = next(t["host"] for t in p["teams"] if t["team"] == team)
     mine = held(p, team)
     out = [r for b in mine for r in ledger_rows(b)] or [row(fields(f"{team} holds no bolt"), " ")]
-    out += [proposal_row(d, team) for d in p["bolt_plan"]["proposals"] if team in d["teams"] or team in d["waiting"]]
+    out += [proposal_row(d, team) for d in p["bolt_plan"]["proposals"] if team in d["teams"]]
     return out + next_rows(p, team) + attention_rows(p, lambda a: a["what"] in ("plan", "signals") or (a["what"] == "host" and a["name"] == host)
                                                     or (a["what"] == "landed" and a["name"] in {b["bolt"] for b in mine}))
 
