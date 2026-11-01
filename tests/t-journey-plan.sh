@@ -61,7 +61,7 @@ expect_ok crew bolt start tenant-environments
 rm "$T/sluice-leaves-copy"
 made=$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/tenant-environments)
 eq "$(git -C "$k" rev-parse refs/remotes/origin/bolt/tenant-environments)" "$made"
-has "$out" "the runner on $box launches unit/the-deploy-names-its-host-tenant (request 1), unit/the-deploy-is-logged (request 2), unit/in-verify (request 3) in stream wldn"
+has "$out" "no agent starts: unit/the-deploy-names-its-host-tenant (request 1), unit/the-deploy-is-logged (request 2), unit/in-verify (request 3) is launched in switchboard-kit"
 eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team,Path | row)" "flume"
 ok "a give fetches the bolt's branch sluice made on GitHub, marks the bolt Path: flume and launches each of its units"
 # The runner on the box launched two of them: Flume's status of their places, carried on its branch, has one in code
@@ -106,7 +106,7 @@ grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was to
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -P Unit | head -1)" "zone-first"
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v '^runs/')" $'plan.rec\nproposals.rec\nrequests.rec'
 eq "$(acts_since "$before")" "1"
-eq "$(requests -e "Work = 'unit/zone-first'" -P Act,Base,Stream | row)" "launch bolt/tenant-environments wldn"
+eq "$(requests -e "Work = 'unit/zone-first'" -P Act,Base,Stream | row)" "launch bolt/tenant-environments"
 ok "a proposal touching a started bolt waits on the user alone, tells no conductor, and is applied in one commit, which launches the unit it adds"
 
 before=$(tip); : > "$CREW_TEST_LOG"

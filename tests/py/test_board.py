@@ -853,7 +853,7 @@ def test_the_session_sweep_after_nothing_moved_asks_the_host_the_last_could_not_
     found = [("wldn", "WilldanGroup/crew-state", "a" * 40, the_plan())]
     only = plan.sessions_unchecked([{"label": "wldn", "host": BOX, "why": "did not answer (exit 255)"}])
     assert only == {"wldn": {BOX}}
-    runs = {"wldn": ([], {BOX: {}})}  # wldn's runner answers on the box (plan.hosts_of)
+    runs = {"wldn": ([], {BOX: runner_reading({}, BOX)})}  # wldn's runner answers on the box (plan.hosts_of)
     assert plan.sweep_sessions(FLEET, found, {}, [], [], {}, {}, only, runs) == ([], []) and asked == [BOX]
     asked.clear()
     plan.sweep_sessions(FLEET, found, {}, [], [], {}, {}, runs=runs)

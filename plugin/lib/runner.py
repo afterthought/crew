@@ -344,8 +344,9 @@ def where(reads, launches, what):
     crew read them (reads) and the launches of the work (launches, requests.rec's records, a bolt's on its branch or a
     kit's): the host whose runner took the newest of them taken (takers), and the kit's folder there and the stream its
     work runs in, as Flume's status of the newest place that runner carries of them names them, None where it carries
-    none naming them yet; as ({"host", "dir", "stream"}, None), or (None, why) when no runner has taken any of them,
-    naming what (what) and any runner crew could not read, or two runners took the newest (read.1)."""
+    none naming them yet; as ({"host", "dir", "stream"}, None); (None, None) while no runner has taken any of them and
+    every runner was read; or (None, why) when none has and one could not be read, naming what (what) and that runner,
+    or two runners took the newest (read.1)."""
     unread = sorted({r["host"]: r["why"] for _, r in reads.items() if r["why"]}.items())
     for l in sorted(launches, key=lambda l: -(number(l.get("Request")) or 0)):
         hits, _ = takers(reads, number(l.get("Request")))
@@ -360,7 +361,7 @@ def where(reads, launches, what):
         return {"host": reading["host"], "dir": next((f["repository"] for f in facts if f["repository"]), None),
                 "stream": next((f["stream"] for f in facts if f["stream"]), None)}, None
     return None, (f"no runner has reported taking {what}'s work yet, so crew can't tell where it runs"
-                  + "".join(f"; {why}" for _, why in unread))
+                  + "".join(f"; {why}" for _, why in unread)) if unread else None
 
 
 # ------------------------------------------------------------------------------------------- a crossed piece's stage

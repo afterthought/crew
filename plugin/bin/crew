@@ -1,32 +1,34 @@
 #!/usr/bin/env bash
 # crew: run bolt teams of agents in herdr, and each partition's main level. Teams and partitions are data in
 # ~/.config/crew/teams.json, version 2, 3 or 4. Version 3 names each team's flume: the Flume stream its work runs in on
-# its host, or false where it names none; version 2 names none. crew runs no team's conductor, ops or slot: a team's
-# work runs in Flume places on its host, which crew bolts shows. crew starts no stage and waits on none: a stage's
+# its host, or false where it names none; version 2 names none. crew runs no team's conductor, ops or slot: a started
+# bolt's work runs in Flume places on the host whose runner's configuration names its kit's repository, which crew
+# bolts shows. crew starts no stage and waits on none: a stage's
 # start and end are Flume's, and crew bolts reads them from the runner's records. Version 4
 # also names each partition's flume, an object of its five main-level roles, design, planner, reviewer, ops and
 # operator, each false while it stands or the Flume stream its runs run in on the main level's host: a role that runs
 # as its kind, whose runs are launched by the host's runner while something is pending for it (crew role below); in
 # versions 2 and 3 every role stands.
 #
-# A team runs the work of its kits' started bolts on its host, in its stream; a bolt that is proven, every unit and
-# chore merged and sluice green at its head, waits to land. A landing or a drop of a bolt reads, on its kit's host, each
+# The runner whose configuration names a kit's repository takes its started bolts' work, in the stream it gives; a
+# bolt that is proven, every unit and chore merged and sluice green at its head, waits to land. A landing or a drop of a
+# bolt reads, on the host the runner that took its work reported, each
 # landing of the kit's bolts nothing recorded, and removes, let go by sluice and then through the kit's wt remove, each
 # landing's place whose bolt is over, naming one kept for uncommitted changes, sluice's let-go or a remove hook; no
 # other worktree is crew's:
 #   crew fix     <bolt> <name> "<what is wrong>" [--label L]
 #                                      the planner's or main-level ops's: a launch of a Flume fix place <bolt>--<name>
-#                                      on a started bolt, cut from bolt/<bolt>, appended to requests.rec for the
-#                                      runner on the host of the team that holds the bolt, which Flume builds and
+#                                      on a started bolt, cut from bolt/<bolt>, appended to requests.rec in its
+#                                      kit's repository for the runner whose configuration names it, which Flume builds and
 #                                      submits to the bolt itself, telling the planner its end, and crew bolts shows its
 #                                      stage; refused for a bolt not started and a name in use on the bolt. A fix in
 #                                      flight holds the bolt's landing
 #   crew fix     <bolt> <name> --drop [--label L]
 #                                      drop a fix not wanted: its launch dropped; a merged one is refused
 #   crew answer  <work> "<words>" [--label L]
-#                                      answer the Flume place of a team's work that stopped short asking, or
+#                                      answer the Flume place of a started bolt's work that stopped short asking, or
 #                                      waits on its caller: the retry of that stage carrying the words, appended to
-#                                      requests.rec for the runner on its host, or of its submission where that waits
+#                                      requests.rec for the runner that took it, or of its submission where that waits
 #                                      unheld; refused, naming the place's stage, when it neither stopped short nor
 #                                      waits on its caller. <work> is the unit's or chore's name, or the fix's place
 #                                      (<bolt>--<name>)
@@ -41,17 +43,19 @@
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
-#                                      or, in a started bolt, from its host's runner's records of Flume's
-#                                      status of its place, a host whose runner can't be read named and its work
-#                                      unknown; each bolt's head line saying its team's stream, in Flume stream <s>;
+#                                      or, in a started bolt, from the records of the runner that took it of Flume's
+#                                      status of its place, a runner that can't be read named and the work no runner
+#                                      read has taken unknown; each started bolt's head line saying where the runner
+#                                      that took its work reported it runs, @ <host>, in Flume stream <s>;
 #                                      each held bolt's verification, sluice's verdict on
 #                                      its last landing, and each merge and landing standing in sluice's queue with
 #                                      its number and state on its line, a queue that can't be read said once on the
 #                                      bolt's head line
 #   crew bolt  new|start|order|drop|land ...
 #                                      start, the user's or a proposal's, has sluice make bolt/<bolt> on GitHub from
-#                                      main (sluice branch create, on the host of the team that builds its kit in a
-#                                      stream), with no worktree, before the plan write; refused, nothing changed, in a
+#                                      main (sluice branch create, on the host of a team of the partition building
+#                                      its kit), with no worktree, before the plan write, its work launched in its
+#                                      repository for the runner whose configuration names it; refused, nothing changed, in a
 #                                      kit whose .config/sluice.toml on origin/main names no checks or no remote for
 #                                      its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
 #                                      words when it makes none; a branch
@@ -73,12 +77,12 @@
 #   crew bolt  submit <bolt>... [--excerpt "<the user's words>"] [--label L]
 #                                      main-level ops's landing of one kit's bolts, in the order the user's landings
 #                                      card gives: each bolt's branch submitted to its kit's main through sluice from a
-#                                      short-lived worktree on its team's host, queued behind the one before on one host,
+#                                      short-lived worktree on its host, as the runner that took its work reported, queued behind the one before on one host,
 #                                      once it ended on another, recorded queued with sluice's number as soon as sluice
 #                                      has it; each waited on in order and closed as it lands, its outcome recorded and
 #                                      a landed bolt closed by the first act of crew's that reads it once sluice's record
-#                                      has it out, on its team's host: this command's end, the waiter it leaves there,
-#                                      the team's next read or crew bolt land; a close crew refuses recorded and said
+#                                      has it out, on its host: this command's end, the waiter it leaves there,
+#                                      the rail's sweep there or crew bolt land; a close crew refuses recorded and said
 #                                      on the bolt's head line until a later read lifts it; one
 #                                      that did not land recorded at its head while the rest go on: one refused for its
 #                                      own content, a conflict or a check that ran and failed, held on its row; one
@@ -124,7 +128,7 @@
 #                                      copy is dead, one raised with alternatives named with the crew record that
 #                                      raises it again; tries again the reading of a batch's, a long proposal's or a
 #                                      kit's landings card that stands without it, ten minutes on, a landings card's
-#                                      by raising it again, which tries each row's on its team's host as crew card
+#                                      by raising it again, which tries each row's on its bolt's host as crew card
 #                                      session land/<bolt> does, changing the card to carry its links; and it ends,
 #                                      on every host of the partition, each card session crew
 #                                      started whose card is closed or whose row is gone. It says what each did, and
@@ -140,12 +144,12 @@
 #                                      crew starts with a batch's card, a landing card and a long proposal's: session
 #                                      prints its link (the running one's, else one started on this host with no
 #                                      browser), a batch card's one on the whole batch, on the main level's host, a
-#                                      bolt's (land/<bolt>) one on what it brings to main, on the host of the team
-#                                      holding it while it is a row of its kit's landings card, the kit's card changed to
+#                                      bolt's (land/<bolt>) one on what it brings to main, on the host its work runs
+#                                      on while it is a row of its kit's landings card, the kit's card changed to
 #                                      carry a new link, or one it stands without, while it waits on the user, land/<kit>
 #                                      having none of its own, as a batch's and a long proposal's change the planner's,
 #                                      recording the start, a proposal's only for one of more than fifteen new units, and an old
-#                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; end
+#                                      batch card's (batch/<n>-<k>) one per <unit> on the host its work ran on; end
 #                                      ends it, as the card's close does, and a bolt's reading as its row's end does,
 #                                      which no close of a card of the bolt's own does. Nothing of crew's waits on a
 #                                      session or a card: crew card wait is refused at once, naming crew card read
@@ -181,7 +185,7 @@
 #                                      the planner's for a batch's (batch/<n>), on the user's words on the card: brings
 #                                      up a thing it carries that must run, a landings row's bolt at its head or a batch
 #                                      line's <unit>/<name> at the branch and revision its stage recorded, through sluice
-#                                      preview on the host of the team holding its work, and changes the card in place
+#                                      preview on the host its work runs on, and changes the card in place
 #                                      to list its addresses while it is up; --done puts it away; refused for any other
 #                                      caller, key or thing, naming those the card carries
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
@@ -208,11 +212,9 @@
 #   crew main     fix <kit> <name> "<the failure's words>" [--label L]
 #                                      main-level ops's or the user's, on reading the kit's main red after a landing:
 #                                      a Flume fix place on main, its submission held for the user's send and ops its
-#                                      recipient, appended to requests.rec for the runner on the kit's host, the one
-#                                      host the teams that build it in a stream run on, or the main level's among
-#                                      several, refused naming them where none is; refused, naming a bolt of one chore
-#                                      proposed first among the planned as the way, where no team builds the kit in a
-#                                      stream or no runner answers on its host
+#                                      recipient, appended to requests.rec in the kit's repository for the runner
+#                                      whose configuration names it; refused, naming a bolt of one chore proposed first
+#                                      among the planned as the way, where no runner answers for the partition
 #   crew main     fix <kit> <name> --send [--excerpt "<the user's words>"] [--label L]
 #                                      main-level ops's, on the user's send of the kit's landings row, which carries the
 #                                      fix once its code has delivered and its submission waits held: the retry of its

@@ -6,7 +6,7 @@
 ## ADDED Requirements
 
 ### Requirement: Construction shows a started bolt from the runner's records
-The Construction lane SHALL show each started bolt as a ledger of its units, chores and fixes with the stages the runner's records give, its head line naming its kit's host and the stream that host's runner keeps the kit with, and no slot. The board's JSON SHALL give each such ledger its stream.
+The Construction lane SHALL show each started bolt as a ledger of its units, chores and fixes with the stages the runner's records give, its head line naming the host and the stream its work runs in, as the runner that took it reported them, and no slot. The board's JSON SHALL give each such ledger its host and stream.
 
 #### Scenario: A started bolt's ledger
 - **WHEN** `x` is started, deneb's runner keeping its kit with the stream `madswan`, `a` at `code 3/7` and `b` waiting on `a`

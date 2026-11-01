@@ -131,10 +131,11 @@ def test_a_new_branch_allows_no_team_or_agreement_and_an_old_branchs_records_sti
 
 
 def launch_rec(n, work="unit/a", after=(), **more):
-    """A launch request as plan.request writes it (runner.request_fields), its brief over two lines."""
-    given = dict(Repo="afterthought/crew", Kind="change", Name=work.split("/")[-1], Base="bolt/b", Stream="madswan",
+    """A kit's launch request as plan.request writes it (runner.request_fields), naming its repository and no host or
+    stream, its brief over two lines."""
+    given = dict(Repo="afterthought/crew", Kind="change", Name=work.split("/")[-1], Base="bolt/b",
                  Priority=2, Intent="madswan/b", Recipient="madswan/planner", After=list(after), Brief="Build a.\nSource: a.md", **more)
-    return plan.Rec("Request", runner.request_fields(n, "launch", "deneb", work, given, "2026-10-31T12:00:00Z", "madswan-dispatch-deneb"))
+    return plan.Rec("Request", runner.request_fields(n, "launch", work, given, "2026-10-31T12:00:00Z", "madswan-dispatch-deneb"))
 
 
 def requests_text(*recs):
@@ -147,10 +148,10 @@ def test_requests_of_every_act_pass_and_the_descriptor_refuses_what_it_does_not_
     lines and its After, a retry with a stage and words, a retry of the submission, a drop, a priority and a role's chore
     launch on main at priority 0 (runner.role_launch; Decision 10 of roles-run-as-flume-kinds) pass; an act, a kind or a
     hold the enums do not hold, a number that is no number and a date that is none are refused."""
-    other = lambda n, act, **g: plan.Rec("Request", runner.request_fields(n, act, "deneb", "unit/a", g, "2026-10-31T12:00:00Z", "madswan-planner"))
-    (_, _, work, given), _ = runner.role_launch([], {"afterthought/crew"}, "madswan", "design", "deneb", "madswan-main", "afterthought/crew",
-                                                "record-0053", "Write docs/adr/0053.md whole:\n# 53. Roles run as kinds")
-    role_land = plan.Rec("Request", runner.request_fields(7, "launch", "deneb", work, given, "2026-10-31T12:00:00Z", "madswan-design"))
+    other = lambda n, act, **g: plan.Rec("Request", runner.request_fields(n, act, "unit/a", g, "2026-10-31T12:00:00Z", "madswan-planner"))
+    (_, work, given), _ = runner.role_launch([], {"afterthought/crew"}, "madswan", "design", "deneb", "madswan-main", "afterthought/crew",
+                                             "record-0053", "Write docs/adr/0053.md whole:\n# 53. Roles run as kinds")
+    role_land = plan.Rec("Request", runner.request_fields(7, "launch", work, given, "2026-10-31T12:00:00Z", "madswan-design"))
     text = requests_text(launch_rec(1, "unit/a"), launch_rec(2, "unit/b", after=[1]), other(3, "retry", Of=1, Stage="construct", Words="Read it again."),
                          other(4, "retry", Of=1, Submission=True), other(5, "drop", Of=2), other(6, "priority", Of=1, Priority=5), role_land)
     plan.checked({"requests.rec": text})
@@ -184,9 +185,9 @@ def test_a_runners_branch_files_pass_by_their_descriptors_and_an_outcome_they_do
 
 
 def launch_of_a(w, **more):
-    """A change function's request: a launch of unit a on bolt b, as a give appends it."""
-    return plan.request(w, "launch", "deneb", "unit/a", **dict(dict(Repo="afterthought/crew", Kind="change", Name="a", Base="bolt/b",
-                        Stream="madswan", Priority=1, Intent="madswan/b", Recipient="madswan/planner", Brief="Build a."), **more))
+    """A change function's request: a launch of unit a on bolt b in its repository, as a start appends it."""
+    return plan.request(w, "launch", "unit/a", **dict(dict(Repo="afterthought/crew", Kind="change", Name="a", Base="bolt/b",
+                        Priority=1, Intent="madswan/b", Recipient="madswan/planner", Brief="Build a."), **more))
 
 
 def test_a_request_is_written_in_the_commit_of_the_plan_write_that_occasions_it_and_a_refused_one_pushes_nothing(state, monkeypatch):
@@ -206,9 +207,9 @@ def test_a_request_is_written_in_the_commit_of_the_plan_write_that_occasions_it_
     assert state.git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split() == ["plan.rec", "requests.rec"]
     assert len(state.git("log", "-1", "--format=%(trailers:key=Crew-Entry,valueonly)", sha).split()) == 1
     held = state.git("show", f"{sha}:requests.rec")
-    assert held.startswith(runner.REQUESTS.split("\n")[0]) and "Request: 1\nAct: launch\nHost: deneb\nWork: unit/a\n" in held
+    assert held.startswith(runner.REQUESTS.split("\n")[0]) and "Request: 1\nAct: launch\nWork: unit/a\n" in held
 
-    for change, said in ((lambda w: launch_of_a(w, Stream=None), "names no Stream"),
+    for change, said in ((lambda w: launch_of_a(w, Stream="madswan"), "names a Host or a Stream"),
                          (lambda w: launch_of_a(w, Priority="high"), "^requests.rec fails recfix --check"),
                          (lambda w: w.replace("requests.rec", w.text("requests.rec").replace("Name: a", "Name: b")), "request 1 would be changed")):
         with pytest.raises(Refusal, match=said):

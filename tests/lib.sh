@@ -305,19 +305,34 @@ part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }
 # that Flume stream, or to stand (record 0047 move 6)
 role_stream() { local s="'$3'"; [[ $3 == false ]] && s=False; edit teams "$(part "$1")['flume']['$2'] = $s"; }
 
-# The Flume world: every team's work runs in Flume places on its host (Decision 1 of the-team-machinery-leaves).
-# flume_world: each team in the teams file naming its partition's label as the stream its work runs in, and a runner
-# serving wldn on each host, its own branch wldn/runner/<host> on wldn's state repository.
+# The Flume world: every bolt's work runs in Flume places, taken by the runner whose configuration names its
+# repository (the user's ruling of 2026-11-01; Decision 1 of the-team-machinery-leaves).
+# flume_world: each team in the teams file naming its partition's label as the stream its work runs in, a runner
+# serving wldn on each host, its own branch wldn/runner/<host> on wldn's state repository, and the box's runner keeping
+# switchboard-kit in its checkout ($k) in stream wldn where the world made one
 flume_world() {
   edit teams "for t in d['teams']: t['flume'] = 'madswan' if t['name'] == 'apk-1' else 'wldn'"
+  [ -n "${k:-}" ] && keeps chuck-herdr-alpha switchboard-kit "$k"
   runner_writes chuck-herdr-alpha; runner_writes mac-studio
+}
+# keeps <host> <kit> <folder> [<stream>]: the runner on <host> keeps <kit> in <folder>, its work in <stream> (wldn by
+# default), as its configuration names them: the repository and stream Flume's status of each place it takes of the kit
+# names, which runner_writes gives a status naming none
+keeps() {
+  local d=$T/runner/$1; mkdir -p "$d"
+  python3 -c 'import json, os, sys
+f = sys.argv[1]; kept = json.load(open(f)) if os.path.exists(f) else {}
+kept[sys.argv[2]] = [sys.argv[3], sys.argv[4]]; json.dump(kept, open(f, "w"))' "$d/keeps.json" "$2" "$3" "${4:-wldn}"
 }
 # runner_writes <host> [<request> <place> <status JSON>]...: wldn/runner/<host> on the state repository as that host's
 # runner writes it, and crew never does: its runner.rec, and each request named answered launched at its place with
-# Flume's status of the place as the runner carried it, beside those an earlier call named
+# Flume's status of the place as the runner carried it, beside those an earlier call named, a status naming no
+# repository or stream given the folder and stream the runner keeps the request's kit in (keeps), as Flume's status
+# names them
 runner_writes() {
   local h=$1 d=$T/runner/$1 tree parent f; shift
   mkdir -p "$d"
+  git --git-dir "$ws" show wldn/main:requests.rec > "$d/requests.rec" 2>/dev/null || : > "$d/requests.rec"
   python3 - "$CREW/plugin/lib" "$d" "$h" "$@" <<'EOF'
 import json, os, sys
 sys.path.insert(0, sys.argv[1])
@@ -325,8 +340,18 @@ import runner
 d, h, args = sys.argv[2], sys.argv[3], sys.argv[4:]
 f = os.path.join(d, "kept.json")
 kept = json.load(open(f)) if os.path.exists(f) else {}
+keeps = json.load(open(os.path.join(d, "keeps.json"))) if os.path.exists(os.path.join(d, "keeps.json")) else {}
+recs = [dict(l.split(": ", 1) for l in r.splitlines() if ": " in l and not l.startswith(("%", "#")))
+        for r in open(os.path.join(d, "requests.rec")).read().split("\n\n")]
+repo = {r["Request"]: r.get("Repo", "").split("/")[-1] for r in recs if "Request" in r}
 for i in range(0, len(args), 3):
-    kept[args[i]] = [args[i + 1], json.loads(args[i + 2])]
+    status = json.loads(args[i + 2])
+    for p in status.get("status", {}).get("places", []):
+        if repo.get(args[i]) in keeps:
+            folder, stream = keeps[repo[args[i]]]
+            p.setdefault("repository", folder)
+            p.setdefault("stream", {"name": stream, "from": "intent"})
+    kept[args[i]] = [args[i + 1], status]
 json.dump(kept, open(f, "w"))
 at = "2026-10-31T12:01:00Z"
 files = {"runner": runner.RUNNER + f"\nHost: {h}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n",

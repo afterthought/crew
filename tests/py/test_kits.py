@@ -155,6 +155,15 @@ class TestWhereABoltRuns:
                                                "alpha's runner can't be read"):
             plan.bolt_at(FLEET, "madswan", self.BOLT, (self.LAUNCHES, {"alpha": silent, "deneb": took("deneb", 3)}))
 
+    def test_a_bolt_none_of_whose_own_work_is_taken_is_read_where_its_kits_work_runs(self):
+        """x's own launches not yet taken, crew's work on bolt z taken by deneb: x is read and landed in crew's folder
+        there (plan.kit_at); with no work of crew's taken at all, crew can't tell."""
+        at = plan.bolt_at(FLEET, "madswan", self.BOLT, (self.LAUNCHES, {"deneb": took("deneb", 3)}))
+        assert (at["machine"], at["kit"]["main"]) == ("deneb", "/w/crew")
+        with pytest.raises(plan.Refusal, match="^no runner has reported taking crew's work yet"):
+            plan.bolt_at(FLEET, "madswan", self.BOLT, (self.LAUNCHES, {"deneb": took("deneb")}))
+        assert plan.bolt_taken(FLEET, "madswan", self.BOLT, (self.LAUNCHES, {"deneb": took("deneb", 3)})) == (None, None)
+
     def test_taken_with_no_place_carried_crew_cant_tell_its_folder(self):
         read = took("deneb", 1)
         read["places"] = {}

@@ -3,7 +3,7 @@
 - FROM: `### Requirement: A crossed team's give launches its bolt whole`
 - TO: `### Requirement: A started bolt's work is launched whole`
 - FROM: `### Requirement: A crossed team's launch carries its stream, priority, intent and recipient`
-- TO: `### Requirement: A launch carries its stream, priority, intent and recipient`
+- TO: `### Requirement: A launch carries its repository, priority, intent and recipient`
 - FROM: `### Requirement: A crossed team's dependent launches once its After work has landed`
 - TO: `### Requirement: A dependent launches once its After work has landed`
 - FROM: `### Requirement: Plan writes reach a crossed team's places`
@@ -330,22 +330,22 @@ When a landed bolt's close is refused, crew SHALL record a `bolt.land` entry on 
 - **THEN** the read closes `z`, the run record holds its `bolt.land`, and no head line for `z` remains
 
 ### Requirement: A started bolt's work is launched whole
-`crew bolt start <bolt>` SHALL check the kit's policy and have sluice make `bolt/<bolt>` on its kit's host, and SHALL be refused while that host is held, has no runner branch, or no runner keeps the kit with a stream. Its one plan write SHALL set `Path: flume` on the bolt, and no `Team`, and append a launch for each of its units and chores in the file's order, cut from `bolt/<bolt>`. It SHALL start, restart and greet no agent.
+`crew bolt start <bolt>` SHALL check the kit's policy and have sluice make `bolt/<bolt>` from the kit's main, and SHALL be refused while the host it makes the branch on is held, or no runner answers for the partition. Its one plan write SHALL set `Path: flume` on the bolt, and no `Team`, and append a launch for each of its units and chores in the file's order, cut from `bolt/<bolt>`, in the kit's repository and naming no host or stream, for the runner whose configuration names the repository to take. It SHALL start, restart and greet no agent.
 
 #### Scenario: A bolt of three
-- **WHEN** `crew bolt start x` runs, `x` holding units `a` and `b`, `b` after `a`, and chore `c`, and deneb's runner keeps `x`'s kit with the stream `madswan`
-- **THEN** the plan marks `x` `Path: flume` with no `Team`, `requests.rec` holds three launches of `change`, `change` and `chore` on `bolt/x`, each on deneb, and no agent starts
+- **WHEN** `crew bolt start x` runs, `x` holding units `a` and `b`, `b` after `a`, and chore `c`, and a runner answers for madswan
+- **THEN** the plan marks `x` `Path: flume` with no `Team`, `requests.rec` holds three launches of `change`, `change` and `chore` on `bolt/x`, each in crew's repository and naming no host or stream, and no agent starts
 
 #### Scenario: No runner on the host
-- **WHEN** `crew bolt start x` runs and no runner branch of madswan's state repository keeps `x`'s kit with a stream
-- **THEN** the start is refused naming the kit and that no runner runs its work, and no branch is made
+- **WHEN** `crew bolt start x` runs and madswan's state repository holds no runner's branch
+- **THEN** the start is refused naming that no runner answers for madswan, and no branch is made
 
-### Requirement: A launch carries its stream, priority, intent and recipient
-Each launch of a started bolt's work SHALL name its kit's host and the stream that host's runner keeps the kit with, the kit's forge address, the intent `<label>/<bolt>`, the recipient `<label>/planner`, a priority from its bolt's place in the plan, the highest first, and its brief, the work's own words as crew's prompts give them. A write that starts or reorders bolts SHALL append a priority for each launched place whose priority the plan's order changed.
+### Requirement: A launch carries its repository, priority, intent and recipient
+Each launch of a started bolt's work SHALL name the kit's repository as the plan names it and no host or stream, the runner whose configuration names the repository taking it in the stream that configuration gives, the intent `<label>/<bolt>`, the recipient `<label>/planner`, a priority from its bolt's place in the plan, the highest first, and its brief, the work's own words as crew's prompts give them. A write that starts or reorders bolts SHALL append a priority for each launched place whose priority the plan's order changed.
 
 #### Scenario: Two bolts in order
-- **WHEN** `x` and then `y` are started, `x` above `y` in the plan, and deneb's runner keeps their kit with the stream `madswan`
-- **THEN** `x`'s launches carry a higher priority than `y`'s, each names deneb, stream `madswan`, intent `madswan/<bolt>` and recipient `madswan/planner`
+- **WHEN** `x` and then `y` are started, `x` above `y` in the plan
+- **THEN** `x`'s launches carry a higher priority than `y`'s, each names crew's repository and no host or stream, intent `madswan/<bolt>` and recipient `madswan/planner`
 
 #### Scenario: A reorder
 - **WHEN** `crew bolt order` puts `y` above `x`
@@ -377,14 +377,14 @@ A move out of a started bolt, a split, or a change of `After` on work whose laun
 - **THEN** the proposal is refused naming `a`'s place and that it is dropped and added again
 
 ### Requirement: A fix is a fix place on its bolt
-`crew fix <bolt> <name> "<words>"` SHALL append a launch of the fix kind on `bolt/<bolt>`, on its kit's host with the stream that host's runner keeps the kit with, with nothing held; `--drop` SHALL drop it, and `--merge`, `--wait` and `--bolt` SHALL be no options it has. A fix in flight SHALL hold its bolt's landing.
+`crew fix <bolt> <name> "<words>"` SHALL append a launch of the fix kind on `bolt/<bolt>`, in its kit's repository and naming no host or stream, with nothing held; `--drop` SHALL drop it, and `--merge`, `--wait` and `--bolt` SHALL be no options it has. A fix in flight SHALL hold its bolt's landing.
 
 #### Scenario: A review note marked fix
 - **WHEN** the planner runs `crew fix x rail-word "Say 'land' for a started bolt"` on a batch's note
 - **THEN** `requests.rec` gains a launch of `fix` named `x--rail-word` on `bolt/x`, and `x`'s landing row says it lands once that fix has merged or been dropped
 
 ### Requirement: A landing that conflicts with main takes main in by a fix place
-When sluice refuses a started bolt at its landing for a conflict with main, the act that reads the refusal SHALL append a launch of a fix on the bolt named `take-main-<main's revision, seven>`, on its kit's host with its stream, its brief saying to take `origin/main` into the bolt with sluice's words of the conflict, unless a fix of that name already stands; the bolt's row SHALL say it takes main first.
+When sluice refuses a started bolt at its landing for a conflict with main, the act that reads the refusal SHALL append a launch of a fix on the bolt named `take-main-<main's revision, seven>`, in its kit's repository and naming no host or stream, its brief saying to take `origin/main` into the bolt with sluice's words of the conflict, unless a fix of that name already stands; the bolt's row SHALL say it takes main first.
 
 #### Scenario: A landing refused for a conflict
 - **WHEN** main-level ops's `crew bolt submit x` reads sluice refusing `x` for a conflict with main at `4d3d9be`

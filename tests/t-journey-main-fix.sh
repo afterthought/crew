@@ -33,12 +33,12 @@ expect_ok crew bolt new smoke-follow-up "Smoke's follow-up." --repo switchboard-
 : > "$CREW_TEST_CLAUDE_LOG"
 words="tests:logic failed on main after landing smoke: tests/py/test_rail.py reads a fixture that is gone."
 expect_ok crew main fix switchboard-kit a-test-reads-its-fixture "$words"
-has "$out" "the runner on $box launches fix main--a-test-reads-its-fixture on switchboard-kit's main (request 1) in stream wldn, its submission held"
-eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act,Host,Work,Kind,Name,Base,Stream,Intent,Recipient,Hold,Brief | grep . | paste -sd ' ' -)" \
-  "launch $box fix/main/switchboard-kit/a-test-reads-its-fixture fix main--a-test-reads-its-fixture main wldn wldn/main/switchboard-kit wldn/ops submission $words"
+has "$out" "fix main--a-test-reads-its-fixture is launched on switchboard-kit's main in switchboard-kit (request 1) for the runner whose configuration names it to take, its submission held"
+eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act,Host,Work,Repo,Kind,Name,Base,Stream,Intent,Recipient,Hold,Brief | grep . | paste -sd ' ' -)" \
+  "launch fix/main/switchboard-kit/a-test-reads-its-fixture switchboard-kit fix main--a-test-reads-its-fixture main wldn/main/switchboard-kit wldn/ops submission $words"
 eq "$(field "$HOST" fix.start On)" "fix/main/switchboard-kit/a-test-reads-its-fixture"
 eq "$(launches)" ""
-ok "crew main fix of a kit a team builds in a stream appends a launch of a fix on main, held for the user's send with ops its recipient, on the team's host and in its stream, starting no agent"
+ok "crew main fix of a kit appends a launch of a fix on main in its repository, held for the user's send with ops its recipient, naming no host or stream, starting no agent"
 
 # The runner launched the fix, and Flume's status of its place, carried on the runner's branch, shows its code
 # delivered and its submission held: the branch gains answers.rec and places.rec beside runner.rec.
@@ -56,7 +56,7 @@ ok "once the runner's record shows the fix's code delivered and its submission h
 expect_ok crew main fix switchboard-kit a-test-reads-its-fixture --send
 has "$out" "fix main--a-test-reads-its-fixture of switchboard-kit's main is sent on the user's word (request 2): the runner on $box submits it"
 eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Request = 2" -P Act,Host,Work,Of,Submission | grep . | paste -sd ' ' -)" \
-  "retry $box fix/main/switchboard-kit/a-test-reads-its-fixture 1 yes"
+  "retry fix/main/switchboard-kit/a-test-reads-its-fixture 1 yes"
 eq "$(field "$HOST" fix.merge On)" "fix/main/switchboard-kit/a-test-reads-its-fixture"
 expect_ok crew rail --label wldn
 has "$out" "fix main--a-test-reads-its-fixture on $box: tests:logic failed on main after landing smoke: tests/py/test_rail.py reads a fixture that is gone.; sent on the user's word (request 2): the runner on $box submits it"

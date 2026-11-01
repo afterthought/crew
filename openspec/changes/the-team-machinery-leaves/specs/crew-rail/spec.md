@@ -51,10 +51,10 @@ Each open proposal on the flywheel's branch SHALL be a row under proposals. The 
 - **THEN** the next `crew rail` has no row for it
 
 ### Requirement: A started bolt waits to land on its kit's row
-A started bolt SHALL wait to land on its kit's landings row on the same terms as any bolt, every unit and chore merged and sluice green at its head, its pieces' stages read from the runner's records; its line SHALL name its kit's host, and no team or slot.
+A started bolt SHALL wait to land on its kit's landings row on the same terms as any bolt, every unit and chore merged and sluice green at its head, its pieces' stages read from the runner's records; its line SHALL name the host its work runs on, as the runner that took it reported, and no team or slot.
 
 #### Scenario: A started bolt proven
-- **WHEN** started `x` has `a`, `b` and `c` merged by the runner's records and sluice green at its head, and deneb's runner keeps its kit with a stream
+- **WHEN** started `x` has `a`, `b` and `c` merged by the runner's records, deneb's runner having taken them, and sluice green at its head
 - **THEN** the rail shows crew's landings row with `x`, on deneb, can land
 
 ## REMOVED Requirements

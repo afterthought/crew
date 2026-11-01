@@ -92,26 +92,26 @@ As main is read (plan.18), crew SHALL read a bolt on GitHub as the host last fet
 - **THEN** the kit's stages read `unknown`, naming that GitHub could not be fetched and git's words, and nothing is read from the host's `bolt/b`
 
 ### Requirement: A bolt's work starts by crew bolt start
-`crew bolt start <bolt>` SHALL make `bolt/<bolt>` through sluice on its kit's host, mark the bolt `Path: flume` and request a launch of each unit and chore of it, with its `After` and priority, in one plan write, starting no agent, and record `bolt.start`. A proposal MAY hold it; the user runs it directly; no other agent SHALL. It SHALL be refused, with the plan unchanged and no branch made, while the kit's host is held, has no runner branch, or no runner keeps the kit with a stream.
+`crew bolt start <bolt>` SHALL make `bolt/<bolt>` through sluice from the kit's main, mark the bolt `Path: flume` and request a launch of each unit and chore of it in its repository, with its `After` and priority and naming no host or stream, for the runner whose configuration names the repository to take, in one plan write, starting no agent, and record `bolt.start`. A proposal MAY hold it; the user runs it directly; no other agent SHALL. It SHALL be refused, with the plan unchanged and no branch made, while the host it makes the branch on is held, or no runner answers for the partition.
 
 #### Scenario: A bolt is started
-- **WHEN** the user approves a proposal holding `crew bolt start b`, a bolt of switchboard-kit with two units, and chuck-herdr-alpha's runner keeps switchboard-kit with the stream `wldn`
-- **THEN** `bolt/b` is made on GitHub by sluice, `b` is marked `Path: flume`, two launch requests name chuck-herdr-alpha and `wldn`, no agent starts, and the run record has `bolt.start` on `bolt/b`
+- **WHEN** the user approves a proposal holding `crew bolt start b`, a bolt of switchboard-kit with two units, and a runner answers for wldn
+- **THEN** `bolt/b` is made on GitHub by sluice, `b` is marked `Path: flume`, two launch requests name switchboard-kit and no host or stream, no agent starts, and the run record has `bolt.start` on `bolt/b`
 
-#### Scenario: A kit no runner keeps with a stream
-- **WHEN** `crew bolt start b` runs and no host's runner record keeps `b`'s kit with a stream
-- **THEN** it is refused, naming the kit and that no runner runs its work, the plan is unchanged and no branch is made
+#### Scenario: A partition no runner answers for
+- **WHEN** `crew bolt start b` runs and wldn's state repository holds no runner's branch
+- **THEN** it is refused, naming that no runner answers for wldn, the plan is unchanged and no branch is made
 
 #### Scenario: An agent starts a bolt directly
 - **WHEN** `wldn-ops` runs `crew bolt start b` outside a proposal
 - **THEN** it is refused, naming the planner and the user, and the plan is unchanged
 
 ### Requirement: A fix names its bolt, and a fix of main its kit alone
-`crew fix <bolt> <name> "<words>"` SHALL request a fix place on `bolt/<bolt>`, and `crew main fix <kit> <name> "<words>"` one on the kit's main, each on its kit's host with the stream that host's runner gives it. Neither SHALL take a team; `--drop` SHALL drop either's launch, and `crew fix` SHALL take no `--merge`, `--wait` or `--bolt`. A kit no runner keeps with a stream SHALL be refused, naming it.
+`crew fix <bolt> <name> "<words>"` SHALL request a fix place on `bolt/<bolt>`, and `crew main fix <kit> <name> "<words>"` one on the kit's main, each in the kit's repository and naming no host or stream, for the runner whose configuration names it to take in the stream it gives. Neither SHALL take a team; `--drop` SHALL drop either's launch, and `crew fix` SHALL take no `--merge`, `--wait` or `--bolt`. A fix of main where no runner answers for the partition SHALL be refused, naming it.
 
 #### Scenario: A fix on a bolt
 - **WHEN** wldn-planner runs `crew fix b zone-check "the zone check fails on tenants with no region"`
-- **THEN** a launch request of a fix on `bolt/b` names its kit's host and stream and the words, and no slot or agent of crew's is involved
+- **THEN** a launch request of a fix on `bolt/b` names its kit's repository and the words and no host or stream, and no slot or agent of crew's is involved
 
 #### Scenario: A team's name where the bolt goes
 - **WHEN** an agent runs `crew fix swb-1 zone-check "<words>"` and no bolt is named `swb-1`

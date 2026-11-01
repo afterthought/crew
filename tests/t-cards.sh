@@ -1,6 +1,6 @@
 # crew's Pending You cards on the stub pendingyou (the rail-cards spec, briefs.16, record 0031), the journey each
-# change of the card series adds its card to, on a plan whose bolt b1 swb-1 builds through Flume (Decision 1 of
-# the-team-machinery-leaves). An agent's own question, through Pending You's own tools, with crew's card hook before and
+# change of the card series adds its card to, on a plan whose bolt b1's work the box's runner takes through Flume, its
+# configuration naming switchboard-kit (Decision 1 of the-team-machinery-leaves; the user's ruling of 2026-11-01). An agent's own question, through Pending You's own tools, with crew's card hook before and
 # after each call: the operator's post refused, naming why, with nothing sent; the planner's question posted in a kit's
 # area made under the kit's key, recorded on the planner with its id and key; crew card read printing where it stands
 # and the user's answer, recording nothing; the planner's close and withdrawal recorded under its key; a post under a
@@ -58,7 +58,7 @@ card() { (export CREW_TEST_HOST=$box CREW_AGENT=wldn-ops HOME; HOME=$(home_of $b
 card2() { (export CREW_TEST_HOST=$box CREW_AGENT=wldn-planner HOME; HOME=$(home_of $box); cd "$wd" && "$CREW/plugin/bin/crew" card "$@"); }
 py_calls() { grep " pendingyou " "$CREW_TEST_LOG" | cut -d' ' -f3- || true; }
 
-# The plan, by hand: b1 holds v1, and swb-1 builds it through Flume, whose landing card crew raises below.
+# The plan, by hand: b1 holds v1, built through Flume, whose landing card crew raises below.
 w=$T/hand; git clone -q -b wldn/main "$ws" "$w"
 python3 - "$CREW/plugin/lib" "$w/plan.rec" <<'PY'
 import sys
@@ -72,6 +72,10 @@ PY
 commit_all "$w" "plan: by hand"; push_state "$w"
 flume_world
 crew bolt start b1 >/dev/null
+# The box's runner, which keeps switchboard-kit in $k (flume_world), took v1's launch, its place coding: b1's work runs
+# on the box.
+runner_writes $box "$(request_of unit/v1)" /flume/places/change--v1 \
+  '{"status":{"places":[{"place":"/flume/places/change--v1","phase":"live","current":"code","stages":[{"name":"code","state":"running"}]}]}}'
 
 # ask <agent> <tool> <args as JSON>: a Pending You call from the agent's session through Pending You's own tools, as
 # Claude Code makes it on the box: crew's card hook before it, which may deny it, then the stub's answer, then the hook
@@ -409,7 +413,7 @@ ok "a batch's card lost to the planner is raised again by the sweep's entry unde
 
 expect_ok planner session batch/1; eq "$out" "$u1"; eq "$(listed)" "$p1"
 expect_fail "a batch has one reading session, on the whole batch: crew card session batch/1" planner session batch/1 v1
-expect_fail "b1 is no row of switchboard-kit's landings card, so it has no reading: unit v1 has not merged: it is launching" \
+expect_fail "b1 is no row of switchboard-kit's landings card, so it has no reading: unit v1 has not merged: it is code" \
   planner session land/b1
 expect_fail "crew card wait is gone: crew keeps no process waiting on a card or its reading. Run crew card read land/b1 when" \
   planner wait land/b1

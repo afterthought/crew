@@ -68,6 +68,7 @@ pa=$kd/places/change--a pb=$kd/places/change--b pc=$kd/places/change--c pf=$kd/p
 runner_writes $box "$(request_of unit/a)" "$pa" "$(live "$pa" code 1 2)" "$(request_of unit/b)" "$pb" "$(live "$pb" construct)" \
   "$(request_of unit/c)" "$pc" "$(live "$pc" verify 2 2)" "$(request_of fix/tenant-environments/edge)" "$pf" "$(live "$pf" code)"
 pm=$(dirname "$ak")/places/change--map-one
+keeps mac-studio atlas-kit "$ak"
 runner_writes mac-studio "$(request_of unit/map-one)" "$pm" "$(live "$pm" construct)"
 CREW_AGENT=wldn-ops as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act card.post --on kit/atlas-kit \
   --field Card=req_lnd-1 --field Key=land/atlas-kit >/dev/null
@@ -76,20 +77,20 @@ CREW_AGENT=wldn-ops as $box python3 "$CREW/plugin/lib/record.py" emit --label wl
 expect_ok crew bolts --json; json=$out
 eq "$(grep -c ' ssh chuck-herdr-alpha ' "$CREW_TEST_LOG")" "1"
 eq "$(st a) $(st b) $(st c) $(st map-one) $(st zone-one)" "code construct verify construct ready"
-eq "$(j '.partitions[0].plans[0].bolts[] | select(.bolt == "tenant-environments") | "\(.team) \(.host) \(.state) \(.stream) \(.fixes[0].fix) \(.fixes[0].flume.stage)"')" \
-  "swb-1 $box active wldn fix/tenant-environments/edge code"
+eq "$(j '.partitions[0].plans[0].bolts[] | select(.bolt == "tenant-environments") | "\(.host) \(.state) \(.stream) \(.fixes[0].fix) \(.fixes[0].flume.stage)"')" \
+  "$box active wldn fix/tenant-environments/edge code"
 eq "$(j '.partitions[0].plans[0].queue[0] | "\(.unit) \(.stage)"')" "later queued"
 expect_ok crew bolts
 has "$out" "  a                                        code 1/2     flume/change--a"
 : > "$CREW_TEST_LOG"; expect_ok crew bolts apex-zones
-has "$out" "apex-zones  switchboard-kit  no team  planned"; lacks "$out" "tenant-environments"
+has "$out" "apex-zones  switchboard-kit  not started  planned"; lacks "$out" "tenant-environments"
 eq "$(grep -c ' ssh ' "$CREW_TEST_LOG" || true)" "0"
 ok "crew bolts reads each unit's and fix's stage from the runner's records, one ssh for the host holding a bolt, and none for a planned bolt alone"
 
 expect_ok crew sites wldn --json; json=$out
-eq "$(j '[.partitions[0].hosts[] | "\(.host) \([.bolts[] | "\(.bolt) \(.team)"] | join(", "))"] | join("; ")')" \
-  "$box tenant-environments swb-1; mac-studio atlas-maps atl-1"
-ok "crew sites lists each held bolt under the host that builds it"
+eq "$(j '[.partitions[0].hosts[] | "\(.host) \([.bolts[] | "\(.bolt) \(.repo)"] | join(", "))"] | join("; ")')" \
+  "$box tenant-environments switchboard-kit; mac-studio atlas-maps atlas-kit"
+ok "crew sites lists each started bolt under the host whose runner took its work"
 
 s1=$(printf 'a%.0s' $(seq 40))
 expect_ok crew ops offer mac-studio --label wldn --from none --to "$s1"

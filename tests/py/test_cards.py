@@ -957,7 +957,7 @@ class TestLandingSession:
 
     def test_off_its_teams_host_it_is_refused_naming_that_host(self, monkeypatch):
         acts = ReadingActs()
-        with pytest.raises(plan.Refusal, match="land/b1's reading session runs on chuck-herdr-alpha, the host of the team holding its bolt"):
+        with pytest.raises(plan.Refusal, match="land/b1's reading session runs on chuck-herdr-alpha, the host its bolt's work runs on"):
             self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
         assert acts.sessions == [] and acts.emitted == []
 
@@ -1252,11 +1252,11 @@ class TestLandingReading:
 
 
 class TestSessionWords:
-    def test_a_landings_session_runs_on_its_bolts_teams_host_and_a_batch_cards_on_the_main_levels(self):
-        """card-sessions "A landing's session on another host": refused naming the team's host, the main level's
-        being no matter."""
+    def test_a_landings_session_runs_on_its_bolts_host_and_a_batch_cards_on_the_main_levels(self):
+        """card-sessions "A landing's session on another host": refused naming the host the bolt's work runs on, the
+        main level's being no matter."""
         assert plan.session_refusal("land/y", "wldn", "mac-studio", "mac-studio", "box") == (
-            "land/y's reading session runs on box, the host of the team holding its bolt, where its kit's main checkout is: "
+            "land/y's reading session runs on box, the host its bolt's work runs on, where the runner that took it keeps its kit: "
             "run crew card session land/y there")
         assert plan.session_refusal("land/crew", "wldn", "mac-studio", "mac-studio", "box", ("crew",)).startswith(
             "land/crew is crew's landings card, wldn-ops's, which has no reading of its own")

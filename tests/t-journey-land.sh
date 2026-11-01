@@ -120,7 +120,7 @@ ok "a unit's place merges into the bolt by a submission, and crew bolts reads th
 # The bolt lands once its units have: submitted to main, which conflicts on the title.
 expect_fail "unit a has not landed on switchboard-kit's main: its place landed on bolt/tenant-environments at $(short origin/bolt/tenant-environments), which main does not hold" \
   crew bolt land tenant-environments
-land=$kd/places/land-tenant-environments
+land=$k/places/land-tenant-environments
 main_before=$(git -C "$k" rev-parse main)
 gh_repo=WilldanGroup/switchboard-kit
 pr=$(pull $gh_repo bolt/tenant-environments false)  # the pull request sluice's submission opens, ready for review
@@ -136,7 +136,7 @@ eq "$(drafted "$pr")" true
 eq "$(calls | grep -A100 "^$box wt submit " | grep -c "^$box gh pr ready $pr -R $gh_repo --undo$")" 1
 m=$(git -C "$k" rev-parse --short=7 origin/main)
 tm=fix/tenant-environments/take-main-$m
-has "$out" "bolt tenant-environments takes main first: the runner on $box launches fix tenant-environments--take-main-$m (request $(request_of "$tm")), taking origin/main at $m into the bolt"
+has "$out" "bolt tenant-environments takes main first: fix tenant-environments--take-main-$m is launched in switchboard-kit (request $(request_of "$tm")) for the runner that keeps it, taking origin/main at $m into the bolt"
 ok "crew bolt submit lands a bolt by a submission to main from a short-lived worktree, and a conflict lands nothing, leaves its pull request a draft, said with its link, and launches the bolt's take-main fix"
 
 # The take-main fix's Flume place merges main in, resolving the title, and is submitted to the bolt, which sluice lands
@@ -244,7 +244,7 @@ ok "ops's --done, on the user's words, releases the preview, and the card carrie
 # left that can land, is withdrawn naming the fix's words.
 : > "$CREW_TEST_LOG"
 expect_ok crew fix tenant-environments gap "The zone list misses one zone."
-has "$out" "the runner on $box launches fix tenant-environments--gap on bolt/tenant-environments (request $(request_of fix/tenant-environments/gap)) in stream wldn"
+has "$out" "fix tenant-environments--gap is launched on bolt/tenant-environments in switchboard-kit (request $(request_of fix/tenant-environments/gap)) for the runner whose configuration names it to take"
 has "$out" "card land/switchboard-kit: $card withdrawn"
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid"
 ended "$pid"; eq "$(listed)" ""
@@ -483,7 +483,7 @@ decoy
 killed far-reach "$submitter"
 spared "ending this run's crew bolt submit far-reach"
 n=$(field mac-studio bolt.submit Submission bolt/far-reach)
-far=$kd/places/land-far-reach
+far=$k/places/land-far-reach
 waiter=$(cat "$(git -C "$far" rev-parse --absolute-git-dir)/crew-landing")
 kill -0 "$waiter" 2>/dev/null || fail "no waiter runs on the landing's submission #$n"
 echo 2 > "$T/sluice-wait-$n-fives"  # two waits more that sluice is undecided on, once it is no longer held
@@ -492,7 +492,7 @@ rm "$T/sluice-wait-holds"
 until_ok closed far-reach || fail "the waiter's read did not close far-reach:"$'\n'"$(calls)"
 # sluice undecided on two more waits: the waiter spent both and called again after each (teams.5)
 eq "$(cat "$T/sluice-wait-$n-fives")" "0"
-(( $(calls | grep -c "^$box sluice wait main --timeout 9m --json in $(cd "$kd" && pwd -P)/places/land-far-reach$") >= 2 )) ||
+(( $(calls | grep -c "^$box sluice wait main --timeout 9m --json in $(cd "$k" && pwd -P)/places/land-far-reach$") >= 2 )) ||
   fail "the waiter did not wait a call at a time:"$'\n'"$(calls)"
 until_ok bash -c '! kill -0 "$1" 2>/dev/null' _ "$waiter" || fail "the waiter outlived its read"
 eq "$(field $box bolt.submit Outcome bolt/far-reach) $(field $box bolt.submit Submission bolt/far-reach)" "landed $n"
@@ -511,7 +511,7 @@ touch "$T/sluice-wait-holds"
 submitter=$!
 until_ok queued near-reach || fail "the landing was not recorded queued:"$'\n'"$(cat "$T/near-reach.out")"
 killed near-reach "$submitter"
-near=$kd/places/land-near-reach
+near=$k/places/land-near-reach
 waiter=$(cat "$(git -C "$near" rev-parse --absolute-git-dir)/crew-landing")
 # stopped <pid>: the process and everything it started, its children first, so the waiter's loop does not outlive the
 # process crew-landing names and read the landing itself
@@ -609,11 +609,10 @@ PY
 # It is started, its chore launched as a start launches it (runner.reach), with no branch made for it.
 by_hand 'p.insert(plan.Rec("Bolt", [("Bolt", "made-before"), ("Repo", "switchboard-kit"), ("Goal", "Made before."), ("Path", "flume")]))
 p.insert(plan.Rec("Unit", [("Unit", "mb"), ("Repo", "switchboard-kit"), ("Bolt", "made-before"), ("Kind", "chore"), ("Intent", "Chore mb.")]))
-import crew, importlib, os, runner
-os.environ["HOME"] = "'"$(home_of mac-studio)"'"; importlib.reload(crew)  # the teams file mac-studio holds
+import os, runner
 rf = os.path.join(os.path.dirname(f), "requests.rec"); rq = plan.Plan(open(rf).read())
-for act, host, work, given in runner.reach(p, rq.recs("Request"), "made-before", plan.kit_team(crew.load(), "wldn", "switchboard-kit")):
-    rq.insert(plan.Rec("Request", runner.request_fields(runner.next_request(rq.recs("Request")), act, host, work, given, "2026-10-31T12:00:00Z", "chuck@mac-studio")))
+for act, work, given in runner.reach(p, rq.recs("Request"), "made-before", "wldn"):
+    rq.insert(plan.Rec("Request", runner.request_fields(runner.next_request(rq.recs("Request")), act, work, given, "2026-10-31T12:00:00Z", "chuck@mac-studio")))
 open(rf, "w").write(rq.text())'
 git -C "$k" branch -q --no-track bolt/made-before main; git -C "$k" config branch.bolt/made-before.crew given
 on_branch "$k" bolt/made-before $'chore(mb): bolts kept on the host\n\nChore: mb' .config/sluice.toml $'[branches."bolt/*"]\nrequired = ["#check-full"]\n'
@@ -647,7 +646,7 @@ expect_ok crew bolt drop kept-work "not this quarter"
 has "$out" "bolt/kept-work is kept on GitHub at ${tip:0:7}: bolt kept-work was dropped, and sluice did not delete it: bolt/kept-work at $tip has not landed into main; submit it there first; it is the drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip"
 github bolt/kept-work || fail "the refused delete removed bolt/kept-work from GitHub"
 eq "$(git -C "$k" rev-parse bolt/kept-work) $(git -C "$k" config branch.bolt/kept-work.crew)" "$tip dropped"
-eq "$(field $box branch.kept Head bolt/kept-work team/swb-1) | $(field $box branch.kept Why bolt/kept-work)" \
+eq "$(field $box branch.kept Head bolt/kept-work) | $(field $box branch.kept Why bolt/kept-work)" \
   "${tip:0:7} | bolt kept-work was dropped, and main does not hold its tip (sluice)"
 eq "$(record_of $box | grep -c "^On: bolt/kept-work")" "1"
 ok "a dropped bolt holding a merge main lacks is kept on GitHub and the host, marked, named in sluice's words and recorded once"
@@ -722,7 +721,7 @@ has "$(field $box bolt.submit Refused bolt/south)" " conflict: regions.txt"
 st=$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Act = 'launch' && Work ~ '^fix/south/take-main-'" -P Work)
 sm=${st##*-}
 eq "$(git -C "$k" rev-parse --short=7 "$sm")" "$sm"
-has "$out" "bolt south takes main first: the runner on $box launches fix south--take-main-$sm (request $(request_of "$st")), taking origin/main at $sm into the bolt"
+has "$out" "bolt south takes main first: fix south--take-main-$sm is launched in switchboard-kit (request $(request_of "$st")) for the runner that keeps it, taking origin/main at $sm into the bolt"
 has "$out" "card land/switchboard-kit: $kit is left as it is, the user having answered it"
 calls | grep -q "^$box pendingyou \(post\|update\|cancel\)_request " && fail "the answered card was changed though the user's send stands for each bolt it ticked"
 has "$out" "bolt/kept-work is removed: main now holds bolt kept-work's tip, and sluice deleted it from GitHub at ${tip:0:7}"
@@ -754,7 +753,7 @@ jq -n --arg h "$sh" '{schema: "sluice/overview@1", at: "2026-10-28T16:00:00Z", h
   sessions: [], repository: "/kit/.git", branches: [{branch: "main", submissions: [{schema: "sluice/submission@1", id: 90,
   branch: "main", head: $h, state: "queued", from: {agent: "wldn-ops", worktree: "pull/9", head: "bolt/south"}}]}]}' \
   > "$CREW_TEST_ROOT/sluice-overview.json"
-echo "$kd/places/land-south" > "$CREW_TEST_ROOT/sluice-stands-90"
+echo "$k/places/land-south" > "$CREW_TEST_ROOT/sluice-stands-90"
 : > "$CREW_TEST_LOG"
 expect_ok crew bolt submit south
 rm "$CREW_TEST_ROOT/sluice-overview.json"

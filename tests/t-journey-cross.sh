@@ -1,10 +1,10 @@
 # A team's work through Flume, through the crew command on the stubs (record 0050 parts 2 and 3; the change
 # teams-cross-to-flume-as-their-bolts-land; Decisions 1 and 10 of the-team-machinery-leaves): crew runs no team's
 # conductor, ops or slot, so crew up is no command, answered with crew's usage, with no host reached and no pane opened. crew bolt start of a
-# bolt whose kit no team builds in a stream is refused, and of one whose kit's team runs where no runner answers, the
-# plan unchanged and no branch made; once a runner answers, sluice makes the bolt's branch, the plan marks the bolt Path:
-# flume, naming no team, and requests.rec on the state branch holds a launch of each of its units and chores, and no
-# agent starts; a second start of it is refused. Once the runner's record shows a's place stopped short asking, crew
+# bolt is refused while no runner answers for the partition, the plan unchanged and no branch made; once a runner
+# answers, sluice makes the bolt's branch, the plan marks the bolt Path: flume, naming no team, and requests.rec on the
+# state branch holds a launch of each of its units and chores in its repository, naming no host or stream, for the
+# runner whose configuration names it to take (the user's ruling of 2026-11-01), and no agent starts; a second start of it is refused. Once the runner's record shows a's place stopped short asking, crew
 # answer a appends the retry of that stage with the answer's words, and crew fix of the bolt appends a launch of a fix
 # on it. Two bolts more of the kit are started beside it (Decision 14 of the-team-machinery-leaves). The launches,
 # what an answer retries, a fix's launch and drop and the refusals' words are logic cases (tests/py/test_cross.py,
@@ -25,21 +25,15 @@ grep -q "ssh $box " "$CREW_TEST_LOG" && fail "crew up of a team went to its host
 [[ -e $(home_of $box)/.stub-herdr/wldn-1.json ]] && fail "crew up of a team opened a pane"
 ok "crew up is no command: crew answers it with its usage, reaching no host and opening no pane"
 
-crew bolt new board "The board." --repo breadboard-kit >/dev/null
-plan_at=$(act_tip)
-expect_fail "no team of wldn builds breadboard-kit in a Flume stream, so crew can't tell where its work runs" crew bolt start board
-eq "$(act_tip)" "$plan_at"
-ok "a start of a bolt whose kit no team builds in a stream is refused, the plan unchanged"
-
 crew unit add a "Build a." --bolt next >/dev/null
 crew unit add b "Build b on a." --bolt next --after a >/dev/null
 crew chore add c "Bump c." --bolt next >/dev/null
 plan_at=$(act_tip)
-expect_fail "no runner answers on $box: wldn/runner/$box does not exist, so nothing would launch the bolt's work there" \
+expect_fail "no runner answers for wldn: its state repository holds no wldn/runner/<host>, so nothing would take the bolt's work" \
   crew bolt start next
 eq "$(act_tip)" "$plan_at"
 git --git-dir "$r" rev-parse --verify -q bolt/next >/dev/null && fail "a start with no runner on the host made bolt/next on GitHub"
-ok "a start is refused while no runner answers on its kit's host, the plan unchanged and no branch made"
+ok "a start is refused while no runner answers for the partition, the plan unchanged and no branch made"
 
 # The runner on swb-1's host serves wldn: its own branch on the state repository, which crew reads and never writes.
 runner_rec=$(printf '%%rec: Runner\n%%key: Host\n%%type: Since date\n%%mandatory: Host Version Since\n%%allowed: Host Version Since\n\nHost: %s\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n' "$box")
@@ -50,11 +44,11 @@ git --git-dir "$ws" update-ref "refs/heads/wldn/runner/$box" \
 : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew bolt start next
 has "$out" "next is started: sluice made bolt/next on GitHub (origin) from switchboard-kit's main at"
-has "$out" "no agent of swb-1 starts: the runner on $box launches unit/a (request 1), unit/b (request 2), chore/c (request 3) in stream wldn"
+has "$out" "no agent starts: unit/a (request 1), unit/b (request 2), chore/c (request 3) is launched in switchboard-kit, for the runner whose configuration names it to take in the stream it gives"
 git --git-dir "$r" rev-parse --verify -q bolt/next >/dev/null || fail "the start made no bolt/next on GitHub"
 eq "$(git --git-dir "$ws" show wldn/main:plan.rec | recsel -t Bolt -e "Bolt = 'next'" -P Team,Path | tr '\n' ' ')" "flume "
-eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act,Work,Kind,Base,Stream,After | grep . | paste -sd ' ' -)" \
-  "launch unit/a change bolt/next wldn launch unit/b change bolt/next wldn 1 launch chore/c chore bolt/next wldn"
+eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act,Work,Repo,Kind,Base,Host,Stream,After | grep . | paste -sd ' ' -)" \
+  "launch unit/a switchboard-kit change bolt/next launch unit/b switchboard-kit change bolt/next 1 launch chore/c switchboard-kit chore bolt/next"
 eq "$(launches)" ""
 eq "$(field "$HOST" bolt.start On bolt/next)" "bolt/next"
 plan_at=$(act_tip)
@@ -81,7 +75,7 @@ ok "crew answer of a place the runner shows stopped short asking appends the ret
 
 : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew fix next tidy "Tidy the rail's words."
-has "$out" "the runner on $box launches fix next--tidy on bolt/next (request 5) in stream wldn"
+has "$out" "fix next--tidy is launched on bolt/next in switchboard-kit (request 5) for the runner whose configuration names it to take"
 eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Request = 5" -P Act,Work,Kind,Name,Base,Brief | grep . | paste -sd ' ' -)" \
   "launch fix/next/tidy fix next--tidy bolt/next Tidy the rail's words."
 eq "$(field "$HOST" fix.start On)" "fix/next/tidy bolt/next"
@@ -94,7 +88,7 @@ crew bolt new more "More of it." --repo switchboard-kit >/dev/null
 crew bolt new last "The last of it." --repo switchboard-kit >/dev/null
 : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew bolt start more
-has "$out" "the runner on $box launches nothing, the bolt holding no unit or chore yet"
+has "$out" "no agent starts: nothing, the bolt holding no unit or chore yet is launched in switchboard-kit"
 expect_ok crew bolt start last
 eq "$(git --git-dir "$ws" show wldn/main:plan.rec | recsel -t Bolt -e "Path = 'flume'" -P Bolt | grep . | paste -sd ' ' -)" "next more last"
 eq "$(launches)" ""

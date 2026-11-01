@@ -1523,6 +1523,20 @@ class TestWhoReads:
     def test_which_bolts_a_teams_read_reads(self, now, stages, marked, due):
         assert plan.landing_read_due(now, stages, marked) is due
 
+    def test_the_rails_read_hands_each_host_the_started_bolts_whose_work_runs_there(self, monkeypatch):
+        """bolt-teams "A landing nothing recorded is read by the rail's sweep" (the-team-machinery-leaves): each host's
+        sweep is handed the started bolts the rail's read holds running there, with their kit's folder and stages, so
+        it reads no plan or kit of its own (plan.12); a partition the read holds no runners of hands none."""
+        where = {"b": "box", "c": "deneb"}
+        bolts = [plan.Rec("Bolt", [("Bolt", n), ("Repo", "k"), ("Path", "flume")]) for n in ("b", "c")] + [plan.Rec("Bolt", [("Bolt", "q"), ("Repo", "k")])]
+        pl = type("P", (), {"bolts": lambda s: bolts, "work_of": lambda s, b: [type("U", (), {"name": lambda s: f"{b}-0"})()]})()
+        monkeypatch.setattr(plan, "known_at", lambda fleet, label, b, run=None: dict(TestTheSubmission.T, machine=where[b.name()]))
+        monkeypatch.setattr(plan, "Stages", lambda fleet, p, sv, runs, label: type("S", (), {"of": lambda s, u: {"stage": "landed" if u == "b-0" else "code"}})())
+        assert plan.landings_judged({}, "wldn", pl, {}, {"wldn": ([], {})}) == {
+            "box": [{"bolt": "b", "kit": "k", "dir": "/k", "stages": ["landed"]}],
+            "deneb": [{"bolt": "c", "kit": "k", "dir": "/k", "stages": ["code"]}]}
+        assert plan.landings_judged({}, "wldn", pl, {}, {}) == {}
+
     def test_the_sweeps_read_reads_only_the_bolts_due_whose_work_runs_here(self, monkeypatch):
         """bolt-teams "A landing nothing recorded is read by the rail's sweep" (the-team-machinery-leaves): of the started
         bolts whose work runs on this host (plan.bolts_on), those whose landing may have an outcome nothing recorded."""
@@ -1934,7 +1948,7 @@ class TestTheLandingsPoint:
         monkeypatch.setattr(plan, "kit_git", lambda fleet, t, where, *args: asked.append((where, *args)) or (0, "diff --git a/x b/x"))
         fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main"}}}}
         f = dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], head="def5678" + "0" * 33, base="abc1234",
-                 team="swb-1", host="box")
+                 host="box", main="/kit/main")
         folder = tmp_path / "def5678"
         folder.mkdir()
         (folder / "01-old-proposal.md").write_text("an older head's")
@@ -1949,7 +1963,7 @@ class TestTheLandingsPoint:
         monkeypatch.setattr(plan, "change_held", lambda main, ref, u: None)
         monkeypatch.setattr(plan, "kit_git", lambda *a: pytest.fail("the diff was read after a change crew could not read"))
         fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main"}}}}
-        f = dict(bolt="y", kit="k", units=["a"], chores=[], head="def5678" + "0" * 33, base="abc1234", team="swb-1", host="box")
+        f = dict(bolt="y", kit="k", units=["a"], chores=[], head="def5678" + "0" * 33, base="abc1234", host="box", main="/kit/main")
         with pytest.raises(plan.Refusal, match="unit a's change is not on bolt y at def5678, open or archived, in /kit/main on box"):
             plan.landing_write(fleet, f, tmp_path / "def5678")
         assert not (tmp_path / "def5678").exists()

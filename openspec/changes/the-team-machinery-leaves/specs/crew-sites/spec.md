@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Sites are listed by bolt, with no server for a started bolt's work
-`crew sites [<label>] [--json]` SHALL list, for each host that keeps one of the partition's kits, each bolt in flight there. A started bolt SHALL be listed with no place and no dev server, saying its work runs in Flume's places, whose servers crew does not show yet, until the runner reports a place's addresses. A host that does not answer SHALL be named, with its bolts from the plan.
+`crew sites [<label>] [--json]` SHALL list, for each of the partition's hosts, its main level's and each its runners answer on, each bolt in flight there, as the runner that took its work reported. A started bolt SHALL be listed with no place and no dev server, saying its work runs in Flume's places, whose servers crew does not show yet, until the runner reports a place's addresses. A host that does not answer SHALL be named, with its bolts from the plan.
 
 #### Scenario: A started bolt's work shows no server
 - **WHEN** `an-installs-apex-is-its-own-zone` is a unit of started bolt `apex-zones`, and `devurl-serve` runs in a worktree of its kit on the box

@@ -874,13 +874,15 @@ def test_git_cherry_does_not_list_a_merge_commit_on_the_branch(repo):
 
 
 def work_kit(repo, monkeypatch):
-    """A kit whose main checkout is repo, built by one team on this host, and bolt/z cut from main holding its own
-    commit; bolt_work reads the bolt there, a kit with no origin reading its own main (plan.bolt_work)."""
+    """A kit whose main checkout is repo, which the runner on this host reported taking its work in (plan.kit_at), and
+    bolt/z cut from main holding its own commit; bolt_work reads the bolt there, a kit with no origin reading its own
+    main (plan.bolt_work)."""
     import crew
+    import plan
     monkeypatch.setattr(crew, "this_host", lambda: "here")
-    kit = {"name": "k", "repo": "o/k", "main": str(repo.path), "dir": str(repo.path.parent)}
-    fleet = {"partitions": {"p": {"label": "p", "machine": "here", "teams": ["k-1"]}},
-             "teams": {"k-1": {"name": "k-1", "label": "p", "machine": "here", "kit": kit}}, "hosts": {}}
+    kit = {"name": "k", "repo": "o/k", "main": str(repo.path), "dir": str(repo.path)}
+    monkeypatch.setattr(plan, "kit_at", lambda fleet, label, name, run=None: {"label": label, "machine": "here", "kit": kit})
+    fleet = {"partitions": {"p": {"label": "p", "machine": "here", "teams": []}}, "teams": {}, "hosts": {}}
     repo.commit("chore: start", {"a.txt": "one\n"})
     repo.git("switch", "-q", "-c", "bolt/z")
     repo.commit("feat: the bolt's own", {"a.txt": "one, as the bolt has it\n"})

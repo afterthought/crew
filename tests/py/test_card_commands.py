@@ -216,9 +216,9 @@ import plan  # noqa: E402
 @pytest.fixture(autouse=True)
 def kits(monkeypatch):
     """Each partition's kits as its plan and landings name them (plan.kits_read), with no branch read; and the rail's
-    sweep reading no landing here (plan.reap_landings, the landing tests')."""
+    sweep reading no landing here (plan.reap_judged, the landing tests')."""
     monkeypatch.setattr(plan, "kits_read", lambda fleet, label: {"swancloud": ["crew"], "wldn": ["switchboard-kit"]}.get(label, []))
-    monkeypatch.setattr(plan, "reap_landings", lambda fleet, label: None)
+    monkeypatch.setattr(plan, "reap_judged", lambda fleet, label, landings: None)
 
 
 WHERE = ("/kit/main", "github.com/WilldanGroup/switchboard-kit")
@@ -1403,7 +1403,7 @@ class TestCardPreview:
 class Sluice:
     """sluice on the host the thing's work runs on as crew card preview reaches it: its previews listed once the ask was
     handed (or never, refuse), each ask handed recorded with its argv, each release recorded, each card's note recorded,
-    and each partition whose landings the rail's sweep read here (reaped)."""
+    and each partition and landings the rail's sweep read here (reaped)."""
 
     def __init__(self, monkeypatch, tmp_path, refuse=None):
         self.handed, self.released, self.notes, self.refuse, self.reaped = [], [], [], refuse, []
@@ -1413,7 +1413,7 @@ class Sluice:
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
         monkeypatch.setattr(plan, "batch_unit_at", lambda fleet, label, bolt, unit: PFLEET["teams"]["crw-1"])
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [reviewed(7, [("a", "x", "aaa1")])])
-        monkeypatch.setattr(plan, "reap_landings", lambda fleet, label: self.reaped.append(label))
+        monkeypatch.setattr(plan, "reap_judged", lambda fleet, label, landings: self.reaped.append((label, landings)))
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: ("p", plan.Rec("Bolt", [("Bolt", bolt)]), PFLEET["teams"]["crw-1"]))
         monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: ({"box": True, "facts": {"head": PHEAD, "kit": "crew"}}, None))
         self.policy = (True, None)
@@ -1512,7 +1512,8 @@ class TestBroughtUp:
             p.write_text(json.dumps(dict(key=key, thing=thing, branch="bolt/x", head=PHEAD + thing[0], main="/crew/main", asked=at)))
         (tmp_path / "previews" / "swancloud" / "x.json").write_text(json.dumps({"head": PHEAD, "main": "/crew/main", "asked": long_ago}))
         monkeypatch.setattr(plan, "CARDS", tmp_path / "cards")
-        monkeypatch.setattr(plan.sys, "stdin", io.StringIO(json.dumps({"live": ["land/z"], "blind": []})))
+        landing = {"bolt": "z", "kit": "crew", "dir": "/crew/main", "stages": ["landed"]}
+        monkeypatch.setattr(plan.sys, "stdin", io.StringIO(json.dumps({"live": ["land/z"], "blind": [], "landings": [landing]})))
         plan.card_sweep(PFLEET, argparse.Namespace(key=None, unit=None, label="swancloud"), Acts())
         out = json.loads(capsys.readouterr().out)
         assert sorted((x["key"], x["said"].split(" from ")[0], x["ended"]) for x in out) == [
@@ -1520,8 +1521,8 @@ class TestBroughtUp:
             ("land/y", "released y's preview of abc1234", True)]
         assert [f.name for f in sorted((tmp_path / "previews" / "swancloud").rglob("*.json"))] == ["b-demo.json", "z.json"]
         assert len(s.released) == 3
-        # and, its JSON list kept on standard output, it read the landings of the bolts whose work runs here (plan.21)
-        assert s.reaped == ["swancloud"]
+        # and, its JSON list kept on standard output, it read the landings the rail's read named here (plan.21)
+        assert s.reaped == [("swancloud", [landing])]
 
 
 def test_a_batch_cards_close_hands_its_previews_release_on_and_no_other_card_does(monkeypatch):

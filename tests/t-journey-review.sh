@@ -68,6 +68,7 @@ open(f, "w").write(p.text())
 PY
 commit_all "$w" "plan: by hand"; push_state "$w"
 flume_world
+keeps $box breadboard-kit "$bk"  # the box's runner keeps breadboard-kit beside switchboard-kit
 crew bolt start b1 >/dev/null; crew bolt start d1 >/dev/null
 mkdir -p "$(space mac-studio willdan)/willdan-blueprints/main"
 crew main up wldn >/dev/null 2>&1
@@ -88,7 +89,7 @@ flume_lands $box unit x1 b1
 HOST=$box expect_ok crew rail --label wldn
 HOST=$box expect_ok crew rail --label wldn
 eq "$(planner_told)" "1"
-has "$(grep "agent prompt wldn-planner" "$CREW_TEST_LOG")" "s changes is due: x1 (swb-1), y1 (brd-1); 2 changes are due, and a batch is every 2. Start its reviewer with crew review wldn"
+has "$(grep "agent prompt wldn-planner" "$CREW_TEST_LOG")" "s changes is due: x1 (b1), y1 (d1); 2 changes are due, and a batch is every 2. Start its reviewer with crew review wldn"
 eq "$(entries $box batch.due | jq -r '[.Count, (.On | join(" "))] | join(" ")')" "2 agent/wldn-planner unit/x1 unit/y1"
 ok "changes two teams' places landed on their bolts make a batch due at the partition's setting, told to its planner once, on the rail's read, while a host of the partition holding none of them does not answer"
 
@@ -105,7 +106,7 @@ rpane=$(herdr_state $box wldn-3 '.agents | to_entries[] | select(.value.name == 
 grep -q "agent prompt \($rpane\|wldn-reviewer\) '\[crew\]" "$CREW_TEST_LOG" && fail "the reviewer was greeted"
 CREW_AGENT=wldn-planner expect_fail "wldn-reviewer is still reviewing a batch" crew review wldn
 CREW_AGENT=wldn-planner expect_fail "batch 1's review is still running after the wait's 0 ms" crew review wldn --wait --timeout 0
-has "$(grep "agent prompt $rpane " "$CREW_TEST_LOG" | tail -1)" "y1 (brd-1, breadboard-kit on $box, at $y1at): its change is archived at that commit: find its folder with \`git -C $bk ls-tree -d --name-only $y1at openspec/changes/archive/\`"
+has "$(grep "agent prompt $rpane " "$CREW_TEST_LOG" | tail -1)" "y1 (d1, breadboard-kit on $box, at $y1at): its change is archived at that commit: find its folder with \`git -C $bk ls-tree -d --name-only $y1at openspec/changes/archive/\`"
 mkdir -p "$(dirname "$summary")"; printf '# Batch 1\n' > "$summary"
 refusals=$(home_of $box)/.stub-plannotator/refuse-starts
 mkdir -p "${refusals%/*}"; echo 1 > "$refusals"  # the reading's first start fails, and its second opens
@@ -114,7 +115,7 @@ has "$out" "card batch/1: its reading could not be opened on the tailnet: planno
 eq "$(grep -v '^card batch/1: its reading' <<<"$out")" "card batch/1: req_stub-1 https://www.pendingyou.com/app/r/req_stub-1
 call get_request (requestId req_stub-1, name wldn-planner)
 batch summary: $summary"
-eq "$(entries $box review.batch | jq -r '[.Batch, (.On | join(" ")), .Units] | join(" ")')" "1 batch/1 unit/x1 unit/y1 x1:swb-1@$x1at y1:brd-1@$y1at"
+eq "$(entries $box review.batch | jq -r '[.Batch, (.On | join(" ")), .Units] | join(" ")')" "1 batch/1 unit/x1 unit/y1 x1:b1@$x1at y1:d1@$y1at"
 eq "$(entries $box card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By, .Unread // "opened"] | join(" ")')" "batch/1 req_stub-1 batch/1 wldn-planner opened"
 CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
 eq "$out" "batch summary: $summary"
@@ -127,7 +128,7 @@ tip=$(git --git-dir "$ws" rev-parse wldn/main) n=$(records)
 expect_ok crew rail --label wldn; r=$out
 eq "$(git --git-dir "$ws" rev-parse wldn/main) $(records)" "$tip $n"
 eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches land operations "
-has "$r" "batch 1 (wldn): x1 (swb-1), y1 (brd-1)"
+has "$r" "batch 1 (wldn): x1 (b1), y1 (d1)"
 has "$r" "    card:   batch/1, open, asked by wldn-planner (req_stub-1)"
 ok "crew rail lists a batch as one row with its card key, and it writes nothing"
 
@@ -173,7 +174,8 @@ batch/1's session had ended as the user sent it, and batch/1 is forgotten"
 eq "$(entries $box card.close | jq -r '[.Card, .Key, .State, .Outcome] | join(" ")')" "req_stub-1 batch/1 withdrawn Read; 1 note sent to its team"
 ok "a batch card's one session reads the summary and every unit's change, archived at its bolt's commit, from its team's host, the link on its card and the same again while it serves; the rail's refresh tells the planner once that it was sent, with none of the user's words, crew card wait is refused naming the read, and the planner's crew card read returns the words and closes the card, which forgets the session"
 
-# m1 is given to atl-1 on mac-studio, and z1's place lands on it there.
+# m1 is started, its work taken by mac-studio's runner, which keeps atlas-kit, and z1's place lands on it there.
+keeps mac-studio atlas-kit "$ak"
 crew bolt start m1 >/dev/null
 k=$ak flume_lands mac-studio unit z1 m1
 z1at=$(git -C "$ak" rev-parse origin/bolt/m1)
@@ -202,7 +204,7 @@ ok "an old batch card's session of a unit is started on that unit's team's host,
 CREW_AGENT=wldn-planner expect_ok crew review wldn
 has "$out" "wldn-reviewer is reviewing batch 3 of wldn"
 rpane=$(herdr_state $box wldn-3 '.agents | to_entries[] | select(.value.name == "wldn-reviewer") | .key')
-has "$(grep "agent prompt $rpane " "$CREW_TEST_LOG" | tail -1)" "z1 (atl-1, atlas-kit on mac-studio, at $z1at): its change is archived at that commit: find its folder with \`ssh -o BatchMode=yes mac-studio git -C $ak ls-tree -d --name-only $z1at openspec/changes/archive/\`"
+has "$(grep "agent prompt $rpane " "$CREW_TEST_LOG" | tail -1)" "z1 (m1, atlas-kit on mac-studio, at $z1at): its change is archived at that commit: find its folder with \`ssh -o BatchMode=yes mac-studio git -C $ak ls-tree -d --name-only $z1at openspec/changes/archive/\`"
 printf '# Batch 3\n\n## z1 (atl-1)\n\nz1 gives each tenant its own zone.\n' > "$(dirname "$summary")/batch-wldn-3.md"
 echo 2 > "$refusals"
 : > "$CREW_TEST_LOG"
@@ -210,7 +212,7 @@ CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
 c3=$(grep -o "^card batch/3: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
 [[ -n $c3 ]] || fail "crew review --wait raised no card for batch 3:"$'\n'"$out"
 has "$out" "card batch/3: its reading could not be opened on the tailnet: plannotator ended before batch/3's session was ready: stub: refused to start; crew card session batch/3 starts it"
-eq "$(entries $box review.batch | jq -r 'select(.Batch == "3") | .Units')" "z1:atl-1@$z1at"
+eq "$(entries $box review.batch | jq -r 'select(.Batch == "3") | .Units')" "z1:m1@$z1at"
 posted=$(jq -r --arg c "$c3" '.[$c].posted' "$(home_of $box)/.stub-pendingyou/cards.json")
 has "$(jq -r .summary <<<"$posted")" "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and the planner starts it with crew card session batch/3; this card then carries its link."
 eq "$(jq -r '.context.links | length' <<<"$posted")" "0"
@@ -301,7 +303,7 @@ summary4=$(dirname "$summary")/batch-wldn-4.md
 has "$out" "wldn-reviewer is asked batch 4 of wldn, into $summary4"
 asks() { git --git-dir "$ws" show wldn/main:asks.rec | recsel -t Ask "$@"; }
 eq "$(asks -e "Role = 'reviewer'" -P What,Names,Key | tr '\n' ' ')" "batch batch/4 batch/4 "
-has "$(asks -e "Role = 'reviewer'" -P Words)" "Review batch 4 of wldn, 1 change, and write its summary to $summary4. v1 (swb-1, switchboard-kit on $box"
+has "$(asks -e "Role = 'reviewer'" -P Words)" "Review batch 4 of wldn, 1 change, and write its summary to $summary4. v1 (b1, switchboard-kit on $box"
 [[ -s $CREW_TEST_CLAUDE_LOG ]] && fail "crew review started a reviewer that runs as its kind"
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator"
 CREW_AGENT=wldn-planner expect_fail "wldn runs its reviewer as its kind, so crew review --wait waits on nothing" crew review wldn --wait

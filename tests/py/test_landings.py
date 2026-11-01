@@ -36,6 +36,7 @@ def kits(monkeypatch):
         return dict(t, label=label, stream=t["flume"]) if t else None
     monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
     monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: kit_where(label, b.get("Repo")) if plan.started(b) else None)
+    monkeypatch.setattr(plan, "bolt_taken", lambda fleet, label, b, run=None: (kit_where(label, b.get("Repo")), None))
     monkeypatch.setattr(plan, "kit_at", lambda fleet, label, kit, run=None: kit_where(label, kit) or plan.fail(
         f"no runner has reported taking {kit}'s work yet, so crew can't tell where it runs"))
 
@@ -984,10 +985,10 @@ class TestLandReadingRead:
         self.read(monkeypatch, tmp_path / "none", session=False)
         assert capsys.readouterr().out == "land/y: no reading of it runs on this host: crew card session land/y starts it\n"
 
-    def test_any_agent_but_ops_and_a_bolt_no_team_holds_are_refused(self, monkeypatch, tmp_path):
+    def test_any_agent_but_ops_and_a_bolt_not_started_are_refused(self, monkeypatch, tmp_path):
         with pytest.raises(crew.Refusal, match="^land/y's reading is swancloud-ops's to read, not swancloud-planner's$"):
             self.read(monkeypatch, tmp_path, who="swancloud-planner")
-        with pytest.raises(crew.Refusal, match="^bolt y is held by no team"):
+        with pytest.raises(crew.Refusal, match="^bolt y is not started"):
             self.read(monkeypatch, tmp_path, team=None)
 
     def test_an_old_card_of_the_bolts_own_under_its_head_is_still_read_as_a_card(self, monkeypatch):

@@ -1,7 +1,7 @@
 ## RENAMED Requirements
 
 - FROM: `### Requirement: A red main's fix is a fix place on main where a crossed team builds the kit`
-- TO: `### Requirement: A red main's fix is a fix place on main on the kit's host`
+- TO: `### Requirement: A red main's fix is a fix place on main in the kit's repository`
 
 ## ADDED Requirements
 
@@ -113,11 +113,11 @@ When herdr resumes a session without crew's environment and crew's record of it 
 - **WHEN** herdr resumes a session whose record names `crw-5-conductor` or `swancloud-dispatch-deneb`
 - **THEN** it is given no name, identity or brief, crew modelling no such agent
 
-### Requirement: A red main's fix stays a bolt of one chore where no runner keeps the kit with a stream
-Where no runner keeps the kit with a stream, `crew main fix` SHALL be refused, naming the kit and a bolt of one chore, proposed first among the planned, as the way.
+### Requirement: A red main's fix stays a bolt of one chore where no runner answers for the partition
+Where no runner answers for the partition, its state repository holding no `<label>/runner/<host>`, `crew main fix` SHALL be refused, naming the kit and a bolt of one chore, proposed first among the planned, as the way.
 
-#### Scenario: No runner keeps the kit with a stream
-- **WHEN** no runner keeps switchboard-kit with a stream and ops runs `crew main fix switchboard-kit gate-word "<words>"`
+#### Scenario: No runner answers for the partition
+- **WHEN** wldn's state repository holds no runner's branch and ops runs `crew main fix switchboard-kit gate-word "<words>"`
 - **THEN** it is refused, naming switchboard-kit and a bolt of one chore proposed first among the planned
 
 ## MODIFIED Requirements
@@ -273,12 +273,12 @@ The main-level ops SHALL land bolts whose verification is green on the user's wo
 - **WHEN** `crew bolt submit y z` says `y` did not land because the host could not run main's checks, nothing of the bolt's
 - **THEN** the main-level ops holds nothing on `y`'s row, records what stopped it as a signal and tells the planner, `z` lands all the same, and once the host runs checks again ops runs `crew bolt submit y` on the user's send that still stands, asking the user nothing
 
-### Requirement: A red main's fix is a fix place on main on the kit's host
-`crew main fix <kit> <name> "<the failure's words>"`, main-level ops's or the user's on reading the kit's main red after a landing, SHALL append a launch of the fix kind on `main`, named `main--<name>`, its brief the failure's words, its submission held and its recipient `<label>/ops`, on the kit's host with the stream that host's runner keeps the kit with. It SHALL take no `--team`. `--drop` SHALL drop it.
+### Requirement: A red main's fix is a fix place on main in the kit's repository
+`crew main fix <kit> <name> "<the failure's words>"`, main-level ops's or the user's on reading the kit's main red after a landing, SHALL append a launch of the fix kind on `main`, named `main--<name>`, its brief the failure's words, its submission held and its recipient `<label>/ops`, in the kit's repository as the partition's kits name it and naming no host or stream, for the runner whose configuration names the repository to take in the stream it gives. It SHALL take no `--team`. `--drop` SHALL drop it.
 
 #### Scenario: Main red after a landing
-- **WHEN** crew's main fails its checks after a landing, deneb's runner keeps crew with the stream `madswan`, and ops runs `crew main fix crew a-test-reads-its-fixture "<the check's words>"`
-- **THEN** `requests.rec` gains a launch of `fix` named `main--a-test-reads-its-fixture` on `main`, its submission held, recipient `madswan/ops`, on deneb
+- **WHEN** crew's main fails its checks after a landing and ops runs `crew main fix crew a-test-reads-its-fixture "<the check's words>"`
+- **THEN** `requests.rec` gains a launch of `fix` named `main--a-test-reads-its-fixture` on `main` in crew, its submission held, recipient `madswan/ops`, naming no host or stream
 
 ## REMOVED Requirements
 
@@ -303,5 +303,5 @@ The main-level ops SHALL land bolts whose verification is green on the user's wo
 **Migration**: "A main-level agent resumed off its host is given no identity, and nothing else of crew's is", added by this change.
 
 ### Requirement: A red main's fix stays a bolt of one chore where no crossed team builds the kit
-**Reason**: Record 0050 part 3: no team builds a kit; a kit's host and stream are its runner's (design Decision 4).
-**Migration**: "A red main's fix stays a bolt of one chore where no runner keeps the kit with a stream", added by this change.
+**Reason**: Record 0050 part 3: no team builds a kit; the runner whose configuration names the kit's repository takes its work (design Decision 4).
+**Migration**: "A red main's fix stays a bolt of one chore where no runner answers for the partition", added by this change.
