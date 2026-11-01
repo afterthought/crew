@@ -14,7 +14,7 @@ A give launches its bolt whole, refused only where no runner answers (runnerless
 write reaches the places a crossed bolt launched as its own act: added work launched, dropped work dropped, a dependent
 launched again when what it waits on is (reach), an amendment a retry of construct or a launch anew (amending), and a
 move, split or change of After of launched work refused (launched_refusal); each launch's priority follows its bolt's
-place in the plan (priorities). A bolt planned in a kit a team builds is the dispatchers' to give it (takers).
+place in the plan (priorities).
 
 A place that stopped short asking, or waits on its caller, is answered by a retry with the answer's words (answer_retry).
 A fix on a crossed bolt is a launch of Flume's fix kind on the bolt's branch (fix_launch), dropped by a drop
@@ -652,29 +652,10 @@ def launched_refusal(requests, work, how):
 
 
 def crossed_builders(teams, label, kit):
-    """The partition's teams that build a kit, by its name or owner/name, in a Flume stream, by name, sorted: those a
-    bolt planned in it is given to (takers), and those whose host runs a fix of its main (main_fixer)."""
+    """The partition's teams that build a kit, by its name or owner/name, in a Flume stream, by name, sorted: those whose
+    host runs the kit's work (kit_builder)."""
     return sorted(n for n, t in teams.items() if t["label"] == label and t["flume"]
                   and any(kit in (k.get("name"), k.get("repo")) for k in t.get("kits") or [t.get("kit") or {}]))
-
-
-def takers(plan, teams, label, bolt):
-    """The partition's teams that build a planned bolt's kit in a Flume stream, by name, sorted (Decision 3): a bolt
-    held by no team in a kit one of them builds is theirs whenever it is planned, a team holding no bound; none for a
-    bolt a team holds."""
-    b = plan.bolt(bolt)
-    if b is None or b.get("Path") == "flume":
-        return []
-    return crossed_builders(teams, label, b.get("Repo"))
-
-
-def planned_said(bolt, names):
-    """What the partition's dispatchers are told of a bolt planned in a kit teams build (Decision 3, takers): that it
-    can be given, and to whom."""
-    who = " or ".join(names)
-    return (f"bolt {bolt} can be given to {who}, which {'takes' if len(names) == 1 else 'take'} each planned bolt of "
-            f"{'its' if len(names) == 1 else 'their'} kits: "
-            + " or ".join(f"crew bolt give {n} {bolt}" for n in names))
 
 
 # ------------------------------------------------------------------------------------------ answers and fixes
@@ -852,7 +833,7 @@ def main_fixer(teams, label, kit, main_host):
     name, why = kit_builder(teams, label, kit, main_host)
     if name is None and why is None:
         return None, (f"no team of {label} builds {kit} in a Flume stream, so a fix of its red main is no Flume place: it is a bolt "
-                      "of one chore, proposed first among the planned, which the dispatcher gives to the next team that frees "
+                      "of one chore, proposed first among the planned, which the user starts "
                       f"(state.3); tell {label}-planner, who proposes it")
     return name, why
 

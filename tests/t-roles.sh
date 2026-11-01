@@ -49,7 +49,7 @@ role chuck-herdr-alpha wldn planner;        has "$launch" "$fable --effort xhigh
 role chuck-herdr-alpha wldn ops;            has "$launch" "$opus --effort high"; has "$launch" "--name wldn-ops"
 role chuck-herdr-alpha wldn reviewer;       has "$launch" "$opus --effort high"; has "$launch" "--name wldn-reviewer"
 has "$launch" "cwd $box/willdan-blueprints/main"
-role chuck-herdr-alpha wldn dispatcher;     has "$launch" "$opus --effort medium"; has "$launch" "--name wldn-dispatch-chuck-herdr-alpha"
+expect_fail "no role 'dispatcher' at wldn's main level. roles: design planner ops reviewer operator" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" wldn dispatcher
 role chuck-herdr-alpha wldn operator;       has "$launch" "$opus --effort medium"; has "$launch" "--name wldn-operator"
 has "$launch" "cwd $box/willdan-blueprints/main"
 role mac-studio madswan planner;            has "$launch" "$fable --effort xhigh"; has "$launch" "cwd $mac/blueprints/main"

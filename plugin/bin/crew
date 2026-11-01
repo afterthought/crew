@@ -224,8 +224,7 @@
 # Each partition's main level, and its console in each operator session:
 #   crew main     up|down|status <label>  the design agent, the planner, ops and the operator in the <label> workspace
 #                                      of the session each runs in, the main level's unless its partition's roles name
-#                                      another, and a dispatcher on each host the partition's teams run on;
-#                                      each agent up starts is greeted to read where the partition stands and carry on;
+#                                      another, and nothing else; each agent up starts is greeted to read where the partition stands and carry on;
 #                                      a pane herdr brought back dead is closed and opened again in its workspace, said.
 #                                      A role that runs as its kind gets no tab and no agent: up writes its record in
 #                                      roles.rec and ends a standing agent of it once not working, and status says it
@@ -526,7 +525,6 @@ case $cmd in
     fi
     [[ -z ${3:-} ]] || { echo "usage: crew review <label> [--wait [--timeout <ms>]]" >&2; exit 2; }
     one _review "$2" ;;
-  _dispatch) one _dispatch "${2:?usage: crew _dispatch up|down|status <label>}" "${3:?usage: crew _dispatch up|down|status <label>}" ;;
   revive) one _revive ;;
   console)
     need_label "${3:-}"

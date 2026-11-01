@@ -158,19 +158,19 @@ class TestStanding:
     @pytest.mark.parametrize("name, role", [
         ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("wldn-design", ("wldn", "design")),
         ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "ops")), ("wldn-operator", ("wldn", "operator")),
-        ("wldn-dispatch-chuck-herdr-alpha", ("wldn", "dispatcher")), ("swb-1-unit-2", None), ("wldn-reviewer", None), ("nobody", None)])
+        ("wldn-dispatch-chuck-herdr-alpha", None), ("swb-1-unit-2", None), ("wldn-reviewer", None), ("nobody", None)])
     def test_only_a_standing_agent_is_restarted_for_an_update(self, name, role):
         assert crew.standing_role(FLEET, name) == role
 
-    def test_the_agents_on_a_host_are_its_teams_its_main_levels_and_its_dispatchers(self, monkeypatch):
+    def test_the_agents_on_a_host_are_its_teams_and_its_main_levels(self, monkeypatch):
         fleet = {"teams": {"crw-4": {"machine": "deneb", "label": "swancloud"}, "swc-1": {"machine": "mac-studio", "label": "swancloud"},
                            "pay-1": {"machine": "deneb", "label": "madswan"}},
                  "partitions": {"swancloud": {"machine": "deneb", "teams": ["crw-4", "swc-1"]},
                                 "madswan": {"machine": "mac-studio", "teams": ["pay-1"]}}}
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
-        assert crew.agents_here(fleet) == ["pay-1-conductor", "pay-1-ops", "madswan-dispatch-deneb", "crw-4-conductor", "crw-4-ops",
-                                           "swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"]
-        assert crew.agents_here(fleet, "madswan") == ["pay-1-conductor", "pay-1-ops", "madswan-dispatch-deneb"]
+        assert crew.agents_here(fleet) == ["pay-1-conductor", "pay-1-ops", "crw-4-conductor", "crw-4-ops",
+                                           "swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"]
+        assert crew.agents_here(fleet, "madswan") == ["pay-1-conductor", "pay-1-ops"]
 
 
 class TestStarts:

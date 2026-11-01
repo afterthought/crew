@@ -418,9 +418,6 @@ def place_of_agent(fleet, name):
         for role in MAIN_STANDING + ("reviewer",):
             if name == f"{l}-{role}":
                 return p["machine"], role_session(p, role)
-        m = re.match(rf"^{re.escape(l)}-dispatch-(.+)$", name)
-        if m:
-            return m.group(1), dispatch_place(fleet, l, m.group(1))
     fail(f"no agent {name}: crew starts none by that name")
 
 
@@ -430,7 +427,7 @@ def label_of_agent(fleet, name):
     if t:
         return t["label"]
     for l in fleet["partitions"]:
-        if name in (f"{l}-{r}" for r in MAIN_STANDING + ("reviewer",)) or re.match(rf"^{re.escape(l)}-dispatch-.+$", name):
+        if name in (f"{l}-{r}" for r in MAIN_STANDING + ("reviewer",)):
             return l
     return None
 
@@ -760,8 +757,8 @@ def pane_holds(name, pane, item, agent):
 
 def held_in(fleet, name):
     """The Agents an agent crew starts is kept in on its host and its role there, from its name alone: a team's for
-    its conductor, ops or a unit slot, a main level's for its roles and its reviewer, or a dispatcher's; None for a
-    name crew starts no agent by."""
+    its conductor, ops or a unit slot, or a main level's for its roles and its reviewer; None for a name crew starts no
+    agent by."""
     t = team_of_agent(fleet, name)
     if t:
         return Team(fleet, t), name[len(t["name"]) + 1:]
@@ -769,14 +766,12 @@ def held_in(fleet, name):
     if not label:
         return None
     role = name[len(label) + 1:]
-    if role.startswith("dispatch-"):
-        return standing(fleet, "dispatch", label), "dispatcher"
     return main_holding(fleet, label, role), role
 
 
 def holding_of(fleet, name):
-    """The Agents a standing agent's role is kept in and that role, from its name alone: a team's, a main level's or a
-    dispatcher's; None for a name that is no standing agent's (standing_role)."""
+    """The Agents a standing agent's role is kept in and that role, from its name alone: a team's or a main level's;
+    None for a name that is no standing agent's (standing_role)."""
     return held_in(fleet, name) if standing_role(fleet, name) else None
 
 
@@ -1215,8 +1210,6 @@ GREETINGS = {
                 "with what is yours: plan what is queued and see each open proposal through."),
     "ops": ("Read where {label} stands with `crew bolts` and `crew rail`, tell me in a few lines, then carry on with what is "
             "yours: a bolt lands only on the user's word, so land nothing until it comes."),
-    "dispatch": ("Read where {label} stands on {host} with `crew bolts` and `crew status` for each team here, tell me in a few "
-                 "lines, then carry on with what is yours: give each team here that holds no bolt its next one."),
     "operator": ("Read where {label} stands with `crew rail` and `crew bolts`, and tell me in a few lines what is moving and "
                  "what waits on me."),
 }
@@ -1307,8 +1300,7 @@ def greeted_roles(act, started, fresh, greet=True):
 
 
 def greet_standing(fleet, name, wait=90):
-    """Get an agent crew starts outside a team going (a main level's design agent, planner or ops, a dispatcher, an
-    operator agent): tell it to read where its partition stands and carry on with what is its role's. A team's agent,
+    """Get an agent crew starts outside a team going (a main level's design agent, planner, ops or operator): tell it to read where its partition stands and carry on with what is its role's. A team's agent,
     or a name crew starts no agent by, is refused."""
     label, text, why, hint = standing_greeting(fleet, name)
     return greet_agent(fleet, name, text, [f"agent/{name}"], label, why, hint, wait)
@@ -1323,7 +1315,7 @@ def standing_greeting(fleet, name):
                       f"crew up {t['name']} greets its conductor")
     label = label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
     host, _ = place_of_agent(fleet, name)
-    role = name[len(label) + 1:]  # design, planner, ops, operator, reviewer or dispatch-<host>
+    role = name[len(label) + 1:]  # design, planner, ops, operator or reviewer
     role != "reviewer" or fail(f"{name} is sent its batch as its prompt by crew review, and is not greeted")
     role = role if role in GREETINGS else role.split("-")[0]
     return label, GREETINGS[role].format(label=label, host=host), f"main({label}): greet {name}", f"crew main up {label} starts and greets it"
@@ -1356,17 +1348,6 @@ def crew_argv(fleet, host, *args):
 def partition_hosts(fleet, label):
     """The hosts where a partition's teams run, each once, by name."""
     return sorted({fleet["teams"][t]["machine"] for t in partition_of(fleet, label)["teams"]})
-
-
-def dispatch_place(fleet, label, host):
-    """A dispatcher runs in the main level's session when that is on the host, else in the session of the
-    host's first team of the partition by name."""
-    p = partition_of(fleet, label)
-    if p["machine"] == host:
-        return p["session"]
-    here = sorted(t for t in p["teams"] if fleet["teams"][t]["machine"] == host)
-    here or fail(f"no team of {label} runs on {host}, so {host} has no dispatcher. hosts: " + " ".join(partition_hosts(fleet, label)))
-    return fleet["teams"][here[0]]["session"]
 
 
 def kits_on(fleet, label, host):
@@ -1484,17 +1465,12 @@ def launch(fleet, scope, role, extra=None, where=True):
             fail(f"no role '{role}' on team {t['name']}. roles: conductor ops unit-<n>")
     else:
         p = partition_of(fleet, scope)
-        label, roles, host = p["label"], p["roles"], this_host()
+        label, roles = p["label"], p["roles"]
         main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"])])
         if role in MAIN_STANDING + ("reviewer",):
             spec = dict(main, defn="main-ops" if role == "ops" else role, name=f"{label}-{role}")
-        elif role == "dispatcher":
-            dispatch_place(fleet, label, host)
-            bps = blueprints_on(fleet, label, host)
-            spec = dict(defn="dispatcher", name=f"{label}-dispatch-{host}", cwd=bps[0] if bps else fleet["hosts"][host]["sessions"][dispatch_place(fleet, label, host)]["dir"],
-                        dirs=bps[1:] + kits_on(fleet, label, host))
         else:
-            fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer dispatcher operator")
+            fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer operator")
     meta, _ = definition(spec["defn"])
     o = roles.get(spec["defn"], {})
     return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]), branch=spec.get("branch"))
@@ -1852,8 +1828,8 @@ def brief_role(fleet, name, recorded):
     gives none, its definition being its stage's. Refused for a name crew starts no agent by."""
     t = team_of_agent(fleet, name)
     scope = t["name"] if t else label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
-    role = name[len(scope) + 1:].split("-")[0]  # conductor, ops, unit; design, planner, ops, reviewer, dispatch, operator
-    named = (role if role in ("conductor", "ops") else None) if t else {"ops": "main-ops", "dispatch": "dispatcher"}.get(role, role)
+    role = name[len(scope) + 1:].split("-")[0]  # conductor, ops, unit; design, planner, ops, reviewer, operator
+    named = (role if role in ("conductor", "ops") else None) if t else {"ops": "main-ops"}.get(role, role)
     return scope, recorded or named or fail(f"{name}'s session record names no definition, and a unit slot's is its stage's, "
                                             "so its brief can't be told")
 
@@ -2036,30 +2012,26 @@ def launch_now(fleet, scope, role):
 
 
 def standing_role(fleet, name):
-    """The scope and role crew-role starts a standing agent as, from its name alone: (team, conductor|ops), (label,
-    design|planner|ops|operator) or (label, dispatcher); None for a unit slot, the reviewer, or a name crew starts no
-    agent by. Only a standing agent outlives a stage, so only it is restarted for an update (teams.19)."""
+    """The scope and role crew-role starts a standing agent as, from its name alone: (team, conductor|ops) or (label,
+    design|planner|ops|operator); None for a unit slot, the reviewer, or a name crew starts no agent by. Only a standing agent outlives a stage, so only it is restarted for an update (teams.19)."""
     t = team_of_agent(fleet, name)
     if t:
         role = name[len(t["name"]) + 1:]
         return (t["name"], role) if role in ("conductor", "ops") else None
     label = label_of_agent(fleet, name)
     role = name[len(label) + 1:] if label else ""
-    if role in MAIN_STANDING:
-        return label, role
-    return (label, "dispatcher") if role.startswith("dispatch-") else None
+    return (label, role) if role in MAIN_STANDING else None
 
 
 def agents_here(fleet, label=None):
     """The standing agents crew runs on this host, by name, of one partition or of every one: each team's conductor
-    and ops, the main level's roles whose machine this is, and this host's dispatchers."""
+    and ops, and the main level's roles whose machine this is."""
     host, out = this_host(), []
     for l, p in sorted(fleet["partitions"].items()):
         if label not in (None, l):
             continue
         out += [f"{t}-{r}" for t in sorted(p["teams"]) if fleet["teams"][t]["machine"] == host for r in ("conductor", "ops")]
         out += [f"{l}-{r}" for r in MAIN_STANDING if p["machine"] == host]
-        out += [f"{l}-dispatch-{host}"] if host in partition_hosts(fleet, l) else []
     return out
 
 
@@ -2211,15 +2183,13 @@ def launch_shell(fleet, scope, role, extra):
 
 
 def here(fleet):
-    """What crew runs on this host: its teams, the main levels whose machine is here, each of their sessions apart
-    (mains), and the dispatchers of the partitions whose teams run here. A console runs no agent and is not listed."""
+    """What crew runs on this host: its teams, and the main levels whose machine is here, each of their sessions apart
+    (mains). A console runs no agent and is not listed."""
     host, out = this_host(), []
     out += [("team", n) for n, t in sorted(fleet["teams"].items()) if t["machine"] == host]
     for label, p in sorted(fleet["partitions"].items()):
         if p["machine"] == host:
             out.append(("main", label))
-        if host in partition_hosts(fleet, label):
-            out.append(("dispatch", label))
     return out
 
 
@@ -2419,7 +2389,7 @@ def ws_key(label):
 
 class Agents:
     """The agents crew starts in one herdr session of this host and their panes, as one crew command acts on them there
-    (code.3): a team's (Team), a main level's, a dispatcher's or an operator agent's (standing). The panes, layout and
+    (code.3): a team's (Team), a main level's, or a console's (standing). The panes, layout and
     slots files of its state folder change only by writing a new file over the old (teams.9), and its herdr session is
     read through the command's Herdr. A working agent is ended only when force is given (teams.2); `ended` names each
     role whose agent this command ended, and `fresh` each it started with a new conversation, none picked up."""
@@ -2471,8 +2441,6 @@ class Agents:
         self.write(f, [l for l in self.lines(f) if l[0] != key])
 
     def agent_of(self, role):
-        if self.kind == "dispatch":
-            return f"{self.label}-dispatch-{self.host}"
         return f"{self.scope}-{role}"
 
     def pane(self, role):
@@ -2523,18 +2491,10 @@ class Agents:
     def split(self, pane, way, cwd):
         return self.answer("pane", "split", pane, "--direction", way, "--cwd", cwd, "--no-focus")["pane"]["pane_id"]
 
-    def single(self, workspace, role):
-        """A workspace holding one agent, its pane opened when it is not there, a dead one closed first (mend)."""
-        self.mend((role,))
-        self.herdr.live(self.pane(role)) or self.opened(workspace, role, self.cwd, role)
-
     def panes(self):
         """Each standing role's pane, opened when it is not there, a dead one closed first (mend): a main level's roles
         in this session one tab each in the <label> workspace, in MAIN_STANDING's order, the first opening the workspace
-        when it is not there; a dispatcher's alone in "<label> dispatch". A team's are Team.panes; a console's tabs
-        are crew console up's."""
-        if self.kind == "dispatch":
-            return self.single(f"{self.label} dispatch", self.standing[0])
+        when it is not there. A team's are Team.panes; a console's tabs are crew console up's."""
         self.mend(self.standing)
         for role in self.standing:
             if not self.herdr.live(self.pane(role)):
@@ -2764,15 +2724,10 @@ def main_holding(fleet, label, role, force=False):
 
 
 def standing(fleet, kind, label, force=False):
-    """This host's dispatcher of a partition (dispatch), or the partition's console on this host (console), as the
-    Agents of its session here: its state folder, standing roles and the folder it runs in. A main level is mains."""
+    """The partition's console on this host (console), as the Agents of its session here: its state folder, standing
+    roles and the folder it runs in. A main level is mains."""
     host = this_host()
     state = pathlib.Path.home() / f".local/state/crew/{label}-{kind}"
-    if kind == "dispatch":
-        session = dispatch_place(fleet, label, host)
-        bps = blueprints_on(fleet, label, host)
-        cwd = bps[0] if bps else fleet["hosts"][host]["sessions"][session]["dir"]
-        return Agents(fleet, "dispatch", label, label, session, state, ("dispatcher",), cwd, host, host, force)
     kind == "console" or fail(f"crew.standing: no kind {kind}")
     sess = operator_session(fleet, label, host)
     return Agents(fleet, "console", label, label, label, state, (), sess["dir"], host, host, force)

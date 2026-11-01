@@ -127,7 +127,8 @@ step1=$(grep -o 'card op/mac-studio/1: req_stub-[0-9]*' <<<"$out" | cut -d' ' -f
 deploy_card=$(runs | grep -B1 -A3 '^Key: deploy/mac-studio$' | grep '^Card: ' | tail -1 | cut -d' ' -f2)
 eq "$(jq -c '[.idempotencyKey, .kind, .intent, .follows, .action.where, .action.steps[0].command, .action.done]' <<<"$(py_arg post_request)")" \
   "[\"op/mac-studio/1@swancloud\",\"action\",\"do\",\"$deploy_card\",\"a terminal on mac-studio\",\"launchctl kickstart -k gui/501/herdr\",\"herdr answers herdr status.\"]"
-expect_ok dep step mac-studio --to "$s2" --key restart-teams/1 --state handed --doer dispatcher --agent swancloud-dispatch-mac-studio --when quiet
+expect_fail "invalid choice: 'dispatcher'" dep step mac-studio --to "$s2" --key restart-teams/1 --state handed --doer dispatcher --when quiet
+expect_ok dep step mac-studio --to "$s2" --key restart-teams/1 --state handed --doer main-ops --agent swancloud-ops --when quiet
 printf "Restart crew's teams.\n- why: It ends a stage mid-unit.\n" > "$T/held.txt"
 expect_ok dep step mac-studio --to "$s2" --key restart-crew/1 --state waiting --doer main-ops --agent swancloud-ops --when quiet --held --text "$T/held.txt"
 has "$out" "card op/mac-studio/1 is open: the next step's card is raised when it closes"
@@ -243,7 +244,7 @@ eq "$(cat "$(home_of "$box")/.local/state/crew/wldn/ops/$box/$s1/notes.md")" "$(
 eq "$(cat "$(home_of "$box")/.local/state/crew/wldn/ops/$box/$s1/steps.txt")" "$(cat "$T/steps.txt")"
 eq "$(acts mac-studio wldn ops.offer)" "0"
 expect_fail "no word is given for a deploy of $box" crew ops word "$box" --label wldn
-expect_ok crew ops step "$box" --label wldn --key restart-teams/1 --state handed --doer dispatcher --text "$T/held.txt"
+expect_ok crew ops step "$box" --label wldn --key restart-teams/1 --state handed --doer main-ops --text "$T/held.txt"
 has "$(grep "ssh $box .*ops step" "$CREW_TEST_LOG")" "--text -"; lacks "$(grep "ssh $box" "$CREW_TEST_LOG")" "$T/held.txt"
 eq "$(runs "$box" wldn | grep -c "^Text: Restart crew's teams. - why: It ends a stage mid-unit.$")" "1"
 ok "an ops command run away from the partition's main level is run there, an offer carrying its files' text and a step its text"

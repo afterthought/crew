@@ -1021,30 +1021,6 @@ def either(rows):
     return rows[0] if len(rows) == 1 else ", ".join(rows[:-1]) + " or " + rows[-1]
 
 
-def planned_takers(fleet, label, plan, added):
-    """Of the bolts a write added (added, by name), each held by no team in a kit a team builds in a Flume stream, with
-    those teams (runner.takers; Decisions 3 and 5 of teams-cross-to-flume-as-their-bolts-land): {bolt: [team]}."""
-    found = {b: runner.takers(plan, fleet["teams"], label, b) for b in added}
-    return {b: names for b, names in found.items() if names}
-
-
-def dispatch_said(subject, takers):
-    """What the partition's dispatchers are told of a write that added a bolt or freed a team (notices): the write's
-    subject, then for each bolt added in a kit a team builds in a Flume stream, that it can be given to that team
-    (runner.planned_said), else to give a free team its next bolt."""
-    if not takers:
-        return f"{subject}. Give a free team its next bolt."
-    return f"{subject}. " + " ".join(runner.planned_said(b, names) + "." for b, names in takers.items())
-
-
-def tell_dispatchers(fleet, label, text):
-    """Each of the partition's dispatchers that is up told the text, unless it is the one asking."""
-    for host in crew.partition_hosts(fleet, label):
-        d = f"{label}-dispatch-{host}"
-        if d != agent() and crew.agent_status(fleet, d):
-            crew.tell(fleet, d, text)
-
-
 def push_now(fleet, label):
     """crew events --push: each entry of the host's run record of the label that its branch lacks, which a push that
     was refused left in the host's file, pushed now, each as its own commit (record.reach); said when there is none."""
@@ -8834,39 +8810,6 @@ def team_cmd(fleet, a):
         print(f"{name} is down; its panes are still there.")
 
 
-def dispatch_up(fleet, label):
-    """This host's dispatcher of a partition started when it is not up, in a workspace of its own, recorded: its Agents
-    and the roles started, for the caller to greet."""
-    not_held()
-    d = crew.standing(fleet, "dispatch", label)
-    d.ensure()
-    d.mark(down=False)
-    d.panes()
-    started = d.start_standing()
-    d.record("main.up", f"main({label}): up {d.agent_of('dispatcher')}", started)
-    return d, started
-
-
-def dispatch_cmd(fleet, a):
-    """crew _dispatch up|down|status <label>: this host's dispatcher of the partition, started and greeted, ended, or
-    listed, as crew main runs it on each host its teams run on."""
-    if a.act == "up":
-        greeted(greeting(fleet, *dispatch_up(fleet, a.label)))
-        return
-    d = crew.standing(fleet, "dispatch", a.label)
-    d.ensure()
-    name = d.agent_of("dispatcher")
-    if a.act == "down":
-        why = d.stop("dispatcher")
-        if why:
-            print(why, file=sys.stderr)
-        d.mark(down=True)
-        d.record("main.down", f"main({a.label}): down {name}", d.ended)
-        print(f"{name} is down")
-    else:
-        print("%-34s %-8s %s" % (name, d.pane("dispatcher"), d.status("dispatcher") or "not up"))
-
-
 def elsewhere(fleet, host, *argv):
     """crew on another host, run as the one asking (crew_argv) and never prompting (code.3): its process, its output
     this command's."""
@@ -8967,18 +8910,16 @@ def kinds_said(fleet, label):
 
 
 def main_cmd(fleet, a):
-    """crew main up|down|status <label>, on the main level's host: its design agent, planner, ops and operator, one tab
-    each in the <label> workspace of the session each runs in (record 0035), started and greeted, ended, or listed; and
-    the dispatcher on each host the partition's teams run on, that host's own, side by side, so one waiting on a
-    question holds back no other host's. A dispatcher that fails fails main up once the rest are up. Up refuses while a
-    role's agent still runs in a session it no longer stands in (moved_role), which down ends."""
+    """crew main up|down|status <label>, on the main level's host: its standing roles, of its design agent, planner, ops
+    and operator, one tab each in the <label> workspace of the session each runs in (record 0035), started and greeted,
+    ended, or listed, and nothing else; no dispatcher is started anywhere. Up refuses while a role's agent still runs in
+    a session it no longer stands in (moved_role), which down ends."""
     p = crew.partition_of(fleet, a.label)
     arrived(fleet, p["machine"])
     ms = crew.mains(fleet, a.label, a.force)
     for m in ms:
         m.ensure()
-    here, label = crew.this_host(), p["label"]
-    hosts = crew.partition_hosts(fleet, label)
+    label = p["label"]
     if a.act == "up":
         not_held()
         moved = moved_role(fleet, label, ms)
@@ -8991,22 +8932,10 @@ def main_cmd(fleet, a):
             started = m.start_standing()
             m.record("main.up", f"main({label}): up", started)
             started_in.append((m, started))
-        rc, greetings, away = 0, [], [(h, elsewhere(fleet, h, "_dispatch", "up", label)) for h in hosts if h != here]
-        if here in hosts:
-            try:
-                greetings += greeting(fleet, *dispatch_up(fleet, label))
-            except Refusal as e:
-                print(e, file=sys.stderr)
-                rc = 1
-            except Stopped as e:
-                rc = e.code
+        greetings = []
         for m, started in started_in:
             greetings += greeting(fleet, m, started)
-        for _, proc in away:
-            rc = proc.wait() or rc
         greeted(greetings)
-        if rc:
-            raise Stopped(rc)
     elif a.act == "down":
         for m in ms:
             # Every agent its panes file names, a role that stood here before its partition named it a session apart
@@ -9018,22 +8947,12 @@ def main_cmd(fleet, a):
             m.mark(down=True)
             m.record("main.down", f"main({label}): down", m.ended)
         print(f"{label}'s main level is down; its panes are still there.")
-        for host in hosts:
-            if host == here:
-                dispatch_cmd(fleet, argparse.Namespace(act="down", label=label))
-            elif elsewhere(fleet, host, "_dispatch", "down", label).wait():
-                raise Stopped(1)
     else:
         for m in ms:
             for role in m.standing:
                 print("%-34s %-8s %-14s %s" % (m.agent_of(role), m.pane(role), m.session, m.status(role) or "not up"))
         for role, said in kinds_said(fleet, label).items():
             print("%-34s %-8s %-14s %s" % (f"{label}-{role}", "-", "-", said))
-        for host in hosts:
-            if host == here:
-                dispatch_cmd(fleet, argparse.Namespace(act="status", label=label))
-            elif elsewhere(fleet, host, "_dispatch", "status", label).wait():
-                print(f"{label}-dispatch-{host}  {host} did not answer")
 
 
 def review_cmd(fleet, a):
@@ -9185,7 +9104,7 @@ def retire_operator(fleet, label):
 
 
 def revive_cmd(fleet, a):
-    """crew revive, after a restart: on this host, each team's, main level's in each of its sessions, and dispatcher's
+    """crew revive, after a restart: on this host, each team's and main level's in each of its sessions
     standing role whose pane came back with no agent in it, or dead, closed and opened again in its layout first (crew.revived,
     teams.2), picked up from its last conversation, a team's conductor greeted, and its ops when it had none to pick up
     (crew.greeted_roles), and every agent brought back outside a team greeted; one taken down with crew down stays
@@ -9194,7 +9113,7 @@ def revive_cmd(fleet, a):
     not_held()
     greetings = []
     every = [(kind, scope, a) for kind, scope in crew.here(fleet)
-             for a in ([None] if kind == "team" else crew.mains(fleet, scope) if kind == "main" else [crew.standing(fleet, kind, scope)])]
+             for a in ([None] if kind == "team" else crew.mains(fleet, scope))]
     for kind, scope, agents in every:
         try:
             agents = agents or crew.Team(fleet, crew.team_of(fleet, scope))
@@ -15170,9 +15089,6 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("act", choices=("up", "down", "status"))
     x.add_argument("label")
     x.add_argument("--force", action="store_true")
-    x = sub.add_parser("_dispatch")
-    x.add_argument("act", choices=("up", "down", "status"))
-    x.add_argument("label")
     x = sub.add_parser("_review")
     x.add_argument("label")
     x.add_argument("--wait", action="store_true")
@@ -15206,7 +15122,7 @@ COMMANDS = {
     ("_land-row", None): land_row_cmd, ("_land-card", None): land_card_cmd, ("_landing-read", None): landing_read_cmd,
     ("_made", None): made_cmd, ("_batch-card", None): batch_card_cmd,
     ("_tidy", None): team_tidy,
-    ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
+    ("_team", None): team_cmd, ("_main", None): main_cmd,
     ("_review", None): review_cmd, ("review-delivered", None): review_delivered, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
     ("_answered", None): card_answered,
     ("signal", None): signal, ("signal-move", None): signal_move,
@@ -15215,7 +15131,7 @@ COMMANDS = {
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "answer"): plan_answer,
 }
 # The commands on a team and on a main level, each one process on the host its agents run on.
-TEAM_COMMANDS = {(c, None) for c in ("_status", "_tidy", "_team", "_main", "_dispatch", "_review", "_console", "_revive")}
+TEAM_COMMANDS = {(c, None) for c in ("_status", "_tidy", "_team", "_main", "_review", "_console", "_revive")}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "start"): "bolt.start", ("bolt", "order"): "bolt.order",

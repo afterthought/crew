@@ -64,7 +64,7 @@ class TestLaunch:
 
 class TestWhichTeam:
     NONE = ("^no team of madswan builds crew in a Flume stream, so a fix of its red main is no Flume place: it is a bolt of one "
-            "chore, proposed first among the planned, which the dispatcher gives to the next team that frees \\(state.3\\); tell "
+            "chore, proposed first among the planned, which the user starts \\(state.3\\); tell "
             "madswan-planner, who proposes it$")
 
     def test_no_team_builds_the_kit_in_a_stream_and_it_is_refused_naming_a_bolt_of_one_chore(self):

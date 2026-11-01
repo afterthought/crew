@@ -28,7 +28,7 @@ when it names one.
       a deploy's start, one of its steps, or its end, in the run record as it runs; its end closes the deploy's card
       with each step's outcome, or the step that failed and its log
   crew ops step <env> --label L --key <key> --state waiting|handed|done|failed|declined [--to <sha>]
-                [--doer dispatcher|main-ops|user] [--agent <name>] [--when deployed|quiet] [--held] [--text <file>]
+                [--doer main-ops|user] [--agent <name>] [--when deployed|quiet] [--held] [--text <file>]
                 [--changes <a,b>] [--note <text>]
       an operation of its own and its state, after the deploy it names with --to or on its own; one the user is to
       take, or an agent's held for the user's word, that waits is a rail row with a card, which crew raises one at a
@@ -61,7 +61,7 @@ SHA = re.compile(r"^[0-9a-f]{7,40}$")
 STEP_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/#-]*$")
 ACTS = ("start", "step", "end")
 STATES = ("waiting", "handed", "done", "failed", "declined")
-DOERS = ("dispatcher", "main-ops", "user")
+DOERS = ("main-ops", "user")
 DAYS = 60  # how far back the operations are read: an offer, a word or a step older than this has no row
 
 
@@ -343,7 +343,7 @@ CARRIED = ("ok", "done")  # a deploy's end that left its environment running its
 
 def doer_of(doer, agent, label, env):
     """Who does a step, as a card names them: the user, the agent it is handed to, or its doer's crew name."""
-    return agent or {"main-ops": f"{label}-ops", "dispatcher": f"{label}-dispatch-{env}"}.get(doer, doer)
+    return agent or {"main-ops": f"{label}-ops"}.get(doer, doer)
 
 
 def handed_steps(text, env, label):
@@ -974,7 +974,7 @@ def args_refusal(fleet, a):
     if getattr(a, "key", None) and not STEP_KEY.match(a.key):
         return f"--key {a.key} is no step key crew takes"
     if getattr(a, "held", False) and a.doer in (None, "user"):
-        return "--held marks an agent's step held for the user's word: give its --doer, dispatcher or main-ops"
+        return "--held marks an agent's step held for the user's word: give its --doer, main-ops"
     if getattr(a, "handed", None) and (a.notes or a.steps):
         return "--handed carries the text of the files --notes and --steps name, so it is given in their place"
     return None

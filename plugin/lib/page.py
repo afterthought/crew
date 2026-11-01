@@ -234,7 +234,7 @@ def where(fleet, label, asked):
     """Each host the partition runs on, by name: those the board asked (asked, {host: True or why it did not answer})
     and its main level's, marked answered, not, or not asked when no team of it runs there; under each, in the hosts
     file's order, each session an agent of the partition runs in, the agents in it, its teams, then its main level's
-    standing roles, then its dispatcher there, and the account the hosts file gives the session, said when it names
+    standing roles, and the account the hosts file gives the session, said when it names
     none (read.2). A session no agent of the partition runs in is left out."""
     p = fleet["partitions"][label]
     placed = agents_in(fleet, label)
@@ -254,16 +254,13 @@ def where(fleet, label, asked):
 
 def agents_in(fleet, label):
     """Which of a partition's agents crew starts in which session, {(host, session): [agent]}: its teams, each in its
-    host's session, then its main level's standing roles in theirs on its host, then its dispatcher on each host its
-    teams run on (crew.dispatch_place)."""
+    host's session, then its main level's standing roles in theirs on its host."""
     p = fleet["partitions"][label]
     out = {}
     for t in p["teams"]:
         out.setdefault((fleet["teams"][t]["machine"], fleet["teams"][t]["session"]), []).append(t)
     for r in crew.MAIN_STANDING:
         out.setdefault((p["machine"], p["sessions"][r]), []).append(f"{label}-{r}")
-    for h in crew.partition_hosts(fleet, label):
-        out.setdefault((h, crew.dispatch_place(fleet, label, h)), []).append(f"{label}-dispatch-{h}")
     return out
 
 
@@ -537,7 +534,7 @@ def subscriptions(fleet, readings, teams, now):
 def on_subscription(fleet, account, teams):
     """The sessions and partitions on a subscription, beside its use and computed from nothing of it: each session the
     hosts file gives account, by host and on each in the file's order, with crew's agents in it across every partition
-    (agents_in), teams first, then main levels' roles, then dispatchers, and each team's slots at work and its
+    (agents_in), teams first, then main levels' roles, and each team's slots at work and its
     conductor's wait as its partition's block says them (teams, by name, as fleet_team gives them); and the partitions
     with an agent in one of them, in the teams file's order, each linked as its block is (linked)."""
     labels = list(fleet["partitions"])
@@ -548,7 +545,7 @@ def on_subscription(fleet, account, teams):
             if v.get("account") != account:
                 continue
             here = [(l, a) for l in labels for a in placed[l].get((h, s), [])]
-            here.sort(key=lambda x: 0 if x[1] in fleet["teams"] else 2 if x[1] == f"{x[0]}-dispatch-{h}" else 1)
+            here.sort(key=lambda x: 0 if x[1] in fleet["teams"] else 1)
             agents = [a for _, a in here]
             on |= {l for l, _ in here}
             sessions.append({"host": h, "session": s, "agents": agents, "said": ", ".join(agents) or "runs no crew agent",

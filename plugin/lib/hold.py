@@ -108,8 +108,8 @@ def renew_exited(holds, unread, marked, session, down):
     """Whether a restart for an update starts an agent it finds not up, with no stop (teams.19): only one an earlier
     restart's keys ended, from facts: whether herdr lists its pane with an agent in it (pane_holds: False for none,
     None when unread), what crew could not read of the pane, the session an earlier restart that could not see it exit
-    typed its exit into (its mark, None when none), the session of its last start, and whether its team, main level or
-    dispatcher was taken down. An agent the user ended by hand, or one a crash took, has no mark naming its session and
+    typed its exit into (its mark, None when none), the session of its last start, and whether its team or main level
+    was taken down. An agent the user ended by hand, or one a crash took, has no mark naming its session and
     stays crew revive's. Returns (start, why not)."""
     if down:
         return False, "it was taken down; it stays down"
@@ -138,15 +138,13 @@ def stamp(t=None):
 # ------------------------------------------------------------------------------------------- what crew reads
 
 def agents_on_host(fleet):
-    """Every Agents crew keeps on this host: each team's, each of its main levels' sessions, each dispatcher's."""
+    """Every Agents crew keeps on this host: each team's and each of its main levels' sessions."""
     out = []
     for kind, scope in crew.here(fleet):
         if kind == "team":
             out.append(crew.Team(fleet, crew.team_of(fleet, scope)))
         elif kind == "main":
             out += crew.mains(fleet, scope)
-        else:
-            out.append(crew.standing(fleet, "dispatch", scope))
     return out
 
 
@@ -371,7 +369,7 @@ def hand(name):
 
 
 def holding(fleet, name):
-    """The Agents an agent's standing role is kept in, and that role: a team's, a main level's or a dispatcher's."""
+    """The Agents an agent's standing role is kept in, and that role: a team's or a main level's."""
     return crew.holding_of(fleet, name) or fail(f"{name} is no standing agent of crew's: only those are restarted for an update")
 
 

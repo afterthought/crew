@@ -3,7 +3,7 @@ session resolves its partition, kit and blueprints to and what its Flume setting
 crew.kind_role_of for which of a partition's main-level roles run as their kinds, crew.greet_waits for one look of
 a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
 crew.greeted_roles for which of a team's agents a command greets and crew.ops_greeting for what its ops is told,
-crew.dispatch_place and crew.operator_session for where those run, crew.tab_holds for what an operator's tab holds,
+crew.operator_session for where an operator runs, crew.tab_holds for what an operator's tab holds,
 crew.dead_said for a pane herdr lists with no terminal behind it and crew.opens_at for where a pane opens again,
 crew.last_conversation for where a role resumes,
 crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
@@ -339,8 +339,7 @@ class TestGreetWaits:
 class TestStandingGreeting:
     @pytest.mark.parametrize("name, says", [
         ("wldn-design", "curate the signals that have no move"), ("wldn-planner", "crew plan proposed"),
-        ("wldn-ops", "land nothing until it comes"), ("wldn-dispatch-mac-studio", "Read where wldn stands on mac-studio with"),
-        ("wldn-operator", "what is moving and what waits on me")])
+        ("wldn-ops", "land nothing until it comes"), ("wldn-operator", "what is moving and what waits on me")])
     def test_each_role_has_its_greeting(self, name, says):
         label, text, why, hint = crew.standing_greeting(FLEET, name)
         assert label == "wldn" and says in text
@@ -415,12 +414,6 @@ class TestTeamGreetings:
 
 
 class TestPlaces:
-    def test_a_dispatcher_runs_in_the_main_levels_session_on_its_host_else_in_its_first_teams(self):
-        assert crew.dispatch_place(FLEET, "wldn", BOX) == "wldn-3"
-        assert crew.dispatch_place(FLEET, "wldn", "mac-studio") == "wldn-5"
-        with pytest.raises(crew.Refusal, match="no team of wldn runs on macbook-pro, so macbook-pro has no dispatcher"):
-            crew.dispatch_place(FLEET, "wldn", "macbook-pro")
-
     def test_an_operator_runs_in_the_session_named_for_its_partition(self):
         assert crew.operator_session(FLEET, "wldn", "mac-studio") == {"partition": "clients/willdan"}
         with pytest.raises(crew.Refusal, match=f"{BOX} has no session named wldn"):
@@ -581,11 +574,15 @@ class TestBriefBack:
     @pytest.mark.parametrize("name, found", [
         ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("atl-1-ops", ("atl-1", "ops")),
         ("wldn-design", ("wldn", "design")), ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "main-ops")),
-        ("wldn-reviewer", ("wldn", "reviewer")), ("wldn-dispatch-chuck-herdr-alpha", ("wldn", "dispatcher")),
-        ("wldn-operator", ("wldn", "operator"))])
+        ("wldn-reviewer", ("wldn", "reviewer")), ("wldn-operator", ("wldn", "operator"))])
     def test_a_session_recorded_before_crew_role_named_its_definition_is_given_the_one_its_name_gives(self, name, found):
         assert crew.brief_role(FLEET, name, "") == found
         assert crew.brief_role(FLEET, name, None) == found
+
+    def test_a_dispatchers_name_is_no_agent_crew_starts(self):
+        """main-level delta: no dispatcher is started, placed or named, so its name gives no brief."""
+        with pytest.raises(crew.Refusal, match="no agent wldn-dispatch-chuck-herdr-alpha: crew starts none by that name"):
+            crew.brief_role(FLEET, "wldn-dispatch-chuck-herdr-alpha", None)
 
     def test_a_unit_slots_name_gives_no_definition_since_its_stage_does(self):
         with pytest.raises(crew.Refusal, match="swb-1-unit-2's session record names no definition"):

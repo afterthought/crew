@@ -143,14 +143,15 @@ class TestWhereItRuns:
         swancloud-2 holds crw-6, account madswan-2; swancloud-3, the partition's, holds none of its agents."""
         deneb = next(h for h in of(fleet(), "swancloud")["hosts"] if h["host"] == "deneb")
         assert [(s["session"], s["agents"], s["account"], s["account_said"]) for s in deneb["sessions"]] == [
-            ("swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"], "madswan", "account madswan"),
+            ("swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"], "madswan", "account madswan"),
             ("swancloud-2", ["crw-6"], "madswan-2", "account madswan-2")]
 
-    def test_a_session_the_hosts_file_names_no_account_for_says_so_and_a_dispatcher_runs_on_a_teams_host_away_from_the_main_level(self):
-        """fleet-page "No account named": never blank (read.2); crw-7's host has the partition's dispatcher in its session."""
+    def test_a_session_the_hosts_file_names_no_account_for_says_so(self):
+        """fleet-page "No account named": never blank (read.2); crw-7's session on its host holds it alone, no dispatcher
+        beside it."""
         mac = next(h for h in of(fleet(), "swancloud")["hosts"] if h["host"] == "mac-studio")
         assert [(s["session"], s["agents"], s["account"], s["account_said"]) for s in mac["sessions"]] == [
-            ("swancloud-4", ["crw-7", "swancloud-dispatch-mac-studio"], None, "no account named in herdr-hosts")]
+            ("swancloud-4", ["crw-7"], None, "no account named in herdr-hosts")]
         assert (team_of(of(fleet(), "swancloud"), "crw-7")["account"], team_of(of(fleet(), "swancloud"), "crw-7")["account_said"]) == (
             None, "no account named in herdr-hosts")
 
@@ -160,7 +161,7 @@ class TestWhereItRuns:
         assert list(hosts) == ["chuck-herdr-alpha", "mac-studio"]
         assert (hosts["mac-studio"]["answered"], hosts["mac-studio"]["said"]) == (None, "not asked: no team of it runs there")
         assert [(s["session"], s["agents"]) for s in hosts["mac-studio"]["sessions"]] == [("wldn", ["wldn-design", "wldn-planner", "wldn-ops", "wldn-operator"])]
-        assert [(s["session"], s["agents"]) for s in hosts["chuck-herdr-alpha"]["sessions"]] == [("wldn-1", ["swb-1", "wldn-dispatch-chuck-herdr-alpha"])]
+        assert [(s["session"], s["agents"]) for s in hosts["chuck-herdr-alpha"]["sessions"]] == [("wldn-1", ["swb-1"])]
 
 
 class TestKits:
@@ -427,10 +428,10 @@ class TestOnASubscription:
         none."""
         m = subs()["madswan"]
         assert [(s["host"], s["session"], s["agents"], s["said"]) for s in m["sessions"]] == [
-            ("deneb", "madswan", ["mad-1", "madswan-design", "madswan-planner", "madswan-ops", "madswan-operator", "madswan-dispatch-deneb"],
-             "mad-1, madswan-design, madswan-planner, madswan-ops, madswan-operator, madswan-dispatch-deneb"),
-            ("deneb", "swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"],
-             "swancloud-design, swancloud-planner, swancloud-ops, swancloud-operator, swancloud-dispatch-deneb"),
+            ("deneb", "madswan", ["mad-1", "madswan-design", "madswan-planner", "madswan-ops", "madswan-operator"],
+             "mad-1, madswan-design, madswan-planner, madswan-ops, madswan-operator"),
+            ("deneb", "swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"],
+             "swancloud-design, swancloud-planner, swancloud-ops, swancloud-operator"),
             ("deneb", "swancloud-3", [], "runs no crew agent"), ("deneb", "agentplot-2", [], "runs no crew agent")]
         assert m["sessions"][0]["teams"] == [{"team": "mad-1", "at_work_said": "0 of 4 slots at work", "waits_said": "waits on nothing"}]
         assert [s["teams"] for s in m["sessions"][1:]] == [[], [], []]
@@ -443,9 +444,9 @@ class TestOnASubscription:
         assert m2["sessions"][0]["teams"] == [{"team": "crw-6", "at_work_said": crw6["at_work_said"], "waits_said": crw6["waits"]["said"]}]
         assert m2["partitions"] == [{"label": "swancloud", "link": None}]
 
-    def test_a_dispatcher_away_from_its_main_level_and_a_session_with_no_account_on_no_subscription(self):
+    def test_a_team_away_from_its_main_level_and_a_session_with_no_account_on_no_subscription(self):
         s = subs()
-        assert [(x["host"], x["session"], x["agents"]) for x in s["ia"]["sessions"]] == [("chuck-herdr-alpha", "wldn-1", ["swb-1", "wldn-dispatch-chuck-herdr-alpha"])]
+        assert [(x["host"], x["session"], x["agents"]) for x in s["ia"]["sessions"]] == [("chuck-herdr-alpha", "wldn-1", ["swb-1"])]
         assert [(x["host"], x["session"]) for x in s["willdan-alex"]["sessions"]] == [("mac-studio", "wldn")]
         assert all(x["session"] != "swancloud-4" for v in s.values() for x in v["sessions"])
 
@@ -456,8 +457,8 @@ class TestOnASubscription:
 
     def test_where_a_partition_runs_reads_the_same_placement(self):
         assert page.agents_in(FLEET, "swancloud") == {
-            ("deneb", "swancloud-2"): ["crw-6"], ("mac-studio", "swancloud-4"): ["crw-7", "swancloud-dispatch-mac-studio"],
-            ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"]}
+            ("deneb", "swancloud-2"): ["crw-6"], ("mac-studio", "swancloud-4"): ["crw-7"],
+            ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"]}
 
 
 class TestTheSection:
