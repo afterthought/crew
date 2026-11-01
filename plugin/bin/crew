@@ -159,7 +159,7 @@
 #                                      where the asker's card stands: its status, whose turn, the user's answer and words,
 #                                      and what the user sent from its reading: a batch's card and reading together
 #                                      (batch/<n>), the planner's, its note and every annotation, the card closed and
-#                                      the batch recorded read; a bolt's reading (land/<bolt>), its conductor's, its
+#                                      the batch recorded read; a bolt's reading (land/<bolt>), main-level ops's, its
 #                                      annotations as notes on its row and its approval as landing nothing, the card
 #                                      left and the reading set aside; a long proposal's reading's decision;
 #                                      an approval the user declined is closed with their words; for a kit's landings

@@ -284,9 +284,8 @@ ok "a fix launched on the bolt holds its row, ending its reading, the card withd
 
 # The read of the bolt's row finds no reading running, and its crew card session starts it, changing the card to carry
 # its link; the reading runs until the landing's close ends it, with nothing of crew's waiting on it. crew card read
-# reads a bolt's reading in the name of the conductor of the team holding it, though no conductor runs.
-reader() { (export CREW_AGENT=swb-1-conductor; HOST=$box crew "$@"); }
-out=$(reader card read land/tenant-environments 2>&1) || fail "the bolt's reading could not be read:"$'\n'"$out"
+# reads a bolt's reading in main-level ops's name.
+out=$(ops card read land/tenant-environments 2>&1) || fail "the bolt's reading could not be read:"$'\n'"$out"
 eq "$out" "land/tenant-environments: no reading of it runs on this host: crew card session land/tenant-environments starts it"
 out=$(ops card session land/tenant-environments 2>&1) || fail "ops could not start the bolt's reading:"$'\n'"$out"
 pid2=$(jq -r .pid "$reading/session.json"); url2=$(jq -r .url "$reading/session.json")
@@ -295,7 +294,7 @@ eq "$(head -1 <<<"$out")" "$url2"
 changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
 has "$changed" "\"requestId\": \"$again\""; has "$changed" "\"changeNote\": \"tenant-environments: Its reading is open again at a new link\""; has "$changed" "$url2"
 eq "$(listed)" "$pid2"
-out=$(reader card read land/tenant-environments 2>&1) || fail "the bolt's reading could not be read:"$'\n'"$out"
+out=$(ops card read land/tenant-environments 2>&1) || fail "the bolt's reading could not be read:"$'\n'"$out"
 eq "$out" "land/tenant-environments: its reading waits on the user, who has sent nothing from it"
 ok "a read of the bolt's row with no reading says so, and ops's crew card session starts it, prints its link and changes the kit's card to carry it"
 

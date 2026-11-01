@@ -2126,8 +2126,8 @@ def words_kept_where(pane_host, here):
 
 
 def landing_card_keys(entries, bolt, owner):
-    """The keys under which the bolt's conductor (owner) holds an open landing card, from its host's run record:
-    land/<bolt>, as crew raises it (record 0031), and land/<bolt>/<head>, as a conductor posted one before."""
+    """The keys under which owner holds an open landing card of the bolt's own, from its host's run record:
+    land/<bolt>, as crew raised it (record 0031), and land/<bolt>/<head>, as a conductor posted one before."""
     keys = sorted({e.get("Key") for e in entries if e.get("Act") == "card.post" and e.get("By") == owner
                    and re.fullmatch(rf"land/{re.escape(bolt)}(/[0-9a-f]{{7}})?", e.get("Key") or "")})
     return [k for k in keys if cards.card_under(entries, k, owner)]
@@ -3229,7 +3229,7 @@ def land_end(fleet, label, bolt):
 
 def landing_cards_closed(fleet, t, bolt, outcome, said=None, here=False):
     """At crew bolt land, on the team's host, once the partition's plan no longer holds the bolt (plan.16): any landing
-    card of the bolt's own its conductor still holds closed with outcome, its reading ended and its preview released
+    card of the bolt's own main-level ops still holds closed with outcome, its reading ended and its preview released
     (land_end); then the kit's landings card raised on the partition's main machine (land_hand), which closes it once
     every bolt the user ticked has landed or been held, naming where GitHub's main holds each. A landing on the user's
     word in ops's pane sends said in place of the outcome, and closes a card still waiting as answered there (here,
@@ -3240,7 +3240,7 @@ def landing_cards_closed(fleet, t, bolt, outcome, said=None, here=False):
         print(f"no landing card of bolt {bolt} is closed: " + (f"{t['label']}/main could not be read" if pl is None else
                                                                 f"{t['label']}/main still holds the bolt"))
         return
-    owner, (_, outcome, reason) = f"{t['name']}-conductor", landing_act("landed", words=outcome)
+    owner, (_, outcome, reason) = reading_owner(t["label"], f"land/{bolt}"), landing_act("landed", words=outcome)
     for key in landing_card_keys(cards.host_entries(record, t["label"], crew.this_host()), bolt, owner):
         row_card_close(fleet, t["label"], owner, key, outcome=outcome, reason=reason, said=said, here=here)
     land_end(fleet, t["label"], bolt)
@@ -11271,9 +11271,9 @@ def land_session(fleet, label, key, acts=None, say=None):
     of the team holding it and refused elsewhere, naming it, while it is a row of its kit's landings card that can land,
     read from the same facts as its row (land_read) and opened as its row's raise opens it (reading_open), its link
     printed, or said by say(link, decided) when given. The try, from the row's read on, is recorded as one card.reading
-    entry on the bolt in its conductor's name, done when the session started anew and refused with crew's message when
-    the bolt is no row that can land or the reading could not open, a session given again recording nothing (record.1),
-    nor a refusal before the try. When it started the session anew, none running, or the run record shows the kit's
+    entry on the bolt in main-level ops's name (reading_owner), done when the session started anew and refused with
+    crew's message when the bolt is no row that can land or the reading could not open, a session given again
+    recording nothing (record.1), nor a refusal before the try. When it started the session anew, none running, or the run record shows the kit's
     card standing without a row's reading (kit_unread), the kit's card is raised on the partition's main machine with
     the new link's note (land_hand), changed in place while it waits on the user and left as it is once they answered
     it (card-sessions "A landing's session follows the bolt's head"). Refused for land/<kit>, which has no reading of
@@ -11291,7 +11291,7 @@ def land_session(fleet, label, key, acts=None, say=None):
     t or fail(f"bolt {bolt} is held by no team, so it is no row of its kit's landings card, and it has no reading")
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), t["machine"], kits)
     not why or fail(why)
-    owner, obj, kit = f"{t['name']}-conductor", cards.row_object(key, kits), b.get("Repo") or t["kit"]["name"]
+    owner, obj, kit = reading_owner(label, key), cards.row_object(key, kits), b.get("Repo") or t["kit"]["name"]
     try:
         row, why = land_read(fleet, label, plan, b, t)
         row or fail(f"{bolt} is no row of {kit}'s landings card, so it has no reading: {why}")
@@ -11711,7 +11711,7 @@ def landing_reading(bolt, kit, head, units, chores, changes, diff):
     """A landing's reading, the files its one session opens as one review, in order, each (name, text) (card-sessions,
     briefs.9): 00-<bolt>.md, a page naming the bolt, its kit and its head, the units and chores that land, one a line,
     and saying that the reading lands nothing, approving the card being the word to land, and that what the user sends
-    from it reaches the bolt's conductor as notes on the card, a note naming a defect holding the landing for a fix;
+    from it reaches main-level ops as notes on the card, a note naming a defect holding the landing for a fix;
     then for the k-th unit each Markdown file of its change as the head holds it, named <kk>-<unit>-<its path under the
     change, / as ->, in a change's reading order (change_order), as a batch's folder names them; then
     <nn>-<bolt>-diff.txt, the bolt's diff against main, numbered after the last unit, as text, which plannotator opens
@@ -11721,7 +11721,7 @@ def landing_reading(bolt, kit, head, units, chores, changes, diff):
                       + [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores]
                       + ["", "This reading lands nothing: approving the landing card is the word to land, and its Approve "
                              "here lands nothing.", "",
-                         "What you send from it reaches the bolt's conductor as notes on the landing card, and a note "
+                         "What you send from it reaches main-level ops as notes on the landing card, and a note "
                          "naming a defect holds the landing for a fix.", "",
                          "After this page come each unit's change as the bolt holds it, then what the bolt changes against "
                          "main, from where it last met main to its head, less its change folders, shown whole before it."])
@@ -12141,7 +12141,7 @@ def card_read(fleet, a):
     crew's words (cards.answer_said); nothing else is. A key with a reading gives what the user sent in it too
     (reading_read), since nothing of crew's waits on it (teams.24): a batch's, batch/<n>, its card and its reading
     together, closing the card and recording the batch read (batch_card_read); a bolt's reading, land/<bolt>, its
-    decision alone, to the bolt's conductor (land_reading_read), unless the caller holds a card of the bolt's own under
+    decision alone, to main-level ops (land_reading_read), unless the caller holds a card of the bolt's own under
     the key, as a conductor posted one before a kit had its landings card, which is read as any card; a long
     proposal's, its reading's decision after the card's answer, a decided one set aside."""
     import cards
@@ -12257,14 +12257,13 @@ def batch_card_read(fleet, label, key, who, as_json=False, acts=None):
 
 
 def land_reading_read(fleet, label, key, who, as_json=False, acts=None):
-    """crew card read land/<bolt>: the bolt's conductor's read of its landing's reading, on the host of the team holding
-    the bolt, once crew tells it the user sent it (card-sessions "The session's decision reaches the owner as the card's
-    answer"), what reading_read gives: its annotations word for word as notes on the bolt's row of its kit's landings
-    card, an approval as landing nothing, the card's approval being the word to land, the decision then set aside so
-    the next crew card session starts the reading anew (reading_decided); nothing sent, that it waits on the user,
-    nothing forgotten or ended. The conductor holds no card under the key: the kit's landings card, main-level ops's, is
-    left as it is. Refused for a bolt the plan does not hold or no team holds, off its team's host, and to any agent
-    but its conductor."""
+    """crew card read land/<bolt>: main-level ops's read of a bolt's landing's reading (reading_owner), on the host of
+    the team holding the bolt, once crew tells it the user sent it (card-sessions "The session's decision reaches the
+    owner as the card's answer"), what reading_read gives: its annotations word for word as notes on the bolt's row of
+    its kit's landings card, an approval as landing nothing, the card's approval being the word to land, the decision
+    then set aside so the next crew card session starts the reading anew (reading_decided); nothing sent, that it
+    waits on the user, nothing forgotten or ended. The kit's landings card, ops's own under land/<kit>, is left as it
+    is. Refused for a bolt the plan does not hold or no team holds, off its team's host, and to any agent but ops."""
     acts = acts or CardActs(fleet)
     kits, bolt = kits_read(fleet, label), key.split("/", 1)[1]
     _, b, t = land_held(fleet, label, bolt)
@@ -12272,7 +12271,7 @@ def land_reading_read(fleet, label, key, who, as_json=False, acts=None):
     t or fail(f"bolt {bolt} is held by no team, so it is no row of its kit's landings card, and it has no reading")
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), t["machine"], kits)
     not why or fail(why)
-    owner = f"{t['name']}-conductor"
+    owner = reading_owner(label, key)
     "@" in who or who == owner or fail(f"{key}'s reading is {owner}'s to read, not {who}'s")
     d = CARDS / label / key
     decided = card_result(d) if d.is_dir() else None
@@ -13554,11 +13553,11 @@ def unopened(b, why):
     """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
     its first paragraph, cut again to Pending You's budget, saying that crew tries it again when the rail is read
     (sweep_cards) and naming crew card session <key> as how its owner starts it, the card then carrying its link
-    (briefs.13: the owner's act, nothing for the user to run), a landing's the bolt's conductor, a batch's and a long
+    (briefs.13: the owner's act, nothing for the user to run), a landing's main-level ops, a batch's and a long
     proposal's the planner; its details opening with why, where the link would be; and why kept on the built card
     (unread), for its post's or change's entry in the run record."""
     key = b["key"]
-    owner = "the bolt's conductor" if key.startswith("land/") else "the planner"
+    owner = "main-level ops" if key.startswith("land/") else "the planner"
     said = (f"Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and {owner} "
             f"starts it with crew card session {key}; this card then carries its link.")
     first, _, rest = b["card"]["summary"].partition("\n\n")
@@ -14473,16 +14472,11 @@ def readings_due(readings):
     return due
 
 
-def reading_owner(fleet, label, key):
-    """Who reads a key's reading (card-sessions): the planner a batch's and a long proposal's, the bolt's conductor a
-    bolt's, land/<bolt>, the team holding it read from the plan (land_held); refused when no team holds the bolt or the
-    plan can't be read."""
-    if not key.startswith("land/"):
-        return f"{label}-planner"
-    bolt = key.split("/", 1)[1]
-    _, b, t = land_held(fleet, label, bolt)
-    (b and t) or fail(f"bolt {bolt} is held by no team of {label}'s plan, so nobody reads its reading")
-    return f"{t['name']}-conductor"
+def reading_owner(label, key):
+    """Who reads a key's reading (card-sessions): the planner a batch's and a long proposal's, main-level ops a bolt's,
+    land/<bolt>, as the owner of its kit's landings card (Decision 6 of the-team-machinery-leaves). A decision of the
+    key alone (code.7)."""
+    return f"{label}-ops" if key.startswith("land/") else f"{label}-planner"
 
 
 def sweep_told(fleet, label, key, acts):
@@ -14491,10 +14485,7 @@ def sweep_told(fleet, label, key, acts):
     read and holding no word of the user's (roles.6), and the reading marked told, told.json beside its result, only
     once the tell went through; a tell refused, the owner not up among it, leaves it untold for the next refresh, so
     delivery is at least once. What it did, in words."""
-    try:
-        owner = reading_owner(fleet, label, key)
-    except Refusal as e:
-        return f"the user sent its reading, and crew can't tell whom to tell: {e}"
+    owner = reading_owner(label, key)
     why = io.StringIO()
     try:
         with contextlib.redirect_stderr(why):

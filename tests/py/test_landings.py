@@ -930,12 +930,12 @@ def test_with_no_card_open_a_sent_bolt_whose_head_crew_cant_read_is_named_and_le
 
 
 class TestLandReadingRead:
-    """crew card read land/<bolt>, the bolt's conductor's on its team's host (card-sessions "The session's decision
+    """crew card read land/<bolt>, main-level ops's on its team's host (card-sessions "The session's decision
     reaches the owner as the card's answer"): the reading's decision alone, its annotations as notes on the bolt's row,
     an approval as landing nothing, then set aside so crew card session starts it anew; the kit's card untouched."""
     S = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio:19432/y", "started": "2026-10-23T10:00:00Z"}
 
-    def read(self, monkeypatch, tmp_path, result=None, session=True, who="crw-1-conductor", team="crw-1", key="land/y"):
+    def read(self, monkeypatch, tmp_path, result=None, session=True, who="swancloud-ops", team="crw-1", key="land/y"):
         d = tmp_path / "swancloud" / key
         d.mkdir(parents=True, exist_ok=True)
         if session:
@@ -975,9 +975,9 @@ class TestLandReadingRead:
         self.read(monkeypatch, tmp_path / "none", session=False)
         assert capsys.readouterr().out == "land/y: no reading of it runs on this host: crew card session land/y starts it\n"
 
-    def test_any_agent_but_its_conductor_and_a_bolt_no_team_holds_are_refused(self, monkeypatch, tmp_path):
-        with pytest.raises(crew.Refusal, match="^land/y's reading is crw-1-conductor's to read, not swc-1-conductor's$"):
-            self.read(monkeypatch, tmp_path, who="swc-1-conductor")
+    def test_any_agent_but_ops_and_a_bolt_no_team_holds_are_refused(self, monkeypatch, tmp_path):
+        with pytest.raises(crew.Refusal, match="^land/y's reading is swancloud-ops's to read, not swancloud-planner's$"):
+            self.read(monkeypatch, tmp_path, who="swancloud-planner")
         with pytest.raises(crew.Refusal, match="^bolt y is held by no team"):
             self.read(monkeypatch, tmp_path, team=None)
 

@@ -264,7 +264,7 @@ class TestNames:
         monkeypatch.delenv("CREW_AGENT")
         assert cards.refusal(hooked("whoami", {"name": "swancloud-ops"})) is None
 
-    def test_the_hook_refuses_a_stage_agents_card_and_a_card_of_crews_own_and_lets_a_question_through(self, monkeypatch):
+    def test_the_hook_refuses_a_card_from_a_role_that_asks_nothing_and_a_card_of_crews_own_and_lets_a_question_through(self, monkeypatch):
         """rail-cards: an agent of no asking role asks; an agent posts a landing card by hand; it closes crew's card; it
         asks."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
@@ -507,7 +507,7 @@ class TestSessions:
         b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
         c, bare = b["card"], built.landing_card(LANDING)["card"]
         assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: crew tries it again when the "
-                                                  "rail is read, and the bolt's conductor starts it with crew card session "
+                                                  "rail is read, and main-level ops starts it with crew card session "
                                                   "land/b1; this card then carries its link.")
         assert len(c["summary"]) <= 400
         assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
@@ -855,8 +855,8 @@ class TestBatchRead:
         assert capsys.readouterr().out == "batch/3: nothing sent yet: the batch waits on the user, on its card or its reading\n"
 
     def test_another_agent_and_a_batch_with_neither_card_nor_reading_are_refused(self, monkeypatch, tmp_path):
-        with pytest.raises(plan.Refusal, match="^batch/3's card and reading are wldn-planner's to read, not swb-1-conductor's$"):
-            self.read(monkeypatch, tmp_path, ReadingActs(), who="swb-1-conductor")
+        with pytest.raises(plan.Refusal, match="^batch/3's card and reading are wldn-planner's to read, not wldn-ops's$"):
+            self.read(monkeypatch, tmp_path, ReadingActs(), who="wldn-ops")
         with pytest.raises(plan.Refusal, match="^no card and no reading of batch/3 is open on mac-studio"):
             self.read(monkeypatch, tmp_path / "none", ReadingActs(), session=False)
 
@@ -874,13 +874,13 @@ class TestLandingSession:
     """crew card session land/<bolt> (card-sessions "A landing's session follows the bolt's head", "A later try of a
     reading is recorded"): its link printed, and the kit's landings card raised on the main machine with the new link's
     note when the session was started anew or the kit's card stands without a row's reading; the try recorded as
-    card.reading in the conductor's name when it started or refused; refused for a bolt that is no row that can land,
+    card.reading in main-level ops's name when it started or refused; refused for a bolt that is no row that can land,
     for land/<kit>, which has no reading of its own, and off its team's host."""
     TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
     KIT_UNREAD = [{"Act": "card.post", "Key": "land/switchboard-kit", "By": "wldn-ops", "Card": "req_k1", "On": ["kit/switchboard-kit"],
                    "Unread": "b1: plannotator is not on this host's path", "At": "2026-10-12T10:00:00Z"}]
     LINK = "http://mac-studio.ts.swancloud.net:19432"
-    DONE = dict(Act="card.reading", by="swb-1-conductor", Key="land/b1")
+    DONE = dict(Act="card.reading", by="wldn-ops", Key="land/b1")
     ROW = dict(bolt="b1", box=True, facts=dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"))
 
     def run(self, monkeypatch, acts, row=ROW, why=None, team=TEAM, key="land/b1", say=None):
@@ -1198,7 +1198,7 @@ class TestLandingReading:
         row, _, _ = self.read(monkeypatch, acts)
         assert row["facts"]["unread"] == self.ENDED and "link" not in row["facts"]
         b = built.landings_card(dict(kit="switchboard-kit", rows=[dict(row["facts"], conductor="swb-1-conductor")]))
-        assert ("crew tries it again when the rail is read, and swb-1-conductor starts it with crew card session land/b1; "
+        assert ("crew tries it again when the rail is read, and main-level ops starts it with crew card session land/b1; "
                 "this card then carries its link.") in b["card"]["summary"]
         assert b["card"]["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
         assert plan.built_fields(b) == {"Unread": self.ENDED, "Heads": "b1@def5678"}
@@ -1646,7 +1646,7 @@ class TestLandings:
         assert "[Read y](http://deneb.ts.swancloud.net:19432/y)" in face and "[Preview web](http://web-abc1234)" in face
         assert "[Pull request #23](https://github.com/afterthought/crew/pull/23)" in face
         assert ("Its reading could not be opened: plannotator is not on the path; crew tries it again when the rail is read, and "
-                "swc-1-conductor starts it with crew card session land/z") in face
+                "main-level ops starts it with crew card session land/z") in face
         assert "- a\n- b\n- c (chore)" in face
         assert [l["label"] for l in b["card"]["context"]["links"]][:2] == ["Read y", "Preview y: web"]
 
@@ -1757,21 +1757,22 @@ class TestFollows:
         assert built.follows_of("step", {"env": "srv", "key": "op/srv/2"}, more, self.OPS) is None
 
     def test_a_landing_raised_again_follows_the_card_its_defect_note_held_and_an_open_one_is_changed_not_followed(self):
-        held = [dict(Act="card.post", Key="land/b7", By=self.CONDUCTOR, Card="req_l1"),
+        held = [dict(Act="card.post", Key="land/b7", By=self.OPS, Card="req_l1"),
                 dict(Act="card.close", Card="req_l1", State="withdrawn")]
-        assert built.follows_of("land", {"bolt": "b7"}, held, self.CONDUCTOR) == "req_l1"
-        assert built.follows_of("land", {"bolt": "b7"}, held[:1], self.CONDUCTOR) is None
+        assert built.follows_of("land", {"bolt": "b7"}, held, self.OPS) == "req_l1"
+        assert built.follows_of("land", {"bolt": "b7"}, held[:1], self.OPS) is None
 
-    def test_a_landing_raised_again_on_a_team_that_did_not_post_the_last_one_follows_nothing(self):
-        """rail-cards "A landing raised again on a team that did not post the last one": b7 now held by swb-2."""
+    def test_a_landing_raised_again_in_another_name_than_the_last_ones_follows_nothing(self):
+        """rail-cards "A card follows only a card in its owner's name": b7's last landing card was posted in its
+        conductor's name, before a bolt's landing was main-level ops's."""
         held = [dict(Act="card.post", Key="land/b7", By=self.CONDUCTOR, Card="req_l1"),
                 dict(Act="card.close", Card="req_l1", State="withdrawn")]
-        assert built.follows_of("land", {"bolt": "b7"}, held, "swb-2-conductor") is None
+        assert built.follows_of("land", {"bolt": "b7"}, held, self.OPS) is None
 
     def test_a_lost_card_is_followed_by_none_and_a_proposal_a_batch_and_a_record_follow_nothing(self):
-        lost = [dict(Act="card.post", Key="land/b7", By=self.CONDUCTOR, Card="req_l1"),
+        lost = [dict(Act="card.post", Key="land/b7", By=self.OPS, Card="req_l1"),
                 dict(Act="card.close", Card="req_l1", State="lost")]
-        assert built.follows_of("land", {"bolt": "b7"}, lost, self.CONDUCTOR) is None
+        assert built.follows_of("land", {"bolt": "b7"}, lost, self.OPS) is None
         assert [built.follows_of(k, {}, self.E, self.OPS) for k in ("proposal", "batch", "record")] == [None, None, None]
 
     def test_a_kits_landings_card_follows_its_last_only_once_answered_and_closed_with_rows_left(self):

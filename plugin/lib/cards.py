@@ -716,11 +716,11 @@ def landing_card(f):
         said.insert(0, "Left on your last send.")
     if "key" in f and f.get("unread") and not f.get("link"):
         said.insert(1, f"Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and "
-                       f"{f.get('conductor') or 'its conductor'} starts it with crew card session land/{f['bolt']}; this card "
+                       f"main-level ops starts it with crew card session land/{f['bolt']}; this card "
                        "then carries its link.")
     defect = ("A note naming a defect holds the landing: crew withdraws this card, and raises it again, following this "
               "one, once the bolt is green again." if "key" not in f else
-              f"A note naming a defect in {f['bolt']} goes to {f.get('conductor') or 'its conductor'}, and holds it on "
+              f"A note naming a defect in {f['bolt']} goes to main-level ops, and holds it on "
               "this card with no box until its fix merges.")
     unread = (f"The reading could not be opened on the tailnet: {f['unread']}\n\n"
               if "key" in f and f.get("unread") and not f.get("link") else "")
@@ -815,7 +815,7 @@ def row_paragraph(n, r):
     lines.append(" ".join(said))
     links = ([f"[Read {r['bolt']}]({r['link']})"] if r.get("link") else
              [f"Its reading could not be opened: {r['unread']}; crew tries it again when the rail is read, and "
-              f"{r.get('conductor') or 'its conductor'} starts it with crew card session land/{r['bolt']}"] if r.get("unread") else [])
+              f"main-level ops starts it with crew card session land/{r['bolt']}"] if r.get("unread") else [])
     _, addresses = preview_said(r.get("preview"))
     links += [f"[Preview {label}]({url})" for label, url in addresses]
     if r.get("preview") and not addresses:

@@ -1913,7 +1913,7 @@ class TestTheLandingsPoint:
                                      [("a", [("proposal.md", "")]), ("b", [("proposal.md", "")])], "")[0][1]
         assert cover.startswith("# Bolt y, landing on switchboard-kit's main\n\nWhat lands, at its head def5678:\n\n- a\n- b\n- c (chore)\n")
         assert "This reading lands nothing: approving the landing card is the word to land" in cover
-        assert "reaches the bolt's conductor as notes on the landing card, and a note naming a defect holds the landing for a fix" in cover
+        assert "reaches main-level ops as notes on the landing card, and a note naming a defect holds the landing for a fix" in cover
 
     def test_a_landings_reading_is_written_into_its_heads_folder_from_the_kit_at_the_head(self, monkeypatch, tmp_path):
         """card-sessions "A bolt of two units and a chore": each unit's change read at the head, and the diff from where
