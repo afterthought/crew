@@ -5460,10 +5460,12 @@ def op_unit_split(ctx, a):
 
 
 def op_unit_amend(ctx, a):
-    """A unit's intent replaced. One that has a worktree has a change written for the old intent, so it is marked
-    amended, proposal/<n> inside an approval and intent when the user runs it; one of a started bolt reaches its place
-    by the write's own requests (amend_place), its construct run again with the amendment's words. Merged work is not
-    amended, and a chore never is (plan.11)."""
+    """A unit's intent replaced. One of a started bolt reaches its place by the write's own requests (amend_place):
+    one whose place is launched has a change written for the old intent, so its construct is run again with the
+    amendment's words and it is marked amended, proposal/<n> inside an approval and intent when the user runs it
+    (bolt-plan "A unit's intent is amended through crew, its construct run again"); one whose launch is held or
+    unanswered has no place yet, and is launched anew carrying the amendment, unmarked. Merged work is not amended, and
+    a chore never is (plan.11)."""
     label, plan = the_work(ctx, a)
     s = ctx.stage(label, plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(
@@ -5471,15 +5473,13 @@ def op_unit_amend(ctx, a):
         + ", so it is not amended: a defect in it is a fix, and new work is a new unit")
     s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
     bolt = plan.unit(a.unit).get("Bolt")
-    mark = (f"proposal/{ctx.n}" if not ctx.direct else "intent") if s["worktree"] else None
+    mark = f"proposal/{ctx.n}" if not ctx.direct else "intent"
 
     def change(w):
         u = w.of(a)
         u.set("Intent", a.intent)
-        if mark:
+        if crossed_bolt(w.plan, u.get("Bolt")) and amend_place(ctx.fleet, w, u, mark) == "retry":
             u.set("Amended", mark)
-        if crossed_bolt(w.plan, u.get("Bolt")):
-            amend_place(ctx.fleet, w, u, "intent" if ctx.direct else f"proposal/{ctx.n}")
         return [bolt] if bolt else []
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"])
 
@@ -5489,8 +5489,8 @@ def amend_place(fleet, w, u, by):
     (Decision 7 of teams-cross-to-flume-as-their-bolts-land, runner.amending), u already holding its new intent: once
     its place is launched, a retry of its construct with the amendment's words, as a construct run again on today's
     path is prompted (again_words), by the user or by proposal <n> with the planner's case; while its launch is held or
-    unanswered, that launch dropped and the unit launched anew carrying the amendment (reach_places). Refused when the
-    runner's records can't tell which, or its place has merged."""
+    unanswered, that launch dropped and the unit launched anew carrying the amendment (reach_places). Returns which,
+    "retry" or "again". Refused when the runner's records can't tell which, or its place has merged."""
     requests, work = requests_of(w).recs("Request"), runner.work_of(u)
     launch = runner.launch_of(requests, work)
     n = runner.number(launch.get("Request")) if launch is not None else None
@@ -5500,10 +5500,11 @@ def amend_place(fleet, w, u, by):
     not why or fail(why)
     if how == "again":
         reach_places(fleet, w, u.get("Bolt"), again={work})
-        return
+        return how
     case = next((p.get("Case") for p in Plan(w.text("proposals.rec") or "").recs("Proposal")
                  if by == f"proposal/{p.get('Proposal')}"), None) if by.startswith("proposal/") else None
     request(w, "retry", work, Of=launch.get("Request"), Stage="construct", Words=runner.brief(u) + again_words(by, case))
+    return "retry"
 
 
 def op_unit_order(ctx, a):

@@ -35,10 +35,6 @@ class TestAmend:
     def test_a_queued_units_intent_is_replaced_and_nothing_else(self):
         assert amend("later", "ready") == ("Done another way.", None)
 
-    def test_a_unit_with_a_worktree_is_marked_by_whoever_amends_it(self):
-        assert amend("coding", "code") == ("Done another way.", "intent")
-        assert amend("coding", "verify", n=4) == ("Done another way.", "proposal/4")
-
     @pytest.mark.parametrize("stage, said", [("merged", "has merged into its bolt"), ("landed", "has landed on main")])
     def test_merged_work_is_not_amended(self, stage, said):
         with pytest.raises(plan.Refusal, match=f"unit coding {said}, so it is not amended: a defect in it is a fix, and new work is a new unit"):
@@ -107,22 +103,25 @@ class TestCrossed:
         return w, [{f: v for f, v in r.fields if f not in ("Date", "By")} for r in rs]
 
     def test_a_unit_in_code_is_a_retry_of_its_construct_with_the_amendments_words(self):
-        """The user approves an amendment of a, whose place on crw-4's runner is in code."""
+        """The user approves an amendment of a, whose place on crw-4's runner is in code: bolt-plan "A unit's intent is
+        amended through crew", scenario A unit in code, the unit marked amended."""
         w, new = self.amend(self.reading("launched", "code"))
         assert new == [{"Request": "3", "Act": "retry", "Work": "unit/a", "Of": "1", "Stage": "construct",
                         "Words": "Build a another way. Sources: README.md. This unit's intent was amended by the user; revise the "
                                  "existing change to it."}]
-        assert (w.plan.unit("a").get("Intent"), w.plan.unit("a").get("Amended")) == ("Build a another way.", None)
+        assert (w.plan.unit("a").get("Intent"), w.plan.unit("a").get("Amended")) == ("Build a another way.", "intent")
 
     def test_by_proposal_the_words_carry_the_planners_case(self):
         proposals = plan.PROPOSALS + "\nProposal: 4\nState: open\nDo: unit amend a \"Build a another way.\"\nCase: The rail reads it.\n"
-        _, new = self.amend(self.reading("launched", "code"), n=4, proposals=proposals)
+        w, new = self.amend(self.reading("launched", "code"), n=4, proposals=proposals)
+        assert w.plan.unit("a").get("Amended") == "proposal/4"
         assert new[0]["Words"].endswith("This unit's intent was amended by proposal 4; revise the existing change to it. "
                                         "The planner's case, as the user approved it: The rail reads it.")
 
     @pytest.mark.parametrize("outcome", ["held", "refused", None])
     def test_a_unit_not_yet_launched_is_dropped_and_launched_anew_and_its_dependent_with_it(self, outcome):
-        _, new = self.amend(self.reading(outcome))
+        w, new = self.amend(self.reading(outcome))
+        assert w.plan.unit("a").get("Amended") is None  # no place yet: launched anew carrying the amendment
         assert [(r["Request"], r["Act"], r["Work"], r.get("Of"), r.get("After"), r.get("Brief")) for r in new] == [
             ("3", "drop", "unit/a", "1", None, None), ("4", "drop", "unit/b", "2", None, None),
             ("5", "launch", "unit/a", None, None, "Build a another way. Sources: README.md."),
