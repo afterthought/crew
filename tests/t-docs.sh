@@ -50,7 +50,7 @@ for gone in "unit run" "unit wait" "unit free" "chore run" "chore wait" "chore f
   for doc in usage readme skill; do lacks "${!doc}" "$gone"; done
 done
 for gone in "unit run a code" "unit wait a" "chore free c"; do expect_fail "invalid choice" crew $gone; done
-expect_fail "crew: run bolt teams of agents in herdr" crew needs "what it needs"
+expect_fail "crew: each partition's plan of bolts, its main level of agents in herdr" crew needs "what it needs"
 ok "none of the removed commands or roles is in the README, the skill or the usage, a team command among them, crew drives no stage and waits on none, crew send names a partition alone, and each names crew review"
 
 for doc in usage readme skill; do has "${!doc}" "crew ops offer <env>"; has "${!doc}" "[--notes <file>] [--steps <file>]"; done
@@ -107,6 +107,20 @@ for doc in usage readme skill; do
     "<team|label>"; do lacks "${!doc}" "$gone"; done
 done
 ok "the README, the skill and the usage say the teams file is version 5 and lists no team, an older one refused, that crew runs no team's agents, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
+
+# The README, the skill and the usage keep no team section, roles row or run-record act of the old path (Task 8.3 of
+# the-team-machinery-leaves): the README's roles are the five main-level definitions, the acts an older crew wrote are
+# entries from before, and the usage opens on the plan and the main level.
+for gone in "## Teams" "Bolt teams of" "conductor.md" "construct.md" "coder.md" "verify.md" "dispatcher.md" "| ops, team and main level" \
+  "such as \`unit.add\`, \`bolt.give\`" "\`team.up\` or" "on the host of the team holding" "on the team's host" "sent to their teams"; do
+  lacks "$readme" "$gone"
+done
+for want in "## Bolts" "| main-level ops | \`main-ops.md\` |" "\`bolt.start\`" "in entries from before, acts crew writes no more" \
+  "in entries from before, \`team/<team>\`"; do has "$readme" "$want"; done
+for gone in "**A team**" "of the team holding" "on the team's host" "its team's fix"; do lacks "$skill" "$gone"; done
+for doc in usage readme skill; do lacks "${!doc}" "bolt teams"; done
+has "$(head -1 <<<"$usage")" "crew: each partition's plan of bolts, its main level of agents in herdr, and its bolts' work in Flume."
+ok "the README, the skill and the usage keep no team section, roles row or old run-record act as current, and the usage opens on the plan and the main level"
 
 for doc in usage readme skill; do
   for want in "runs as its kind" "every role stands" "asks.rec" "roles.rec" "crew-<role>--<label>" "end --report <path>" \

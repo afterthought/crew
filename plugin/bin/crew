@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# crew: run bolt teams of agents in herdr, and each partition's main level. Partitions are data in
-# ~/.config/crew/teams.json, version 5, which lists no team: crew refuses a file at any other version,
-# version 2, 3 or 4 among them, or one that lists teams, naming swancloud's lib/crew-teams.nix.
+# crew: each partition's plan of bolts, its main level of agents in herdr, and its bolts' work in Flume.
+# Partitions are data in ~/.config/crew/teams.json, version 5, which lists no team: crew refuses a file at
+# any other version, version 2, 3 or 4 among them, or one that lists teams, naming swancloud's lib/crew-teams.nix.
 # crew runs no team's conductor, ops or slot: a started bolt's work runs in Flume places on the host whose runner's
 # configuration names its kit's repository, which crew bolts shows. crew starts no stage and waits on none: a stage's
 # start and end are Flume's, and crew bolts reads them from the runner's records. Each partition names its flume, an
@@ -33,7 +33,7 @@
 #                                      (<bolt>--<name>)
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
-# repository, with requests.rec, crew's requests of each host's runner for a team's work, appended in the
+# repository, with requests.rec, crew's requests of the partition's runners for a started bolt's work, appended in the
 # commit of the plan write that occasions them, and for a role's run's work that lands; asks.rec, each ask of a role
 # that runs as its kind and each turn of its runs; and roles.rec, each such role's record, which its runner launches
 # its run from; each runner answers on <label>/runner/<host> of the same repository, which crew fetches with
