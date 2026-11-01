@@ -18,7 +18,7 @@
 # test_cards.py, test_review.py); each step here checks a command's wiring once.
 # Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-team_world
+bolt_world
 box=chuck-herdr-alpha
 bk=$(kit $box willdan breadboard-kit) ak=$(kit mac-studio willdan atlas-kit)
 kit $box willdan atlas-kit >/dev/null  # wldn's main level's checkout of it, where a start makes m1's branch

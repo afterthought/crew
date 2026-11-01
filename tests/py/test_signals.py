@@ -219,7 +219,7 @@ class TestShortId:
 
 class TestRefused:
     FLEET = {"partitions": {"wldn": {"label": "wldn", "blueprints": ["WilldanGroup/willdan-blueprints"], "state": "WilldanGroup/crew-state"}},
-             "teams": {}, "hosts": {}}
+             "hosts": {}}
 
     def test_a_signal_in_neither_home_is_refused_naming_both(self):
         with pytest.raises(Refusal, match="^no signal x/01-y on wldn/main of WilldanGroup/crew-state or on main of WilldanGroup/willdan-blueprints"):
@@ -326,7 +326,7 @@ class TestCaptureAsk:
 
     def fleet(self, design):
         return {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "blueprints": ["afterthought/blueprints"], "roles": {},
-                                           "flume": dict(dict.fromkeys(crew.KIND_ROLES, False), design=design)}}, "teams": {}, "hosts": {}}
+                                           "flume": dict(dict.fromkeys(crew.KIND_ROLES, False), design=design)}}, "hosts": {}}
 
     @pytest.fixture
     def w(self, monkeypatch):

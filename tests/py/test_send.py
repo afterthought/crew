@@ -9,8 +9,7 @@ import facts
 import record
 
 FLEET = {**facts.FLEET, "partitions": {**facts.FLEET["partitions"],
-                                       "swancloud": {"label": "swancloud", "machine": "mac-studio"}},
-         "teams": {**facts.FLEET["teams"], "crw-5": {"name": "crw-5", "label": "swancloud", "machine": "mac-studio"}}}
+                                       "swancloud": {"label": "swancloud", "machine": "mac-studio"}}}
 
 
 class TestDoor:

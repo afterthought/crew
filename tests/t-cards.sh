@@ -39,7 +39,7 @@
 # does, test_rail.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-team_world
+bolt_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
 stub=$(home_of $box)/.stub-pendingyou

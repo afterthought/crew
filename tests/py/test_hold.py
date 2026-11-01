@@ -96,7 +96,7 @@ class TestKindEnd:
     (hold.update_here), and crew _renew ends it once idle, its pane left and nothing started, never on a held host
     (hold.kind_end). That the Stop hook hands it over and crew _renew ends it through herdr is the hold journey's
     (t-hold)."""
-    FLEET = {"teams": {}, "partitions": {"madswan": {"label": "madswan", "machine": "mac-studio", "teams": [],
+    FLEET = {"partitions": {"madswan": {"label": "madswan", "machine": "mac-studio",
                                                      "flume": dict({r: False for r in crew.KIND_ROLES}, planner="madswan-main", reviewer="madswan-main")}}}
 
     def test_a_main_level_agent_whose_role_runs_as_its_kind_is_due_an_end_and_one_that_stands_is_not(self):
@@ -163,9 +163,7 @@ class TestStanding:
         assert crew.standing_role(FLEET, name) == role
 
     def test_the_agents_on_a_host_are_its_main_levels(self, monkeypatch):
-        fleet = {"teams": {"crw-4": {"machine": "deneb", "label": "swancloud"}, "pay-1": {"machine": "deneb", "label": "madswan"}},
-                 "partitions": {"swancloud": {"machine": "deneb", "teams": ["crw-4"]},
-                                "madswan": {"machine": "mac-studio", "teams": ["pay-1"]}}}
+        fleet = {"partitions": {"swancloud": {"machine": "deneb"}, "madswan": {"machine": "mac-studio"}}}
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
         assert crew.agents_here(fleet) == ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"]
         assert crew.agents_here(fleet, "madswan") == []
@@ -385,8 +383,7 @@ class Lingering:
 
 class TestHosts:
     def test_all_is_every_main_levels_host_and_one_named_must_be_a_host(self):
-        fleet = {"teams": {"a": {"machine": "deneb"}, "b": {"machine": "box"}},
-                 "partitions": {"l": {"machine": "mac-studio"}, "m": {"machine": "deneb"}},
+        fleet = {"partitions": {"l": {"machine": "mac-studio"}, "m": {"machine": "deneb"}},
                  "hosts": {"deneb": {}, "box": {}, "mac-studio": {}, "macbook-pro": {}}}
         assert hold.hosts_named(fleet, "--all") == ["deneb", "mac-studio"]
         assert hold.hosts_named(fleet, "macbook-pro") == ["macbook-pro"]

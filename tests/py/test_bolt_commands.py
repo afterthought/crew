@@ -397,10 +397,10 @@ class TestWhereABoltIsRead:
     def test_a_started_bolt_whose_policy_crew_cant_read_is_unknown(self, monkeypatch):
         """bolt-plan "A policy crew can't read": nothing is read from the host's bolt/b in its place, so the bolt's state is
         unknown; its pieces read their stages from the runner's records, landed once main holds them."""
-        from facts import crew_read, crossed_fleet_read, launched, ran
+        from facts import crew_read, launched, madswan_fleet, ran
         monkeypatch.setenv("CREW_AGENT", "madswan-planner")
         why = ".config/sluice.toml at origin/bolt/b is not TOML, so crew can't read bolt b: Expected ']'"
-        fleet = crossed_fleet_read()
+        fleet = madswan_fleet()
         p, requests = launched(["b"], work=[("a", "b", [], "unit", []), ("done", "b", [], "unit", [])], fleet=fleet)
         unread = {"exists": False, "head": None, "head_at": None, "verdict": None, "error": why}
         st = plan.Stages(fleet, p, crew_read(main=["done"], bolts={"b": unread}), runs={"madswan": (requests, ran({1: "code", 2: "landed"}))},
@@ -414,9 +414,7 @@ class TestWhenABoltIsFetched:
     """bolt-plan "A bolt on GitHub is fetched where a decision rests on it" (plan.18, plan.19, design Decision 3): crew
     bolts asks each kit's GitHub fetched first; every other read fetches nothing. b is started, its work running on box,
     where the runner that took it reported the kit in /kit/main (plan.bolt_at)."""
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "teams": ["swb-1"]}},
-             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "flume": "wldn",
-                                 "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio"}}}
     KIT_READ = {"ok": True, "main": [], "chores": [], "places": {}, "chore_places": {}, "fixes": [],
                 "bolts": {"b": {"exists": True, "at": "origin/bolt/b", "changes": [], "archived": [], "open": {}, "chores": [],
                                 "head": "d" * 40, "head_at": "2026-10-23T09:00:00Z", "verdict": ""}}}
@@ -487,10 +485,10 @@ class TestCrewBoltsCrossed:
         monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
 
     def data(self, runners, bolt=None):
-        from facts import crew_read, crossed_fleet_read, launched
-        fleet = crossed_fleet_read(**{"crw-5": "madswan"})
+        from facts import crew_read, launched, madswan_fleet
+        fleet = madswan_fleet()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("y1", "y", [], "unit", [])],
-                               fleet=fleet, held=[("y", "crw-5")])
+                               fleet=fleet, planned=["y"])
         return plan.bolts_data(fleet, ["madswan"], [("madswan", "afterthought/crew-state", "abcdef1" + "0" * 33, p)],
                                crew_read(bolts={"x": {}, "y": {}}), {}, bolt, runs={"madswan": (requests, runners)})
 

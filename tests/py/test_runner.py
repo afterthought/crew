@@ -11,7 +11,7 @@ import pathlib
 import pytest
 
 from crew import Refusal
-from facts import FactsWrite, crossed_fleet, flume_plan
+from facts import FactsWrite, flume_plan, madswan_fleet
 import plan
 import runner
 
@@ -419,7 +419,7 @@ def test_a_place_over_as_done_or_in_a_phase_crew_does_not_read_is_unknown_saying
 class TestPriorities:
     """A launch's priority is its bolt's place among the plan's started bolts, counted from the end, and a write that
     launches or reorders bolts sends each priority the plan's order changed (Decision 6)."""
-    FLEET = crossed_fleet()
+    FLEET = madswan_fleet()
 
     @staticmethod
     def write(*bolts):

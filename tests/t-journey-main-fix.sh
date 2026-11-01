@@ -4,9 +4,9 @@
 # of Flume's fix kind on main in the kit's repository, its submission held and main-level ops its recipient, and starts
 # no agent. The refusals where no runner answers, the drop and the role table are logic cases
 # (tests/py/test_main_fix.py).
-# Reads: plugin/roles/ tests/teams.sh
+# Reads: plugin/roles/ tests/journeys.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-. "$TESTS/teams.sh"
+. "$TESTS/journeys.sh"
 
 # runner_writes <file>...: wldn/runner/$box on the state repository as the runner on the box writes it, and crew
 # never does, holding each file named from its text in <file>_rec.

@@ -51,7 +51,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 ## 7. The teams file holds partitions only
 
 - [x] 7.1 crew reads `teams.json` version 5, partitions only, each with its `flume`, refuses version 2, 3, 4 or any other naming swancloud's `lib/crew-teams.nix`, and refuses a partition role it has no definition for, `dispatcher` among them (design Decision 2; Task notes 7.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams` ends with "0 failed".
-- [ ] 7.2 The end-to-end world and the logic facts write and read the new file and plans with no team (Task notes 7.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams t-roles t-docs t-briefs t-journey-state` ends with "0 failed".
+- [x] 7.2 The end-to-end world and the logic facts write and read the new file and plans with no team (Task notes 7.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-teams t-roles t-docs t-briefs t-journey-state` ends with "0 failed".
 
 ## 8. The briefs
 

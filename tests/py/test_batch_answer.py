@@ -12,8 +12,7 @@ import transcript
 
 import plan
 
-FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "deneb", "teams": ["crw-1"]}},
-         "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "deneb"}}, "hosts": {}}
+FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "deneb"}}, "hosts": {}}
 WORDS = "Batch 13 is fine, approve it"
 
 

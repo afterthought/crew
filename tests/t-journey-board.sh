@@ -20,7 +20,7 @@
 # Reads: tests/stubs-sites/ plugin/lib/board.py plugin/lib/sites.py plugin/lib/page.py plugin/lib/page.html plugin/lib/fleet.html
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 export PATH="$TESTS/stubs-sites:$PATH"
-team_world
+bolt_world
 box=chuck-herdr-alpha
 ak=$(kit mac-studio willdan atlas-kit)
 kit $box willdan atlas-kit >/dev/null  # wldn's main level's checkout of it, where crew acts on it before a runner takes its work

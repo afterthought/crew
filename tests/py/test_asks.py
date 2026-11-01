@@ -270,7 +270,7 @@ class TestWaitsOn:
         assert [w[1] for w in asks.waits_on("madswan/planner", reqs, places)] == ["3", "12"]
 
 
-MADSWAN = {"partitions": {"madswan": madswan(planner="madswan-main")}, "teams": {}, "hosts": {}}
+MADSWAN = {"partitions": {"madswan": madswan(planner="madswan-main")}, "hosts": {}}
 
 
 @pytest.fixture
@@ -461,7 +461,7 @@ def in_run(monkeypatch, tmp_path):
     import crew
     import plan
     import record
-    fleet = {"partitions": {"madswan": madswan(planner="madswan-main")}, "teams": {}, "hosts": {}}
+    fleet = {"partitions": {"madswan": madswan(planner="madswan-main")}, "hosts": {}}
     monkeypatch.setenv("FLUME_PLACE", "/home/u/.local/state/flume/places/crew-planner--madswan")
     b = on_branch(monkeypatch, fleet, {"asks.rec": TAKEN})
     monkeypatch.setattr(crew, "brief", lambda fleet, scope, role, self_name="": f"the {role} brief of {scope} for {self_name}")
@@ -483,7 +483,7 @@ def end(b, report, words):
 
 
 def fleet_of(p):
-    return {"partitions": {"madswan": p}, "teams": {}, "hosts": {}}
+    return {"partitions": {"madswan": p}, "hosts": {}}
 
 
 def roles_held(p):
@@ -772,7 +772,7 @@ def opening(monkeypatch):
     standing: madswan's branch in memory and deneb's runner as a case sets it (reads)."""
     import getpass
     import plan
-    fleet = {"partitions": {"madswan": madswan(design="madswan-main", planner="madswan-main")}, "teams": {}, "hosts": {}}
+    fleet = {"partitions": {"madswan": madswan(design="madswan-main", planner="madswan-main")}, "hosts": {}}
     b = on_branch(monkeypatch, fleet, {})
     monkeypatch.delenv("CREW_LABEL", raising=False)
     monkeypatch.setattr(getpass, "getuser", lambda: "chuck")

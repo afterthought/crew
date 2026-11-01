@@ -140,7 +140,7 @@ class TestRecordSources:
 class TestRestsOnAccepted:
     """A proposal's new work and the records it rests on (plan.record_items, plan.unaccepted): each named record not
     accepted on its main refuses the proposal with one line naming the work, the record and what main holds."""
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio"}}, "teams": {},
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio"}},
              "hosts": {"mac-studio": keeping("/w", "WilldanGroup/switchboard-kit")}}
     REPO = "WilldanGroup/switchboard-kit"
     FILE = "docs/adr/0033-a-record.md"

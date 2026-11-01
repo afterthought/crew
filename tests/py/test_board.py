@@ -20,17 +20,17 @@ import plan
 
 BOX = "chuck-herdr-alpha"
 KIT = {"name": "switchboard-kit", "main": "/kit/main", "dir": "/kit"}
-FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "teams": ["swb-1", "swb-2", "brd-1", "atl-1"],
+FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio",
                                  "blueprints": ["WilldanGroup/willdan-blueprints"], "state": "WilldanGroup/crew-state"}},
-         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "flume": "wldn", "kit": KIT},
-                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": BOX, "flume": "wldn", "kit": KIT},
-                   "brd-1": {"name": "brd-1", "label": "wldn", "machine": BOX, "flume": "wldn",
-                             "kit": {"name": "breadboard-kit", "main": "/b/main", "dir": "/b"}},
-                   "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio", "flume": "wldn",
-                             "kit": {"name": "atlas-kit", "main": "/a/main", "dir": "/a"}}},
          "hosts": {BOX: {"kind": "nixos", "ssh": BOX},
                    "mac-studio": {"kind": "darwin", "ssh": "mac-studio",
                                   "sessions": {"wldn": {"dir": "/m", "repos": ["WilldanGroup/breadboard-kit", "WilldanGroup/switchboard-kit"]}}}}}
+# Where work runs, as the runner that took it reported (plan.bolt_at), for a survey of the kits it runs in: two pieces
+# of work in switchboard-kit and one in breadboard-kit on the box, and one in atlas-kit on mac-studio.
+WHERE = {"a": {"label": "wldn", "machine": BOX, "stream": "wldn", "kit": KIT},
+         "b": {"label": "wldn", "machine": BOX, "stream": "wldn", "kit": KIT},
+         "c": {"label": "wldn", "machine": BOX, "stream": "wldn", "kit": {"name": "breadboard-kit", "main": "/b/main", "dir": "/b"}},
+         "d": {"label": "wldn", "machine": "mac-studio", "stream": "wldn", "kit": {"name": "atlas-kit", "main": "/a/main", "dir": "/a"}}}
 NOW = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
 
 
@@ -444,10 +444,9 @@ class TestRefresh:
     the views and the stamps, so what is asked is what the case shows."""
 
     FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan", "state": "o/state", "blueprints": ["o/bp"],
-                                     "machine": "mac-studio", "teams": ["swb-1"], "flume": {r: False for r in crew.KIND_ROLES}},
+                                     "machine": "mac-studio", "flume": {r: False for r in crew.KIND_ROLES}},
                             "swancloud": {"label": "swancloud", "partition": "personal", "state": "o/state", "blueprints": ["o/bp"],
-                                          "machine": "mac-studio", "teams": [], "flume": {r: False for r in crew.KIND_ROLES}}},
-             "teams": {"swb-1": {"machine": BOX}},
+                                          "machine": "mac-studio", "flume": {r: False for r in crew.KIND_ROLES}}},
              "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
 
     @pytest.fixture
@@ -1179,7 +1178,7 @@ class TestKept:
             asked.append((host, sorted(k["main"] for k in req["kits"]), req.get("stamped")))
             return {k["main"]: {"ok": True, "stamp": "new"} for k in req["kits"]}, None
         monkeypatch.setattr(plan, "gathered", gathered)
-        held = [(FLEET["teams"][t], None) for t in FLEET["partitions"]["wldn"]["teams"]]
+        held = [(w, None) for w in WHERE.values()]
         k = plan.Kept()
         monkeypatch.setattr(plan.READ, "follower", k)
         first = plan.survey(FLEET, held, board=True)
@@ -1199,7 +1198,7 @@ class TestKept:
         k = plan.Kept()
         k.queued = {(BOX, "/kit/main"): [[{"id": 41, "branch": "bolt/te"}], None]}
         monkeypatch.setattr(plan.READ, "follower", k)
-        plan.survey(FLEET, [(FLEET["teams"]["swb-1"], "te")], board=True)
+        plan.survey(FLEET, [(WHERE["a"], "te")], board=True)
         assert [x.get("queued") for x in asked[0]["kits"]] == [[[{"id": 41, "branch": "bolt/te"}], None]]
         assert "queued" not in k.used[BOX]["/kit/main"][0], "the kit was kept by a request that names its queue"
 
@@ -1208,14 +1207,14 @@ class TestKept:
                             ({k["main"]: {"ok": True, "stamp": "s"} for k in req["kits"]}, None))
         k = plan.Kept()
         monkeypatch.setattr(plan.READ, "follower", k)
-        sv = plan.survey(FLEET, [(FLEET["teams"][t], None) for t in FLEET["partitions"]["wldn"]["teams"]], board=True)
+        sv = plan.survey(FLEET, [(w, None) for w in WHERE.values()], board=True)
         assert sv[BOX] == {"ok": False, "error": "ssh: connect timed out"}
         assert {m: a for m, (_, a) in k.used[BOX].items()} == {"/kit/main": None, "/b/main": None}
 
     def test_a_survey_of_any_other_command_is_served_nothing_the_follower_kept(self, monkeypatch):
         asked = []
         monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: asked.append(host) or ({k["main"]: {"ok": True} for k in req["kits"]}, None))
-        plan.survey(FLEET, [(FLEET["teams"]["swb-1"], None)], board=True)
+        plan.survey(FLEET, [(WHERE["a"], None)], board=True)
         assert asked == [BOX] and plan.READ.follower is None
 
     def test_a_state_file_at_a_tip_already_listed_is_its_kept_blob_and_starts_no_git(self, monkeypatch):
@@ -1817,11 +1816,11 @@ class TestStarted:
     def data(self, runners, extra=(), kit=None, bolts=None):
         """The board of madswan, its runner as given and extra requests appended to those the start wrote; kit what deneb's
         read of crew holds beside, and bolts each bolt's facts there."""
-        from facts import crew_read, crossed_fleet_read, launched
-        fleet = crossed_fleet_read(**{"crw-5": "madswan"})
+        from facts import crew_read, launched, madswan_fleet
+        fleet = madswan_fleet()
         fleet["partitions"]["madswan"].update(machine="deneb", blueprints=["afterthought/blueprints"], state="afterthought/crew-state")
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("y1", "y", [], "unit", [])],
-                               fleet=fleet, held=[("y", "crw-5")])
+                               fleet=fleet, planned=["y"])
         runs = {"madswan": (requests + [plan.Rec("Request", list(f.items())) for f in extra], runners)}
         found, sv = [("madswan", "afterthought/crew-state", "tip0", p)], crew_read(bolts=bolts or {"x": {}, "y": {}})
         sv["deneb"]["kits"]["/crew/main"].update(kit or {})

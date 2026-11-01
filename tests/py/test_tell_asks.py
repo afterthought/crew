@@ -10,8 +10,7 @@ import record
 
 FALSE = dict.fromkeys(crew.KIND_ROLES, False)
 FLEET = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "roles": {}, "flume": dict(FALSE, planner="madswan-main", operator="madswan-main")},
-                        "wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "roles": {}, "flume": FALSE}},
-         "teams": {"swc-3": {"name": "swc-3", "label": "madswan", "machine": "deneb", "session": "madswan-2"}}, "hosts": {}}
+                        "wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "roles": {}, "flume": FALSE}}, "hosts": {}}
 
 
 class TestAsksInstead:

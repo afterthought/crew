@@ -1,6 +1,6 @@
-# The teams journey's world, which each of its parts sources after lib.sh: a team world whose kit's GitHub another
-# clone pushes to, wldn's blueprints on mac-studio and atl-1's kit there; and the helpers the parts read it with.
-team_world
+# The journeys' world, which each sources after lib.sh: a bolt world whose kit's GitHub another clone pushes to,
+# wldn's blueprints on mac-studio and atlas-kit there; and the helpers the journeys read it with.
+bolt_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
 clone WilldanGroup/willdan-blueprints "$(space mac-studio willdan)/willdan-blueprints/main"

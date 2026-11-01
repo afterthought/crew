@@ -9,9 +9,9 @@
 # on it. Two bolts more of the kit are started beside it (Decision 14 of the-team-machinery-leaves). The launches,
 # what an answer retries, a fix's launch and drop and the refusals' words are logic cases (tests/py/test_cross.py,
 # tests/py/test_fix.py).
-# Reads: plugin/hooks/ plugin/roles/ tests/teams.sh
+# Reads: plugin/hooks/ plugin/roles/ tests/journeys.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-. "$TESTS/teams.sh"
+. "$TESTS/journeys.sh"
 
 crew bolt new next "What comes next." --repo switchboard-kit >/dev/null
 

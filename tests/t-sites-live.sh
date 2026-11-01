@@ -12,7 +12,7 @@ stop() { pkill -f "http.server [0-9]* --bind 127.0.0.1 --directory $T" 2>/dev/nu
 trap stop EXIT
 timeout 30 portless proxy start --port "$PORTLESS_PORT" --no-tls </dev/null >/dev/null 2>&1 || fail "the test's proxy did not start"
 
-team_world
+bolt_world
 ak=$(kit mac-studio willdan atlas-kit)
 git -C "$ak" remote add origin https://github.com/WilldanGroup/atlas-kit.git
 export CREW_LABEL=wldn

@@ -2,7 +2,7 @@
 whose stage crew cannot tell (read.1); and a started bolt's work, its stage read from the runner's records: plan.Stages."""
 import pytest
 
-from facts import FactsWrite, apply, crew_read, crossed_fleet_read, known, plan_text
+from facts import FactsWrite, apply, crew_read, known, madswan_fleet, plan_text
 
 import plan
 import runner
@@ -59,7 +59,7 @@ class TestCrossed:
     Flume's status has it" (Decision 8 of teams-cross-to-flume-as-their-bolts-land): plan.Stages answers runner.stage_of
     for each unit and chore of a bolt marked Path: flume, from the runner that took its launch, never reading a place in
     the kit, and reads the kit where that runner reported it (the user's ruling of 2026-11-01)."""
-    FLEET = crossed_fleet_read()
+    FLEET = madswan_fleet()
 
     @pytest.fixture(autouse=True)
     def writer(self, monkeypatch):

@@ -5,7 +5,7 @@ bolt's landing while it is in flight (runner.fixes_in_flight). That the command 
 agent is the crossed path's journey's (t-journey-cross)."""
 import pytest
 
-from facts import FactsWrite, crossed_fleet, flume_plan, ran
+from facts import FactsWrite, flume_plan, madswan_fleet, ran
 
 import plan
 import runner
@@ -15,7 +15,7 @@ class TestAFixOfAStartedBolt:
     @pytest.fixture(autouse=True)
     def planner(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "madswan-planner")
-        self.FLEET = crossed_fleet()
+        self.FLEET = madswan_fleet()
 
     def bolt(self, runners=None, work=("a",)):
         """x, started, its units launched in crew's repository as the start launches them."""

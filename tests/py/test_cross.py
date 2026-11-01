@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from facts import crossed_fleet, flume_plan
+from facts import flume_plan, madswan_fleet
 import plan
 import runner
 
@@ -19,7 +19,7 @@ def team(flume, name="crw-4"):
 
 # ------------------------------------------------------------------------------------- a crossed team's bolt launched
 
-FLEET = crossed_fleet()
+FLEET = madswan_fleet()
 
 
 def unit(name, bolt="x", after=(), kind="unit", sources=()):

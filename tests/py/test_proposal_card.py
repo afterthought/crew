@@ -292,9 +292,7 @@ def test_a_reading_opened_after_the_card_was_raised_changes_the_planners_card_to
 # proposal 538 was approved at 9b8c8c1 and its card closed, and the sweep, on a read from before, posted it again 15 s
 # after (signal 2026-10-23-swancloud-planner-727dc1ea/01).
 SWEPT_FLEET = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], state="WilldanGroup/crew-state",
-                                                   checkout="/w/willdan-blueprints/main", blueprints=["WilldanGroup/willdan-blueprints"])},
-                   teams={n: dict(t, kit=dict(t["kit"], main=f"/w/{t['kit']['name']}/main", dir=f"/w/{t['kit']['name']}"))
-                          for n, t in FLEET["teams"].items()})
+                                                   checkout="/w/willdan-blueprints/main", blueprints=["WilldanGroup/willdan-blueprints"])})
 TODAY = "2026-10-23"
 
 

@@ -94,7 +94,7 @@ def test_a_tell_herdr_refused_to_type_says_why_in_crews_words():
 
 
 def test_an_agent_crew_starts_none_by_that_name_is_refused():
-    fleet = {"teams": {}, "partitions": {"wldn": {"label": "wldn", "machine": BOX, "session": "wldn-3"}}}
+    fleet = {"partitions": {"wldn": {"label": "wldn", "machine": BOX, "session": "wldn-3"}}}
     assert crew.place_of_agent(fleet, "wldn-planner") == (BOX, "wldn-3")
     with pytest.raises(crew.Refusal, match="no agent somebody: crew starts none by that name"):
         crew.place_of_agent(fleet, "somebody")
@@ -111,7 +111,7 @@ class TestAReviewerThatRunsAsItsKind:
     def fleet(self, **flume):
         return {"partitions": {"wldn": {"label": "wldn", "machine": BOX, "blueprints": ["WilldanGroup/willdan-blueprints"], "roles": {},
                                         "flume": dict(dict.fromkeys(crew.KIND_ROLES, False), **flume)}},
-                "teams": {}, "hosts": {}}
+                "hosts": {}}
 
     def test_the_batches_a_turn_took_are_its_batch_asks_in_the_order_taken(self):
         held = [{"Id": "1", "Role": "reviewer", "What": "batch", "Names": "batch/21"}, {"Id": "2", "Role": "reviewer", "What": "tell"},

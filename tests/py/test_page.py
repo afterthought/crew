@@ -169,8 +169,8 @@ class TestFile:
 class TestMade:
     """lineage-page, "A host was asleep": the page is drawn from the branch's entries alone, a Mac that wrote some of
     them and does not answer among them, and names a host only for its kits."""
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "state": "WilldanGroup/crew-state", "teams": []}},
-             "teams": {}, "hosts": {"mac-studio": {"kind": "darwin"}, "macbook-pro": {"kind": "darwin"}}}
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "state": "WilldanGroup/crew-state"}},
+             "hosts": {"mac-studio": {"kind": "darwin"}, "macbook-pro": {"kind": "darwin"}}}
 
     def made(self, monkeypatch, capsys, kits):
         import argparse
@@ -225,9 +225,9 @@ class TestSitesOfAStartedBolt:
 
     def listed(self, monkeypatch):
         import crew
-        from facts import crew_read, crossed_fleet_read, flume_plan
-        fleet = dict(crossed_fleet_read(), hosts={"deneb": {"kind": "nixos"}})
-        p = plan.Plan(flume_plan([("x", "crw-4", "flume")], [("a", "x", [], "unit", [])]))
+        from facts import CREW_AT, crew_read, flume_plan, madswan_fleet
+        fleet = dict(madswan_fleet(), hosts={"deneb": {"kind": "nixos"}})
+        p = plan.Plan(flume_plan([("x", True, "flume")], [("a", "x", [], "unit", [])]))
         sv = crew_read(bolts={"x": {}})
         k = sv["deneb"]["kits"]["/crew/main"]
         k.update(places={"a": {"path": "/crew/places/unit-a"}}, sites={"/crew/places/unit-a": {"here": "https://unit-a--crew.local"}},
@@ -238,7 +238,7 @@ class TestSitesOfAStartedBolt:
         # x's work taken by deneb's runner, which reported crew in /crew/main (plan.known_at); madswan's hosts its main
         # level's and its runners' (plan.partition_hosts)
         monkeypatch.setattr(plan, "rail_runs", lambda found: {"madswan": ([], {})})
-        monkeypatch.setattr(plan, "known_at", lambda fleet, label, b, run=None: dict(fleet["teams"]["crw-4"], label=label))
+        monkeypatch.setattr(plan, "known_at", lambda fleet, label, b, run=None: dict(CREW_AT, label=label))
         monkeypatch.setattr(plan, "partition_hosts", lambda fleet, label, fetch=True: ["deneb"])
         return sites.sites(fleet, ["madswan"])
 

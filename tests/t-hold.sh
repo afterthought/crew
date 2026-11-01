@@ -8,9 +8,9 @@
 # ended at its turn's end, never started again.
 # What makes an agent due, what keeps a host from being quiet, when a due agent may be restarted and what the bands
 # say are logic cases (tests/py/test_hold.py).
-# Reads: plugin/hooks/ plugin/lib/board.py plugin/lib/hold.py plugin/lib/ops.py tests/teams.sh
+# Reads: plugin/hooks/ plugin/lib/board.py plugin/lib/hold.py plugin/lib/ops.py tests/journeys.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-. "$TESTS/teams.sh"
+. "$TESTS/journeys.sh"
 
 # wldn's main level runs on the box, in its session wldn-3; mains says which of its agents herdr holds there.
 here="wldn-design,wldn-operator,wldn-ops,wldn-planner"

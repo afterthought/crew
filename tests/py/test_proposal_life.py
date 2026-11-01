@@ -342,10 +342,8 @@ class TestWhichAct:
         assert plan.proposal_act("approve", 4, mine=False, outcome="x") is None
 
 
-CARDED = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], teams=["swb-1"], state="WilldanGroup/crew-state",
-                                              checkout="/w/willdan-blueprints/main", blueprints=["WilldanGroup/willdan-blueprints"])},
-              teams={"swb-1": dict(FLEET["teams"]["swb-1"], kit={"name": KIT, "repo": f"WilldanGroup/{KIT}", "dir": f"/w/{KIT}",
-                                                                 "main": f"/w/{KIT}/main"})})
+CARDED = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], state="WilldanGroup/crew-state",
+                                              checkout="/w/willdan-blueprints/main", blueprints=["WilldanGroup/willdan-blueprints"])})
 
 
 class TestRaise:

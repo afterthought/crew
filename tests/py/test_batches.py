@@ -529,8 +529,8 @@ class TestCrossed:
     def stages(self, at, archived=("a",)):
         """x, started, holding a and b after a, launched as requests 1 and 2, each at the flume fixture at names on
         deneb's runner; crew's kit as read on deneb, bolt x holding archived's changes archived."""
-        from facts import crew_read, crossed_fleet_read, launched, ran
-        fleet = crossed_fleet_read()
+        from facts import CREW_AT, crew_read, launched, madswan_fleet, ran
+        fleet = madswan_fleet()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", [])], fleet=fleet)
         return plan.Stages(fleet, p, crew_read(bolts={"x": {"archived": list(archived)}}), runs={"madswan": (requests, ran(at))},
                            label="madswan")
@@ -574,8 +574,8 @@ class TestCrossed:
             f"--name-only {self.LANDED} <folder>/` and read each with `git -C /crew/main show {self.LANDED}:<path>`")
 
     def test_its_batch_reading_opens_the_change_at_that_commit_with_no_place_of_crews(self, monkeypatch, tmp_path):
-        from facts import crew_read, crossed_fleet_read
-        t = crossed_fleet_read()["teams"]["crw-4"]
+        from facts import CREW_AT, crew_read, madswan_fleet
+        t = CREW_AT
         monkeypatch.setattr(plan, "survey", lambda fleet, held: crew_read(bolts={"x": {}}))
         monkeypatch.setattr(plan, "change_written", lambda main, ref, unit, into: f"{into} from {ref} of {unit} in {main}")
         monkeypatch.setattr(plan.subprocess, "run", lambda *a, **k: pytest.fail("main was read for a change the batch's commit holds"))

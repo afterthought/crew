@@ -16,24 +16,25 @@ import crew
 import plan
 
 KITS = ("crew", "swancloud")
-FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio", "teams": ["swc-1", "crw-1"]}},
-         "teams": {"swc-1": {"name": "swc-1", "label": "swancloud", "machine": "deneb", "flume": "swancloud",
-                             "kit": {"name": "swancloud", "repo": "afterthought/swancloud", "main": "/s/main", "dir": "/s"}},
-                   "crw-1": {"name": "crw-1", "label": "swancloud", "machine": "mac-studio", "flume": "swancloud",
-                             "kits": [{"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}],
-                             "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}}
+FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio"}}}
+# Where each kit's work runs, as the runner that took it reported (plan.bolt_at, plan.kit_at): swancloud's on deneb,
+# crew's on mac-studio, each in stream swancloud.
+WHERE = {"swancloud": {"machine": "deneb", "stream": "swancloud",
+                       "kit": {"name": "swancloud", "repo": "afterthought/swancloud", "main": "/s/main", "dir": "/s"}},
+         "crew": {"machine": "mac-studio", "stream": "swancloud",
+                  "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}
 
 
 @pytest.fixture(autouse=True)
 def kits(monkeypatch):
     """swancloud's kits as its plan and landings name them (plan.kits_read), with no branch read; and where each started
     bolt's and each kit's work runs as the runner that took it reported (plan.bolt_at, plan.kit_at), on the host and in
-    the folder FLEET gives each kit, with no runner read."""
+    the folder WHERE gives each kit, with no runner read."""
     monkeypatch.setattr(plan, "kits_read", lambda fleet, label: list(KITS))
 
     def kit_where(label, kit):
-        t = next((t for t in FLEET["teams"].values() if t["kit"]["name"] == (kit or "").split("/")[-1]), None)
-        return dict(t, label=label, stream=t["flume"]) if t else None
+        w = WHERE.get((kit or "").split("/")[-1])
+        return dict(w, label=label) if w else None
     monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
     monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: kit_where(label, b.get("Repo")) if plan.started(b) else None)
     monkeypatch.setattr(plan, "bolt_taken", lambda fleet, label, b, run=None: (kit_where(label, b.get("Repo")), None))
@@ -222,9 +223,9 @@ class TestCrossedTakesMain:
 
     def launched(self):
         """x, started, its unit a launched as a start launches it."""
-        from facts import FactsWrite, crossed_fleet, flume_plan
+        from facts import FactsWrite, flume_plan, madswan_fleet
         w = FactsWrite(flume_plan([("x", None, "flume")], [("a", "x", [], "unit", [])]), label="madswan")
-        plan.reach_places(crossed_fleet(), w, "x")
+        plan.reach_places(madswan_fleet(), w, "x")
         return w, "madswan"
 
     def test_a_landing_refused_for_a_conflict_launches_one_take_main_fix_with_sluices_words(self):
@@ -940,12 +941,12 @@ def test_with_no_card_open_a_sent_bolt_whose_head_crew_cant_read_is_named_and_le
 
 
 class TestLandReadingRead:
-    """crew card read land/<bolt>, main-level ops's on its team's host (card-sessions "The session's decision
+    """crew card read land/<bolt>, main-level ops's on the host its bolt's work runs on (card-sessions "The session's decision
     reaches the owner as the card's answer"): the reading's decision alone, its annotations as notes on the bolt's row,
     an approval as landing nothing, then set aside so crew card session starts it anew; the kit's card untouched."""
     S = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio:19432/y", "started": "2026-10-23T10:00:00Z"}
 
-    def read(self, monkeypatch, tmp_path, result=None, session=True, who="swancloud-ops", team="crw-1", key="land/y"):
+    def read(self, monkeypatch, tmp_path, result=None, session=True, who="swancloud-ops", kit="crew", key="land/y"):
         d = tmp_path / "swancloud" / key
         d.mkdir(parents=True, exist_ok=True)
         if session:
@@ -956,7 +957,7 @@ class TestLandReadingRead:
         monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", who))
         monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt), ("Repo", "crew")]),
-                                                                           FLEET["teams"].get(team)))
+                                                                           dict(WHERE[kit], label="swancloud") if kit else None))
         monkeypatch.setattr(cards, "host_entries", lambda record, label, host: [])
         monkeypatch.setattr(cards, "Bridge", lambda *a, **k: pytest.fail("the read of a bolt's reading reached Pending You"))
         plan.card_read(FLEET, argparse.Namespace(key=key, label=None, json=False, sub="read"))
@@ -989,7 +990,7 @@ class TestLandReadingRead:
         with pytest.raises(crew.Refusal, match="^land/y's reading is swancloud-ops's to read, not swancloud-planner's$"):
             self.read(monkeypatch, tmp_path, who="swancloud-planner")
         with pytest.raises(crew.Refusal, match="^bolt y is not started"):
-            self.read(monkeypatch, tmp_path, team=None)
+            self.read(monkeypatch, tmp_path, kit=None)
 
     def test_an_old_card_of_the_bolts_own_under_its_head_is_still_read_as_a_card(self, monkeypatch):
         monkeypatch.setattr(plan, "card_asker", lambda fleet, a: ("swancloud", "crw-1-conductor"))
@@ -1097,7 +1098,7 @@ MAIN = "e4f5a6b" + "0" * 33
 
 def row(bolt, head=H1, **more):
     return dict(bolt=bolt, box=True, facts=dict(dict(bolt=bolt, kit="crew", units=["a"], chores=[], batches={}, head=head, at=None,
-                                                     moved=0, pr=None, team="crw-1", conductor="crw-1-conductor", preview=None,
+                                                     moved=0, pr=None, preview=None,
                                                      link=f"http://mac-studio:19432/{bolt}"), **more))
 
 

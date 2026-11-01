@@ -18,10 +18,7 @@ import crew
 import plan
 
 BOX = "chuck-herdr-alpha"
-FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": BOX, "teams": ["swb-1", "swb-2"]}},
-         "teams": {t: {"name": t, "label": "wldn", "machine": BOX, "flume": "wldn",
-                       "kit": {"main": "/kit/main", "dir": "/kit", "name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit"}}
-                   for t in ("swb-1", "swb-2")},
+FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": BOX}},
          "hosts": {BOX: {"ssh": BOX, "home": "/h/box"}, "mac-studio": {"ssh": "mac-studio", "home": "/h/mac"}}}
 KIT = "switchboard-kit"
 NOW = START + datetime.timedelta(hours=4)
@@ -1702,8 +1699,8 @@ class TestCrossedLandings:
         monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
 
     def rows(self, at, extra=()):
-        from facts import crew_read, crossed_fleet_read, launched, ran
-        fleet = crossed_fleet_read()
+        from facts import crew_read, launched, madswan_fleet, ran
+        fleet = madswan_fleet()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("c", "x", [], "chore", [])],
                                fleet=fleet)
         runs = {"madswan": (requests + [plan.Rec("Request", list(f.items())) for f in extra], ran(at))}

@@ -7,7 +7,7 @@ import pathlib
 
 import pytest
 
-from facts import FLEET, FactsWrite, apply, crossed_fleet, flume_plan, known, plan_text
+from facts import FLEET, FactsWrite, apply, flume_plan, known, madswan_fleet, plan_text
 
 import plan
 
@@ -75,7 +75,7 @@ class TestCrossed:
     """An approved amendment of a unit of a bolt given through Flume reaches its place as the approval's own act
     (Decision 7 of teams-cross-to-flume-as-their-bolts-land): a retry of its construct with the amendment's words once
     its place is launched, else a drop of its launch and a launch anew carrying the amendment; no mark, no conductor."""
-    FLEET = crossed_fleet()
+    FLEET = madswan_fleet()
     FLUME = pathlib.Path(__file__).parent / "flume-0.3.6"
 
     @pytest.fixture(autouse=True)

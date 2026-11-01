@@ -9,7 +9,7 @@
 # case (tests/contract/test_git.py).
 # Reads: .config/sluice.toml
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-team_world
+bolt_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
 flume_world

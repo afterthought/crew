@@ -24,22 +24,14 @@ START = datetime.datetime(2026, 10, 12, 10, 0, 0, tzinfo=datetime.timezone.utc)
 BEFORE, AFTER = START - datetime.timedelta(minutes=1), START + datetime.timedelta(minutes=1)
 
 
-def owed(stage, name="a", slot="unit-1", obj="", start=START, team="swb-1"):
-    """A stage crew owes an end, as plan.Owed reads its line in the team's stages file; its start entry's id begins with
-    the start's second, or holds none when start is None."""
-    import plan
-    eid = (start.strftime("%Y%m%dT%H%M%SZ") + "-mac-studio-1-1") if start else "unreadable"
-    return plan.Owed({"name": team}, [slot, name, stage, eid, obj])
-
-
 def saved(name):
     """A report or proof file saved since the stage began, as newest_saved returns it."""
     return pathlib.Path("/reports") / name
 
 
 def plan_of(bolts=None, units=None):
-    """A plan.rec as plan.Plan reads it: bolts as {bolt: started or not}, a team's name read as started (Path: flume),
-    units as {unit: bolt or None}, in order."""
+    """A plan.rec as plan.Plan reads it: bolts as {bolt: started or not}, a started one marked Path: flume, units as
+    {unit: bolt or None}, in order."""
     import plan
     text = "%rec: Bolt\n\n" + "".join(f"Bolt: {b}\n" + ("Path: flume\n" if t else "") + "\n" for b, t in (bolts or {}).items())
     text += "%rec: Unit\n\n" + "".join(f"Unit: {u}\n" + (f"Bolt: {b}\n" if b else "") + "\n" for u, b in (units or {}).items())
@@ -58,7 +50,8 @@ def constructed(unit, sha, minutes=0):
 
 
 def reviewed(n, units, minutes=0):
-    """A run-record entry: batch n delivered, holding each (unit, team, sha)."""
+    """A run-record entry: batch n delivered, holding each (unit, its bolt, sha), as review.batch names it, or, in an entry
+    written before, its team (units_of_batch reads the middle name as written)."""
     return {"Act": "review.batch", "Batch": str(n), "Units": " ".join(f"{u}:{t}@{s}" for u, t, s in units), "At": at(minutes), "On": []}
 
 
@@ -81,15 +74,11 @@ def keeping(at, *repos):
     return {"sessions": {"main": {"dir": at, "repos": list(repos)}}}
 
 
-# Every role of a partition stands, as a teams file below version 4 reads (crew.load).
+# Every role of a partition stands, its flume false throughout.
 STANDING = {r: False for r in ("design", "planner", "reviewer", "ops", "operator")}
-# wldn's main level runs on mac-studio, whose spaces keep its kits in /w.
-FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}, "teams": ["swb-1", "swb-2"],
-                                 "flume": STANDING}},
-         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha", "flume": "wldn",
-                             "kit": {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit"}},
-                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": "chuck-herdr-alpha", "flume": "wldn",
-                             "kit": {"name": "breadboard-kit", "repo": "WilldanGroup/breadboard-kit"}}},
+# The teams file at version 5 as crew.load reads it, its partitions alone: wldn's main level runs on mac-studio, whose
+# spaces keep its kits in /w.
+FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}, "flume": STANDING}},
          "hosts": {"mac-studio": keeping("/w", "WilldanGroup/atlas-kit", "WilldanGroup/breadboard-kit", "WilldanGroup/switchboard-kit")}}
 
 
@@ -104,9 +93,8 @@ def kits_of(found):
 
 
 def plan_text(bolts=(), units=()):
-    """plan.rec text with its descriptors: bolts as (name, repo, started), a team's name read as started (Path:
-    flume), units as (name, repo, bolt or None,
-    [after...]), in order, a fifth "chore" making it a chore, whose words are "Chore <name>."."""
+    """plan.rec text with its descriptors: bolts as (name, repo, started), a started one marked Path: flume, units as
+    (name, repo, bolt or None, [after...]), in order, a fifth "chore" making it a chore, whose words are "Chore <name>."."""
     text = "%rec: Bolt\n%key: Bolt\n\n" + "".join(
         f"Bolt: {b}\nRepo: {r}\nGoal: Goal of {b}.\n" + ("Path: flume\n" if t else "") + "\n" for b, r, t in bolts)
     text += "%rec: Unit\n%key: Unit\n\n" + "".join(
@@ -191,23 +179,15 @@ def units_of(w, bolt=None, repo=None):
 CREW_KIT = {"name": "crew", "repo": "afterthought/crew"}
 
 
-def crossed_fleet(**settings):
-    """The fleet of madswan's teams on deneb building crew (afterthought/crew), each with its Flume setting: crw-4
-    crossed in stream madswan unless given otherwise, crw-5 on today's path."""
-    settings = dict({"crw-4": "madswan", "crw-5": False}, **settings)
-    return {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "teams": sorted(settings)}}, "hosts": {},
-            "teams": {n: {"name": n, "flume": f, "label": "madswan", "machine": "deneb", "kit": CREW_KIT, "kits": [CREW_KIT]}
-                      for n, f in settings.items()}}
+def madswan_fleet():
+    """madswan's fleet as crew.load reads it, its main level on deneb, whose runner takes crew's work (afterthought/crew)
+    in stream madswan, as ran reports it."""
+    return {"partitions": {"madswan": {"label": "madswan", "machine": "deneb"}}, "hosts": {}}
 
 
-def crossed_fleet_read(**settings):
-    """madswan's fleet (crossed_fleet), crew's kit with its main checkout on deneb, so a kit read there (crew_read) can
-    say what main and a bolt hold."""
-    fleet = crossed_fleet(**settings)
-    for t in fleet["teams"].values():
-        t["kit"] = dict(CREW_KIT, main="/crew/main", dir="/crew")
-        t["kits"] = [t["kit"]]
-    return fleet
+# Where madswan's started bolts of crew run, as plan.bolt_at gives it from the runner's report (ran): deneb, stream
+# madswan, crew's folder there, which a kit read there (crew_read) says what main and a bolt hold of.
+CREW_AT = {"label": "madswan", "machine": "deneb", "stream": "madswan", "kit": dict(CREW_KIT, main="/crew/main", dir="/crew")}
 
 
 def crew_read(main=(), chores=(), bolts=None):
@@ -221,9 +201,9 @@ def crew_read(main=(), chores=(), bolts=None):
 
 
 def flume_plan(bolts=(), work=()):
-    """madswan's plan.rec text, every bolt and piece of work in crew: bolts as (name, started, Path or None), a team's
-    name read as Path: flume, work as
-    (name, bolt or None, [after], kind, [sources]), kind "chore" or "unit", each in order and intended `Build <name>.`."""
+    """madswan's plan.rec text, every bolt and piece of work in crew: bolts as (name, started, Path or None), a started
+    one marked Path: flume, work as (name, bolt or None, [after], kind, [sources]), kind "chore" or "unit", each in
+    order and intended `Build <name>.`."""
     out = "%rec: Bolt\n%key: Bolt\n\n" + "".join(
         f"Bolt: {b}\nRepo: crew\nGoal: Goal of {b}.\n" + (f"Path: {p or 'flume'}\n" if p or t else "") + "\n"
         for b, t, p in bolts)
@@ -259,14 +239,14 @@ def ran(launched=None, held=(), host="deneb", label="madswan", repository="/crew
     return {host: runner.host_read(label, host, "5e1f0c2a" + "0" * 32, files, {})}
 
 
-def launched(bolts, work=(), team=None, fleet=None, held=()):
+def launched(bolts, work=(), fleet=None, planned=()):
     """madswan's plan (flume_plan) with each bolt in bolts started and its work launched as a start launches it
-    (plan.reach_places), and each of held, (bolt, a team), planned and not started: (the plan, requests.rec's records
-    as the writes leave them). The requests name their writer: set CREW_AGENT first."""
+    (plan.reach_places), and each bolt in planned planned and not started: (the plan, requests.rec's records as the
+    writes leave them). The requests name their writer: set CREW_AGENT first."""
     import plan
     import runner
-    fleet = fleet or crossed_fleet()
-    w = FactsWrite(flume_plan([(b, None, None) for b in [*bolts, *(b for b, _ in held)]], work), label="madswan")
+    fleet = fleet or madswan_fleet()
+    w = FactsWrite(flume_plan([(b, None, None) for b in [*bolts, *planned]], work), label="madswan")
     for b in bolts:
         w.plan.bolt(b).set("Path", "flume")
         plan.reach_places(fleet, w, b)

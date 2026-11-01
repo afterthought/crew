@@ -1,5 +1,5 @@
 # A partition's main level and its console through the crew command on the stubs (tests.11, record 0022), in the
-# teams journey's world (tests/teams.sh): crew main up starts the main level, its operator among it, and nothing else,
+# journeys' world (tests/journeys.sh): crew main up starts the main level, its operator among it, and nothing else,
 # no dispatcher on any host, each greeted once, one waiting on a question holding back no other; main status lists
 # them; a tell records its length and never its text; crew send reaches the partition named by its label's operator,
 # marked with whom it was for, and records its length, and a team's name from before teams left is refused; a word from the board, piped to crew tell --board as the board's
@@ -13,9 +13,9 @@
 # partition runs as its kind is started by none of them, its role record written and a standing agent of it left from
 # before ended, and main status says whether a run of it stands and what waits.
 # What each agent is greeted with, where it runs and whether a pane is dead are logic cases (tests/py/test_teams.py).
-# Reads: plugin/hooks/ plugin/lib/board.py plugin/roles/ tests/teams.sh
+# Reads: plugin/hooks/ plugin/lib/board.py plugin/roles/ tests/journeys.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-. "$TESTS/teams.sh"
+. "$TESTS/journeys.sh"
 
 # The main level, with the planner stopped on a question as it starts: the others are greeted meanwhile.
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"

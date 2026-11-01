@@ -17,7 +17,7 @@
 # The date, read once: the run's zone puts this moment at local noon, so every date crew takes in local time, a move's
 # among them, falls on this day however long the run takes, across the host's own midnight (read.1).
 read -r h today <<<"$(date -u '+%H %F')"; export TZ=NOON$(printf %+d $((10#$h - 12)))
-team_world
+bolt_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
 blueprints_refs=$(git --git-dir "$wb" for-each-ref)

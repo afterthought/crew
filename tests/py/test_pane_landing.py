@@ -56,11 +56,12 @@ class TestTheWordToLand:
 
 class Plan:
     def bolt(self, name):
-        return {"Bolt": name, "Team": "crw-5", "Repo": "crew"}
+        return {"Bolt": name, "Repo": "crew"}
 
 
 OLD, NEW = "a" * 40, "b" * 40
-TEAM = {"name": "crw-5", "label": "swancloud", "machine": "deneb", "kit": {"name": "crew", "dir": "/k", "main": "/k/main", "repo": "o/crew"}}
+# Where a started bolt's work runs, as the runner that took it reported (plan.bolt_at).
+AT = {"label": "swancloud", "machine": "deneb", "stream": "swancloud", "kit": {"name": "crew", "dir": "/k", "main": "/k/main", "repo": "o/crew"}}
 BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\nSUBMISSION_OWN=\n"
 
 
@@ -76,7 +77,7 @@ def submit(monkeypatch, tmp_path):
     monkeypatch.setattr(plan, "CONTEXT", {})
     monkeypatch.setattr(plan, "locate", lambda fleet, kind, name, label: ("swancloud", "crew", "tip", Plan()))
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
-    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: TEAM)
+    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: AT)
     monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
     monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(
         "MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE)))
@@ -119,7 +120,7 @@ def submit(monkeypatch, tmp_path):
 
     def run(excerpt=None, bolts=("y",)):
         a = argparse.Namespace(bolt=list(bolts), label=None, excerpt=excerpt)
-        plan.bolt_submit({"teams": {}, "partitions": {}}, a)
+        plan.bolt_submit({"partitions": {}}, a)
         return got
     got["run"] = run
     return got
@@ -243,7 +244,7 @@ class TestTheWordsAtAClose:
 
     def test_a_reads_close_on_a_host_keeping_no_words_names_the_pane_and_the_time_and_reaches_no_other_host(
             self, monkeypatch, tmp_path, capsys):
-        P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Path": "flume", "Repo": "crew"}, "work_of": lambda s, b: [],
+        P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Repo": "crew"}, "work_of": lambda s, b: [],
                            "units": lambda s: [], "bolts": lambda s: []})
         at = "2026-10-28T09:41:00Z"
         entries = [dict(submitted(frm="session/s-1/u-7", at=at, host="mac-studio"), Outcome="queued", Submission="412", Chars=len(WORDS)),
@@ -251,7 +252,7 @@ class TestTheWordsAtAClose:
         tidied, wrote = [], []
         monkeypatch.setattr(plan, "locate", lambda *a: ("swancloud", None, None, P()))
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
-        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: TEAM)
+        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: AT)
         monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
         monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: BEFORE.replace(f"GITHUB={OLD}", f"GITHUB={NEW}"))
         monkeypatch.setattr(plan, "stages_for", lambda fleet, label, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
@@ -280,14 +281,14 @@ STOP = "Hold the phone bolt, don't land it yet"
 
 @pytest.fixture
 def leave(monkeypatch):
-    """crew bolt leave on stand-ins for what it reaches: the plan, ops's transcript, each bolt's row as its team's host
-    reads it (rows, a bolt with none reading unproven), this host's run record and the raise of the kit's card."""
-    got = {"emitted": [], "raised": [], "verdict": heard(), "teams": {"y": TEAM, "z": TEAM},
+    """crew bolt leave on stand-ins for what it reaches: the plan, ops's transcript, each bolt's row as the host its work
+    runs on reads it (rows, a bolt with none reading unproven), this host's run record and the raise of the kit's card."""
+    got = {"emitted": [], "raised": [], "verdict": heard(), "at": {"y": AT, "z": AT},
            "rows": {"y": dict(bolt="y", box=True, facts=dict(head=NEW)), "z": dict(bolt="z", box=True, facts=dict(head=OLD))}}
     monkeypatch.setattr(plan, "CONTEXT", {})
     monkeypatch.setattr(plan, "locate", lambda fleet, kind, name, label: ("swancloud", "crew", "tip", Plan()))
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
-    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: got["teams"].get(b["Bolt"]))
+    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: got["at"].get(b["Bolt"]))
     monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (
         (got["rows"][b["Bolt"]], None) if b["Bolt"] in got["rows"] else (None, "lands once its verification is green; now failed")))
     monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
@@ -296,7 +297,7 @@ def leave(monkeypatch):
     monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None, pane=None: got["raised"].append((label, kit, note)))
 
     def run(excerpt=STOP, bolts=("y",)):
-        plan.bolt_leave({"teams": {}, "partitions": {}}, argparse.Namespace(bolt=list(bolts), label=None, excerpt=excerpt))
+        plan.bolt_leave({"partitions": {}}, argparse.Namespace(bolt=list(bolts), label=None, excerpt=excerpt))
         return got
     got["run"] = run
     return got
@@ -338,10 +339,10 @@ class TestTheStop:
         assert leave["emitted"] == []
 
     def test_a_bolt_not_started_or_not_proven_has_no_landing_to_stop(self, leave):
-        leave["teams"].pop("z")
+        leave["at"].pop("z")
         with pytest.raises(plan.Refusal, match="bolt z is not started, so it has no landing to stop"):
             leave["run"](bolts=("y", "z"))
-        leave["teams"]["z"], leave["rows"] = TEAM, {"y": leave["rows"]["y"]}
+        leave["at"]["z"], leave["rows"] = AT, {"y": leave["rows"]["y"]}
         with pytest.raises(plan.Refusal, match="bolt z does not read proven, so it has no landing to stop: lands once its "
                                                "verification is green; now failed"):
             leave["run"](bolts=("y", "z"))

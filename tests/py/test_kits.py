@@ -77,7 +77,7 @@ class TestKeys:
             "card is land/atlas-kit")
 
     def test_an_area_is_made_for_a_kit_the_partition_names_and_none_other(self):
-        fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "teams": {}, "hosts": {}}
+        fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "hosts": {}}
         kits = ["agentplot/flywheel-web", "switchboard-kit"]
         refused = lambda key: plan.card_refusal(fleet, "wldn-ops", "wldn", "create_area", key, kits)
         assert refused("create-area:WilldanGroup/switchboard-kit") is None
@@ -111,7 +111,7 @@ class TestActsIn:
 # ------------------------------------------------------------------------------- where a kit's work runs
 
 TIP = "5e1f0c2a" + "0" * 32
-FLEET = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb"}}, "teams": {}, "hosts": {}}
+FLEET = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb"}}, "hosts": {}}
 
 
 def launch(n, work, base, repo="crew"):

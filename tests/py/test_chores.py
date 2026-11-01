@@ -5,7 +5,7 @@ import argparse
 
 import pytest
 
-from facts import FLEET, FactsWrite, apply, crew_read, crossed_fleet_read, known, launched, plan_text, ran, units_of
+from facts import FLEET, FactsWrite, apply, crew_read, known, launched, madswan_fleet, plan_text, ran, units_of
 
 import cards
 import plan
@@ -163,7 +163,7 @@ class TestStage:
     def test_a_bolt_lands_once_every_unit_and_chore_has(self):
         """Started bolt x of unit a and chore bump, both landed on x by the runner: active while crew's main holds a's change
         and not bump's trailer, landed once it holds both."""
-        fleet = crossed_fleet_read()
+        fleet = madswan_fleet()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("bump", "x", [], "chore", [])], fleet=fleet)
         runs = {"madswan": (requests, ran({1: "landed", 2: "landed"}))}
         st = plan.Stages(fleet, p, crew_read(main=["a"], bolts={"x": {}}), runs=runs, label="madswan")

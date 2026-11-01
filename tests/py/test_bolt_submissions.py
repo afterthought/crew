@@ -268,9 +268,7 @@ def test_a_standing_state_is_said_in_crews_words_and_sluices_own_for_one_crew_ha
 # ------------------------------------------------------------------------------------------------- crew bolts
 
 BOX = "chuck-herdr-alpha"
-FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": BOX, "teams": ["swb-1"]}},
-         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "flume": "wldn",
-                             "kit": {"main": "/kit/main", "dir": "/kit", "name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit"}}},
+FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": BOX}},
          "hosts": {BOX: {"ssh": BOX, "home": "/h/box"}}}
 
 

@@ -188,7 +188,7 @@ acts_since() { git --git-dir "${3:-$ws}" rev-list --count --invert-grep --grep='
 rewrite() { sed -e "$2" "$1" > "$1.new" && mv "$1.new" "$1"; }
 
 # kit <host> <space> <name>: a kit's main checkout at <space>/<name>/main, with OpenSpec set up and a sluice policy
-# naming the checks its bolt branches and main require, which a bolt is given only with (teams.5), and origin, GitHub,
+# naming the checks its bolt branches and main require, which a bolt is started only with (teams.5), and origin, GitHub,
 # for both (plan.19): its origin is a bare remote under the test's remotes, as https://github.com/<owner>/<name>, its
 # owner the one the hosts file's sessions name it under, its main pushed there. A kit already standing on its remote,
 # made again on another host, is cloned from it.
@@ -434,8 +434,9 @@ ago() { python3 -c 'import datetime, sys; t = datetime.datetime.now(datetime.tim
 
 # herdr_state <host> <session> <jq>: what the stub herdr holds there
 herdr_state() { jq -r "$3" "$(home_of "$1")/.stub-herdr/$2.json"; }
-# team_world: the box's switchboard-kit and willdan-blueprints checkouts, and the plan with swb-1 holding a bolt
-team_world() {
+# bolt_world: the box's switchboard-kit and willdan-blueprints checkouts, and wldn's flywheel started, its plan
+# empty, which a test's bolts and units fill as the planner's commands do
+bolt_world() {
   world
   wb=$(blueprints WilldanGroup/willdan-blueprints); ws=$(remote WilldanGroup/crew-state)
   k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")

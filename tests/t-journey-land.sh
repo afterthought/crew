@@ -51,7 +51,7 @@
 # git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the command's wiring once.
 # Reads: plugin/lib/board.py plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-team_world
+bolt_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
 flume_world

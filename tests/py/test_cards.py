@@ -29,17 +29,18 @@ cards = importlib.util.module_from_spec(importlib.util.spec_from_loader("cards_h
 _loader.exec_module(cards)
 
 KIT = {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}
-FLEET = {"partitions": {"wldn": dict(BASE["partitions"]["wldn"], teams=["swb-1", "swb-2", "atl-1"]),
-                        "madswan": {"label": "madswan", "machine": "mac-studio", "teams": ["apk-1"]}},
-         "teams": {"swb-1": dict(BASE["teams"]["swb-1"], kit=KIT), "swb-2": dict(BASE["teams"]["swb-2"], kit=KIT),
-                   "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio",
-                             "kit": {"name": "atlas-kit", "repo": "WilldanGroup/atlas-kit", "main": "/a/main", "dir": "/a"}},
-                   "brd-1": {"name": "brd-1", "label": "wldn", "machine": "chuck-herdr-alpha",
-                             "kit": {"name": "breadboard-kit", "repo": "WilldanGroup/breadboard-kit", "main": "/b/main", "dir": "/b"}},
-                   "apk-1": {"name": "apk-1", "label": "madswan", "machine": "mac-studio",
-                             "kit": {"name": "flywheel-next", "repo": "agentplot/flywheel-next", "main": "/f/main", "dir": "/f"}}},
+FLEET = {"partitions": {"wldn": BASE["partitions"]["wldn"], "madswan": {"label": "madswan", "machine": "mac-studio"}},
          "hosts": {"mac-studio": keeping("/w", "WilldanGroup/atlas-kit", "WilldanGroup/breadboard-kit", "WilldanGroup/switchboard-kit")}}
-FLEET["partitions"]["wldn"]["teams"].append("brd-1")
+# Where work ran, as the runner that took it reported (plan.bolt_at, plan.batch_unit_at), by the name a case gives it: a
+# bolt's, or the team a batch entry written before names in its place.
+WHERE = {"swb-1": {"label": "wldn", "machine": "chuck-herdr-alpha", "stream": "wldn", "kit": KIT},
+         "swb-2": {"label": "wldn", "machine": "chuck-herdr-alpha", "stream": "wldn", "kit": KIT},
+         "atl-1": {"label": "wldn", "machine": "mac-studio", "stream": "wldn",
+                   "kit": {"name": "atlas-kit", "repo": "WilldanGroup/atlas-kit", "main": "/a/main", "dir": "/a"}},
+         "brd-1": {"label": "wldn", "machine": "chuck-herdr-alpha", "stream": "wldn",
+                   "kit": {"name": "breadboard-kit", "repo": "WilldanGroup/breadboard-kit", "main": "/b/main", "dir": "/b"}},
+         "apk-1": {"label": "madswan", "machine": "mac-studio", "stream": "madswan",
+                   "kit": {"name": "flywheel-next", "repo": "agentplot/flywheel-next", "main": "/f/main", "dir": "/f"}}}
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +51,7 @@ def previews(monkeypatch, tmp_path):
 
 
 # Where the bolts BATCH_UNITS names ran their work, as a runner reported it (plan.batch_unit_at).
-BUILT = {"tenant-zones": FLEET["teams"]["swb-1"], "apex-zones": FLEET["teams"]["swb-2"]}
+BUILT = {"tenant-zones": WHERE["swb-1"], "apex-zones": WHERE["swb-2"]}
 # Each partition's kits as its plan and landings name them (plan.partition_kits), which an area's key is checked against.
 PARTITION_KITS = {"wldn": ["atlas-kit", "breadboard-kit", "switchboard-kit"], "madswan": ["flywheel-next"]}
 
@@ -63,7 +64,7 @@ def kits(monkeypatch):
     monkeypatch.setattr(plan, "kits_read", lambda fleet, label: list(PARTITION_KITS.get(label, [])))
 
     def unit_at(fleet, label, bolt, unit):
-        t = (BUILT.get(bolt) or FLEET["teams"].get(bolt)
+        t = (BUILT.get(bolt) or WHERE.get(bolt)
              or plan.fail(f"no runner has reported taking bolt {bolt}'s work yet, so crew can't tell where it runs"))
         return dict(t, label=label)
     monkeypatch.setattr(plan, "batch_unit_at", unit_at)
@@ -885,17 +886,17 @@ class TestLandingSession:
     reading is recorded"): its link printed, and the kit's landings card raised on the main machine with the new link's
     note when the session was started anew or the kit's card stands without a row's reading; the try recorded as
     card.reading in main-level ops's name when it started or refused; refused for a bolt that is no row that can land,
-    for land/<kit>, which has no reading of its own, and off its team's host."""
-    TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    for land/<kit>, which has no reading of its own, and off the host its bolt's work runs on."""
+    AT = dict(WHERE["swb-1"], machine="mac-studio")
     KIT_UNREAD = [{"Act": "card.post", "Key": "land/switchboard-kit", "By": "wldn-ops", "Card": "req_k1", "On": ["kit/switchboard-kit"],
                    "Unread": "b1: plannotator is not on this host's path", "At": "2026-10-12T10:00:00Z"}]
     LINK = "http://mac-studio.ts.swancloud.net:19432"
     DONE = dict(Act="card.reading", by="wldn-ops", Key="land/b1")
     ROW = dict(bolt="b1", box=True, facts=dict(LANDING, host="mac-studio", base="abc0000"))
 
-    def run(self, monkeypatch, acts, row=ROW, why=None, team=TEAM, key="land/b1", say=None):
+    def run(self, monkeypatch, acts, row=ROW, why=None, at=AT, key="land/b1", say=None):
         handed = []
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, team))
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, at))
         monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (None, why) if why else (row, None))
         monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((label, kit, note)))
         self.got = plan.land_session(FLEET, "wldn", key, acts, say=say)
@@ -958,10 +959,10 @@ class TestLandingSession:
             self.run(monkeypatch, acts, row=dict(self.ROW, box=False, why="held for a fix: x (fix/b1/gap)"))
         assert acts.sessions == []
 
-    def test_off_its_teams_host_it_is_refused_naming_that_host(self, monkeypatch):
+    def test_off_the_host_its_work_runs_on_it_is_refused_naming_that_host(self, monkeypatch):
         acts = ReadingActs()
         with pytest.raises(plan.Refusal, match="land/b1's reading session runs on chuck-herdr-alpha, the host its bolt's work runs on"):
-            self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
+            self.run(monkeypatch, acts, at=WHERE["swb-1"])
         assert acts.sessions == [] and acts.emitted == []
 
     def test_a_kits_landings_card_has_no_reading_of_its_own(self, monkeypatch):
@@ -1086,11 +1087,11 @@ class TestLandingPreview:
     kit's policy at the head is read (rail-cards "A landing row carries what brings its bolt's preview up", record
     0043), sluice asked for nothing there; a held row and a bolt that is no row end the reading and release the
     preview (land_row)."""
-    TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    AT = dict(WHERE["swb-1"], machine="mac-studio")
     PREVIEW = dict(head=LANDING["head"], name="preview/0123456789ab", state="starting", addresses={"web": "http://web.example"})
 
     def row(self, monkeypatch, acts, previewed, more=None, why=None):
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, self.TEAM))
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, self.AT))
         monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t, fixes_hold=True: (None, why) if why else (
             dict(LANDING, host="mac-studio", base="abc0000", **(more or {})), None))
         monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: previewed)
@@ -1145,7 +1146,7 @@ class TestLandingPreview:
         assert acts.ended == acts.releases == [("wldn", "land/b1")] and acts.sessions == []
 
     def test_off_its_host_a_row_is_refused_naming_it(self, monkeypatch):
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, FLEET["teams"]["swb-1"]))
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, WHERE["swb-1"]))
         with pytest.raises(plan.Refusal, match="bolt b1's row is read on chuck-herdr-alpha, where the runner that took its work runs"):
             plan.land_row(FLEET, "wldn", "b1", ReadingActs())
 
@@ -1154,7 +1155,7 @@ class TestLandingReading:
     """A row's read opens its reading itself, and tries once more when it refuses, as crew card session would
     (card-sessions "A landing's raise tries its reading again before raising without it"): the kit's main fetched on
     the team's host, the landing read afresh and its reading opened again with those facts."""
-    TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    AT = dict(WHERE["swb-1"], machine="mac-studio")
     LINK = "http://mac-studio.ts.swancloud.net:19432"
     SLOW = "plannotator did not list land/b1's session within 10 seconds, so crew ended it"
     ENDED = "plannotator ended before land/b1's session was ready: stub: refused to start"
@@ -1177,7 +1178,7 @@ class TestLandingReading:
             if fetched:
                 raise plan.Refusal(fetched)
             return 0, ""
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, self.TEAM))
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, self.AT))
         monkeypatch.setattr(plan, "land_facts", facts)
         monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (False, None))
         monkeypatch.setattr(plan.gather, "has_origin", lambda main: True)

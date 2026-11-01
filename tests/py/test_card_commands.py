@@ -935,7 +935,7 @@ class TestSessionEnd:
         sent = {"status": "answered", "turn": "agent", "version": 2, "answer": {"note": {"text": "Read."}}}
         acts = Acts({"get_request": (sent, None)}, [post("batch/3", "wldn-planner", "req_b3", On=["batch/3"])])
         acts.end = lambda label, key: plan.end_session(label, key)[0]
-        fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "teams": {}, "hosts": {}}
+        fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "hosts": {}}
         plan.batch_card_read(fleet, "wldn", "batch/3", "wldn-planner", acts=acts)
         assert [e["Act"] for e in acts.emitted] == ["card.close"]
         assert capsys.readouterr().out.splitlines() == [
@@ -1024,8 +1024,9 @@ def test_a_told_mark_goes_with_the_reading_it_marked_so_the_next_one_is_told_of_
 
 
 class TestSweptReading:
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "teams": ["swb-1"]}},
-             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha"}}, "hosts": {}}
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "hosts": {}}
+    # Where the bolt's work runs, as the runner that took it reported (plan.land_held).
+    AT = {"label": "wldn", "machine": "chuck-herdr-alpha", "stream": "wldn"}
 
     def sweep(self, monkeypatch, tmp_path, acts, key, result, live=None):
         import argparse
@@ -1035,7 +1036,7 @@ class TestSweptReading:
         (d / "result.json").write_text(json.dumps(result))
         monkeypatch.setattr(plan, "CARDS", tmp_path)
         monkeypatch.setattr(plan, "PREVIEWS", tmp_path / "previews")
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt)]), self.FLEET["teams"]["swb-1"]))
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt)]), self.AT))
         monkeypatch.setattr(plan.sys, "stdin", io.StringIO(json.dumps({"live": live or [key], "blind": []})))
         plan.card_sweep(self.FLEET, argparse.Namespace(key=None, unit=None, label="wldn"), acts)
         return d
@@ -1176,9 +1177,7 @@ class ReadSent:
     """crew card read land/crew as swancloud-ops on the partition's main machine, holding req_k1 under it, with the
     user's send (got) read from Pending You; the kit's card raised in its stead, the raise adding what it records (told)
     to this host's run record."""
-    FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio", "teams": ["crw-1"]}},
-             "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "mac-studio",
-                                 "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}}
+    FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio"}}}
 
     PLAN = "%rec: Bolt\n\nBolt: y\nRepo: crew\n\nBolt: z\nRepo: crew\n\n%rec: Unit\n\n"
 
@@ -1280,11 +1279,12 @@ import argparse  # noqa: E402
 import datetime  # noqa: E402
 import io  # noqa: E402
 
-from facts import reviewed  # noqa: E402
+from facts import reviewed# noqa: E402
 
 PKIT = {"name": "crew", "repo": "agentplot/crew", "main": "/crew/main", "dir": "/crew"}
-PFLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "deneb", "teams": ["crw-1"]}},
-          "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "deneb", "kit": PKIT}}, "hosts": {}}
+PFLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "deneb"}}, "hosts": {}}
+# Where crew's started bolts run, as the runner that took their work reported (plan.land_held, plan.batch_unit_at).
+PAT = {"label": "swancloud", "machine": "deneb", "stream": "swancloud", "kit": PKIT}
 PHEAD = "abc1234" + "0" * 33
 CARD = [post("land/crew", "swancloud-ops", "req_k1", Heads="y@abc1234 z@def5678 x@1234567")]
 DEMO = '{"name": "demo", "kind": "preview", "branch": "unit/a", "revision": "abc1234"}'
@@ -1326,10 +1326,10 @@ class TestCardPreview:
 
     @pytest.fixture(autouse=True)
     def held(self, monkeypatch):
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt)]), PFLEET["teams"]["crw-1"]))
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", bolt)]), PAT))
         monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: self.POLICY[head])
         # a batch's unit was built where the runner that took its bolt's work reported it (plan.batch_unit_at)
-        monkeypatch.setattr(plan, "batch_unit_at", lambda fleet, label, bolt, unit: PFLEET["teams"]["crw-1"])
+        monkeypatch.setattr(plan, "batch_unit_at", lambda fleet, label, bolt, unit: PAT)
 
     def test_the_owner_hands_a_rows_bolt_to_the_host_its_work_runs_on(self):
         """rail-cards "The user asks on the landings card"."""
@@ -1411,10 +1411,10 @@ class Sluice:
         monkeypatch.setattr(plan, "PREVIEWS", tmp_path / "previews")
         monkeypatch.setattr(plan, "MADE", tmp_path / "made")
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
-        monkeypatch.setattr(plan, "batch_unit_at", lambda fleet, label, bolt, unit: PFLEET["teams"]["crw-1"])
+        monkeypatch.setattr(plan, "batch_unit_at", lambda fleet, label, bolt, unit: PAT)
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [reviewed(7, [("a", "x", "aaa1")])])
         monkeypatch.setattr(plan, "reap_judged", lambda fleet, label, landings: self.reaped.append((label, landings)))
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: ("p", plan.Rec("Bolt", [("Bolt", bolt)]), PFLEET["teams"]["crw-1"]))
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: ("p", plan.Rec("Bolt", [("Bolt", bolt)]), PAT))
         monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: ({"box": True, "facts": {"head": PHEAD, "kit": "crew"}}, None))
         self.policy = (True, None)
         monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: self.policy)
