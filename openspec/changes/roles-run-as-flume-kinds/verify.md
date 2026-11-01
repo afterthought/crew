@@ -1,28 +1,8 @@
 # Verify: roles-run-as-flume-kinds
 
-Read 2026-10-31 on deneb, at `73552850` on `change/roles-run-as-flume-kinds`, cut from `bolt/crew-runs-its-work-through-flume` at `91bd81f7`.
+Read 2026-10-31 on deneb, at `0e0d6443` on `change/roles-run-as-flume-kinds`, cut from `bolt/crew-runs-its-work-through-flume` at `91bd81f7`, which has not moved since.
 
-**Outcome: not archived.** One scenario fails: role-runs "Role records follow the teams file", *The planner stands again*, when the role moved back is the last of its partition's roles that runs as its kind. `crew main up` then leaves its role record on the branch (finding 1). Every other requirement and scenario of the change's eight spec deltas is met and proved by a check in crew's tiers. Every task is ticked, and every check the tasks name passes. The change goes back to its code stage for finding 1.
-
-## Findings
-
-### 1. `crew main up` leaves the last role record of a role that stands again (fix)
-
-role-runs, "Role records follow the teams file": crew "SHALL remove the record of a role the teams file no longer runs as its kind", and *The planner stands again* has `crew main up madswan` leave `roles.rec` with no record of the planner once madswan's teams entry names the planner `false` again.
-
-`plan.py` `kinds_up` (13025) builds `kinds`, the roles the partition runs as its kind now, and at 13032 returns when there are none, before it reads `roles.rec` or calls `roles_lines`. So when the role moved back is the partition's only one running as its kind, nothing removes its record. That is the case the design's migration starts with: the reviewer moves first, alone, and moving it back leaves `crew-reviewer`'s record standing. Nothing else removes a record: an ask writes `roles.rec` only for the role it asks (`ask_rec`, `roles_lines(..., [role])`), and no ask is written for a role that stands.
-
-Reproduced in the logic tier's harness (`tests/py/test_asks.py` `on_branch`, `madswan`, `written`), as a scratch case not committed:
-
-- madswan's `roles.rec` holds the planner's record, as `roles_lines` wrote it while `flume` named `madswan-main` for the planner;
-- the fleet then names every role `false`;
-- `plan.kinds_up(stood, "madswan", [])` writes nothing, and `roles.rec` still holds `['planner']`.
-
-The same case with ops still running as its kind (`madswan(ops="madswan-ops")`) removes the planner's record and keeps ops's, as `test_roles_rec_follows_the_teams_file_and_a_branch_with_nothing_due_gets_none` shows for `roles_lines`. That test calls `roles_lines` directly, always with a role left running as its kind, and `t-journey-main` never moves a role back, so no check covers the failing case.
-
-What follows from the stale record: the runner keeps the role's record (R1, R2), so a run of it is launched whenever anything is pending for its address: an ask written before the move and never taken, or a place whose launch request names `<label>/<role>`. That run's `crew role start` refuses (`run_named`: the partition no longer runs the role as its kind), so the run stops short and holds its place until `flume retry`, beside the role's standing agent.
-
-The fix: `kinds_up` brings `roles.rec` to match the teams file whenever `asks.roles_due` finds anything due or gone, even with no role running as its kind, and returns early only before the standing-agent loop. The fix carries a case proving it: a logic case of `kinds_up` with the partition's last kind role moved back, or `t-journey-main` naming the planner and reviewer `false` again and reading `roles.rec` empty of both after `crew main up wldn`.
+**Outcome: the work holds.** Every requirement and scenario of the change's eight spec deltas is met and proved by a check in crew's tiers, every one of its 25 tasks is ticked, and every check the tasks name passes. The change is archived.
 
 ## Checks
 
@@ -32,11 +12,11 @@ The fix: `kinds_up` brings `roles.rec` to match the teams file whenever `asks.ro
 | `tests/suite --force logic contract mod t-roles t-journey-roles t-journey-signals t-journey-review t-journey-land t-cards t-journey-main t-hold t-session-hook t-briefs t-docs` (every task the tasks name) | 14 passed (0 replayed), 0 failed |
 | `tests/moon-tasks --check` | in step |
 | `openspec validate roles-run-as-flume-kinds --strict` | valid |
-| Scratch case of finding 1 (logic tier harness, not committed) | 1 failed (the last kind role moved back), 1 passed (the control, ops still running as its kind) |
+| `tests/py/test_asks.py` `TestMainUp` (task 10.4) against `plan.py` as it stood at `b779ceba`, before `kinds_up` read `roles.rec` with no role running as its kind | 2 failed (the last kind role moved back; a fetch refused, said), 1 passed (ops still running as its kind): the cases reproduce what they prove, and pass at `0e0d6443` |
 
 ## Tasks
 
-All 24 tasks, 1.1 to 13.2, are ticked, and the check each names passes. The tasks marked *needs teams-cross* (4.2, 5.4, 6.1, 11.1) rest on `teams-cross-to-flume-as-their-bolts-land`, which is on the bolt at `91bd81f7`: `runner.py`, `requests.rec`, `runner_facts` and the runner's branches are there. Task 10.1's check passes but does not cover finding 1.
+All 25 tasks, 1.1 to 13.2, are ticked, and the check each names passes. The tasks marked *needs teams-cross* (4.2, 5.4, 6.1, 11.1) rest on `teams-cross-to-flume-as-their-bolts-land`, which is on the bolt at `91bd81f7`: `runner.py`, `requests.rec`, `runner_facts` and the runner's branches are there.
 
 ## Requirements and scenarios
 
@@ -57,7 +37,7 @@ Each scenario is matched to the check that proves it.
 - A place that waits on a role is pending for the role: `test_asks.py` `TestWaitsOn` (*A stage asks the planner*, *A stage that delivers*), `test_a_place_that_waits_on_the_role_is_taken_and_a_runner_that_cant_be_read_is_said`.
 - A role's landed work is pending for the role (*A record lands*): `test_asks.py` `test_a_place_a_role_launched_is_pending_for_it_once_it_has_landed`.
 - A role record names its run (*The planner's record*): `test_asks.py` `test_the_planners_record_names_its_run`.
-- Role records follow the teams file: *The planner moves* is `t-journey-main` (`roles.rec` holding the planner's and the reviewer's records after `crew main up wldn`) and `test_roles_rec_follows_the_teams_file_and_a_branch_with_nothing_due_gets_none`; *An ask before main up* is `test_the_first_ask_starts_asks_rec_and_writes_its_roles_record_beside_it`; *The planner stands again* **fails** when the planner is the partition's last role running as its kind (finding 1), and holds while another still does.
+- Role records follow the teams file: *The planner moves* is `t-journey-main` (`roles.rec` holding the planner's and the reviewer's records after `crew main up wldn`) and `test_roles_rec_follows_the_teams_file_and_a_branch_with_nothing_due_gets_none`; *An ask before main up* is `test_the_first_ask_starts_asks_rec_and_writes_its_roles_record_beside_it`; *The planner stands again* is `test_asks.py` `TestMainUp` `test_a_role_that_stands_again_leaves_roles_rec_though_it_was_the_last_to_run_as_its_kind`, `plan.kinds_up` removing the planner's record in one commit both where it was the partition's last role running as its kind and where ops still runs as its kind, and `test_with_none_running_as_its_kind_no_record_no_branch_or_a_branch_unread_writes_nothing` for a branch with no record, no branch, and a fetch refused, which is said and removes nothing (`read.1`).
 - A role has at most one run, wanted while anything is pending: `test_asks.py` `TestPending` (*A burst*, *An ask during a run*, *Nothing pending*), `test_an_ask_written_after_the_start_waits_for_the_next_run`.
 - A run's start takes everything pending: `test_asks.py` `TestStart` (*Two asks waiting*, *Nothing waiting*, *Not a run*); `t-journey-roles`.
 - A run's start gives its brief and what it took (*What the planner's run reads*): `test_asks.py` `test_two_asks_waiting_are_one_turn_and_it_prints_the_brief_then_each_ask_then_the_cards`, `TestRunCards`.
@@ -92,5 +72,7 @@ Each scenario is matched to the check that proves it.
 **host-holds-and-updates**: `test_hold.py` (*The planner moves*: ended idle, its pane left, recorded; *An update after the move*: `crew update` passes it over; a held host ends nothing); `t-hold`, `t-session-hook`.
 
 ## Rules
+
+`crew main up` for a partition running no role as its kind now fetches its flywheel's branch to read `roles.rec`, writing nothing where no record is held, and saying a refused fetch and going on: today's path otherwise unchanged (`roles.8`), and no new reach, since the same up already writes its `main.up` entry to that branch (`read.5`).
 
 The design names each rule it departs from, with the user's settlement of 2026-10-31 as its reason, for the design agent to amend at the landing (`docs.5`, `docs.7`): `roles.7`, `roles.9`, `teams.6`, `teams.7`, `teams.11` and `code.5`. The change touches no page under `docs/architecture/` or `docs/adr/`.
