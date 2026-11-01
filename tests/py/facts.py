@@ -232,7 +232,7 @@ def ran(launched=None, held=(), host="deneb", label="madswan", repository="/crew
     """A host's runner as crew reads it from its branch (runner.host_read): each launch in launched, {request's number:
     the flume 0.3.6 status fixture its place stands at (tests/py/flume-0.3.6/<name>.json)}, answered launched and
     carried in places.rec at the fixture's own place, its repository given as repository, the kit's folder on host where
-    crew reads it (runner.where), and its stream the partition's label, as the runner's configuration gives it; and each
+    crew reads it (runner.where), and its stream the partition's label, as its host's Flume configuration maps it; and each
     in held answered held."""
     import json
     import plan

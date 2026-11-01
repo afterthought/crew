@@ -244,7 +244,7 @@ ok "ops's --done, on the user's words, releases the preview, and the card carrie
 # left that can land, is withdrawn naming the fix's words.
 : > "$CREW_TEST_LOG"
 expect_ok crew fix tenant-environments gap "The zone list misses one zone."
-has "$out" "fix tenant-environments--gap is launched on bolt/tenant-environments in switchboard-kit (request $(request_of fix/tenant-environments/gap)) for the runner whose configuration names it to take"
+has "$out" "fix tenant-environments--gap is launched on bolt/tenant-environments in switchboard-kit (request $(request_of fix/tenant-environments/gap)) for a runner whose configuration names it to take"
 has "$out" "card land/switchboard-kit: $card withdrawn"
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid"
 ended "$pid"; eq "$(listed)" ""

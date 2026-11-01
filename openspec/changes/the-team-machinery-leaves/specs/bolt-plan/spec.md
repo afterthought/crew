@@ -92,7 +92,7 @@ As main is read (plan.18), crew SHALL read a bolt on GitHub as the host last fet
 - **THEN** the kit's stages read `unknown`, naming that GitHub could not be fetched and git's words, and nothing is read from the host's `bolt/b`
 
 ### Requirement: A bolt's work starts by crew bolt start
-`crew bolt start <bolt>` SHALL make `bolt/<bolt>` through sluice from the kit's main, mark the bolt `Path: flume` and request a launch of each unit and chore of it in its repository, with its `After` and priority and naming no host or stream, for the runner whose configuration names the repository to take, in one plan write, starting no agent, and record `bolt.start`. A proposal MAY hold it; the user runs it directly; no other agent SHALL. It SHALL be refused, with the plan unchanged and no branch made, while the host it makes the branch on is held, or no runner answers for the partition.
+`crew bolt start <bolt>` SHALL make `bolt/<bolt>` through sluice from the kit's main, mark the bolt `Path: flume` and request a launch of each unit and chore of it in its repository, with its `After` and priority and naming no host or stream, for a runner whose configuration names the repository to take, in one plan write, starting no agent, and record `bolt.start`. A proposal MAY hold it; the user runs it directly; no other agent SHALL. It SHALL be refused, with the plan unchanged and no branch made, while the host it makes the branch on is held, or no runner answers for the partition.
 
 #### Scenario: A bolt is started
 - **WHEN** the user approves a proposal holding `crew bolt start b`, a bolt of switchboard-kit with two units, and a runner answers for wldn
@@ -107,7 +107,7 @@ As main is read (plan.18), crew SHALL read a bolt on GitHub as the host last fet
 - **THEN** it is refused, naming the planner and the user, and the plan is unchanged
 
 ### Requirement: A fix names its bolt, and a fix of main its kit alone
-`crew fix <bolt> <name> "<words>"` SHALL request a fix place on `bolt/<bolt>`, and `crew main fix <kit> <name> "<words>"` one on the kit's main, each in the kit's repository and naming no host or stream, for the runner whose configuration names it to take in the stream it gives. Neither SHALL take a team; `--drop` SHALL drop either's launch, and `crew fix` SHALL take no `--merge`, `--wait` or `--bolt`. A fix of main where no runner answers for the partition SHALL be refused, naming it.
+`crew fix <bolt> <name> "<words>"` SHALL request a fix place on `bolt/<bolt>`, and `crew main fix <kit> <name> "<words>"` one on the kit's main, each in the kit's repository and naming no host or stream, for a runner whose configuration names it to take, in the stream its host maps it to. Neither SHALL take a team; `--drop` SHALL drop either's launch, and `crew fix` SHALL take no `--merge`, `--wait` or `--bolt`. A fix of main where no runner answers for the partition SHALL be refused, naming it.
 
 #### Scenario: A fix on a bolt
 - **WHEN** wldn-planner runs `crew fix b zone-check "the zone check fails on tenants with no region"`

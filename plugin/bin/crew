@@ -10,7 +10,7 @@
 # as its kind, whose runs are launched by the host's runner while something is pending for it (crew role below); in
 # versions 2 and 3 every role stands.
 #
-# The runner whose configuration names a kit's repository takes its started bolts' work, in the stream it gives; a
+# A runner whose configuration names a kit's repository takes its started bolts' work, in the stream its host maps it to; a
 # bolt that is proven, every unit and chore merged and sluice green at its head, waits to land. A landing or a drop of a
 # bolt reads, on the host the runner that took its work reported, each
 # landing of the kit's bolts nothing recorded, and removes, let go by sluice and then through the kit's wt remove, each
@@ -19,7 +19,7 @@
 #   crew fix     <bolt> <name> "<what is wrong>" [--label L]
 #                                      the planner's or main-level ops's: a launch of a Flume fix place <bolt>--<name>
 #                                      on a started bolt, cut from bolt/<bolt>, appended to requests.rec in its
-#                                      kit's repository for the runner whose configuration names it, which Flume builds and
+#                                      kit's repository for a runner whose configuration names it, which Flume builds and
 #                                      submits to the bolt itself, telling the planner its end, and crew bolts shows its
 #                                      stage; refused for a bolt not started and a name in use on the bolt. A fix in
 #                                      flight holds the bolt's landing
@@ -55,7 +55,7 @@
 #                                      start, the user's or a proposal's, has sluice make bolt/<bolt> on GitHub from
 #                                      main (sluice branch create, on the host of a team of the partition building
 #                                      its kit), with no worktree, before the plan write, its work launched in its
-#                                      repository for the runner whose configuration names it; refused, nothing changed, in a
+#                                      repository for a runner whose configuration names it; refused, nothing changed, in a
 #                                      kit whose .config/sluice.toml on origin/main names no checks or no remote for
 #                                      its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
 #                                      words when it makes none; a branch

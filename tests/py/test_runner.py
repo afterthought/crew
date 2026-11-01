@@ -22,7 +22,7 @@ LAUNCH = dict(Repo="afterthought/crew", Kind="change", Base="bolt/b", Priority=2
 
 def rec(n, act, work="unit/a", **given):
     """A request as plan.request makes it, a launch carrying every field a launch needs unless given otherwise: a kit's
-    work names no host or stream, the runner whose configuration names its repository taking it (the user's ruling of
+    work names no host or stream, a runner whose configuration names its repository taking it (the user's ruling of
     2026-11-01)."""
     if act == "launch":
         given = dict(dict(LAUNCH, Name=work.split("/")[-1]), **given)
@@ -58,10 +58,10 @@ class TestRequests:
                               "Name, Base, Priority")
 
     def test_a_kits_launch_names_no_host_or_stream_and_a_roles_names_both(self):
-        """The runner whose configuration names a kit's repository takes its work in the stream it gives, and crew
-        names neither (the user's ruling of 2026-11-01); a role's work runs on its main level's host in its stream."""
-        kit = ("launch 1 of unit/a names a Host or a Stream: a kit's work is taken by the runner whose configuration names its "
-               "repository, in the stream that configuration gives, and crew names neither")
+        """A runner whose configuration names a kit's repository takes its work in the stream its host maps it to, and crew
+        names neither (settled with the user 2026-11-01); a role's work runs on its main level's host in its stream."""
+        kit = ("launch 1 of unit/a names a Host or a Stream: a kit's work is taken by a runner whose configuration names its "
+               "repository, in the stream its host's Flume configuration maps the repository to, and crew names neither")
         assert runner.request_refusal([], rec(1, "launch", Host="deneb")) == kit
         assert runner.request_refusal([], rec(1, "launch", Stream="madswan")) == kit
         role = dict(Repo="afterthought/blueprints", Kind="chore", Base="main", Intent="madswan-design", Recipient="madswan/design")

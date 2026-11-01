@@ -305,7 +305,7 @@ part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }
 # that Flume stream, or to stand (record 0047 move 6)
 role_stream() { local s="'$3'"; [[ $3 == false ]] && s=False; edit teams "$(part "$1")['flume']['$2'] = $s"; }
 
-# The Flume world: every bolt's work runs in Flume places, taken by the runner whose configuration names its
+# The Flume world: every bolt's work runs in Flume places, taken by a runner whose configuration names its
 # repository (the user's ruling of 2026-11-01; Decision 1 of the-team-machinery-leaves).
 # flume_world: each team in the teams file naming its partition's label as the stream its work runs in, a runner
 # serving wldn on each host, its own branch wldn/runner/<host> on wldn's state repository, and the box's runner keeping
@@ -315,9 +315,9 @@ flume_world() {
   [ -n "${k:-}" ] && keeps chuck-herdr-alpha switchboard-kit "$k"
   runner_writes chuck-herdr-alpha; runner_writes mac-studio
 }
-# keeps <host> <kit> <folder> [<stream>]: the runner on <host> keeps <kit> in <folder>, its work in <stream> (wldn by
-# default), as its configuration names them: the repository and stream Flume's status of each place it takes of the kit
-# names, which runner_writes gives a status naming none
+# keeps <host> <kit> <folder> [<stream>]: the runner on <host> keeps <kit> in <folder>, as its configuration names them,
+# and the host's Flume configuration maps the kit to <stream> (wldn by default): the repository and stream Flume's status
+# of each place it takes of the kit names, which runner_writes gives a status naming none
 keeps() {
   local d=$T/runner/$1; mkdir -p "$d"
   python3 -c 'import json, os, sys
@@ -327,8 +327,8 @@ kept[sys.argv[2]] = [sys.argv[3], sys.argv[4]]; json.dump(kept, open(f, "w"))' "
 # runner_writes <host> [<request> <place> <status JSON>]...: wldn/runner/<host> on the state repository as that host's
 # runner writes it, and crew never does: its runner.rec, and each request named answered launched at its place with
 # Flume's status of the place as the runner carried it, beside those an earlier call named, a status naming no
-# repository or stream given the folder and stream the runner keeps the request's kit in (keeps), as Flume's status
-# names them
+# repository or stream given the folder the runner keeps the request's kit in and the stream its host maps it to
+# (keeps), as Flume's status names them
 runner_writes() {
   local h=$1 d=$T/runner/$1 tree parent f; shift
   mkdir -p "$d"

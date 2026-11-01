@@ -274,7 +274,7 @@ The main-level ops SHALL land bolts whose verification is green on the user's wo
 - **THEN** the main-level ops holds nothing on `y`'s row, records what stopped it as a signal and tells the planner, `z` lands all the same, and once the host runs checks again ops runs `crew bolt submit y` on the user's send that still stands, asking the user nothing
 
 ### Requirement: A red main's fix is a fix place on main in the kit's repository
-`crew main fix <kit> <name> "<the failure's words>"`, main-level ops's or the user's on reading the kit's main red after a landing, SHALL append a launch of the fix kind on `main`, named `main--<name>`, its brief the failure's words, its submission held and its recipient `<label>/ops`, in the kit's repository as the partition's kits name it and naming no host or stream, for the runner whose configuration names the repository to take in the stream it gives. It SHALL take no `--team`. `--drop` SHALL drop it.
+`crew main fix <kit> <name> "<the failure's words>"`, main-level ops's or the user's on reading the kit's main red after a landing, SHALL append a launch of the fix kind on `main`, named `main--<name>`, its brief the failure's words, its submission held and its recipient `<label>/ops`, in the kit's repository as the partition's kits name it and naming no host or stream, for a runner whose configuration names the repository to take, in the stream its host maps it to. It SHALL take no `--team`. `--drop` SHALL drop it.
 
 #### Scenario: Main red after a landing
 - **WHEN** crew's main fails its checks after a landing and ops runs `crew main fix crew a-test-reads-its-fixture "<the check's words>"`
@@ -303,5 +303,5 @@ The main-level ops SHALL land bolts whose verification is green on the user's wo
 **Migration**: "A main-level agent resumed off its host is given no identity, and nothing else of crew's is", added by this change.
 
 ### Requirement: A red main's fix stays a bolt of one chore where no crossed team builds the kit
-**Reason**: Record 0050 part 3: no team builds a kit; the runner whose configuration names the kit's repository takes its work (design Decision 4).
+**Reason**: Record 0050 part 3: no team builds a kit; a runner whose configuration names the kit's repository takes its work (design Decision 4).
 **Migration**: "A red main's fix stays a bolt of one chore where no runner answers for the partition", added by this change.

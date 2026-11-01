@@ -1868,11 +1868,11 @@ def kit_policy(fleet, t):
 
 def launched_said(repo, bolt, launched):
     """What a start says once the plan starts the bolt (Decision 5): each piece of work launched by its request, for the
-    runner whose configuration names the bolt's repository to take in the stream it gives (the user's ruling of
+    runner whose configuration names the bolt's repository to take in the stream its host maps it to (the user's ruling of
     2026-11-01), and that no agent starts, crew bolts showing the places."""
     work = ", ".join(f"{w} (request {n})" for n, w in launched) or "nothing, the bolt holding no unit or chore yet"
-    return (f"no agent starts: {work} is launched in {repo}, for the runner whose configuration names it to take in the "
-            "stream it gives, and crew bolts shows their places")
+    return (f"no agent starts: {work} is launched in {repo}, for a runner whose configuration names it to take, in the "
+            "stream its host maps it to, and crew bolts shows their places")
 
 
 def crossed_bolt(plan, bolt):
@@ -8546,7 +8546,7 @@ def fix(fleet, a):
     """crew fix <bolt> <name> "<what is wrong>" | --drop [--label L]: a fix of a started bolt as a Flume place of the fix
     kind on its branch (Decision 15 of the-team-machinery-leaves, record 0049 part 4), the planner's or main-level
     ops's (may_request), a plan write on the asking host that starts nothing there: a new fix a launch on the bolt's
-    branch in its repository, for the runner whose configuration names it to take in the stream it gives (the user's
+    branch in its repository, for a runner whose configuration names it to take, in the stream its host maps it to (the user's
     ruling of 2026-11-01; runner.fix_launch), the bolt's landing held while it is in
     flight (land_hand, land_facts); --drop a drop of its launch (runner.fix_drop_refusal). Flume submits the place and
     tells its end itself, so crew fix has no merge and no wait. Recorded as fix.start or fix.drop, done or refused
@@ -8570,7 +8570,7 @@ def fix(fleet, a):
     if mode == "drop":
         print(f"fix/{a.bolt}/{a.name} is dropped (request {seen['n']}): {took(seen['host'])} drops its place")
         return
-    print(f"fix {a.bolt}--{a.name} is launched on bolt/{a.bolt} in {seen['repo']} (request {seen['n']}) for the runner whose "
+    print(f"fix {a.bolt}--{a.name} is launched on bolt/{a.bolt} in {seen['repo']} (request {seen['n']}) for a runner whose "
           f"configuration names it to take, and crew bolts shows its place; {a.bolt}'s landing waits until it has merged or been dropped")
     land_hand(fleet, label, plan.bolt(a.bolt).get("Repo"), f"{a.bolt} is held for a fix: {a.words}")
 
@@ -8608,7 +8608,7 @@ def main_fix(fleet, a):
     Decision 15 of the-team-machinery-leaves, state.3), main-level ops's or the user's on reading main's checks red
     after a landing (may_request), a plan write on the asking host that starts nothing there: a launch of Flume's fix
     kind on main, its submission held for the user's send and main-level ops its recipient, in the kit's repository for
-    the runner whose configuration names it to take in the stream it gives (the user's ruling of 2026-11-01;
+    a runner whose configuration names it to take in the stream its host maps it to (the user's ruling of 2026-11-01;
     runner.main_fix_launch), refused naming state.3's way, a bolt of one chore proposed first among the planned, where
     no runner answers for the partition; --drop a drop of
     its launch (runner.fix_drop_refusal); --send, ops's on the user's send of the kit's landings row, the retry of its
@@ -8653,7 +8653,7 @@ def main_fix(fleet, a):
         print(f"fix main--{a.name} of {kit_name}'s main is sent on the user's word (request {seen['n']}): {took(seen['host'])} "
               "submits it to main through sluice")
         return
-    print(f"fix main--{a.name} is launched on {kit_name}'s main in {repo} (request {seen['n']}) for the runner whose configuration "
+    print(f"fix main--{a.name} is launched on {kit_name}'s main in {repo} (request {seen['n']}) for a runner whose configuration "
           f"names it to take, its submission held for the user's send: once its code has delivered, {kit_name}'s landings row carries it")
 
 

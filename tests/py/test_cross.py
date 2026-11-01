@@ -45,7 +45,7 @@ def requests(w):
 
 def launch(n, work, name, after=(), kind="change", bolt="x", priority="1", brief=None):
     """A launch request as a start writes it, in crew's repository as the plan names it and naming no host or stream,
-    for the runner whose configuration names it to take (the user's ruling of 2026-11-01)."""
+    for a runner whose configuration names it to take (the user's ruling of 2026-11-01)."""
     d = {"Request": str(n), "Act": "launch", "Work": work, "Repo": CREW, "Kind": kind, "Name": name,
          "Base": f"bolt/{bolt}", "Priority": priority, "Intent": f"madswan/{bolt}", "Recipient": "madswan/planner"}
     if after:
@@ -110,8 +110,8 @@ class TestStart:
 
     def test_what_the_start_says_names_each_launch_and_that_no_agent_starts(self):
         assert plan.launched_said("crew", "x", [(1, "unit/a"), (2, "chore/c")]) == (
-            "no agent starts: unit/a (request 1), chore/c (request 2) is launched in crew, for the runner whose configuration "
-            "names it to take in the stream it gives, and crew bolts shows their places")
+            "no agent starts: unit/a (request 1), chore/c (request 2) is launched in crew, for a runner whose configuration "
+            "names it to take, in the stream its host maps it to, and crew bolts shows their places")
 
 
 def ops(w, *dos, stages=None, n=None):

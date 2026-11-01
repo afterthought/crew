@@ -1,6 +1,6 @@
 """A red main's fix is a Flume fix place on main (Decision 11 of teams-cross-to-flume-as-their-bolts-land, Decision 15 of
 the-team-machinery-leaves, state.3): plan.main_fix_change on a write of madswan's plan, the launch in crew's repository
-naming no team, host or stream, taken by the runner whose configuration names it (the user's ruling of 2026-11-01;
+naming no team, host or stream, taken by a runner whose configuration names it (the user's ruling of 2026-11-01;
 runner.main_fix_launch), deneb's runner answering for madswan by default (facts.ran). That crew main fix reaches the plan
 from the command line, on the stubs, is t-journey-main-fix's."""
 import pytest

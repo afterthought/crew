@@ -33,7 +33,7 @@ expect_ok crew bolt new smoke-follow-up "Smoke's follow-up." --repo switchboard-
 : > "$CREW_TEST_CLAUDE_LOG"
 words="tests:logic failed on main after landing smoke: tests/py/test_rail.py reads a fixture that is gone."
 expect_ok crew main fix switchboard-kit a-test-reads-its-fixture "$words"
-has "$out" "fix main--a-test-reads-its-fixture is launched on switchboard-kit's main in switchboard-kit (request 1) for the runner whose configuration names it to take, its submission held"
+has "$out" "fix main--a-test-reads-its-fixture is launched on switchboard-kit's main in switchboard-kit (request 1) for a runner whose configuration names it to take, its submission held"
 eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act,Host,Work,Repo,Kind,Name,Base,Stream,Intent,Recipient,Hold,Brief | grep . | paste -sd ' ' -)" \
   "launch fix/main/switchboard-kit/a-test-reads-its-fixture switchboard-kit fix main--a-test-reads-its-fixture main wldn/main/switchboard-kit wldn/ops submission $words"
 eq "$(field "$HOST" fix.start On)" "fix/main/switchboard-kit/a-test-reads-its-fixture"

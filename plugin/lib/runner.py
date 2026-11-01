@@ -1,8 +1,9 @@
 """crew's side of the runner's interface (flywheel-runner core.2), and the decisions over a bolt's work given through
-Flume: crew records a kit's work against its repository, and the runner whose configuration names that repository
-takes it and launches it in Flume places on its host, in the stream that configuration gives (the user's ruling of
-2026-11-01; Decision 4 of the-team-machinery-leaves); crew looks up no kit's host and models no account, and where it
-must say or act where a kit's work runs, it reads what the runner reported for the work it took (taken, where).
+Flume: crew records a kit's work against its repository, and a runner whose configuration names that repository
+takes it under a lease, while its host's stream has room, and launches it in Flume places on its host, in the stream
+the host's Flume configuration maps the repository to (settled with the user 2026-11-01; Decision 4 of
+the-team-machinery-leaves); crew names no stream, looks up no kit's host and models no account, and where it must say
+or act where a kit's work runs, it reads what the runner reported for the work it took (taken, where).
 
 crew asks the runners for work by requests on the flywheel's branch, requests.rec (REQUESTS), each appended in the
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
@@ -56,7 +57,7 @@ REQUESTS = """\
 # never writes.
 
 %rec: Request
-%doc: A request for Work: a launch of a Flume place of Kind named Name, cut from Base of Repo, taken by the runner whose configuration names Repo, in the stream it gives, or by Host's runner in Stream for a role's work; or a retry, drop or priority of the place the launch Of names launched, taken by the runner that took it.
+%doc: A request for Work: a launch of a Flume place of Kind named Name, cut from Base of Repo, taken by a runner whose configuration names Repo, in the stream its host maps it to, or by Host's runner in Stream for a role's work; or a retry, drop or priority of the place the launch Of names launched, taken by the runner that took it.
 %key: Request
 %type: Request,Of,After,Priority int
 %type: Act enum launch retry drop priority
@@ -114,8 +115,8 @@ def request_refusal(requests, new):
     file's records before it, and new, the request appended, each a record of the plan's kind (plan.Rec). A request is
     the next by number; its work is a unit's, a chore's or a fix's as crew names them; it carries every field its act
     needs and none its act does not take; a launch of a role's work names the host and stream its role runs in, and a
-    launch of a kit's work neither, the runner whose configuration names its repository taking it in the stream that
-    configuration gives (the user's ruling of 2026-11-01); a retry, drop or priority names by Of a launch of the same
+    launch of a kit's work neither, a runner whose configuration names its repository taking it in the stream its
+    host's Flume configuration maps the repository to (settled with the user 2026-11-01); a retry, drop or priority names by Of a launch of the same
     work; a launch's After names launches on the same base, the work of the same bolt; a fix of main holds its
     submission; and a retry starts a stage again or submits again, not both (Decision 4)."""
     n, act, work = new.get("Request"), new.get("Act"), new.get("Work")
@@ -139,8 +140,8 @@ def request_refusal(requests, new):
     if act == "launch" and work.startswith("role/") and not (new.get("Host") and new.get("Stream")):
         return f"launch {n} of {work} names no Host or no Stream: a role's work runs on the host and in the stream its role runs in"
     if act == "launch" and not work.startswith("role/") and (new.get("Host") or new.get("Stream")):
-        return (f"launch {n} of {work} names a Host or a Stream: a kit's work is taken by the runner whose configuration "
-                "names its repository, in the stream that configuration gives, and crew names neither")
+        return (f"launch {n} of {work} names a Host or a Stream: a kit's work is taken by a runner whose configuration "
+                "names its repository, in the stream its host's Flume configuration maps the repository to, and crew names neither")
     by = {r.get("Request"): r for r in requests}
     if act != "launch":
         of = by.get(new.get("Of"))
@@ -324,7 +325,7 @@ def taken(reads, n):
     """The runner that took request n (takers): (its reading, None) for the one whose answers hold it; (None, None)
     while none read holds it and every one was read, the request not taken yet; (None, why) when two hold it, or none
     read holds it and one could not be read, or no runner answers for the partition at all (read.1, read.3). crew names
-    no host on a kit's launch: the runner whose configuration names its repository takes it (the user's ruling of
+    no host on a kit's launch: a runner whose configuration names its repository takes it (the user's ruling of
     2026-11-01)."""
     if not reads:
         return None, f"no runner answers for the partition: no <label>/runner/<host> branch exists, so nothing takes request {n}"
@@ -614,8 +615,8 @@ def reach(plan, requests, bolt, label, again=()):
     requests.rec's records before them; label, the bolt's partition; again, the work (as requests name it) whose launch
     is dropped and launched anew, an amendment of a unit whose place is not launched. Each unit and chore of the bolt
     with no launch standing is launched, as a start launches them: in the file's order, each after the work its After
-    names, cut from the bolt's branch, carrying the bolt's repository as the plan names it, for the runner whose
-    configuration names it to take in the stream it gives (the user's ruling of 2026-11-01), the bolt's priority, its
+    names, cut from the bolt's branch, carrying the bolt's repository as the plan names it, for a runner whose
+    configuration names it to take in the stream its host maps it to (the user's ruling of 2026-11-01), the bolt's priority, its
     intent, the planner as recipient, its brief, and the launches of its After work; a launch standing whose After no longer names
     its After work's standing launches, one of them dropped, launched anew or gone from its After, is dropped and the
     work launched again, so no place waits on a launch that will never land; and each unit's or chore's launch on the
@@ -760,7 +761,7 @@ def answer_retry(work, s):
 def fix_launch(plan, requests, bolt, label, name, words):
     """The launch crew fix <bolt> <name> "<words>" appends for a fix on a started bolt (Decision 10), as (act, work, its
     fields as plan.request takes them), or (None, why): a place of the fix kind named <bolt>--<name>, cut from the
-    bolt's branch, in the bolt's repository for the runner whose configuration names it to take, as reach launches its
+    bolt's branch, in the bolt's repository for a runner whose configuration names it to take, as reach launches its
     units, with the bolt's priority and its partition's (label) intent, the planner as recipient, the fix's words as its
     brief and nothing held. Refused while a launch of that fix stands on the bolt, merged or not, since the name is in
     use there (teams.3)."""
@@ -857,7 +858,7 @@ def main_fix_launch(plan, requests, label, repo, name, words, served):
     """The launch crew main fix <kit> <name> "<the failure's words>" appends (Decision 11; Decision 15 of
     the-team-machinery-leaves), as (act, work, its fields as plan.request takes them), or (None, why): a place of the fix
     kind named main--<name>, cut from main, in the kit's repository (repo, as the partition's kits name it) for the
-    runner whose configuration names it to take in the stream it gives (the user's ruling of 2026-11-01), ahead of every
+    runner whose configuration names it to take in the stream its host maps it to (the user's ruling of 2026-11-01), ahead of every
     bolt (main_priority), its intent the kit's main, main-level ops as its recipient, the failure's words as its brief,
     and its submission held for the user's send (state.3). Refused while no runner answers for the partition (served,
     whether any runner's branch exists), since nothing would take it and the red main waits on it, the fix then being a

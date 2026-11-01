@@ -44,7 +44,7 @@ git --git-dir "$ws" update-ref "refs/heads/wldn/runner/$box" \
 : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew bolt start next
 has "$out" "next is started: sluice made bolt/next on GitHub (origin) from switchboard-kit's main at"
-has "$out" "no agent starts: unit/a (request 1), unit/b (request 2), chore/c (request 3) is launched in switchboard-kit, for the runner whose configuration names it to take in the stream it gives"
+has "$out" "no agent starts: unit/a (request 1), unit/b (request 2), chore/c (request 3) is launched in switchboard-kit, for a runner whose configuration names it to take, in the stream its host maps it to"
 git --git-dir "$r" rev-parse --verify -q bolt/next >/dev/null || fail "the start made no bolt/next on GitHub"
 eq "$(git --git-dir "$ws" show wldn/main:plan.rec | recsel -t Bolt -e "Bolt = 'next'" -P Team,Path | tr '\n' ' ')" "flume "
 eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -P Act,Work,Repo,Kind,Base,Host,Stream,After | grep . | paste -sd ' ' -)" \
@@ -75,7 +75,7 @@ ok "crew answer of a place the runner shows stopped short asking appends the ret
 
 : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew fix next tidy "Tidy the rail's words."
-has "$out" "fix next--tidy is launched on bolt/next in switchboard-kit (request 5) for the runner whose configuration names it to take"
+has "$out" "fix next--tidy is launched on bolt/next in switchboard-kit (request 5) for a runner whose configuration names it to take"
 eq "$(git --git-dir "$ws" show wldn/main:requests.rec | recsel -t Request -e "Request = 5" -P Act,Work,Kind,Name,Base,Brief | grep . | paste -sd ' ' -)" \
   "launch fix/next/tidy fix next--tidy bolt/next Tidy the rail's words."
 eq "$(field "$HOST" fix.start On)" "fix/next/tidy bolt/next"
