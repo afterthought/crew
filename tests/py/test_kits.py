@@ -3,7 +3,9 @@ registry of repositories in crew (plan.partition_kits), and the run record's lan
 (record.acts_in). The landings card's key, a bolt's name check, the card hook's areas and the board's Inception lane read
 the kits so. Where a kit's work runs (Decisions 4 and 5, the user's ruling of 2026-11-01): crew looks up no kit's host,
 and reads where a bolt's or a kit's work runs from what the runner that took it reported (plan.bolt_at, plan.kit_at,
-runner.where), a partition's hosts its main level's and its runners' (plan.hosts_of)."""
+runner.where), a partition's hosts its main level's and its runners' (plan.hosts_of); and what crew does before any runner
+has taken a kit's work, it does in the checkout its partition's main-level host keeps of the kit (plan.main_kit,
+crew.kit_kept, crew.kits_on)."""
 import json
 
 import pytest
@@ -185,3 +187,48 @@ def test_a_partitions_hosts_are_its_main_levels_and_its_runners():
     """Decision 5: deneb, madswan's main level's, and alpha, where a runner answers for it, each once."""
     assert plan.hosts_of(FLEET, "madswan", {"madswan": ([], {"alpha": took("alpha"), "deneb": took("deneb")})}) == ["alpha", "deneb"]
     assert plan.hosts_of(FLEET, "madswan", {}) == ["deneb"]
+
+
+class TestBeforeARunnerTookIt:
+    """The user's ruling of 2026-11-01: a start's branch and checks, a unit name's check, a bolt never started landed,
+    the design agent's records, the board's explorations and the main level's kit folders run on the partition's
+    main-level host, in the checkout its spaces keep of the kit (plan.main_kit, crew.kit_kept), refused where they keep
+    none; nothing is asked of a runner."""
+    SPACES = {"deneb": {"sessions": {
+        "madswan": {"dir": "/d/madswan", "repos": ["afterthought/blueprints", "afterthought/crew"]},
+        "madswan-2": {"dir": "/d/agentplot", "repos": ["agentplot/blueprints", "agentplot/sluice", "agentplot/flume"]}}},
+        "alpha": {"sessions": {"willdan": {"dir": "/a/willdan", "repos": ["afterthought/crew", "WilldanGroup/switchboard-kit"]}}}}
+    FLEET = dict(FLEET, hosts=SPACES)
+
+    def test_a_kit_is_its_main_level_hosts_checkout_by_its_name_or_its_forge_address(self):
+        for kit in ("crew", "afterthought/crew"):
+            assert plan.main_kit(self.FLEET, "madswan", kit) == {"label": "madswan", "machine": "deneb", "stream": None, "kit": {
+                "name": "crew", "repo": "afterthought/crew", "dir": "/d/madswan/crew", "main": "/d/madswan/crew/main"}}
+        assert plan.main_kit(self.FLEET, "madswan", "sluice")["kit"]["main"] == "/d/agentplot/sluice/main"
+
+    def test_a_kit_the_host_keeps_none_of_is_none_and_said_so_where_it_is_acted_on(self):
+        """A kit another host keeps, or one kept under another owner, is not the main-level host's."""
+        assert plan.main_kit(self.FLEET, "madswan", "switchboard-kit") is None
+        assert plan.main_kit(self.FLEET, "madswan", "agentplot/crew") is None
+        assert plan.main_kit_said(self.FLEET, "madswan", "switchboard-kit", "make bolt/b") == (
+            "madswan's main level runs on deneb, and no space there keeps switchboard-kit, so crew can't make bolt/b")
+
+    def test_two_repositories_by_a_kits_name_are_refused_unless_its_owner_tells_them_apart(self):
+        spaces = dict(self.SPACES, deneb={"sessions": {"x": {"dir": "/x", "repos": ["afterthought/blueprints", "agentplot/blueprints"]}}})
+        fleet = dict(FLEET, hosts=spaces)
+        with pytest.raises(plan.Refusal, match="^deneb's spaces keep afterthought/blueprints and agentplot/blueprints by the name "
+                                               "blueprints, so crew can't tell which is meant$"):
+            plan.main_kit(fleet, "madswan", "blueprints")
+        assert plan.main_kit(fleet, "madswan", "agentplot/blueprints")["kit"]["repo"] == "agentplot/blueprints"
+        assert plan.main_kit_read(fleet, "madswan", "blueprints") is None
+
+    def test_the_main_levels_kit_folders_are_its_partitions_kits_its_host_keeps(self, monkeypatch):
+        """crew.kits_on: the partition's kits (plan.kits_read) its host keeps, each once, as crew's cache holds the branch
+        unless fetched; a kit it keeps none of is left out."""
+        import crew
+        asked = []
+        monkeypatch.setattr(plan, "kits_read", lambda fleet, label, fresh=True: asked.append((label, fresh)) or
+                            ["afterthought/crew", "crew", "flume", "switchboard-kit"])
+        assert crew.kits_on(self.FLEET, "madswan", "deneb") == ["/d/madswan/crew/main", "/d/agentplot/flume/main"]
+        assert crew.kits_on(self.FLEET, "madswan", "deneb", fetch=True) == ["/d/madswan/crew/main", "/d/agentplot/flume/main"]
+        assert asked == [("madswan", False), ("madswan", True)]

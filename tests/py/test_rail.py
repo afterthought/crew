@@ -1515,7 +1515,7 @@ class TestMainMoved:
         def host(self):
             return self.here
 
-        def main_at(self, label, kit, sv):
+        def main_at(self, label, kit, sv, runs):
             return self.mains.get(kit, (None, "chuck-herdr-alpha did not answer (ssh: connect to host timed out)"))
 
         def kept_main(self, label, kit):
@@ -1563,16 +1563,18 @@ class TestMainMoved:
         assert (f"  land/{KIT} (wldn): main is at e4f5a6b, its rows forecast at no revision crew kept: its raise refused: "
                 "wldn/main could not be read") in text([], moved=got)
 
-    def test_the_survey_names_the_revision_its_builder_read_or_why_it_cant(self):
-        """read.2: SweepActs.main_at reads the builder's kit as the rail's survey read it, with no read of its own."""
-        acts, sv = plan.SweepActs(FLEET), survey()
+    def test_the_survey_names_the_revision_read_where_the_kits_work_runs_or_why_it_cant(self):
+        """read.2: SweepActs.main_at reads the kit in its folder where the runner that took its work reported it
+        (plan.kit_at), as the rail's survey read it, with no read of its own."""
+        acts, sv, at = plan.SweepActs(FLEET), survey(), runs()
         sv[BOX]["kits"]["/kit/main"]["main_at"] = self.M2
-        assert acts.main_at("wldn", KIT, sv) == (self.M2, None)
+        assert acts.main_at("wldn", KIT, sv, at) == (self.M2, None)
         del sv[BOX]["kits"]["/kit/main"]["main_at"]
-        assert acts.main_at("wldn", KIT, sv) == (
+        assert acts.main_at("wldn", KIT, sv, at) == (
             None, f"crew on {BOX} names no revision of main it read /kit/main at, as a crew older than the read of it does")
-        assert acts.main_at("wldn", KIT, survey(ok=False)) == (None, f"{BOX} did not answer (ssh: connect to host timed out)")
-        assert acts.main_at("wldn", "atlas-kit", sv) == (None, "no team of wldn builds atlas-kit")
+        assert acts.main_at("wldn", KIT, survey(ok=False), at) == (None, f"{BOX} did not answer (ssh: connect to host timed out)")
+        assert acts.main_at("wldn", "atlas-kit", sv, at) == (
+            None, "no runner has reported taking atlas-kit's work yet, so crew can't tell where it runs")
 
 
 class TestLandTime:

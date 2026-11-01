@@ -92,7 +92,7 @@ As main is read (plan.18), crew SHALL read a bolt on GitHub as the host last fet
 - **THEN** the kit's stages read `unknown`, naming that GitHub could not be fetched and git's words, and nothing is read from the host's `bolt/b`
 
 ### Requirement: A bolt's work starts by crew bolt start
-`crew bolt start <bolt>` SHALL make `bolt/<bolt>` through sluice from the kit's main, mark the bolt `Path: flume` and request a launch of each unit and chore of it in its repository, with its `After` and priority and naming no host or stream, for a runner whose configuration names the repository to take, in one plan write, starting no agent, and record `bolt.start`. A proposal MAY hold it; the user runs it directly; no other agent SHALL. It SHALL be refused, with the plan unchanged and no branch made, while the host it makes the branch on is held, or no runner answers for the partition.
+`crew bolt start <bolt>` SHALL make `bolt/<bolt>` through sluice from the kit's main, in the checkout the partition's main-level host keeps of the kit, mark the bolt `Path: flume` and request a launch of each unit and chore of it in its repository, with its `After` and priority and naming no host or stream, for a runner whose configuration names the repository to take, in one plan write, starting no agent, and record `bolt.start`. A proposal MAY hold it; the user runs it directly; no other agent SHALL. It SHALL be refused, with the plan unchanged and no branch made, while that host keeps no checkout of the kit or is held, or no runner answers for the partition.
 
 #### Scenario: A bolt is started
 - **WHEN** the user approves a proposal holding `crew bolt start b`, a bolt of switchboard-kit with two units, and a runner answers for wldn

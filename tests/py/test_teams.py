@@ -288,9 +288,12 @@ class TestRoleSessions:
             self.load(tmp_path, monkeypatch, roles)
 
     def test_a_brief_names_where_each_main_level_role_runs_and_on_which_account(self, tmp_path, monkeypatch):
+        import plan
         fleet = self.load(tmp_path, monkeypatch, {"planner": {"session": "swancloud-2"}})
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        monkeypatch.setattr(plan, "kits_read", lambda fleet, label, fresh=True: ["crew"])
         tok = crew.main_tokens(fleet, crew.partition_of(fleet, "swancloud"), "planner", "")
+        assert tok["KIT_CHECKOUTS"] == f"`{tmp_path}/deneb/madswan/crew/main`"
         assert ("`swancloud-design` in session swancloud-1 (account madswan); `swancloud-planner` in session swancloud-2 "
                 "(account madswan-2)") in tok["MAIN_SESSIONS"]
         assert tok["MAIN_SESSIONS"] in tok["ROSTER"] and tok["OPERATORS"] == "`swancloud-operator` on deneb"

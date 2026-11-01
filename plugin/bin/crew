@@ -53,16 +53,16 @@
 #                                      bolt's head line
 #   crew bolt  new|start|order|drop|land ...
 #                                      start, the user's or a proposal's, has sluice make bolt/<bolt> on GitHub from
-#                                      main (sluice branch create, on the host of a team of the partition building
-#                                      its kit), with no worktree, before the plan write, its work launched in its
-#                                      repository for a runner whose configuration names it; refused, nothing changed, in a
-#                                      kit whose .config/sluice.toml on origin/main names no checks or no remote for
-#                                      its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
-#                                      words when it makes none; a branch
+#                                      main (sluice branch create, in the checkout the partition's main-level host
+#                                      keeps of its kit), with no worktree, before the plan write, its work launched in
+#                                      its repository for a runner whose configuration names it; refused, nothing
+#                                      changed, in a kit that host keeps no checkout of, or whose .config/sluice.toml
+#                                      on origin/main names no checks or no remote for its bolt branches, on a host
+#                                      whose sluice is older than 0.20.0, in sluice's words when it makes none; a branch
 #                                      already on GitHub at main's tip with no commit of its own, as a start that
 #                                      failed after sluice made it leaves it, is taken and the start goes on. A start
-#                                      is refused for a bolt started already, while its host is held, while no team
-#                                      builds its kit in a stream, or while no runner answers there (no
+#                                      is refused for a bolt started already, while that host is held, or while no
+#                                      runner answers for the partition (no
 #                                      <label>/runner/<host>); it marks the bolt Path: flume, appends a launch to
 #                                      requests.rec for each unit and chore, a dependent's naming the launches of its
 #                                      After work, which the runner holds it for until that work has landed on the
@@ -263,7 +263,8 @@
 #                                      anywhere but a role's run
 #   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
-#                                      kit's main: the status recorded with its commit; --proposed raises the record's
+#                                      kit's main, read in the checkout the main level's host keeps of the kit, refused
+#                                      where it keeps none: the status recorded with its commit; --proposed raises the record's
 #                                      card in the design agent's name, or at a new commit changes it, a new card
 #                                      following it once the user has answered it, unless --settled-in-pane says the
 #                                      user said yes in the pane, in the words --excerpt gives, which crew reads in the
@@ -451,7 +452,7 @@ case $cmd in
     # the bolt's landing card closed there with the words
     need_label "${2:-}"; one _sweep "${args[@]:1}" ;;
   _preview)  # crew _preview <label> <key> <thing> <branch> <revision>: the preview of a thing a card carries, asked
-    # of sluice and waited on to its end in a process of its own on the team's host, which crew card preview hands it
+    # of sluice and waited on to its end in a process of its own on the host its work ran on, which crew card preview hands it
     # to (code.9)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   _answered)  # crew _answered: run by Pending You's notice, `pendingyou watch -- crew _answered`, which the host's

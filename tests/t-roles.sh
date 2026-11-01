@@ -1,5 +1,7 @@
 # Each of a partition's main-level roles starts from its agent definition: the model and effort in its frontmatter,
-# unless the teams file overrides them for the partition, and its brief appended to Claude Code's system prompt; crew-role
+# unless the teams file overrides them for the partition, and its brief appended to Claude Code's system prompt, reaching
+# the checkouts its host keeps of the partition's kits, the repositories its plan names, as GitHub holds its branch at
+# the start (the user's ruling of 2026-11-01), a kit the host keeps none of left out; crew-role
 # starts no team's conductor, ops or slot (Decision 10 of the-team-machinery-leaves); its name is in
 # CREW_AGENT, and in SLUICE_AGENT for sluice, and its definition in CREW_ROLE. A session herdr resumes without crew's
 # environment is given that same brief back by crew's SessionStart hook at each compaction. A main level's role is
@@ -11,6 +13,8 @@
 world
 box=$(space chuck-herdr-alpha willdan); mac=$(space mac-studio madswan)
 mkdir -p "$box"/{switchboard-kit,willdan-blueprints,breadboard-kit,atlas-kit}/main "$mac/blueprints/main"
+blueprints WilldanGroup/willdan-blueprints >/dev/null; crew state init wldn >/dev/null
+for k in atlas breadboard switchboard rocs; do crew bolt new "$k-work" "Work in $k-kit." --repo "$k-kit" --label wldn >/dev/null; done
 
 role() {  # role <host> <scope> <role> [stage]: start it with the stub claude, print and keep its launch
   : > "$CREW_TEST_CLAUDE_LOG"
@@ -34,6 +38,7 @@ opus='--model claude-opus-5-5[1m]'; fable='--model claude-fable-5-1'
 role chuck-herdr-alpha wldn design;         has "$launch" "$fable --effort xhigh"; has "$launch" "--name wldn-design"
 first=$(jq -r .session "$CREW_TEST_CLAUDE_LOG")
 has "$launch" "cwd $box/willdan-blueprints/main"; has "$launch" "--add-dir $box/atlas-kit/main --add-dir $box/breadboard-kit/main --add-dir $box/switchboard-kit/main"
+lacks "$launch" "rocs-kit"
 has "$launch" "agent wldn-design | sluice wldn-design | label wldn"
 role chuck-herdr-alpha wldn planner;        has "$launch" "$fable --effort xhigh"; has "$launch" "--name wldn-planner"
 role chuck-herdr-alpha wldn ops;            has "$launch" "$opus --effort high"; has "$launch" "--name wldn-ops"

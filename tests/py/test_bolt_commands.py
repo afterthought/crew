@@ -1,13 +1,13 @@
 """crew bolt new|order|drop|start on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
 reads given; when a bolt lands (plan.land_refusal), started or not (plan.unheld_stages, plan.unheld_refusal,
-plan.builder); and what a start checks and says around sluice's create of the bolt's branch (plan.kit_team,
+plan.main_kit); and what a start checks and says around sluice's create of the bolt's branch (plan.main_kit,
 plan.start_check, plan.give_check, plan.made_said, plan.started_said, plan.unstarted_said). The branch a start makes
 and land removes, and the commits every write makes, are the journey's (t-journey-units and t-journey-land)."""
 import base64
 import pathlib
 
 import pytest
-from facts import FLEET, FactsWrite, apply, known, plan_text, units_of
+from facts import FLEET, FactsWrite, apply, keeping, known, plan_text, units_of
 
 import plan
 
@@ -147,22 +147,14 @@ class TestDropDeletes:
             "bolt/b is still kept: #1 still queued on bolt/b; wait for them to land, or withdraw them")
 
 
-def kitted(**flume):
-    """wldn's fleet (facts.FLEET) with each team's kit checked out on its host, each team in the stream given (flume,
-    {team: stream or False}), else in wldn's."""
-    teams = {n: dict(t, flume=flume.get(n, t["flume"]), kit=dict(t["kit"], main=f"/w/{t['kit']['name']}/main", dir=f"/w/{t['kit']['name']}"))
-             for n, t in FLEET["teams"].items()}
-    return dict(FLEET, teams=teams)
-
-
 class TestStart:
     """bolt-plan "A bolt's work starts by crew bolt start" (Decision 14 of the-team-machinery-leaves; plan.19): the start
-    makes the bolt's branch on the host of a team building its kit (plan.building_team) until where crew acts on a kit no
-    runner has reported is ruled, and is refused, with the plan unchanged and no branch made, for a bolt started already,
-    a kit no team builds, a held host, or a partition no runner answers for (plan.start_check), before the kit's policy
-    and sluice are read. Its launches are the
-    cross tests' (test_cross.py); its commit and branch the cross journey's (t-journey-cross)."""
-    HOST = "chuck-herdr-alpha"
+    makes the bolt's branch in the checkout its partition's main-level host keeps of its kit (plan.main_kit; the user's
+    ruling of 2026-11-01), since no runner has taken any of its work yet, and is refused, with the plan unchanged and no
+    branch made, for a bolt started already, a kit that host keeps no checkout of, a held host, or a partition no runner
+    answers for (plan.start_check), before the kit's policy and sluice are read. Its launches are the cross tests'
+    (test_cross.py); its commit and branch the cross journey's (t-journey-cross)."""
+    HOST = "mac-studio"
 
     @pytest.fixture
     def reads(self, monkeypatch):
@@ -177,23 +169,29 @@ class TestStart:
         monkeypatch.setattr(plan, "kit_policy", lambda fleet, t: self.read.append(("policy", t["kit"]["main"])) or self.policy)
 
     def checked(self, fleet=None):
-        fleet = fleet or kitted()
-        return plan.start_check(fleet, "wldn", plan.building_team(fleet, "wldn", KIT), "b")
+        fleet = fleet or FLEET
+        return plan.start_check(fleet, "wldn", plan.main_kit(fleet, "wldn", KIT), "b")
 
-    def test_a_bolts_branch_is_made_on_the_host_of_a_team_building_its_kit(self):
-        assert [(t["name"], t["machine"], t["kit"]["name"]) for t in (plan.building_team(kitted(), "wldn", k) for k in (KIT, BOARD))] == [
-            ("swb-1", self.HOST, KIT), ("swb-2", self.HOST, BOARD)]
+    def test_a_bolts_branch_is_made_in_the_checkout_the_main_level_host_keeps_of_its_kit(self):
+        assert [(t["label"], t["machine"], t["stream"], t["kit"]) for t in (plan.main_kit(FLEET, "wldn", k) for k in (KIT, f"WilldanGroup/{BOARD}"))] == [
+            ("wldn", self.HOST, None, {"name": KIT, "repo": f"WilldanGroup/{KIT}", "dir": f"/w/{KIT}", "main": f"/w/{KIT}/main"}),
+            ("wldn", self.HOST, None, {"name": BOARD, "repo": f"WilldanGroup/{BOARD}", "dir": f"/w/{BOARD}", "main": f"/w/{BOARD}/main"})]
+        assert plan.main_kit(FLEET, "wldn", "rocs-kit") is None and plan.main_kit(FLEET, "wldn", f"agentplot/{KIT}") is None
+        two = dict(FLEET, hosts={self.HOST: keeping("/w", f"WilldanGroup/{KIT}", f"agentplot/{KIT}")})
+        assert plan.main_kit(two, "wldn", f"agentplot/{KIT}")["kit"]["main"] == f"/w/{KIT}/main"
+        with pytest.raises(plan.Refusal, match=f"^{self.HOST}'s spaces keep WilldanGroup/{KIT} and agentplot/{KIT} by the name {KIT}, "
+                                               "so crew can't tell which is meant$"):
+            plan.main_kit(two, "wldn", KIT)
 
     def test_a_bolt_started_already_is_refused(self):
         assert refusal(fresh(), "bolt start tenant-environments") == "bolt tenant-environments is started already"
 
-    def test_a_kit_no_team_builds_is_refused_naming_it(self):
+    def test_a_kit_the_main_level_host_keeps_no_checkout_of_is_refused_naming_it(self):
         w = fresh()
-        fleet = kitted()
-        fleet = dict(fleet, teams={n: t for n, t in fleet["teams"].items() if n != "swb-1"})
+        fleet = dict(FLEET, hosts={self.HOST: keeping("/w", f"WilldanGroup/{BOARD}")})
         with pytest.raises(plan.Refusal) as e:
             apply(w, "bolt start console-pages", ctx=known(w, fleet=fleet))
-        assert str(e.value) == f"no team of wldn builds {KIT}, so crew has no host to make bolt/console-pages on"
+        assert str(e.value) == f"wldn's main level runs on {self.HOST}, and no space there keeps {KIT}, so crew can't make bolt/console-pages"
         assert not plan.started(w.plan.bolt("console-pages"))
 
     def test_a_held_host_is_refused_before_anything_else_is_read(self, reads):
@@ -346,15 +344,16 @@ class TestLand:
         of = plan.unheld_stages(None, "chuck-herdr-alpha did not answer", planned)
         assert self.land({}, of=of) == "cannot tell whether unit a-console-page has landed: chuck-herdr-alpha did not answer"
 
-    def test_a_bolt_no_team_holds_is_read_where_a_team_of_the_partition_builds_its_kit(self):
-        swb, brd = {"name": "swb-2", "kit": {"name": KIT}}, {"name": "brd-1", "kit": {"name": BOARD}}
-        fleet = {"partitions": {"wldn": {"teams": ["swb-2", "brd-1"]}}, "teams": {"swb-2": swb, "brd-1": brd}}
-        assert plan.builder(fleet, "wldn", BOARD) is brd and plan.builder(fleet, "wldn", "rocs-kit") is None
-        assert plan.unheld_refusal("console-pages", ["a-console-page"], KIT, swb, "wldn") is None
-        assert plan.unheld_refusal("console-pages", ["a-console-page"], "rocs-kit", None, "wldn") == (
-            "bolt console-pages is held by no team, and no team of wldn builds rocs-kit, so crew can't read its main")
-        assert plan.unheld_refusal("console-pages", [], KIT, swb, "wldn") == (
-            "bolt console-pages is held by no team and holds no units or chores, so nothing of it has landed")
+    def test_a_bolt_never_started_is_read_in_the_checkout_the_main_level_host_keeps_of_its_kit(self):
+        """The user's ruling of 2026-11-01: a bolt no runner took work of is read and landed on its partition's main-level host."""
+        t = plan.main_kit(FLEET, "wldn", BOARD)
+        assert (t["machine"], t["kit"]["main"]) == ("mac-studio", f"/w/{BOARD}/main")
+        assert plan.unheld_refusal(FLEET, "console-pages", ["a-console-page"], KIT, t, "wldn") is None
+        assert plan.unheld_refusal(FLEET, "console-pages", ["a-console-page"], "rocs-kit", None, "wldn") == (
+            "bolt console-pages was never started, and wldn's main level runs on mac-studio, and no space there keeps rocs-kit, "
+            "so crew can't read its main")
+        assert plan.unheld_refusal(FLEET, "console-pages", [], KIT, t, "wldn") == (
+            "bolt console-pages was never started and holds no units or chores, so nothing of it has landed")
 
     def test_a_change_no_batch_has_held_refuses_it(self):
         assert self.land({"a-console-page": "landed", "a-console-filter": "landed"}, ["a-console-page", "a-console-filter"]) == (

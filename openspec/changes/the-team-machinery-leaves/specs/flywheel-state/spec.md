@@ -19,6 +19,25 @@ crew SHALL record a kit's work against its repository and look up no kit's host:
 - **WHEN** no runner has taken any launch of crew's work
 - **THEN** a landing of `x` is refused naming that no runner has reported taking its work, and a piece of it reads launching
 
+### Requirement: What comes before a runner takes a kit's work is done on the main-level host
+What crew does on a kit before any runner has taken the work in hand, a start's `sluice branch create` and its read of the kit's policy and its host's sluice, a new unit's or chore's name checked against the kit's main, a bolt never started landed by its close alone, the design agent's records and a proposal's records read in the kit, the board's explorations on the kit's main, and the main level's folders of the partition's kits, SHALL be done in the checkout the partition's main-level host keeps of the kit, as that host's spaces in the hosts file keep it, by its forge address or, for a kit the plan names by its name alone, by that name; it SHALL be refused, naming the host and the kit, where that host keeps none, or keeps two repositories by the kit's name, and nothing SHALL be asked of a runner for it.
+
+#### Scenario: A kit's first bolt is started
+- **WHEN** `crew bolt start x` runs for crew's first bolt, no runner has taken any of crew's work, and deneb, madswan's main-level host, keeps `afterthought/crew` at `/d/madswan/crew/main`
+- **THEN** sluice makes `bolt/x` from main in `/d/madswan/crew/main` on deneb, the policy there is read, and the start goes on as any start
+
+#### Scenario: A kit the main-level host keeps no checkout of
+- **WHEN** `crew bolt start x` runs and deneb's spaces keep no checkout of crew
+- **THEN** it is refused naming deneb and crew, the plan is unchanged and no branch is made
+
+#### Scenario: A unit's name and a record
+- **WHEN** the planner adds unit `a` to crew and the design agent runs `crew record crew 53 --proposed`
+- **THEN** `a`'s name is checked against crew's main, and record 0053 read, in `/d/madswan/crew/main` on deneb
+
+#### Scenario: The main level's kit folders
+- **WHEN** madswan's plan names crew and sluice, deneb keeps both and a role of madswan's main level starts there
+- **THEN** it may reach deneb's checkouts of crew and sluice, and a kit its plan names that deneb keeps none of is left out
+
 ## RENAMED Requirements
 
 - FROM: `### Requirement: A runner's branch that can't be read hides only its host's work`

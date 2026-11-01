@@ -28,7 +28,9 @@ FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "team
                              "kit": {"name": "breadboard-kit", "main": "/b/main", "dir": "/b"}},
                    "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio", "flume": "wldn",
                              "kit": {"name": "atlas-kit", "main": "/a/main", "dir": "/a"}}},
-         "hosts": {BOX: {"kind": "nixos", "ssh": BOX}, "mac-studio": {"kind": "darwin", "ssh": "mac-studio"}}}
+         "hosts": {BOX: {"kind": "nixos", "ssh": BOX},
+                   "mac-studio": {"kind": "darwin", "ssh": "mac-studio",
+                                  "sessions": {"wldn": {"dir": "/m", "repos": ["WilldanGroup/breadboard-kit", "WilldanGroup/switchboard-kit"]}}}}}
 NOW = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
 
 
@@ -65,13 +67,17 @@ def the_plan():
 
 
 def kits(ok=True):
+    """Each host's survey: the box, where the started bolts' work runs, and mac-studio, wldn's main-level host, whose
+    checkout of switchboard-kit holds its explorations (plan.main_kit)."""
     swb = {"ok": True, "main": [], "places": {}, "reports": {},
            "bolts": {"tenant-environments": {"head": "d" * 40, "head_at": ago(200), "changes": [], "worktree": "/kit/bolts/tenant-environments"}},
-           "sites": {}, "routes": [],
-           "explorations": [{"name": "command-cost", "first": "Reading: what each crew command costs."}], "submissions": [], "decided": []}
+           "sites": {}, "routes": [], "submissions": [], "decided": []}
     brd = {"ok": True, "main": ["done-one"], "places": {}, "reports": {}, "bolts": {"board-done": {"head": "e" * 40, "head_at": ago(10), "changes": []}},
            "fixes": [], "sites": {}, "routes": [], "submissions": [], "decided": []}
-    mac = {"mac-studio": {"ok": True, "kits": {"/a/main": {"ok": True, "main": [], "places": {}, "reports": {}, "bolts": {}, "fixes": []}}}}
+    mac = {"mac-studio": {"ok": True, "kits": {"/a/main": {"ok": True, "main": [], "places": {}, "reports": {}, "bolts": {}, "fixes": []},
+                                               "/m/switchboard-kit/main": {"ok": True, "main": [], "places": {}, "reports": {}, "bolts": {},
+                                                                           "explorations": [{"name": "command-cost",
+                                                                                             "first": "Reading: what each crew command costs."}]}}}}
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
 

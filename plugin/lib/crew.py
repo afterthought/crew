@@ -1242,6 +1242,23 @@ def kept_on(fleet, host, repo):
     return None
 
 
+def kit_kept(fleet, host, kit):
+    """A kit as a host keeps it, named as a plan names it, by its forge address, <owner>/<name>, or its name alone: the
+    repository of that address, or of that name, the first of the host's sessions whose space keeps it holds, as
+    kept_on finds a repo, {"name", "repo" (owner/name as the space keeps it), "dir" (its folder), "main" (its main
+    checkout)}; None where no session's space keeps it. Refused for a name alone when the spaces keep two repositories
+    by it, since crew can't tell which is meant (read.1)."""
+    same = (lambda r: r == kit) if "/" in kit else (lambda r: r.split("/")[-1] == kit)
+    found = [(r, s) for s in fleet["hosts"].get(host, {}).get("sessions", {}).values() for r in (s.get("repos") or []) if same(r)]
+    repos = list(dict.fromkeys(r for r, _ in found))
+    len(repos) < 2 or fail(f"{host}'s spaces keep " + " and ".join(repos) + f" by the name {kit}, so crew can't tell which is meant")
+    if not found:
+        return None
+    r, s = found[0]
+    name = r.split("/")[-1]
+    return {"name": name, "repo": r, "dir": f"{s['dir']}/{name}", "main": checkout(s, r)}
+
+
 def crew_at(fleet, host):
     """The crew command on a host: this checkout here, else the crew checkout the host's spaces keep."""
     if host == this_host():
@@ -1263,14 +1280,18 @@ def partition_hosts(fleet, label):
     return sorted({fleet["teams"][t]["machine"] for t in partition_of(fleet, label)["teams"]})
 
 
-def kits_on(fleet, label, host):
-    """The main checkouts on a host of the kits the partition's teams build, each once."""
+def kits_on(fleet, label, host, fetch=False):
+    """The main checkouts on a host of a partition's kits, the repositories its plan and its landings name
+    (plan.kits_read), each as the host's spaces keep it (kit_kept), each once, a kit the host keeps no checkout of left
+    out: the kit folders its main level reaches on its host (the user's ruling of 2026-11-01). Read from the partition's
+    branch as crew's cache holds it, with no fetch (plan.12), as a standing agent's due restart reads it at each stop,
+    or fetched first with fetch, as a role's start reads it."""
+    import plan  # plan imports this module
     out = []
-    for t in sorted(partition_of(fleet, label)["teams"]):
-        for k in kits_of(fleet["teams"][t]):
-            c = kept_on(fleet, host, k["repo"])
-            if c and c not in out:
-                out.append(c)
+    for kit in plan.kits_read(fleet, label, fetch):
+        k = kit_kept(fleet, host, kit)
+        if k and k["main"] not in out:
+            out.append(k["main"])
     return out
 
 
@@ -1291,12 +1312,13 @@ def definition(role):
     return meta, m.group(2)
 
 
-def launch(fleet, label, role):
+def launch(fleet, label, role, fetch=False):
     """How crew-role starts a partition's main-level role: its folder, agent name, partition, the definition it comes
-    from, the folders it may also reach, and the model and effort after the teams file's override."""
+    from, the folders it may also reach, its blueprints' and its kits' on its host (kits_on, fetched first with fetch),
+    and the model and effort after the teams file's override."""
     p = partition_of(fleet, label)
     roles = p["roles"]
-    main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"])])
+    main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"], fetch)])
     if role in MAIN_STANDING + ("reviewer",):
         spec = dict(main, defn="main-ops" if role == "ops" else role, name=f"{label}-{role}")
     else:
@@ -1833,7 +1855,8 @@ def launch_digest(l, text):
 
 
 def launch_now(fleet, scope, role):
-    """The digest of what crew-role would start a standing role with now (launch_digest), read without the plan."""
+    """The digest of what crew-role would start a standing role with now (launch_digest), its kits read from the
+    partition's branch as crew's cache holds it, with no fetch (kits_on)."""
     l = launch(fleet, scope, role)
     return launch_digest(l, brief(fleet, scope, l["defn"], l["name"]))
 
@@ -1944,10 +1967,10 @@ def due_of(fleet, name, started=None, commit=None):
     return (*update_due(started, commit, now, loaded), started)
 
 
-def resolve(fleet, scope, role, extra):
+def resolve(fleet, scope, role, extra, fetch=False):
     """How a role starts, and with "resume" the session it picks up: its last conversation, in the folder that began
-    it, which need not be where the role starts today."""
-    l = launch(fleet, scope, role)
+    it, which need not be where the role starts today; its kits read as launch reads them, fetched first with fetch."""
+    l = launch(fleet, scope, role, fetch)
     found = last_conversation(l["name"]) if extra == "resume" else None
     return (dict(l, cwd=found[1]), found[0]) if found else (l, None)
 
@@ -1957,12 +1980,13 @@ def launch_shell(fleet, scope, role, extra):
     (what the start is made of besides crew's plugin, launch_digest) and the claude arguments in `args`. A resume with
     no conversation to pick up starts the role fresh.
     A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said), and on
-    every host when its partition runs it as its kind (kind_said)."""
+    every host when its partition runs it as its kind (kind_said). Its kit folders are the partition's kits as its
+    branch stands on GitHub, fetched once for the start (kits_on), which its brief then reads with no fetch of its own."""
     if role in MAIN_STANDING + ("reviewer",):
         p, here = partition_of(fleet, scope), this_host()
         p["flume"][role] is False or fail(kind_said(p["label"], role))
         p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
-    l, session = resolve(fleet, scope, role, extra)
+    l, session = resolve(fleet, scope, role, extra, fetch=True)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
         args += ["--add-dir", d]

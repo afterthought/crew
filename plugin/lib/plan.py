@@ -1497,12 +1497,30 @@ def kit_labels(fleet, kit):
     return [l for l in sorted(fleet["partitions"]) if kit_in(kit, kits_read(fleet, l))]
 
 
-def building_team(fleet, label, kit):
-    """A team of the partition building a kit, the first by name, with the kit as its kit, on whose host and main
-    checkout crew reads the kit's changes and records and makes a started bolt's branch; None for none. From the teams
-    file, until the user rules where crew reads and acts on a kit no runner has reported taking work of (Task notes
-    5.2 of the-team-machinery-leaves)."""
-    return next((crew.with_kit(t, kit) for _, t in sorted(fleet["teams"].items()) if t["label"] == label and crew.builds(t, kit)), None)
+def main_kit(fleet, label, kit):
+    """Where crew acts on a kit before any runner has taken the work in hand (the user's ruling of 2026-11-01; Decision 4
+    of the-team-machinery-leaves): the checkout the partition's main-level host keeps of it, as that host's spaces keep
+    it (crew.kit_kept), in the shape bolt_at gives a bolt's, {"label", "machine", "stream" None, "kit"}; None where the
+    host keeps none. A start's branch and checks, a new unit's name, a bolt never started landed, the design agent's
+    records, a proposal's records and the board's explorations are read and acted on there."""
+    host = crew.partition_of(fleet, label)["machine"]
+    k = crew.kit_kept(fleet, host, kit)
+    return {"label": label, "machine": host, "stream": None, "kit": k} if k else None
+
+
+def main_kit_read(fleet, label, kit):
+    """A kit's checkout on its partition's main-level host (main_kit) for a view, None where crew can't tell it, its
+    spaces keeping none or two by the kit's name: the board shows no explorations of it then."""
+    try:
+        return main_kit(fleet, label, kit)
+    except Refusal:
+        return None
+
+
+def main_kit_said(fleet, label, kit, what):
+    """Why crew can't act on a kit on its partition's main-level host (main_kit): that host keeps no checkout of it."""
+    host = crew.partition_of(fleet, label)["machine"]
+    return f"{label}'s main level runs on {host}, and no space there keeps {kit}, so crew can't {what}"
 
 
 def kit_in(kit, kits):
@@ -1526,9 +1544,9 @@ def plan_for(fleet, kit, label):
 
 def name_free(fleet, label, kit, names):
     """A unit's name is its OpenSpec change's, and a name is taken once in a kit, by a unit or a chore (plan.7, plan.11):
-    refused when the kit's main already has that change, open or archived, or holds a chore by it, read on the host
-    and main checkout of a team of the partition building the kit (building_team), and refused when none does."""
-    t = building_team(fleet, label, kit) or fail(f"cannot check {kit}'s changes: no team of {label} builds {kit}, so crew reads no checkout of it")
+    refused when the kit's main already has that change, open or archived, or holds a chore by it, read in the checkout
+    the partition's main-level host keeps of the kit (main_kit), and refused where it keeps none."""
+    t = main_kit(fleet, label, kit) or fail(main_kit_said(fleet, label, kit, f"check {kit}'s changes"))
     sv = survey(fleet, [(t, None)])[t["machine"]]
     sv["ok"] or fail(f"cannot check {kit}'s changes: {t['machine']} did not answer ({sv['error']})")
     k = sv["kits"][t["kit"]["main"]]
@@ -2004,12 +2022,6 @@ def land_refusal(bolt, units, stage_of, outside, label, held=None, kit_name=None
     return None
 
 
-def builder(fleet, label, kit):
-    """The team of the partition building a kit, the first by name, on whose host and main checkout a bolt no team
-    holds is read and landed; None when no team of the partition builds it."""
-    return next((crew.with_kit(fleet["teams"][t], kit) for t in sorted(crew.partition_of(fleet, label)["teams"]) if crew.builds(fleet["teams"][t], kit)), None)
-
-
 def partition_kits(plan, landings):
     """A partition's kits (Decision 3 of the-team-machinery-leaves): the repositories its plan's Bolt and Unit records
     name, with those its run record's landings name, each bolt.land entry not refused (landings, as record.acts_in
@@ -2041,11 +2053,17 @@ def kits_at(repo, tip, pl):
     return partition_kits(pl, landings_at(repo, tip) if tip else [])
 
 
-def kits_read(fleet, label):
-    """A partition's kits (partition_kits) read from its branch, fetched once for the command; refused naming the
-    branch when it can't be read (read.1)."""
+def kits_read(fleet, label, fresh=True):
+    """A partition's kits (partition_kits) read from its branch, fetched once for the command, or, not fresh, as crew's
+    cache holds it now with no fetch (tip_here, plan.12), as a standing agent's due restart reads its kit folders
+    (crew.kits_on); none for a branch not started, or not yet fetched into the cache. Refused naming the branch when it
+    can't be read (read.1)."""
     repo, ref = state_of(fleet, label)
-    tip = fetch(repo, ref)
+    if fresh:
+        tip = fetch(repo, ref)
+    else:
+        tip = tip_here(repo, ref)
+        tip is not None or fail(f"crew's cache of {repo} can't be read for {ref}")
     return kits_at(repo, tip, read(repo, ref, tip) if tip else None)
 
 
@@ -2083,13 +2101,13 @@ def unheld_stages(k, why, other, chores=()):
     return of
 
 
-def unheld_refusal(bolt, units, kit, t, label):
-    """Why a bolt no team holds can't land, or None: it holds units or chores, since a bolt with none has nothing on
-    main, and a team of the partition builds its kit, whose main checkout is read."""
+def unheld_refusal(fleet, bolt, units, kit, t, label):
+    """Why a bolt never started can't land, or None: it holds units or chores, since a bolt with none has nothing on
+    main, and the partition's main-level host keeps a checkout of its kit (t, main_kit), whose main is read."""
     if not units:
-        return f"bolt {bolt} is held by no team and holds no units or chores, so nothing of it has landed"
+        return f"bolt {bolt} was never started and holds no units or chores, so nothing of it has landed"
     if t is None:
-        return f"bolt {bolt} is held by no team, and no team of {label} builds {kit}, so crew can't read its main"
+        return f"bolt {bolt} was never started, and {main_kit_said(fleet, label, kit, 'read its main')}"
     return None
 
 
@@ -3293,8 +3311,8 @@ def bolt_land(fleet, a, by=None, close_why=None):
         t = held = bolt_at(fleet, label, b)
     units = [u.name() for u in plan.work_of(a.bolt)]
     if not held:
-        t = builder(fleet, label, b.get("Repo"))
-        why = unheld_refusal(a.bolt, units, b.get("Repo"), t, label)
+        t = main_kit(fleet, label, b.get("Repo"))
+        why = unheld_refusal(fleet, a.bolt, units, b.get("Repo"), t, label)
         not why or fail(why)
     # What main holds now, GitHub's after the command's one fetch (plan.18), read before which units landed, so a bolt
     # sluice has just landed reads landed with no wait for the fleet's timer; the landing records it (plan.14).
@@ -5221,7 +5239,7 @@ MADE_BRANCH = {}
 
 
 def start_check(fleet, label, t, bolt):
-    """What a start checks on the host it makes the bolt's branch on (t, building_team) before sluice makes it, every
+    """What a start checks on the host it makes the bolt's branch on (t, main_kit) before sluice makes it, every
     refusal leaving the plan unchanged and no branch made: the host held (teams.19); no runner answering for the
     partition, no <label>/runner/<host> branch (runner.runnerless), since nothing would take the bolt's work; and the
     kit's policy at its main now and the host's sluice (give_check). The remote the branch is made on."""
@@ -5237,11 +5255,11 @@ def start_check(fleet, label, t, bolt):
 def op_bolt_start(ctx, a):
     """crew bolt start <bolt>: the bolt's work started through Flume as a crossed team's give started it, with no team
     (Decision 14 of the-team-machinery-leaves; plan.19, record 0026): bolt/<bolt> made by sluice on GitHub from the
-    kit's main, on the host of a team of the partition building the kit (building_team) until where crew acts on a kit
-    no runner has yet reported taking work of is ruled (Task notes 5.2), with no worktree, then, in one plan write, the
-    bolt marked Path: flume and a launch of each of its units and chores appended in its repository for the runner
-    whose configuration names it to take (reach_places), starting no agent. A proposal may hold it, and
-    the user runs it directly (roles.1, may_write). Refused, with the plan unchanged and no branch made, for a bolt
+    kit's main, in the checkout the partition's main-level host keeps of the kit (main_kit), since no runner has taken
+    any of the bolt's work yet (the user's ruling of 2026-11-01), refused where it keeps none, with no worktree; then,
+    in one plan write, the bolt marked Path: flume and a launch of each of its units and chores appended in its
+    repository for the runner whose configuration names it to take (reach_places), starting no agent. A proposal may
+    hold it, and the user runs it directly (roles.1, may_write). Refused, with the plan unchanged and no branch made, for a bolt
     started already and by start_check; in sluice's words when it makes no branch, but for a branch already on its
     remote at main's tip with no commit of its own, as a start that failed after sluice made it leaves it, which the
     start takes and goes on with (made_said). A plan write refused after sluice made the branch has sluice delete it
@@ -5249,8 +5267,7 @@ def op_bolt_start(ctx, a):
     label, plan = ctx.locate("Bolt", a.bolt)
     fleet, b = ctx.fleet, plan.bolt(a.bolt)
     not started(b) or fail(f"bolt {a.bolt} is started already")
-    t = building_team(fleet, label, b.get("Repo")) or fail(f"no team of {label} builds {b.get('Repo')}, so crew has no host "
-                                                           f"to make bolt/{a.bolt} on")
+    t = main_kit(fleet, label, b.get("Repo")) or fail(main_kit_said(fleet, label, b.get("Repo"), f"make bolt/{a.bolt}"))
     remote = ctx.start_checked(label, t, a.bolt)
     kit_name, main, host = t["kit"]["name"], t["kit"]["main"], t["machine"]
     seen = {}
@@ -6315,8 +6332,9 @@ def record_items(fleet, label, plan, argvs):
     each unit or chore it makes new to a bolt or the queue (new_units), as the plan its commands leave holds them, each
     record its sources name (record_refs), as (kind, name, kit, repo, number): kit the record's kit as a refusal names
     it, the work's kit by its name, or <owner>/<name> when the record is another repository's, and repo the repository
-    it is read in, from the teams file (code.5). Work whose sources name a record and whose kit no team of the partition
-    builds is refused, since crew can't tell whose records they are (read.1)."""
+    it is read in, the work's kit as the partition's main-level host keeps it (main_kit; the user's ruling of
+    2026-11-01). Work whose sources name a record and whose kit that host keeps no checkout of is refused, since crew
+    can't tell whose records they are (read.1)."""
     work = [("bolt", a.bolt, plan.bolt(a.bolt)) for a in argvs if (a.cmd, a.sub) == ("bolt", "new")]
     work += [(kind_of(plan.item(u)) if plan.item(u) else "unit", u, plan.item(u)) for u in new_units(argvs)]
     out = []
@@ -6325,8 +6343,8 @@ def record_items(fleet, label, plan, argvs):
         if not sources:
             continue
         kit = r.get("Repo")
-        t = building_team(fleet, label, kit)
-        t or fail(f"{kind} {name} names a decision record, and no team of {label} builds {kit}, so crew can't tell whose it is")
+        t = main_kit(fleet, label, kit)
+        t or fail(f"{kind} {name} names a decision record, and " + main_kit_said(fleet, label, kit, "tell whose it is"))
         k = t["kit"]
         for s in sources:
             out += [(kind, name, k["name"] if repo == k["repo"] else repo, repo, n) for repo, n in record_refs(s, k["repo"])]
@@ -10833,9 +10851,10 @@ def rail_read(fleet, labels, board=False, sweep=False):
     """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
     found and the errors of those that could not be read, the survey, the open proposals, the cards, the branches whose
     record could not be read, the landings and gives, the operations' entries, every entry read, each partition's kits
-    (kits_at, the repositories its plan and its landings name), and the rows. The survey
-    is of each host holding a bolt; with board, of every team of the labels, with the bolt it holds or none, and its
-    dev servers, slots and explorations too, for the board (board.py), from which the rail's text is made as well.
+    (kits_at, the repositories its plan and its landings name), and the rows. The survey is of each host where a
+    started bolt's work runs, as the runner that took it reported (known_at); with board, of each kit's checkout on its
+    partition's main-level host too (main_kit), and the explorations on each kit's main there, for the board
+    (board.py), from which the rail's text is made as well.
     With sweep, once the rows are made, the cards on this host are swept under its sign-in (sweep_cards), against the
     proposals the plans read hold (proposals_held), the cards read then being those open once it acted, each kit's
     landings card main moved under is raised again (sweep_moved), and the card sessions whose card is closed or whose row is gone are
@@ -10847,15 +10866,15 @@ def rail_read(fleet, labels, board=False, sweep=False):
     runs = rail_runs(found)  # each partition's runners, read once beside its plan for its crossed work (plan.12)
     held = [(t, b.name()) for l, _, _, p in found if p and l in runs for b in p.bolts() if started(b)
             for t in [known_at(fleet, l, b, runs[l])] if t]
-    if board:  # the explorations on each kit's main, read where a team of the partition keeps it until where crew reads a kit no runner has reported is ruled
-        held += [(dict(fleet["teams"][t], kit=k), None) for l in labels for t in crew.partition_of(fleet, l)["teams"]
-                 for k in crew.kits_of(fleet["teams"][t])]
+    kits = {l: kits_at(repo, tip, p) for l, repo, tip, p in found}
+    if board:  # the explorations on each kit's main, read in the checkout its partition's main-level host keeps of it
+        held += [(t, None) for l, ks in kits.items() for k in ks for t in [main_kit_read(fleet, l, k)] if t]
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     crossed = {l: crossed_changes(p, Stages(fleet, p, sv, runs, l)) for l, _, _, p in found if p and l in runs}
     times, cards_, unread, landings, gives, batched, deploys, opses, logs = rail_record(fleet, found, props, crossed)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
-                gives=gives, ops=opses, logs=logs, batched=batched, runs=runs, kits={l: kits_at(repo, tip, p) for l, repo, tip, p in found},
+                gives=gives, ops=opses, logs=logs, batched=batched, runs=runs, kits=kits,
                 rows=rail_rows(fleet, found, sv, props, times, batched, runs) + deploys)
     if sweep:
         read["proposed"] = proposals_held(found)
@@ -13309,13 +13328,19 @@ class CardActs:
         return preview_release_row(label, key.split("/", 1)[1]) if key.startswith("land/") else None
 
     def release_previews(self, label, key):
-        """Every preview brought up from a batch's card released as it closes, on each host of its units' teams
-        (crew _preview-release, code.3; design Decision 7), here when this is the host: what each said, or None. A host
-        that does not answer is said, the rail's sweep releasing it later."""
+        """Every preview brought up from a batch's card released as it closes, on each host its units' bolts' work ran
+        on (batch_unit_at), where they were brought up (crew _preview-release, code.3; design Decision 7), here when
+        this is the host: what each said, or None. A host that does not answer, and a unit whose host crew can't tell,
+        is said, the rail's sweep releasing it later."""
         n = int(key.split("/")[1].split("-")[0])
-        teams = {tm for m, _, us in batches(self.entries(label)) if m == n for _, tm, _ in us}
-        said = []
-        for host in sorted({self.fleet["teams"][tm]["machine"] for tm in teams if tm in self.fleet["teams"]}):
+        units = [(u, between) for m, _, us in batches(self.entries(label)) if m == n for u, between, _ in us]
+        said, hosts = [], set()
+        for u, between in units:
+            try:
+                hosts.add(batch_unit_at(self.fleet, label, between, u)["machine"])
+            except Refusal as e:
+                said.append(f"{key}'s previews of {u} are not released yet, the rail's sweep releasing them: {e}")
+        for host in sorted(hosts):
             if host == crew.this_host():
                 said.append(preview_release_card(label, key))
                 continue
@@ -13970,12 +13995,11 @@ def record_card_close(fleet, label, owner, obj, outcome, acts=None):
 
 
 def record_kit(fleet, label, name):
-    """The kit of a partition's teams named name, read from the teams file alone (code.5); refused naming the kits it
-    takes."""
-    kits = {k["name"]: k for t in crew.partition_of(fleet, label)["teams"] for k in crew.kits_of(fleet["teams"][t])}
-    name in kits or fail(f"crew record takes a kit of {label}'s, " + (f"{either(sorted(kits))}, not {name}." if kits else
-                                                                     f"and no team of {label} builds one."))
-    return kits[name]
+    """The kit a design agent's record is in, by name, as the partition's main-level host keeps it (main_kit; the user's
+    ruling of 2026-11-01), where its design agent runs and its records are read, a kit's first records coming before
+    its first bolt; refused where that host keeps none."""
+    t = main_kit(fleet, label, name) or fail(main_kit_said(fleet, label, name, "read its records"))
+    return t["kit"]
 
 
 def record_read(fleet, label, kit_, number, status, alternatives=None):
@@ -13985,7 +14009,7 @@ def record_read(fleet, label, kit_, number, status, alternatives=None):
     where, the commit, its subject), where as card_where gives it for the checkout; refused when the checkout, main,
     the one file or the status it holds can't be read (read.1)."""
     here, k, n = crew.this_host(), record_kit(fleet, label, kit_), f"{number:04d}"
-    checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
+    checkout = k["main"]
 
     def git(*args):
         r = subprocess.run(["git", "-C", checkout, *args], capture_output=True, text=True)
@@ -14009,8 +14033,8 @@ def record_read(fleet, label, kit_, number, status, alternatives=None):
 def record_status(fleet, a):
     """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"]
     [--alternatives <file>] [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031
-    §1). The kit is one of the partition's teams', read from the teams file alone (code.5); the record is read as
-    record_read reads it, where the partition's main level runs. A status its file does not hold there is refused,
+    §1). The kit is one the partition's main-level host keeps (record_kit); the record is read as record_read reads
+    it, in that checkout, where the partition's main level runs. A status its file does not hold there is refused,
     naming what it holds, and so is an alternatives file crew can't read, with nothing recorded. Else record.<status>
     is recorded on record/<kit>/<number> with that commit; then --proposed raises the record's card in the design
     agent's name, or changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in
@@ -14107,13 +14131,16 @@ class SweepActs(CardActs):
     def now(self):
         return datetime.datetime.now(datetime.timezone.utc)
 
-    def main_at(self, label, kit, sv):
-        """The revision of main the rail's survey (sv) read a kit at in its builder's main checkout (gather.kit's
-        main_at), as last fetched (plan.18): (sha, None), or (None, why) when no team builds it, its host did not
-        answer or its read names none. A builder holding no bolt is not in the rail's survey, and is surveyed alone."""
-        t = builder(self.fleet, label, kit)
-        if not t:
-            return None, f"no team of {label} builds {kit}"
+    def main_at(self, label, kit, sv, runs):
+        """The revision of main the rail's survey (sv) read a kit at in its folder where its work runs (gather.kit's
+        main_at), as the runner that took the kit's newest work reported it (kit_at, from the partition's runners as
+        the read holds them, runs), where its landings card's rows are forecast, as last fetched (plan.18): (sha,
+        None), or (None, why) when crew can't tell where the kit's work runs, its host did not answer or its read
+        names none. A kit the rail's survey did not read is surveyed alone."""
+        try:
+            t = kit_at(self.fleet, label, kit, (runs or {}).get(label))
+        except Refusal as e:
+            return None, str(e)
         host, main = t["machine"], t["kit"]["main"]
         v = sv.get(host)
         if v is None or (v["ok"] and main not in v["kits"]):
@@ -14391,7 +14418,7 @@ def sweep_moved(fleet, read, acts=None):
     """The rail read's raise of each kit's landings card main moved under (rail-cards "Main moves under an open card"),
     once its sweep acted, on the partition's main machine alone, where main-level ops's cards are: for each partition
     whose plan was read, each landings card open on this host in ops's name (land/<kit>), the revision of main the
-    survey read its kit at in its builder's checkout, as last fetched with no fetch of its own (SweepActs.main_at,
+    survey read its kit at where its work runs, as last fetched with no fetch of its own (SweepActs.main_at,
     plan.18), and the one its rows were last forecast against (CardActs.kept_main) are compared (landings_moved), and
     each card main moved under is raised again (SweepActs.raise_kit), which fetches GitHub's main and forecasts its
     rows there; a card main has not moved under is fetched for and raised by none. A raise refused is said, and the read
@@ -14405,7 +14432,7 @@ def sweep_moved(fleet, read, acts=None):
         kits = read["kits"][l]
         open_ = [(l, kit) for c in read["cards"] if c["label"] == l and c["host"] == here and c["by"] == f"{l}-ops"
                  for kind, kit in [land_key(c["key"], kits) or (None, None)] if kind == "kit"]
-        mains = {c: acts.main_at(l, c[1], read["sv"]) for c in dict.fromkeys(open_)}
+        mains = {c: acts.main_at(l, c[1], read["sv"], read.get("runs")) for c in dict.fromkeys(open_)}
         kept = {c: acts.kept_main(*c) for c in mains}
         due, unread = landings_moved(open_, {c: m for c, (m, _) in mains.items()}, kept)
         out["unread"] += [dict(label=l, kit=c[1], why=mains[c][1]) for c in unread]

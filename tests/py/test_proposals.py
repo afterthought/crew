@@ -4,7 +4,7 @@ plan its commands leave, applied in order to the plan in memory, and a start it 
 (plan.check_ops, plan.apply_all). Writing, recording and telling the planner are the proposals journey's
 (t-journey-plan)."""
 import pytest
-from facts import FLEET, FactsWrite, apply, plan_text, units_of
+from facts import FLEET, FactsWrite, apply, keeping, plan_text, units_of
 
 import plan
 import runner
@@ -140,10 +140,8 @@ class TestRecordSources:
 class TestRestsOnAccepted:
     """A proposal's new work and the records it rests on (plan.record_items, plan.unaccepted): each named record not
     accepted on its main refuses the proposal with one line naming the work, the record and what main holds."""
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio"}},
-             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha",
-                                 "kit": {"name": KIT, "repo": "WilldanGroup/switchboard-kit", "main": "/kit"}}},
-             "hosts": {}}
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio"}}, "teams": {},
+             "hosts": {"mac-studio": keeping("/w", "WilldanGroup/switchboard-kit")}}
     REPO = "WilldanGroup/switchboard-kit"
     FILE = "docs/adr/0033-a-record.md"
 
@@ -220,25 +218,26 @@ class TestRestsOnAccepted:
         w = apply(FactsWrite(text), *dos)
         assert plan.record_items(self.FLEET, "wldn", w.plan, args(*dos)) == []
 
-    def test_work_of_a_kit_no_team_builds_naming_a_record_is_refused(self):
+    def test_work_of_a_kit_its_main_level_host_keeps_no_checkout_of_naming_a_record_is_refused(self):
         said, _ = refused(self.items, 'unit add n "N." --repo breadboard-kit --source docs/adr/0001')
-        assert said == "unit n names a decision record, and no team of wldn builds breadboard-kit, so crew can't tell whose it is"
+        assert said == ("unit n names a decision record, and wldn's main level runs on mac-studio, and no space there keeps "
+                        "breadboard-kit, so crew can't tell whose it is")
         assert self.items('unit add m "M." --repo breadboard-kit --source docs/architecture/core.md') == []
 
 
 class TestStartProposed:
     """A proposal may hold crew bolt start (bolt-plan "A bolt is started"; Decision 14 of the-team-machinery-leaves,
     roles.1): its Do parses by the command's grammar and touches the bolt; it is checked as the proposal's card is drawn,
-    reading no kit (Drawn); and its approval, the kit's host read as a direct start reads it (plan.start_check), marks
-    the bolt Path: flume and launches each unit of it on its kit's host in its stream, starting no agent. One naming a
-    bolt started already is refused whole. sluice's branch and the commit are the cross journey's (t-journey-cross)."""
-    FLEET = dict(FLEET, teams={n: dict(t, kit=dict(t["kit"], main=f"/w/{t['kit']['name']}/main", dir=f"/w/{t['kit']['name']}"))
-                               for n, t in FLEET["teams"].items()})
+    reading no kit (Drawn); and its approval, the kit read on its partition's main-level host as a direct start reads it
+    (plan.start_check), marks the bolt Path: flume and launches each unit of it in its repository, naming no host or
+    stream, starting no agent. One naming a bolt started already is refused whole. sluice's branch and the commit are
+    the cross journey's (t-journey-cross)."""
+    FLEET = FLEET  # wldn's main level on mac-studio, whose spaces keep its kits
     DOS = ("bolt start pages",)
 
     @pytest.fixture(autouse=True)
     def host(self, monkeypatch):
-        """chuck-herdr-alpha free, its runner answering, and switchboard-kit's policy making bolts on GitHub."""
+        """mac-studio, wldn's main-level host, free, a runner answering, and switchboard-kit's policy making bolts on GitHub."""
         import crew
         self.read = []
         monkeypatch.setenv("CREW_AGENT", "chuck@mac-studio")
@@ -267,7 +266,7 @@ class TestStartProposed:
     def test_its_approval_starts_the_bolt_and_launches_its_work_in_its_repository(self):
         w = self.write()
         ops, _ = plan.apply_all(self.FLEET, "wldn", w, args(*self.DOS), 1)
-        assert [op.act for op in ops] == ["bolt.start"] and self.read == ["chuck-herdr-alpha"]
+        assert [op.act for op in ops] == ["bolt.start"] and self.read == ["mac-studio"]
         assert plan.started(w.plan.bolt("pages")) and w.plan.bolt("pages").get("Team") is None
         assert [(r.get("Act"), r.get("Host"), r.get("Stream"), r.get("Work"), r.get("Base"), r.all("After"))
                 for r in plan.Plan(w.files["requests.rec"]).recs("Request") if r.get("Act") == "launch"] == [

@@ -23,6 +23,7 @@ export PATH="$TESTS/stubs-sites:$PATH"
 team_world
 box=chuck-herdr-alpha
 ak=$(kit mac-studio willdan atlas-kit)
+kit $box willdan atlas-kit >/dev/null  # wldn's main level's checkout of it, where crew acts on it before a runner takes its work
 export CREW_LABEL=wldn PLANNOTATOR_URL_HOST=auto PLANNOTATOR_PORT=19432-19451
 unset PLANNOTATOR_SKIP_BROWSER_OPEN PLANNOTATOR_REMOTE
 tip() { git --git-dir "$ws" rev-parse wldn/main; }

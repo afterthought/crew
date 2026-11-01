@@ -60,7 +60,7 @@ Bolts whose verification is green SHALL be landed by main-level ops on the user'
 - **THEN** the command says `y` landed and was not closed, naming why and that crew's next read of the bolt closes it once that is mended, the run record holds a refused `bolt.land` on `bolt/y` with those words, and the command goes on to the next bolt
 
 ### Requirement: A bolt whose work is on main lands by its close alone
-`crew bolt land` SHALL land a bolt with no merge to make, on the user's word, once its kit's main holds each of its units' changes, open or archived, and each of its chores, read on its kit's host, recording the landing as any landing; it SHALL be refused for such a bolt with no units or chores, whose kit no host's runner keeps, or while any unit's change is not on main.
+`crew bolt land` SHALL land a bolt with no merge to make, on the user's word, once its kit's main holds each of its units' changes, open or archived, and each of its chores, read in the checkout the partition's main-level host keeps of its kit, since no runner took any of its work, recording the landing as any landing; it SHALL be refused for such a bolt with no units or chores, whose kit that host keeps no checkout of, or while any unit's change is not on main.
 
 #### Scenario: A bolt built outside its branch
 - **WHEN** the plan holds the bolt `deploys-go-through-crew`, nothing has merged into its branch, and each of its units' changes is archived on crew's main
@@ -330,7 +330,7 @@ When a landed bolt's close is refused, crew SHALL record a `bolt.land` entry on 
 - **THEN** the read closes `z`, the run record holds its `bolt.land`, and no head line for `z` remains
 
 ### Requirement: A started bolt's work is launched whole
-`crew bolt start <bolt>` SHALL check the kit's policy and have sluice make `bolt/<bolt>` from the kit's main, and SHALL be refused while the host it makes the branch on is held, or no runner answers for the partition. Its one plan write SHALL set `Path: flume` on the bolt, and no `Team`, and append a launch for each of its units and chores in the file's order, cut from `bolt/<bolt>`, in the kit's repository and naming no host or stream, for a runner whose configuration names the repository to take. It SHALL start, restart and greet no agent.
+`crew bolt start <bolt>` SHALL check the kit's policy and have sluice make `bolt/<bolt>` from the kit's main, in the checkout the partition's main-level host keeps of the kit, and SHALL be refused while that host keeps none or is held, or no runner answers for the partition. Its one plan write SHALL set `Path: flume` on the bolt, and no `Team`, and append a launch for each of its units and chores in the file's order, cut from `bolt/<bolt>`, in the kit's repository and naming no host or stream, for a runner whose configuration names the repository to take. It SHALL start, restart and greet no agent.
 
 #### Scenario: A bolt of three
 - **WHEN** `crew bolt start x` runs, `x` holding units `a` and `b`, `b` after `a`, and chore `c`, and a runner answers for madswan

@@ -21,6 +21,7 @@
 team_world
 box=chuck-herdr-alpha
 bk=$(kit $box willdan breadboard-kit) ak=$(kit mac-studio willdan atlas-kit)
+kit $box willdan atlas-kit >/dev/null  # wldn's main level's checkout of it, where a start makes m1's branch
 export CREW_LABEL=wldn PLANNOTATOR_URL_HOST=auto PLANNOTATOR_PORT=19432-19451
 unset PLANNOTATOR_SKIP_BROWSER_OPEN PLANNOTATOR_REMOTE
 now=$(date +%s)

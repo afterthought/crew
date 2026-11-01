@@ -17,7 +17,7 @@ import re
 
 import pytest
 
-from facts import FLEET as BASE, START
+from facts import FLEET as BASE, START, keeping
 
 import crew
 import plan
@@ -38,7 +38,7 @@ FLEET = {"partitions": {"wldn": dict(BASE["partitions"]["wldn"], teams=["swb-1",
                              "kit": {"name": "breadboard-kit", "repo": "WilldanGroup/breadboard-kit", "main": "/b/main", "dir": "/b"}},
                    "apk-1": {"name": "apk-1", "label": "madswan", "machine": "mac-studio",
                              "kit": {"name": "flywheel-next", "repo": "agentplot/flywheel-next", "main": "/f/main", "dir": "/f"}}},
-         "hosts": {}}
+         "hosts": {"mac-studio": keeping("/w", "WilldanGroup/atlas-kit", "WilldanGroup/breadboard-kit", "WilldanGroup/switchboard-kit")}}
 FLEET["partitions"]["wldn"]["teams"].append("brd-1")
 
 
@@ -2208,7 +2208,7 @@ class TestRecordCommand:
         assert str(e.value) == f"crew refuses the alternatives for record 0032 in switchboard-kit: {said}. Nothing is raised."
 
     @pytest.mark.parametrize("kit, n, status, more, said", [
-        ("flywheel-next", 32, "proposed", {}, "crew record takes a kit of wldn's, atlas-kit, breadboard-kit or switchboard-kit, not flywheel-next."),
+        ("flywheel-next", 32, "proposed", {}, "wldn's main level runs on mac-studio, and no space there keeps flywheel-next, so crew can't read its records"),
         ("atlas-kit", 0, "proposed", {}, "a record's number is its one to four digits, not 0"),
         ("atlas-kit", 21, "accepted", {"settled_in_pane": True}, "--settled-in-pane and --alternatives go with --proposed"),
         ("atlas-kit", 21, "rejected", {"alternatives": "a.md"}, "--settled-in-pane and --alternatives go with --proposed"),
@@ -2216,7 +2216,7 @@ class TestRecordCommand:
         ("atlas-kit", 21, "proposed", {"settled_in_pane": True}, "--settled-in-pane needs --excerpt"),
         ("atlas-kit", 21, "proposed", {"settled_in_pane": True, "excerpt": " "}, "--settled-in-pane needs --excerpt"),
         ("atlas-kit", 21, "proposed", {"excerpt": "Yes, accept 21"}, "--excerpt goes with --settled-in-pane")])
-    def test_a_kit_not_the_partitions_or_flags_that_do_not_go_together_are_refused_on_the_teams_file_alone(self, kit, n, status, more, said):
+    def test_a_kit_its_main_level_host_keeps_none_of_or_flags_that_do_not_go_together_are_refused_reading_nothing(self, kit, n, status, more, said):
         a = argparse.Namespace(**dict(dict(kit=kit, number=n, status=status, settled_in_pane=False, excerpt=None, alternatives=None,
                                            label="wldn"), **more))
         with pytest.raises(crew.Refusal, match=re.escape(said)):
@@ -2235,7 +2235,8 @@ class TestRecordCommand:
         monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: asked.append(words) or (heard(), "s-9"))
         a = argparse.Namespace(kit="switchboard-kit", number=32, status="proposed", settled_in_pane=True, excerpt="Yes, accept 32",
                                alternatives=None, label="wldn")
-        with pytest.raises(crew.Refusal, match="no session of .* keeps WilldanGroup/switchboard-kit"):
+        monkeypatch.setattr(plan, "record_read", lambda *args: plan.fail("read in the kit's checkout"))
+        with pytest.raises(crew.Refusal, match="^read in the kit's checkout$"):
             plan.record_status(FLEET, a)
         assert asked == ["Yes, accept 32"]
 

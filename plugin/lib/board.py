@@ -264,11 +264,10 @@ def board_data(fleet, labels, read, now):
 
         explorations = []
         for kit in read["kits"].get(l, []):  # the kits its plan and its landings name (plan.partition_kits)
-            for t in (crew.with_kit(fleet["teams"][x], kit) for x in sorted(p["teams"]) if crew.builds(fleet["teams"][x], kit)):
-                k = (sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}
-                if k.get("ok") and "explorations" in k:
-                    explorations += [{"kit": kit, "name": e["name"], "first": e["first"], "teams": building(kit)} for e in k["explorations"]]
-                    break
+            t = plan.main_kit_read(fleet, l, kit)  # read in the checkout its main-level host keeps of it
+            k = ((sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}) if t else {}
+            if k.get("ok") and "explorations" in k:
+                explorations += [{"kit": kit, "name": e["name"], "first": e["first"], "teams": building(kit)} for e in k["explorations"]]
 
         def proposal_teams(d):
             """The teams of each bolt a proposal's changes name, the team holding it or else those building its

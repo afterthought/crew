@@ -74,15 +74,23 @@ def told(minutes=0):
     return {"Act": "batch.due", "At": at(minutes), "On": []}
 
 
+def keeping(at, *repos):
+    """A host's spaces as the hosts file has them, one session keeping each repository (owner/name) in its folder at:
+    each kit's main checkout at <at>/<name>/main, where crew acts on a kit no runner has taken work of (crew.kit_kept,
+    plan.main_kit)."""
+    return {"sessions": {"main": {"dir": at, "repos": list(repos)}}}
+
+
 # Every role of a partition stands, as a teams file below version 4 reads (crew.load).
 STANDING = {r: False for r in ("design", "planner", "reviewer", "ops", "operator")}
+# wldn's main level runs on mac-studio, whose spaces keep its kits in /w.
 FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}, "teams": ["swb-1", "swb-2"],
                                  "flume": STANDING}},
          "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha", "flume": "wldn",
                              "kit": {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit"}},
                    "swb-2": {"name": "swb-2", "label": "wldn", "machine": "chuck-herdr-alpha", "flume": "wldn",
                              "kit": {"name": "breadboard-kit", "repo": "WilldanGroup/breadboard-kit"}}},
-         "hosts": {}}
+         "hosts": {"mac-studio": keeping("/w", "WilldanGroup/atlas-kit", "WilldanGroup/breadboard-kit", "WilldanGroup/switchboard-kit")}}
 
 
 KITS = ("switchboard-kit", "breadboard-kit")
