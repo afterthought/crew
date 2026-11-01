@@ -1297,13 +1297,14 @@ def signal_how(cmd, label, state):
             f"`signals/` on `{label}/main` of {state}.")
 
 
-# How an agent asks the user a question of its own, the same in the brief of each of the four that ask: a conductor's,
-# the planner's, main-level ops's and the design agent's (record 0031, briefs.11).
+# How an agent asks the user a question of its own, the same in the brief of each of the three that ask: the planner's,
+# main-level ops's and the design agent's (record 0031, briefs.11; Decision 6 of the-team-machinery-leaves).
 def cards_how(cmd, label, kits):
     return ("A question of yours for the user reaches them on a Pending You card you ask yourself; every other card on "
-            "the rail is crew's. Four ask the user: a team's conductor, the planner, main-level ops and the design agent. "
-            f"A stage agent and a team's ops stop short to their conductor, with `{cmd} needs` or a tell; the dispatcher "
-            "asks through the planner; and crew refuses a card from any of them. Before you ask, answer it from the "
+            "the rail is crew's. Three ask the user: the planner, main-level ops and the design agent. A Flume place "
+            "that stops short asks the one of you it names, who gets the answer and gives it to the place with "
+            f"`{cmd} answer`; the operator and the reviewer ask nothing; and crew refuses a card from any other agent. "
+            "Before you ask, answer it from the "
             f"records and the rules already written, or ask the agent whose it is with `{cmd} tell`: `{label}-design` for "
             f"the design, `{label}-ops` for a live system or a deploy, `{label}-planner` for the plan. It is the user's "
             "only when they alone can decide, know or do it, in their name, their money, their plans, public or hard to "
@@ -1345,10 +1346,10 @@ SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sen
            "sent from the board about the item it names, and answers no card; one that begins `[crew]` is crew's own; "
            "anything else typed there is the user.")
 
-# How anything for another team or partition is sent, beside every brief's roster (briefs.10): to that partition's
-# operator, its one door, and to nobody else.
-SENDS = (f"`{HOME}/plugin/bin/crew send <team or partition> \"<text>\"`, which reaches that partition's operator, its "
-         "one door, and to nobody else")
+# How anything for another partition is sent, beside every brief's roster (briefs.10): to that partition's operator,
+# its one door, and to nobody else.
+SENDS = (f"`{HOME}/plugin/bin/crew send <partition> \"<text>\"`, which reaches that partition's operator, its one door, "
+         "and to nobody else")
 
 # How an agent reports results, the same in every brief that reports them.
 RESULTS = ("## Test, check and proof results\n\n"
@@ -1430,7 +1431,6 @@ def main_tokens(fleet, p, role, self_name):
         "REVIEWER": f"{label}-reviewer", "REVIEWS": f"~/.local/state/crew/{label}-main/reports",
         "KITS": ", ".join(sorted({k.split("/")[-1] for k in named})) or "none yet",
         "KIT_CHECKOUTS": ", ".join(f"`{k['main']}`" for k in kept) or "none on this host",
-        "OPERATORS": f"`{label}-operator` on {p['machine']}",
         "TEAMS_DOORS": ", ".join(doors) or "none", "TURN": turn_said(p, role),
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
                     "`terminal-browser open <url> --split right`." if fleet["hosts"].get(host, {}).get("kind") == "darwin" else
@@ -1443,7 +1443,7 @@ def main_tokens(fleet, p, role, self_name):
         f"bolts and posts its review batches; `{label}-reviewer`, started fresh for each batch, summarizes its changes; `{label}-ops` lands "
         f"proven bolts on the user's send on each kit's landings card; and `{label}-operator`, the partition's door, works for the user. "
         f"Any of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
-        f"anything for another partition or one of its teams is sent with {SENDS}. {SENDERS}")
+        f"anything for another partition is sent with {SENDS}. {SENDERS}")
     return tok
 
 

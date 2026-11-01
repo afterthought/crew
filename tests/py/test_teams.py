@@ -219,7 +219,7 @@ class TestRoleSessions:
         assert tok["KITS"] == "crew, weir" and tok["CARDS"].endswith("The kits: crew: afterthought/crew.")
         assert ("`swancloud-design` in session swancloud-1 (account madswan); `swancloud-planner` in session swancloud-2 "
                 "(account madswan-2)") in tok["MAIN_SESSIONS"]
-        assert tok["MAIN_SESSIONS"] in tok["ROSTER"] and tok["OPERATORS"] == "`swancloud-operator` on deneb"
+        assert tok["MAIN_SESSIONS"] in tok["ROSTER"] and "OPERATORS" not in tok
 
     @pytest.mark.parametrize("role", ["dispatcher", "conductor", "coder"])
     def test_a_role_with_no_definition_is_refused_a_dispatcher_among_them(self, tmp_path, monkeypatch, role):

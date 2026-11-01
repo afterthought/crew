@@ -10,7 +10,9 @@ for role in conductor ops construct coder verify dispatcher fable; do
   expect_fail "no definition '$role' for a main level. definitions: design planner main-ops operator reviewer" crewpy brief wldn $role
 done
 expect_fail "no partition 'swb-1'. partitions: wldn madswan swancloud" crewpy brief swb-1 planner
-[[ ! -e $CREW/plugin/roles/fable.md && ! -e $CREW/plugin/roles/explorer.md && ! -e $CREW/plugin/roles/verifier.md ]] || fail "a retired role is still there"
+for gone in fable explorer verifier conductor ops dispatcher construct coder verify; do
+  [[ ! -e $CREW/plugin/roles/$gone.md ]] || fail "the retired role $gone is still there"
+done
 ok "no brief prints for a team, a dispatcher or a retired role"
 
 # sluice's verdict can outlast an agent's ten-minute call (teams.5's details; sluice ADR 0041), so every brief that
@@ -42,13 +44,15 @@ done
 [[ ${named[*]} == "main-ops" ]] || fail "the briefs naming wt submit are ${named[*]}"
 ok "every brief that names wt submit says never to run wt submit --help in a worktree, and to read sluice submit --help or wt --help"
 
-# The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
+# The question discipline each of the three that ask carries (record 0031, briefs.11; Decision 6 of
+# the-team-machinery-leaves): who asks and after whom, a Flume place's question answered with crew answer, Pending
 # You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
 # row's card as crew's.
 asks_say() {
   for want in "A question of yours for the user reaches them on a Pending You card you ask yourself; every other card on the rail is crew's." \
-    "Four ask the user: a team's conductor, the planner, main-level ops and the design agent." \
-    "the dispatcher asks through the planner; and crew refuses a card from any of them" \
+    "Three ask the user: the planner, main-level ops and the design agent." \
+    "A Flume place that stops short asks the one of you it names, who gets the answer and gives it to the place with \`$CREW/plugin/bin/crew answer\`" \
+    "the operator and the reviewer ask nothing; and crew refuses a card from any other agent" \
     "\`$CREW/plugin/bin/crew tell\`: \`wldn-design\` for the design, \`wldn-ops\` for a live system or a deploy, \`wldn-planner\` for the plan" \
     "in their name, their money, their plans, public or hard to undo" "when its choices lead to noticeably different products" \
     "decide what a careful product designer would, and say so" "its options, with the one you recommend" \
@@ -63,6 +67,7 @@ asks_say() {
   done
   for gone in "rail row's of your own" "the form its row takes" "plan card" "begins with the link to the card's plannotator session" \
     "No card carries a path" "kind \`image\`" "An older copy of this card is dead" "posted again by nobody" \
+    "Four ask the user" "crew needs" "stop short to their" \
     "The one exception is a lost card" "card session <key>" "answeredHere" "Never open a browser for a card"; do
     lacks "$out" "$gone"
   done
@@ -259,14 +264,15 @@ expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
 has "$out" "Never pass on a word to land, and never tell \`wldn-ops\` to land or deploy"
 ok "every brief says who speaks in its pane, and the four that record findings quote the words and say what a refusal means"
 
-# Anything for another team or partition goes with crew send, to that partition's operator, and to nobody else
-# (briefs.10): every brief says so in one line beside its roster.
+# Anything for another partition goes with crew send, to that partition's operator, and to nobody else (briefs.10):
+# every brief says so in one line beside its roster, naming no team.
 for role in design planner main-ops operator reviewer; do
   expect_ok crewpy brief wldn $role
-  has "$out" 'anything for another partition or one of its teams is sent with `'
-  has "$out" '/crew send <team or partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+  has "$out" 'anything for another partition is sent with `'
+  has "$out" '/crew send <partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+  lacks "$out" "or one of its teams is sent"; lacks "$out" "crew send <team or partition>"
 done
-ok "every brief sends anything for another team or partition with crew send, to that partition's operator and to nobody else"
+ok "every brief sends anything for another partition with crew send, to that partition's operator and to nobody else"
 ok "a signal names where what it points at lives, a unit carries it as a source, and the construct reads it, stops when it can't, and builds from its sources over its intent"
 
 # Every message an agent sends another goes through crew tell, marked: no brief prompts an agent through herdr.
