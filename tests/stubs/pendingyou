@@ -21,7 +21,10 @@ Tools: whoami, match_area (use for a remote an area was made for, else create), 
 post_request (a key gives its card back, and one under eight characters is refused in Pending You's words, as its
 schema refuses it in pendingyou 0.35.1; one that follows an answered card picks that card up, resolving it, as Pending
 You's guide says a post does), get_request, update_request and ack_answer (at the card's version), cancel_request (a
-card already resolved, cancelled or expired refused in Pending You's words). Any other is a JSON-RPC error."""
+card already resolved, cancelled or expired refused in Pending You's words), and list_pending (the open cards posted in
+the name given, each as Pending You's wake mod reads the list in pendingyou 0.39.0, mod/hooks/wake.js handedOf: its id,
+title, status, turn, version and when it changed, an answer steered to it taken as get_request takes it). Any other is
+a JSON-RPC error."""
 import json, os, pathlib, sys
 
 if sys.argv[1:] != ["mcp", "--app", "claude-code"]:
@@ -58,6 +61,14 @@ def refused(words):
 def card_of(cards, args):
     c = cards.get(args.get("requestId"))
     return c if c else None
+
+
+def taken(cards, rid):
+    """The user's answer steered to a card still waiting on them, taken: the card answered, on the agent's turn."""
+    c, answered = cards[rid], home / "answered" / f"{rid}.json"
+    if answered.exists() and c["status"] == "pending":
+        c.update(status="answered", turn="agent", version=c["version"] + 1, answer=json.loads(answered.read_text())["answer"])
+        save("cards.json", cards)
 
 
 def tool(name, args):
@@ -100,15 +111,20 @@ def tool(name, args):
         c = cards[known]
         return said({"requestId": known, "threadId": known, "status": c["status"], "version": c["version"],
                      "pollAfterSeconds": 30, "url": f"https://www.pendingyou.com/app/r/{known}"})
+    if name == "list_pending":
+        mine = [i for i, c in cards.items() if c["posted"].get("name") == args.get("name")
+                and c["status"] not in ("resolved", "cancelled", "expired")]
+        for i in mine:
+            taken(cards, i)
+        return said({"requests": [{"id": i, "title": cards[i]["posted"].get("title"), "status": cards[i]["status"],
+                                   "turn": cards[i]["turn"], "version": cards[i]["version"], "updatedAt": "2026-10-31T10:00:00Z"}
+                                  for i in mine], "total": len(mine)})
     c = card_of(cards, args)
     if c is None:
         return refused(f"Not found: request:{args.get('requestId')}.")
     rid = args["requestId"]
     if name == "get_request":
-        answered = home / "answered" / f"{rid}.json"
-        if answered.exists() and c["status"] == "pending":
-            c.update(status="answered", turn="agent", version=c["version"] + 1, answer=json.loads(answered.read_text())["answer"])
-            save("cards.json", cards)
+        taken(cards, rid)
         messages = home / "messages" / f"{rid}.json"
         got = {"requestId": rid, "status": c["status"], "turn": c["turn"], "version": c["version"],
                "url": f"https://www.pendingyou.com/app/r/{rid}",

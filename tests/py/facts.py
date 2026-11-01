@@ -73,7 +73,10 @@ def told(minutes=0):
     return {"Act": "batch.due", "At": at(minutes), "On": []}
 
 
-FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}, "teams": ["swb-1", "swb-2"]}},
+# Every role of a partition stands, as a teams file below version 4 reads (crew.load).
+STANDING = {r: False for r in ("design", "planner", "reviewer", "ops", "operator")}
+FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}, "teams": ["swb-1", "swb-2"],
+                                 "flume": STANDING}},
          "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha"},
                    "swb-2": {"name": "swb-2", "label": "wldn", "machine": "chuck-herdr-alpha"}},
          "hosts": {}}

@@ -53,6 +53,54 @@ def test_the_plan_takes_a_chore_among_its_units_and_refuses_any_other_kind():
         plan.recfix(text.replace("Kind: chore", "Kind: spike"), "plan.rec")
 
 
+MADSWAN = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "blueprints": ["afterthought/blueprints"], "roles": {},
+                                      "flume": {"design": False, "planner": "madswan-main", "reviewer": False, "ops": "madswan-main",
+                                                "operator": False}}}}
+
+
+def an_asks_write():
+    """A write of the flywheel holding no asks.rec or roles.rec yet, as a branch before its first ask."""
+    class W(plan.Write):
+        def text(self, path):
+            return self.files.get(path)
+    return W(None, "madswan", None, plan.Plan(""))
+
+
+def test_the_asks_turns_and_role_records_crew_writes_pass_recfix():
+    """plan.ask_rec and plan.roles_lines, checked as land() checks every file a commit holds (plan.checked; plan.1,
+    state.1): asks.rec with its two record sets, an ask with words over two lines and one keyed naming a card, a turn
+    that took both and ended and one superseded, and roles.rec with the planner's and ops's records."""
+    w = an_asks_write()
+    plan.ask_rec(w, MADSWAN, "madswan", "planner", "tell", "madswan-design", words="record 0053 is accepted\nand its rule amended")
+    plan.ask_rec(w, MADSWAN, "madswan", "planner", "card", "crew", names="proposal/12", key="card/req_1/2026-10-31T10:04:00Z")
+    plan.roles_lines(w, MADSWAN, "madswan")
+    pl = plan.Plan(w.files["asks.rec"])
+    for n, end in ((1, [("Superseded", "2")]), (2, [("Ended", "2026-10-31T10:20:00Z"), ("Said", "proposed the fix bolt")])):
+        pl.insert(plan.Rec("Turn", [("Turn", str(n)), ("Role", "planner"), ("Run", "madswan-planner"), ("Place", "crew-planner--madswan"),
+                                    ("Host", "deneb"), ("Took", "ask/1"), ("Took", "place/7@1793440000"), ("Began", "2026-10-31T10:10:00Z")] + end))
+    plan.checked({"asks.rec": pl.text(), "roles.rec": w.files["roles.rec"]})
+    assert [r.get("Role") for r in plan.Plan(w.files["roles.rec"]).recs("Role")] == ["planner", "ops"]
+
+
+@pytest.mark.parametrize("path, drop, field, value", [
+    ("asks.rec", "Role", None, None), ("asks.rec", None, "What", "nudge"), ("asks.rec", None, "Id", "one"), ("asks.rec", "At", None, None),
+    ("roles.rec", "Stream", None, None), ("roles.rec", None, "Effort", "fast"), ("roles.rec", None, "Role", "dispatcher")])
+def test_an_ask_or_a_role_record_the_headers_do_not_allow_is_refused(path, drop, field, value):
+    """role-runs, A malformed ask: an ask with no Role, of a kind the enum does not hold, numbered with no number or with
+    no time, and a role record with no stream, an effort or a role crew has no kind for, each refused by recfix, so the
+    write commits nothing (plan.1)."""
+    w = an_asks_write()
+    plan.ask_rec(w, MADSWAN, "madswan", "planner", "tell", "madswan-design", words="Go.")
+    pl = plan.Plan(w.files[path])
+    rec = pl.recs("Ask" if path == "asks.rec" else "Role")[0]
+    if drop:
+        rec.drop(drop)
+    else:
+        rec.set(field, value)
+    with pytest.raises(Refusal, match=f"^{path} fails recfix --check"):
+        plan.checked({path: pl.text()})
+
+
 def test_a_bolt_given_to_a_crossed_team_is_marked_flume_and_no_other_path_passes():
     """A give to a crossed team marks its bolt Path: flume beside Team (the change teams-cross-to-flume-as-their-bolts-land,
     Decision 2): plan.checked takes it, and refuses a Path the Bolt set's enum does not hold (plan.1)."""
@@ -78,13 +126,19 @@ def requests_text(*recs):
 def test_requests_of_every_act_pass_and_the_descriptor_refuses_what_it_does_not_allow():
     """plan.request appends each act's request to requests.rec, and land checks the file by recfix with the plan write
     (runner.REQUESTS; Decision 4 of teams-cross-to-flume-as-their-bolts-land, plan.1): a launch with its brief over two
-    lines and its After, a retry with a stage and words, a retry of the submission, a drop and a priority pass; an act,
-    a kind or a hold the enums do not hold, a number that is no number and a date that is none are refused."""
+    lines and its After, a retry with a stage and words, a retry of the submission, a drop, a priority and a role's chore
+    launch on main at priority 0 (runner.role_launch; Decision 10 of roles-run-as-flume-kinds) pass; an act, a kind or a
+    hold the enums do not hold, a number that is no number and a date that is none are refused."""
     other = lambda n, act, **g: plan.Rec("Request", runner.request_fields(n, act, "deneb", "unit/a", g, "2026-10-31T12:00:00Z", "madswan-planner"))
+    (_, _, work, given), _ = runner.role_launch([], {"afterthought/crew"}, "madswan", "design", "deneb", "madswan-main", "afterthought/crew",
+                                                "record-0053", "Write docs/adr/0053.md whole:\n# 53. Roles run as kinds")
+    role_land = plan.Rec("Request", runner.request_fields(7, "launch", "deneb", work, given, "2026-10-31T12:00:00Z", "madswan-design"))
     text = requests_text(launch_rec(1, "unit/a"), launch_rec(2, "unit/b", after=[1]), other(3, "retry", Of=1, Stage="construct", Words="Read it again."),
-                         other(4, "retry", Of=1, Submission=True), other(5, "drop", Of=2), other(6, "priority", Of=1, Priority=5))
+                         other(4, "retry", Of=1, Submission=True), other(5, "drop", Of=2), other(6, "priority", Of=1, Priority=5), role_land)
     plan.checked({"requests.rec": text})
-    assert [r.get("Act") for r in plan.Plan(text).recs("Request")] == ["launch", "launch", "retry", "retry", "drop", "priority"]
+    assert [r.get("Act") for r in plan.Plan(text).recs("Request")] == ["launch", "launch", "retry", "retry", "drop", "priority", "launch"]
+    assert [(r.get("Work"), r.get("Kind"), r.get("Base"), r.get("Priority")) for r in plan.Plan(text).recs("Request")][-1] == (
+        "role/design/record-0053", "chore", "main", "0")
     assert plan.Plan(text).recs("Request")[0].get("Brief") == "Build a.\nSource: a.md"
     for right, wrong in (("Act: priority", "Act: reorder"), ("Kind: change", "Kind: spike"), ("Submission: yes", "Submission: maybe"),
                          ("Request: 6", "Request: six"), ("Date: 2026-10-31T12:00:00Z", "Date: soon"), ("Of: 2", "Of: 2\nTeam: crw-4")):
@@ -93,16 +147,20 @@ def test_requests_of_every_act_pass_and_the_descriptor_refuses_what_it_does_not_
 
 
 def test_a_runners_branch_files_pass_by_their_descriptors_and_an_outcome_they_do_not_allow_is_refused():
-    """What a runner writes on <label>/runner/<host>, as crew reads it (runner.RUNNER, ANSWERS, PLACES; plan.runners
-    checks each by recfix before host_read reads it): the runner's record, an answer per request and a place whose
-    Status is Flume's answer on one line pass; an Outcome the enum does not hold is refused."""
+    """What a runner writes on <label>/runner/<host>, as crew reads it (runner.RUNNER, ANSWERS, PLACES, RUNS; plan.runners
+    checks each by recfix before host_read reads it): the runner's record, an answer per request, a place whose Status
+    is Flume's answer on one line and, after the places, a role's run keyed by its address, one holding only the
+    runner's words, pass; an Outcome the enum does not hold is refused."""
     status = json.dumps({"status": {"places": [{"place": "/kit/places/change--a", "phase": "live"}], "host": {}}})
     files = {"runner.rec": runner.RUNNER + "\nHost: deneb\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n",
              "answers.rec": runner.ANSWERS + "\nRequest: 1\nOutcome: launched\nPlace: /kit/places/change--a\nAt: 2026-10-31T12:01:00Z\n"
                             "\nRequest: 2\nOutcome: held\nAt: 2026-10-31T12:01:00Z\n",
-             "places.rec": runner.PLACES + f"\nRequest: 1\nPlace: /kit/places/change--a\nAt: 2026-10-31T12:02:00Z\nStatus: {status}\n"}
+             "places.rec": runner.PLACES + f"\nRequest: 1\nPlace: /kit/places/change--a\nAt: 2026-10-31T12:02:00Z\nStatus: {status}\n"
+                           "\n" + runner.RUNS + "\nAddress: madswan/design\nAt: 2026-10-31T12:03:00Z\nWords: no stream madswan-main\n"
+                           f"\nAddress: madswan/planner\nPlace: /flume/places/crew-planner--madswan\nAt: 2026-10-31T12:03:00Z\nStatus: {status}\n"}
     plan.checked(files)
     assert json.loads(plan.Plan(files["places.rec"]).recs("Place")[0].get("Status")) == json.loads(status)
+    assert [r.get("Address") for r in plan.Plan(files["places.rec"]).recs("Run")] == ["madswan/design", "madswan/planner"]
     with pytest.raises(Refusal, match="^answers.rec fails recfix --check"):
         plan.checked({"answers.rec": files["answers.rec"].replace("Outcome: held", "Outcome: queued")})
 

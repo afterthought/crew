@@ -25,6 +25,9 @@ building the kit in a stream (main_fixer, main_fix_launch), a bolt of one chore 
 row carries it once its code has delivered and its submission waits held (main_fixes_waiting), and the user's send of
 it is the retry of its submission, made once (send_refusal, sent_of).
 
+A main-level role that runs as its kind has its run read from the runner's records (role_run), and its work that lands
+is a launch of Flume's chore kind on its repository's default branch, the role's address its recipient (role_launch).
+
 Each is a function of plain facts (code.7); plan.py, crew.py and hold.py read the facts and act on what they decide.
 This module imports nothing outside the standard library and crew's own modules (code.1)."""
 import json
@@ -53,7 +56,8 @@ def crossed_refusal(team, host, what):
 
 REQUESTS = """\
 # crew's requests of each host's runner: a launch of a Flume place for a
-# crossed team's work, or a retry, drop or priority of a place launched.
+# crossed team's work or a role's that lands, or a retry, drop or priority of
+# a place launched.
 # Written only by crew, each in the commit of the plan write that occasions it;
 # numbered once, and never changed or removed. Each host's runner answers on
 # <label>/runner/<host> of this repository, which crew reads and never writes.
@@ -82,8 +86,9 @@ ACTS = {
     "drop": (("Of",), ()),
     "priority": (("Of", "Priority"), ()),
 }
-# The work a request serves, as crew names it: a unit, a chore, a fix on a bolt or a fix of a kit's main.
-WORK = re.compile(r"^(?:unit/N|chore/N|fix/N/N|fix/main/N/N)$".replace("N", "[a-z0-9][a-z0-9-]*"))
+# The work a request serves, as crew names it: a unit, a chore, a fix on a bolt or a fix of a kit's main, or a role's
+# work that lands (Decision 10 of roles-run-as-flume-kinds).
+WORK = re.compile(r"^(?:unit/N|chore/N|fix/N/N|fix/main/N/N|role/N/N)$".replace("N", "[a-z0-9][a-z0-9-]*"))
 
 
 def number(v):
@@ -133,7 +138,8 @@ def request_refusal(requests, new):
     if extra:
         return f"{act} {n} for {work} carries {', '.join(extra)}, which a {act} does not take"
     if not WORK.match(work):
-        return f"{act} {n} serves {work}, and a request serves unit/<unit>, chore/<chore>, fix/<bolt>/<name> or fix/main/<kit>/<name>"
+        return (f"{act} {n} serves {work}, and a request serves unit/<unit>, chore/<chore>, fix/<bolt>/<name>, fix/main/<kit>/<name> "
+                "or role/<role>/<name>")
     by = {r.get("Request"): r for r in requests}
     if act != "launch":
         of = by.get(new.get("Of"))
@@ -181,7 +187,10 @@ def runner_branch(label, host):
 # these descriptors (flywheel-runner core.2), and never by crew (state.5). runner.rec names the host and the runner
 # serving the partition there, so a branch that exists says a runner answers; answers.rec where each request it has
 # read stands; places.rec Flume's status of each place it launched, `flume status --json <place>`'s answer on one line
-# as Flume gave it (flywheel-runner core.1), kept after Flume tidies the place until its work has left crew's plan.
+# as Flume gave it (flywheel-runner core.1), kept after Flume tidies the place until its work has left crew's plan,
+# and after those each role's latest run on the host, a Run record keyed by the role's address (R4 of
+# roles-run-as-flume-kinds), with Flume's status of its place, or the runner's words where no run could be launched
+# (flywheel-runner's the-runner-carries-crews-work-into-flume, Decision 14).
 RUNNER = """\
 %rec: Runner
 %key: Host
@@ -206,6 +215,13 @@ PLACES = """\
 %mandatory: Request Place At Status
 %allowed: Request Place At Status
 """
+RUNS = """\
+%rec: Run
+%key: Address
+%type: At date
+%mandatory: Address At
+%allowed: Address Place At Status Words
+"""
 FILES = {"runner.rec": "Runner", "answers.rec": "Answer", "places.rec": "Place"}
 
 
@@ -215,7 +231,8 @@ def host_read(label, host, tip, files, refused):
     for one the tip lacks, answers and places then none; refused, recfix's words for each file it refused. Returns
     the reading, its host, branch and tip, with either why it could not be read, which hides this host's work alone
     (read.1, read.3), or the runner's record, each answer by its request's number and each place by its launch's: the
-    place's path, when the runner carried it, and its Status parsed, or with why it could not be."""
+    place's path, when the runner carried it, and its Status parsed, or with why it could not be; and each role's run
+    by its address, likewise, with the runner's words where it could launch none."""
     branch = runner_branch(label, host)
     out = {"host": host, "branch": branch, "tip": tip, "why": None}
     if tip is None:
@@ -246,7 +263,49 @@ def host_read(label, host, tip, files, refused):
         except ValueError as e:
             status, why = None, f"{at}: places.rec's status of the place of request {n} is no JSON ({e})"
         places[n] = {"place": r.get("Place"), "at": r.get("At"), "status": status, "why": why}
-    return dict(out, runner=run[0], answers=answers, places=places)
+    runs = {}
+    for r in files["places.rec"].recs("Run") if files.get("places.rec") is not None else []:
+        a = r.get("Address")
+        if not a or a in runs:
+            return dict(out, why=f"{host}'s runner can't be read: {at}: places.rec holds "
+                        + ("a run with no role's address" if not a else f"the run of {a} twice"))
+        try:
+            status, why = (json.loads(r.get("Status")) if r.get("Status") is not None else None), None
+        except ValueError as e:
+            status, why = None, f"{at}: places.rec's status of the run of {a} is no JSON ({e})"
+        runs[a] = {"place": r.get("Place"), "at": r.get("At"), "status": status, "words": r.get("Words"), "why": why}
+    return dict(out, runner=run[0], answers=answers, places=places, runs=runs)
+
+
+def role_run(reading, address):
+    """A role's latest run on a host as its runner's records show it (R4 of roles-run-as-flume-kinds), from host_read's
+    reading and the role's address, <label>/<role>: whether it is live, its place, the runner's words where it could
+    launch none, and why crew can't tell, the host's runner unread or the run's status no JSON (read.1). A run is live
+    while its place reads live or making in Flume's status, as the runner judges a run that stands; one tidied, over,
+    gone, refused or never launched is not."""
+    if reading.get("why"):
+        return {"live": None, "place": None, "words": None, "why": reading["why"]}
+    r = reading["runs"].get(address)
+    if r is None:
+        return {"live": False, "place": None, "words": None, "why": None}
+    if r["why"]:
+        return {"live": None, "place": r["place"], "words": r["words"], "why": r["why"]}
+    facts = flume_facts(r["status"], r["place"]) if r["status"] is not None else None
+    return {"live": bool(facts) and facts["phase"] in ("live", "making"), "place": r["place"], "words": r["words"], "why": None}
+
+
+def run_waiting(reading, address):
+    """What a role's latest run on a host waits on its caller for, as Flume's status the runner carried shows it (Decision
+    15 of roles-run-as-flume-kinds): (why, words, place), why as Flume's `waiting_on.why` names it, answer for a turn
+    that stopped short and lost for one whose agent was lost, the words the stop-short's own where it has them, else
+    Flume's; None for a run that waits on nothing, is not live, or that crew can't read, which role_run says why (read.1)."""
+    r = None if reading.get("why") else reading["runs"].get(address)
+    if r is None or r["why"] or r["status"] is None:
+        return None
+    f = flume_facts(r["status"], r["place"])
+    if not f or f["phase"] != "live" or not f["waiting"]:
+        return None
+    return f["waiting"], text(f["end"].get("words")) or f["waiting_words"], r["place"]
 
 
 def of_host(reads, label, host):
@@ -871,3 +930,37 @@ def main_fixes_waiting(requests, reads, label):
                         since=flume_facts(place["status"], place["place"])["waiting_since"], carried=place["at"],
                         sent=number(sent.get("Request")) if sent is not None else None))
     return out
+
+
+# ------------------------------------------------------------------------------------- a role's work that lands
+
+# The branch a role's work lands on, its repository's default: main, as crew reads every kit's main (plan.18) and cuts a
+# fix of it (main_fix_launch).
+ROLE_BASE = "main"
+FORGE = re.compile(r"^[^/\s]+/[^/\s]+$")
+
+
+def role_launch(requests, named, label, role, host, stream, repo, name, brief):
+    """The launch crew role land <repo> <name> --brief-file <file> appends for a role's work that lands (Decision 10 of
+    roles-run-as-flume-kinds; roles.7 part 3), as (act, host, work, its fields as plan.request takes them), or (None,
+    why): a place of Flume's own chore kind named name, cut from repo's default branch (ROLE_BASE), on the main level's
+    host and in the role's stream, at priority 0, its intent the role's run, <label>-<role>, its recipient the role's
+    address, <label>/<role>, so its landing, or a wait on its caller, reaches the role's next run, and its brief the
+    file's text whole, since the stage's agent is fresh. Refused for a repository not named as its forge address,
+    <owner>/<name>, or one crew does not name (named, the teams file's and the plan's), for a brief with no words, and
+    while a launch of role/<role>/<name> stands, since the name is in use there."""
+    if not FORGE.match(repo):
+        return None, f"a repository is named by its forge address, <owner>/<name>, which the runner resolves to its clone, not {repo}"
+    if repo not in named:
+        return None, (f"crew names no repository {repo}: a role's work lands in a blueprints repository or a kit the teams file "
+                      "names, or a repository the plan names, and it names " + ", ".join(sorted(n for n in named if FORGE.match(n))))
+    if not brief.strip():
+        return None, f"the brief for {name} holds no words, and a chore's agent starts fresh with its brief alone"
+    work = f"role/{role}/{name}"
+    l = launch_of(requests, work)
+    if l is not None:
+        return None, (f"{name} is in use for {label}/{role}: request {l.get('Request')} launched it in {l.get('Repo')} as Flume "
+                      f"place chore--{l.get('Name')}, so name this work differently")
+    return ("launch", host, work, {
+        "Repo": repo, "Kind": "chore", "Name": name, "Base": ROLE_BASE, "Stream": stream, "Priority": 0,
+        "Intent": f"{label}-{role}", "Recipient": f"{label}/{role}", "Brief": brief}), None

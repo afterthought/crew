@@ -3,8 +3,9 @@
 # to finish its step, and records it; while it holds, crew starts no agent there; hold status says what still works;
 # hold wait, once the host is quiet, ends every crew agent there with its pane kept; crew go lifts the hold and brings
 # each back with its conversation, greeted; crew update hands each standing agent an update made due its restart, which
-# brings it back on crew as it now is, told so; crew's Stop hook does the same at the end of a due agent's turn; and
-# --now ends every agent at once.
+# brings it back on crew as it now is, told so; crew's Stop hook does the same at the end of a due agent's turn; --now
+# ends every agent at once; and a standing agent whose role now runs as its kind is passed over by crew update and
+# ended at its turn's end, never started again.
 # What makes an agent due, what keeps a host from being quiet, when a due agent may be restarted and what the bands
 # say are logic cases (tests/py/test_hold.py).
 # Reads: plugin/hooks/ plugin/lib/board.py plugin/lib/hold.py plugin/lib/ops.py tests/teams.sh
@@ -130,3 +131,26 @@ eq "$(herdr_state $box wldn-3 '[.agents[].name] | join(",")')" ""
 expect_ok crew go --all
 eq "$(mains)" "$here"
 ok "crew hold --all --now holds every host crew runs agents on and ends every agent there at once, and crew go --all brings them back"
+
+# wldn's planner stands, then its partition comes to run it as its kind (design Decision 14): crew update passes it
+# over, and at the end of its turn the Stop hook hands it its end, given once it is idle, its pane left with nothing
+# started in it and its log saying why; nothing starts it again.
+HOST=$box expect_ok crew main up wldn
+planner=$(rec wldn-planner)
+role_stream wldn planner wldn-main
+: > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
+rm -f "$(home_of $box)/.local/state/crew/renew/wldn-planner.log"  # its restart's above
+expect_ok crew update $box
+has "$out" "wldn-planner is passed over, never restarted: its role now runs as its kind, in Flume runs of its own"
+[[ -e $(home_of $box)/.local/state/crew/renew/wldn-planner.log ]] && fail "crew update handed wldn-planner to crew _renew"
+as $box bash -c "echo '{\"session_id\":\"$(basename "$planner")\"}' | python3 '$CREW/plugin/hooks/stop'"
+log=$(home_of $box)/.local/state/crew/renew/wldn-planner.log
+until_ok grep -q "wldn-planner is ended" "$log" || fail "wldn-planner was not ended: $(cat "$log" 2>/dev/null)"
+has "$(cat "$log")" "wldn-planner is ended: its role now runs as its kind, in Flume runs of its own, so nothing starts it again; its pane is left"
+eq "$(herdr_state $box wldn-3 '[.agents[].name] | map(select(. == "wldn-planner")) | length')" "0"
+eq "$(herdr_state $box wldn-3 '[.tabs[].label] | map(select(. == "planner")) | length')" "1"
+eq "$(field $box agent.end On)" "agent/wldn-planner"
+expect_ok crew update $box
+HOST=$box expect_ok crew revive
+eq "$(launches)" ""
+ok "a standing planner whose role now runs as its kind is passed over by crew update and ended at the end of its turn, its pane left, and nothing starts it again"

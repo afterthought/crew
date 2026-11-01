@@ -78,16 +78,18 @@ def kits(ok=True):
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
 
-def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, cards=(), errors=None, unread=None, pl=True, entries=(), logs=()):
+def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, cards=(), errors=None, unread=None, pl=True, entries=(), logs=(),
+         roles=None):
     """The read the board is made from; entries are the partition's run record entries the operations are read from,
-    whose rail rows join the plan's, as plan.rail_record makes them, and logs every entry it read."""
+    whose rail rows join the plan's, as plan.rail_record makes them, logs every entry it read, and roles what it read of
+    the roles the partition runs as their kinds (board.roles_read), none by default."""
     p = the_plan() if pl else None
     found = [("wldn", "WilldanGroup/crew-state", "tip0" if pl else None, p)]
     sv = sv or kits()
     ops_rows = [dict(r, at=plan.utc(r["at"]), doc=None) for r in ops.rows(FLEET, "wldn", list(entries))]
     return dict(found=found, sv=sv, props=list(props), cards=list(cards), unread=unread or {}, errors=errors or {},
                 landings=list(landings), gives=gives or {}, signals={"wldn": (signals or [], {})}, ops={"wldn": list(entries)},
-                logs={"wldn": GIVES + (list(logs) or list(entries))},
+                logs={"wldn": GIVES + (list(logs) or list(entries))}, roles={"wldn": roles} if roles else {},
                 rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None) if p else []) + ops_rows)
 
 
@@ -382,9 +384,9 @@ class TestRefresh:
     the views and the stamps, so what is asked is what the case shows."""
 
     FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan", "state": "o/state", "blueprints": ["o/bp"],
-                                     "machine": "mac-studio", "teams": ["swb-1"]},
+                                     "machine": "mac-studio", "teams": ["swb-1"], "flume": {r: False for r in crew.KIND_ROLES}},
                             "swancloud": {"label": "swancloud", "partition": "personal", "state": "o/state", "blueprints": ["o/bp"],
-                                          "machine": "mac-studio", "teams": []}},
+                                          "machine": "mac-studio", "teams": [], "flume": {r: False for r in crew.KIND_ROLES}}},
              "teams": {"swb-1": {"machine": BOX}},
              "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "swancloud": {"partition": "personal"}}}}}
 
@@ -438,6 +440,42 @@ class TestRefresh:
             def again(self, fleet):
                 test.again.append(list(self.labels))
         return Here(None)
+
+    def test_the_follower_runs_pending_yous_notice_while_a_role_here_runs_as_its_kind(self, tmp_path, monkeypatch):
+        """role-runs "The follower hears Pending You's notice while a role here runs as its kind": started at a tick
+        while a partition whose main level is here names a stream for a role, once, started again when it ended, and
+        ended once none does (design Decision 5 of roles-run-as-flume-kinds)."""
+        started = []
+
+        class Proc:
+            def __init__(self, argv, **kw):
+                self.argv, self.code, self.ended = argv, None, False
+                started.append(self)
+
+            def poll(self):
+                return self.code
+
+            def terminate(self):
+                self.ended, self.code = True, -15
+
+            def wait(self, timeout=None):
+                return self.code
+        monkeypatch.setattr(board.subprocess, "Popen", Proc)
+        monkeypatch.setattr(board, "HEARD", tmp_path / "heard.log")
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        stands = {r: False for r in crew.KIND_ROLES}
+        runs = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "flume": dict(stands, planner="madswan-main")}}}
+        f = board.Follower(None)
+        f.hear(runs)
+        f.hear(runs)
+        assert [x.argv for x in started] == [board.notice_argv()]
+        started[0].code = 1
+        f.hear(runs)
+        assert len(started) == 2, "a notice that ended was not started again"
+        f.hear({"partitions": {"madswan": dict(runs["partitions"]["madswan"], flume=stands)}})
+        assert started[1].ended and f.notice is None
+        f.hear({"partitions": {"madswan": dict(runs["partitions"]["madswan"], machine="mac-studio")}})
+        assert len(started) == 2, "a notice was run for a role whose main level is on another host"
 
     def frame(self, label, kind="rail"):
         return json.loads((board.FRAMES / f"{label}{'.' + kind if kind != 'board' else ''}.json").read_text())
@@ -1231,7 +1269,7 @@ class TestMore:
         p = d["partitions"][0]
         assert sorted(d) == ["from", "partitions", "read_at", "unread"]
         assert sorted(p) == ["asking", "attention", "bolt_plan", "cards", "construction", "environments", "fixing", "hosts", "inception", "label",
-                             "operation", "plan", "records", "teams"]
+                             "operation", "plan", "records", "runs", "teams"]
         assert sorted(p["teams"][0]) == ["host", "kit", "kits", "stream", "team"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
         assert sorted(te) == ["bolt", "fixes", "given", "goal", "host", "landing", "markers", "record", "repo", "state", "stream", "submissions_error",
@@ -1492,6 +1530,11 @@ class TestViews:
         lines = [v["stale"]] + [l for lines in v["views"].values() for l in lines] + [l for lines in board.agent_views(data(cards=[QUESTION]))["cards"].values() for l in lines]
         lines += [l for lines in standing.values() for l in lines]
         assert any("#41 under test" in t for l in standing["swb-1-conductor"] for t, _ in l)
+        # a role's run's view, under its run's name, its lines of the same form (Decision 15 of roles-run-as-flume-kinds)
+        ran = json.loads(json.dumps(board.agent_views(data(roles=roles({"planner": "wldn-main", "reviewer": "wldn-main"},
+                                                                       [an_ask(1, 9), an_ask(2, 4)], [a_turn(1, ["ask/1"])])))))["views"]
+        assert ran["wldn-planner"][0][0] == ["wldn-planner run", "bold"] and ran["wldn-reviewer"]
+        lines += [l for lines in ran.values() for l in lines]
         assert all(isinstance(l, list) and all(isinstance(t, str) and len(seg) == 2 and style in (None, "bold", "dim") for seg in l for t, style in [seg])
                    for l in lines)
 
@@ -1775,3 +1818,153 @@ class TestCrossed:
 
     def test_a_crossed_pieces_pip_is_the_stage_it_waits_at(self):
         assert board.pips([{"stage": "needs", "flume": {"of": "code"}}, {"stage": "submitted"}, {"stage": "launching"}, {"stage": "refused"}]) == "◑◕○?"
+
+
+# A role's run on wldn's main level's host, as the runner carries it (runner.RUNS): its place and Flume's status of it.
+RUN = "/home/u/.local/state/flume/places/crew-{role}--wldn"
+
+
+def run_status(role, waiting_on=None, words=None):
+    """flume status --json of a role's run in its one stage, turn, as the runner carries it."""
+    stage = {"name": "turn", "state": "ended" if waiting_on else "running", "end": {"words": words} if words else None}
+    return json.dumps({"status": {"places": [{"place": RUN.format(role=role), "phase": "live", "current": "turn", "stages": [stage],
+                                              "waiting_on": waiting_on, "stalled": False}]}})
+
+
+def runner_reading(runs, host="mac-studio"):
+    """The main level's host's runner as plan.runners reads it, its places.rec holding each role's run, {role: status}."""
+    import runner
+    recs = "".join(f"\nAddress: wldn/{r}\nPlace: {RUN.format(role=r)}\nAt: {ago(10)}\nStatus: {st}\n" for r, st in runs.items())
+    files = {"runner.rec": plan.Plan(runner.RUNNER + f"\nHost: {host}\nVersion: 0.1.0\nSince: {ago(60)}\n"),
+             "answers.rec": plan.Plan(runner.ANSWERS), "places.rec": plan.Plan(runner.PLACES + "\n" + runner.RUNS + recs)}
+    return runner.host_read("wldn", host, "5e1f0c2a" + "0" * 32, files, {})
+
+
+def asks_rec(asks_, turns):
+    """asks.rec with these asks and turns, each a dict of its fields, a Took a list."""
+    def rec(f):
+        return "".join(f"{k}: {x}\n" for k, v in f.items() for x in (v if isinstance(v, list) else [v])) + "\n"
+    return "%rec: Ask\n\n" + "".join(rec(a) for a in asks_) + "%rec: Turn\n\n" + "".join(rec(t) for t in turns)
+
+
+def an_ask(n, minutes, role="planner", what="tell", frm="wldn-design", names=None):
+    return dict(Id=str(n), Role=role, From=frm, What=what, **({"Names": names} if names else {}), At=ago(minutes))
+
+
+def a_turn(n, took, role="planner", ended=False, superseded=None):
+    t = dict(Turn=str(n), Role=role, Run=f"wldn-{role}", Place=f"crew-{role}--wldn", Host="mac-studio", Took=list(took), Began=ago(6))
+    t.update(dict(Ended=ago(1), Said="done") if ended else {})
+    t.update(dict(Superseded=str(superseded)) if superseded else {})
+    return t
+
+
+def roles(kinds, asks_=(), turns=(), runs=None, reading=None):
+    """What the board read of wldn's roles that run as their kinds (board.roles_read)."""
+    return {"kinds": kinds, "asks": asks_rec(list(asks_), list(turns)) if asks_ or turns else None, "host": "mac-studio",
+            "reading": reading if reading is not None else runner_reading(runs or {})}
+
+
+PLANNER = {"planner": "wldn-main"}
+# What the fixture's board names for attention with no role's run in it: board-done, every unit of it landed.
+ATTENDED = ["! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
+
+
+def runs_named(r):
+    """What the attention line names of the roles' runs in the board read with roles r."""
+    return [a for a in data(roles=r)["partitions"][0]["attention"] if a["what"] == "run"]
+
+
+class TestRuns:
+    """crew-board "A role that runs as its kind has its view" and "The attention line names a role's run that waits"
+    (Decision 15 of roles-run-as-flume-kinds, code.8): wldn's planner, and in some cases its design agent and reviewer,
+    run as their kinds in stream wldn-main, their runs on mac-studio, wldn's main level's host."""
+
+    def test_a_run_with_an_ask_waiting(self):
+        """A run with an ask waiting: the planner's run took two asks, and a third has waited four minutes."""
+        r = roles(PLANNER, [an_ask(1, 9), an_ask(2, 7, what="landed", frm="crew", names="bolt/apex-zones"), an_ask(3, 4)],
+                  [a_turn(1, ["ask/1", "ask/2"])], {"planner": run_status("planner")})
+        mine = view("wldn-planner", roles=r)
+        assert mine[:3] == ["wldn-planner run  in stream wldn-main  turn 1 took 2  1 ask waits, for 4m",
+                            "  ask 1  tell from wldn-design", "  ask 2  landed from crew  on bolt/apex-zones"]
+        # the planner's own view of the board follows its run's lines
+        assert mine[3:] == view("wldn-planner")
+        styled = board.agent_views(data(roles=r))["views"]["wldn-planner"][0]
+        assert styled[0] == ("wldn-planner run", "bold")
+
+    def test_nothing_waiting(self):
+        """Nothing waiting: the planner's run took one ask and nothing else waits."""
+        r = roles(PLANNER, [an_ask(1, 9)], [a_turn(1, ["ask/1"])])
+        assert view("wldn-planner", roles=r)[:2] == ["wldn-planner run  in stream wldn-main  turn 1 took 1  nothing waits",
+                                                      "  ask 1  tell from wldn-design"]
+
+    def test_asks_that_wait_count_from_the_oldest_and_an_ended_turn_took_its_own(self):
+        r = roles(PLANNER, [an_ask(1, 30), an_ask(2, 125), an_ask(3, 12)], [a_turn(1, ["ask/1"], ended=True)])
+        assert view("wldn-planner", roles=r)[0] == "wldn-planner run  in stream wldn-main  turn 1 took 1, ended  2 asks wait, the oldest for 2h 05m"
+
+    def test_a_run_with_no_turn_yet_and_the_reviewer_whose_run_has_no_other_view(self):
+        r = roles({"planner": "wldn-main", "reviewer": "wldn-main"}, [an_ask(1, 3, role="reviewer", what="batch", frm="crew", names="batch/4")])
+        v = {a: ["".join(t for t, _ in l) for l in ls] for a, ls in board.agent_views(data(roles=r))["views"].items()}
+        assert v["wldn-reviewer"] == ["wldn-reviewer run  in stream wldn-main  no turn taken  1 ask waits, for 3m"]
+        assert v["wldn-planner"][0] == "wldn-planner run  in stream wldn-main  no turn taken  nothing waits"
+        # a role that stands keeps its view as it was, and no run's lines
+        assert v["wldn-design"] == view("wldn-design") and v["wldn-ops"] == view("wldn-ops")
+
+    def test_a_superseded_turn_is_not_the_runs_and_its_asks_wait_again_until_the_next_takes_them(self):
+        lost = roles(PLANNER, [an_ask(1, 20)], [a_turn(1, ["ask/1"], superseded=2)])
+        assert view("wldn-planner", roles=lost)[0] == "wldn-planner run  in stream wldn-main  no turn taken  1 ask waits, for 20m"
+        again = roles(PLANNER, [an_ask(1, 20)], [a_turn(1, ["ask/1"], superseded=2), a_turn(2, ["ask/1"])])
+        assert view("wldn-planner", roles=again)[0] == "wldn-planner run  in stream wldn-main  turn 2 took 1  nothing waits"
+
+    def test_a_lost_run(self):
+        """A lost run: the runner's records show wldn's design run lost; the attention line names it, its place and its
+        host, and prints no command."""
+        lost = {"act": "retry", "stage": "turn", "why": "lost", "since": 1793440000, "words": None}
+        r = roles({"design": "wldn-main"}, runs={"design": run_status("design", lost)})
+        said = f"wldn's design run: lost, its place {RUN.format(role='design')} on mac-studio"
+        assert lane(board.board_text(data()), "attention") == ATTENDED
+        assert lane(board.board_text(data(roles=r)), "attention") == ATTENDED + [f"! {said}"]
+        assert f"! {said}" in view("wldn-operator", roles=r) and f"! {said}" in view("wldn-planner", roles=r)
+        a, = runs_named(r)
+        assert (a["what"], a["run"], a["how"], a["place"], a["host"]) == ("run", "wldn-design", "lost", RUN.format(role="design"), "mac-studio")
+        for no in ("flume retry", "crew "):
+            assert no not in said
+
+    def test_a_run_that_stopped_short_is_named_with_its_words(self):
+        short = {"act": "retry", "stage": "turn", "why": "answer", "since": 1793440000, "words": None}
+        r = roles(PLANNER, runs={"planner": run_status("planner", short, "Which bolt does proposal 12's chore belong in?\nIt names two.")})
+        assert lane(board.board_text(data(roles=r)), "attention") == ATTENDED + [
+            f"! wldn's planner run: stopped short, its place {RUN.format(role='planner')} on mac-studio: Which bolt does proposal 12's chore belong in?"]
+        assert runs_named(r)[0]["words"] == "Which bolt does proposal 12's chore belong in?\nIt names two."
+
+    def test_a_run_that_waits_on_nothing_or_stands_live_is_not_named(self):
+        held = {"act": "retry", "stage": "turn", "why": "on_hold", "since": 1793440000, "words": "held for the user"}
+        r = roles({"planner": "wldn-main", "design": "wldn-main"}, runs={"planner": run_status("planner"), "design": run_status("design", held)})
+        assert runs_named(r) == []
+
+    def test_a_runner_crew_cant_read_names_the_runs_it_cant_tell(self):
+        import runner
+        r = roles({"design": "wldn-main", "planner": "wldn-main", "operator": "wldn-main"}, reading=runner.of_host({}, "wldn", "mac-studio"))
+        assert lane(board.board_text(data(roles=r)), "attention") == ATTENDED + [
+            "! wldn's design, planner and operator runs: crew can't tell how they stand: no runner answers on mac-studio: wldn/runner/mac-studio "
+            "does not exist"]
+        bad = runner_reading({"design": "{not json", "planner": run_status("planner")})
+        assert lane(board.board_text(data(roles=roles({"design": "wldn-main", "planner": "wldn-main"}, reading=bad))), "attention")[-1].startswith(
+            "! wldn's design run: crew can't tell how it stands: wldn/runner/mac-studio at 5e1f0c2: places.rec's status of the run of wldn/design is no JSON (")
+        # the runs still have their views from asks.rec
+        assert view("wldn-design", roles=r)[0] == "wldn-design run  in stream wldn-main  no turn taken  nothing waits"
+
+    def test_the_board_reads_the_roles_beside_the_plan_and_a_partition_running_none_reads_nothing_more(self, monkeypatch):
+        shown, ran = [], []
+        monkeypatch.setattr(plan, "show", lambda repo, tip, path: shown.append((repo, tip, path)) or "%rec: Ask\n")
+        monkeypatch.setattr(plan, "runners", lambda repo, label: ran.append((repo, label)) or {})
+        fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], flume=dict(crew_standing(), planner="wldn-main")),
+                                        "madswan": dict(FLEET["partitions"]["wldn"], label="madswan", flume=crew_standing())})
+        got = board.roles_read(fleet, [("wldn", "WilldanGroup/crew-state", "tip0", None), ("madswan", "WilldanGroup/crew-state", "tip1", None)])
+        assert list(got) == ["wldn"] and got["wldn"]["kinds"] == {"planner": "wldn-main"} and got["wldn"]["asks"] == "%rec: Ask\n"
+        assert got["wldn"]["reading"]["why"] == "no runner answers on mac-studio: wldn/runner/mac-studio does not exist"
+        assert (shown, ran) == ([("WilldanGroup/crew-state", "tip0", "asks.rec")], [("WilldanGroup/crew-state", "wldn")])
+        assert board.roles_read(fleet, [("wldn", "WilldanGroup/crew-state", None, None)])["wldn"]["asks"] is None
+
+
+def crew_standing():
+    return {r: False for r in crew.KIND_ROLES}

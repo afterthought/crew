@@ -131,6 +131,30 @@ def card_under(entries, key, by):
     return held
 
 
+def posted_keys(entries, by):
+    """The cards crew raised in the agent `by`'s name and has not closed, each by its card's id to the key it holds it
+    under: a card.post done and naming a card that no later card.close of it closes. entries are in written order."""
+    held = {}
+    for e in entries:
+        act, card = e.get("Act"), e.get("Card")
+        if act == "card.post" and not e.get("Refused") and e.get("By") == by and card and e.get("Key"):
+            held[card] = e["Key"]
+        elif act == "card.close" and not e.get("Refused"):
+            held.pop(card, None)
+    return held
+
+
+def run_cards(listed):
+    """The cards a role's run reads at its start (design Decision 7 of roles-run-as-flume-kinds): those of list_pending's
+    reply on the agent's turn, the user having answered, each (its id, its title or None), in the reply's order. Read as
+    Pending You's own wake mod reads list_pending (pendingyou 0.39.0, mod/hooks/wake.js handedOf): `requests`, each with
+    its card's `id`, `title` and whose `turn` it is; a request of any other shape is left out (read.2)."""
+    requests = listed.get("requests") if isinstance(listed, dict) else None
+    return [(r["id"], r["title"] if isinstance(r.get("title"), str) and r["title"].strip() else None) for r in requests
+            if isinstance(r, dict) and isinstance(r.get("id"), str) and REQUEST_ID.match(r["id"]) and r.get("turn") == "agent"] \
+        if isinstance(requests, list) else []
+
+
 def stranded(entries, key, owner, here):
     """The owner's newest card under a key when this host (here) can't reach it: one posted from another host, done and
     naming a card, that no later card.close of it closes, or one whose last close was as lost to its owner, on any

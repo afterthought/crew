@@ -75,7 +75,7 @@ On request, the operator agent SHALL make the partition's lineage page with `cre
 - **THEN** it runs `crew page wldn`, opens the file beside its pane, and says as of when it is
 
 ### Requirement: The operator is a main-level role
-The partition's operator, `<label>-operator`, SHALL be a standing role of its main level: `crew main up <label>` SHALL start it in an `operator` tab of the `<label>` workspace, beside the design agent, the planner and ops, and greet it once it is up as it greets them; `crew main down <label>` SHALL end it; `crew revive` SHALL bring it back as it brings them back. Every brief SHALL name it as the partition's operator, and crew SHALL start no other operator agent for the partition.
+The partition's operator, `<label>-operator`, SHALL be a role of its main level: while it stands, `crew main up <label>` SHALL start it in an `operator` tab of the `<label>` workspace, beside the design agent, the planner and ops, and greet it once it is up as it greets them; `crew main down <label>` SHALL end it; `crew revive` SHALL bring it back as it brings them back. While its partition runs it as its kind, it SHALL run as a role's run does, on an ask, and none of these SHALL start it. Every brief SHALL name it as the partition's operator, and crew SHALL start no other operator agent for the partition.
 
 #### Scenario: The main level comes up with its operator
 - **WHEN** `crew main up wldn` runs
@@ -84,6 +84,10 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 #### Scenario: A conductor waits on the user with no card
 - **WHEN** a conductor of wldn stops on a question asked only in its pane
 - **THEN** its brief has it tell `wldn-operator`, the partition's one operator
+
+#### Scenario: The operator runs as its kind
+- **WHEN** madswan's `flume` names a stream for its operator and `crew main up madswan` runs
+- **THEN** no `operator` tab is opened and no operator is started, and a tell to `madswan-operator` is an ask of its role
 
 ### Requirement: The console follows the run record
 `crew console up <label> flow` SHALL open a `flow` tab in the `console` workspace of the host's `<label>` session that runs `crew events --follow` for the partition, and SHALL start no agent. When the tab is already there it SHALL do nothing. `crew console down <label>` SHALL close the console's tabs. The tab SHALL show an entry written on this host within a few seconds, and one from another host within a minute.
@@ -146,7 +150,7 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 - **THEN** the console opens, the command says `crew operator up` is `crew console up` now, and no agent is started
 
 ### Requirement: Anything sent to another team or partition reaches its operator
-`crew send <team or partition> "<text>"` SHALL deliver the text to the operator of the partition it names, `<label>-operator`, wherever that agent runs: a partition is named by its label, and a team resolves to the partition it belongs to. The text SHALL arrive marked as every tell is, `[crew tell from <sender>]`, the sender being the agent that ran the command or `<user>@<host>`, followed by `(sent to <team or partition>)` as it was named, then the text. A name that is no team and no partition SHALL be refused, naming the teams and partitions there are. A send by the operator to its own partition, or to one of its own partition's teams, SHALL be refused, saying it carries with `crew tell`. An operator that is not up, or waits on a question in its pane, SHALL get nothing typed, and the send SHALL fail saying so, as a tell does.
+`crew send <team or partition> "<text>"` SHALL deliver the text to the operator of the partition it names, `<label>-operator`, wherever that agent runs: a partition is named by its label, and a team resolves to the partition it belongs to. The text SHALL arrive marked as every tell is, `[crew tell from <sender>]`, the sender being the agent that ran the command or `<user>@<host>`, followed by `(sent to <team or partition>)` as it was named, then the text. A name that is no team and no partition SHALL be refused, naming the teams and partitions there are. A send by the operator to its own partition, or to one of its own partition's teams, SHALL be refused, saying it carries with `crew tell`. An operator that is not up, or waits on a question in its pane, SHALL get nothing typed, and the send SHALL fail saying so, as a tell does. To a partition that runs its operator as its kind, with no standing operator up, the send SHALL be written as an ask of the operator from the sender, carrying whom it was sent to and the text, and SHALL not fail for the operator not being up.
 
 #### Scenario: A team's agent sends to another partition's team
 - **WHEN** `crw-5-unit-1` runs `crew send swb-1 "The zone check fails on tenants with no region"`
@@ -167,6 +171,10 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 #### Scenario: The operator waits on a question
 - **WHEN** an agent sends to wldn while `wldn-operator` waits on a question in its pane
 - **THEN** nothing is typed, and the send fails saying the operator waits on a question and to send again once it is answered
+
+#### Scenario: An operator that runs as its kind
+- **WHEN** madswan runs its operator as its kind, no standing operator of it is up, and swancloud-planner runs `crew send madswan "<text>"`
+- **THEN** an ask of madswan's operator from swancloud-planner holds `(sent to madswan)` and the text, and nothing is typed
 
 ### Requirement: The operator carries what is sent to it
 The operator SHALL carry what reaches it by `crew send` on to the agent whose job it is, in the sender's words and naming the sender: a finding becomes a signal it records, quoting the words as sent; a design question goes to the design agent; work to build to the planner; a message for a team to that team's conductor. It SHALL NOT answer it in the sender's place or reason it out itself. A request to change the teams, from an operator whose main level runs on a box, SHALL be sent with `crew send` to a partition whose main level runs on a Mac that keeps swancloud's checkout.

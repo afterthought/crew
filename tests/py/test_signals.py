@@ -328,3 +328,42 @@ class TestLand:
             plan.capture_landing(DEP, folder(), {"capture.md": CAPTURE, "01-failed.md": FAILED}, "swancloud")
         with pytest.raises(Refusal, match=f"signals/{DEP}/01-failed.md on swancloud/main is not the one landed now, and a capture or signal is never changed"):
             plan.capture_landing(DEP, folder(), {"capture.md": CAPTURE, "01-failed.md": FAILED.replace("machine", "suite")}, "swancloud")
+
+
+class TestCaptureAsk:
+    """A capture landed through crew asks a design agent that runs as its kind, one ask per signal keyed by its id, in
+    the capture's commit (role-runs "An ask is written with the act that makes it" and "A capture and a landing are
+    asks"; design Decision 5); a design agent that stands is asked nothing."""
+
+    def fleet(self, design):
+        return {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "blueprints": ["afterthought/blueprints"], "roles": {},
+                                           "flume": dict(dict.fromkeys(crew.KIND_ROLES, False), design=design)}}, "teams": {}, "hosts": {}}
+
+    @pytest.fixture
+    def w(self, monkeypatch):
+        from facts import FactsWrite
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        monkeypatch.setattr(plan, "agent", lambda: "madswan-planner")
+        w = FactsWrite("", None)
+        w.label = "madswan"
+        return w
+
+    def test_a_capture_asks_the_design_agent_that_runs_as_its_kind_once_per_signal_in_its_commit(self, w):
+        """role-runs, A capture: the capture's commit holds an ask of the design agent keyed by the signal's id."""
+        import asks
+        plan.capture_asks(w, self.fleet("madswan-main"), "madswan", [f"{CAP}/01-cfn-nag", f"{CAP}/02-lint"])
+        got, _ = asks.parse(w.files["asks.rec"])
+        assert [(a["Role"], a["From"], a["What"], a["Names"], a["Key"]) for a in got] == [
+            ("design", "madswan-planner", "capture", f"signals/{CAP}/01-cfn-nag", f"signal/{CAP}/01-cfn-nag"),
+            ("design", "madswan-planner", "capture", f"signals/{CAP}/02-lint", f"signal/{CAP}/02-lint")]
+        assert [r.get("What") for _, r in w.asked] == ["capture", "capture"] and "roles.rec" in w.files
+
+    def test_a_signal_already_asked_about_is_asked_once(self, w):
+        plan.capture_asks(w, self.fleet("madswan-main"), "madswan", [f"{CAP}/01-cfn-nag"])
+        plan.capture_asks(w, self.fleet("madswan-main"), "madswan", [f"{CAP}/01-cfn-nag"])
+        assert len(w.asked) == 1 and w.held == [("madswan-design", f"signal/{CAP}/01-cfn-nag")]
+
+    def test_a_design_agent_that_stands_is_asked_nothing(self, w):
+        """role-runs, A role that stands is asked nothing."""
+        plan.capture_asks(w, self.fleet(False), "madswan", [f"{CAP}/01-cfn-nag"])
+        assert w.files == {} and w.asked == []

@@ -290,6 +290,32 @@ has "$out" $'A landing is never that word.\n\n## Asking the user\n\nA question o
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
 
+# How a main-level role's work reaches it (design Decision 9, role-runs "A run's brief says how a turn goes"): a role
+# that stands, in its pane; one its partition runs as its kind, a turn from crew role start to crew role end, waiting in
+# its session on nothing, and asking the user only on a card in its own name.
+for role in design planner reviewer main-ops operator; do
+  expect_ok crewpy brief wldn $role
+  has "$out" "You stand in your pane, an agent crew started and keeps up: your work reaches you there, as tells marked"
+  lacks "$out" "You run as your kind"
+done
+for r in design planner reviewer ops operator; do role_stream wldn $r wldn-main; done
+for role in design planner reviewer main-ops operator dispatcher; do
+  expect_ok crewpy brief wldn $role
+  [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/$role.md left ${BASH_REMATCH[0]} unfilled for a partition running all five as their kinds"
+  [[ $role == dispatcher ]] && continue
+  for want in "You run as your kind: no agent of you stands" "Your turn starts with \`$CREW/plugin/bin/crew role start\`" \
+    "end the turn with \`$CREW/plugin/bin/crew role end\`" "Wait in your session on nothing" \
+    "end your turn instead, and the thing reaches your next run as an ask" "Ask the user only on a card in your own name, wldn-"; do
+    has "$out" "$want"
+  done
+  lacks "$out" "You stand in your pane"
+done
+expect_ok crewpy brief wldn reviewer; has "$out" "run \`$CREW/plugin/bin/crew review delivered\`, which records it"
+expect_ok crewpy brief wldn main-ops; has "$out" "\`$CREW/plugin/bin/crew bolt submit\` returns once each bolt is queued"
+expect_ok crewpy brief wldn planner; has "$out" "its delivery reaches you as an ask, with the line that adopts its card"
+for r in design planner reviewer ops operator; do role_stream wldn $r false; done
+ok "each main-level brief says how its work reaches it: in its pane while it stands, and as a turn that waits on nothing once it runs as its kind, every brief filled for a partition running all five so"
+
 expect_ok crewpy brief wldn operator
 has "$out" "the deployer offers that host's deploy under *operations* on swancloud's rail"; has "$out" "never ask \`wldn-ops\` to deploy it"
 has "$out" "never hand the user a deploy command"; has "$out" "deploys by hand only a kit with no deployer"

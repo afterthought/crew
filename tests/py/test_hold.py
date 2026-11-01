@@ -67,6 +67,93 @@ class TestDue:
                     crew.launch_digest(dict(l, dirs=["/a"]), "brief"), crew.launch_digest(l, "brief, amended")}) == 5
 
 
+class Main:
+    """A main level's session on its host as hold.kind_end reads and acts on it: whether its agent's exit is taken at
+    once, later or never, and what was done."""
+
+    def __init__(self, label, stopped=None, exits=True):
+        self.label, self.stopped, self.exits, self.done = label, stopped, exits, []
+
+    def agent_of(self, role):
+        return f"{self.label}-{role}"
+
+    def stop(self, role, ending=None, waits=False):
+        self.done.append(f"{role} stopped" + (" with its waits" if waits else ""))
+        return self.stopped
+
+    def exited(self, role, looks):
+        self.done.append(f"{role} watched")
+        return self.exits
+
+    def record(self, act, why, roles):
+        self.done.append((act, why, roles))
+
+
+class TestKindEnd:
+    """A main level's standing agent whose partition now runs its role as its kind is due an end, never a restart
+    (design Decision 14; host-holds-and-updates "A standing agent of a role that now runs as its kind is ended at its
+    next stop"): crew.end_due and crew.due_of read it from the teams file alone, crew update passes it over
+    (hold.update_here), and crew _renew ends it once idle, its pane left and nothing started, never on a held host
+    (hold.kind_end). That the Stop hook hands it over and crew _renew ends it through herdr is the hold journey's
+    (t-hold)."""
+    FLEET = {"teams": {}, "partitions": {"madswan": {"label": "madswan", "machine": "mac-studio", "teams": [],
+                                                     "flume": dict({r: False for r in crew.KIND_ROLES}, planner="madswan-main", reviewer="madswan-main")}}}
+
+    def test_a_main_level_agent_whose_role_runs_as_its_kind_is_due_an_end_and_one_that_stands_is_not(self):
+        assert crew.end_due(self.FLEET, "madswan-planner") == crew.KIND_SAID
+        assert crew.due_of(self.FLEET, "madswan-planner", STARTED, C1) == (True, crew.KIND_SAID, STARTED)
+        assert crew.end_due(self.FLEET, "madswan-design") is None
+        assert crew.due_of(self.FLEET, "madswan-reviewer", STARTED, C1) == (False, None, STARTED)
+
+    def test_crew_update_passes_it_over_and_hands_any_other_due_agent_its_restart(self, monkeypatch, capsys):
+        handed = []
+        monkeypatch.setattr(crew, "held", lambda: None)
+        monkeypatch.setattr(crew, "crew_version", lambda: (C2, "v0.40.0"))
+        monkeypatch.setattr(crew, "agents_here", lambda fleet, label=None: ["madswan-design", "madswan-planner"])
+        monkeypatch.setattr(crew, "due_of", lambda fleet, name, commit=None: (
+            (True, crew.KIND_SAID, STARTED) if name == "madswan-planner" else (True, "crew's plugin changed", STARTED)))
+        monkeypatch.setattr(hold, "hand", handed.append)
+        hold.update_here(self.FLEET, types.SimpleNamespace(label=None))
+        assert handed == ["madswan-design"]
+        out = capsys.readouterr().out
+        assert ("madswan-planner is passed over, never restarted: its role now runs as its kind, in Flume runs of its own; "
+                "while it is up, the end of its next turn ends it, as crew main up madswan does") in out
+        assert "madswan-design is due (crew's plugin changed): it is restarted on crew v0.40.0 once it is idle" in out
+
+    @pytest.fixture
+    def here(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(crew, "held", lambda: None)
+        monkeypatch.setattr(hold, "RENEW", tmp_path / "renew")
+
+    ENDED = ("agent.end", "main(madswan): end madswan-planner, which runs as its kind", ["planner"])
+
+    def test_an_idle_agent_is_ended_its_pane_left_and_recorded(self, here, capsys):
+        main = Main("madswan")
+        hold.kind_end(self.FLEET, main, "planner")
+        assert main.done == ["planner stopped with its waits", self.ENDED]
+        assert ("madswan-planner is ended: its role now runs as its kind, in Flume runs of its own, so nothing starts it "
+                "again; its pane is left") in capsys.readouterr().out
+
+    def test_one_slow_to_exit_is_watched_and_one_that_never_exits_runs_on_still_due(self, here, capsys):
+        slow = Main("madswan", stopped="madswan-planner did not exit")
+        hold.kind_end(self.FLEET, slow, "planner")
+        assert slow.done == ["planner stopped with its waits", "planner watched", self.ENDED]
+        never = Main("madswan", stopped="madswan-planner did not exit", exits=False)
+        hold.kind_end(self.FLEET, never, "planner")
+        assert never.done == ["planner stopped with its waits", "planner watched"]
+        assert "it runs on as it was, still due its end: the end of its next turn hands it back" in capsys.readouterr().err
+
+    def test_one_gone_to_work_and_any_on_a_held_host_is_left(self, here, monkeypatch, capsys):
+        working = Main("madswan", stopped=crew.working_said("madswan-planner"))
+        hold.kind_end(self.FLEET, working, "planner")
+        assert working.done == ["planner stopped with its waits"]
+        monkeypatch.setattr(crew, "held", lambda: {"by": "chuck@mac-studio", "why": "herdr 0.9.6", "at": "2026-10-31T12:00Z"})
+        held = Main("madswan")
+        hold.kind_end(self.FLEET, held, "planner")
+        assert held.done == []
+        assert "mac-studio is held; crew go mac-studio hands madswan-planner its end" in capsys.readouterr().out
+
+
 class TestStanding:
     @pytest.mark.parametrize("name, role", [
         ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("wldn-design", ("wldn", "design")),

@@ -36,6 +36,10 @@ crew trace, the batches, the rail, the board and the page, reads the branch alon
   record.py events --push [--label L]     push what of this host's entries a refused push left, each a commit of its own
   record.py trace <object> [--label L]    one bolt's, unit's, chore's or signal's history, read from the entries alone
 
+A main-level role that runs as its kind has an `ask` entry for each ask of it, naming the record the ask names and the
+length of its words, a `turn.begin` for each start of its run, how many things pending it took, and a `turn.end` for
+each end, all on agent/<label>-<role>, so crew trace agent/<label>-<role> lists them; none holds an ask's words.
+
 An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>,
 agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, fix/main/<kit>/<name> (a fix of a kit's red main, a Flume
 place on main), plan/<label>, proposal/<n>, batch/<n> (a review batch of the partition), and
@@ -82,7 +86,8 @@ DESCRIPTOR = """\
 # plan.20), a landing's submission's Submission (sluice's number for it, on its bolt.submit from the moment sluice queued
 # it, plan.21), a branch.kept's Head (the commit a unit's, chore's or
 # fix's branch the tidy kept is at) and Count (its commits whose patch its bolt, or main, lacks, plan.10), crew's own
-# order of two units a forecast found in conflict, the unit.after that puts one After the other or the one that Lifted
+# order of two units a forecast found in conflict, a turn.begin's Took (how many asks and waiting places a role's run
+# took at its start), the unit.after that puts one After the other or the one that Lifted
 # it, with the Settle whose end decided it (plan.13), a team.cross's State (the Flume stream its team's work now runs in), a record.proposed's State (settled in the pane) and Form
 # (alternatives, when its card offered them, none of the file's words), and an operation's (ops.py): a deploy's commit
 # as Head and the one it comes from as Base, its Phase (start, step or end), a step's Step and Outcome, its Log and the
@@ -94,16 +99,17 @@ LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
 KINDS = ("unit/", "chore/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/",
-         "proof/", "batch/", "env/", "host/")
+         "proof/", "batch/", "env/", "host/", "role/")
 
 _ids = itertools.count(1)  # each entry's count in this process, safe from threads
 _session = ...  # resolved once per process
 
 
 def who():
-    """Who asked: the agent crew started, else the user at this host."""
+    """Who asked: the agent crew started, or the role's run the command's place is (crew.caller), else the user at
+    this host."""
     import getpass
-    return os.environ.get("CREW_AGENT") or f"{getpass.getuser()}@{crew.this_host()}"
+    return crew.caller() or f"{getpass.getuser()}@{crew.this_host()}"
 
 
 def session():
@@ -161,6 +167,25 @@ def new_id():
     """A new entry's id, made now (entry_id). A write makes its entry's id before its commit, so the commit can name
     the entry its message describes."""
     return entry_id(datetime.datetime.now(datetime.timezone.utc), crew.this_host(), os.getpid(), next(_ids))
+
+
+def ask_entry(run, what, names=None, words=None):
+    """An ask's entry, as emit takes it (the run-record spec, An ask and a turn are entries): an `ask` on the asked
+    role's run, agent/<run>, and the record the ask names, its Why made from names, and the length of its words, never
+    their text (record.3)."""
+    return dict(act="ask", on=[f"agent/{run}"] + ([names] if names else []), why=f"ask {run}: {what}", Chars=len(words) if words else None)
+
+
+def turn_begin_entry(run, n, took):
+    """A run's start's entry, as emit takes it: a `turn.begin` on the run, agent/<run>, of turn n, with how many asks
+    and waiting places it took (Took)."""
+    return dict(act="turn.begin", on=[f"agent/{run}"], why=f"turn {n} of {run}", Took=str(took))
+
+
+def turn_end_entry(run, n):
+    """A run's end's entry, as emit takes it: a `turn.end` on the run, agent/<run>, of turn n; what the run said it did
+    stays in asks.rec (record.3)."""
+    return dict(act="turn.end", on=[f"agent/{run}"], why=f"turn {n} of {run} ended")
 
 
 def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, by=None, **extra):
@@ -415,6 +440,8 @@ def line(e, zoe=False):
         s += f" (observed {e['Observed']})"
     if e.get("Chars"):
         s += f" ({e['Chars']} characters)"
+    if e.get("Act") == "turn.begin" and e.get("Took"):
+        s += f" (took {e['Took']})"
     if e.get("Amended"):
         s += " (amended)"
     if e.get("Paths") and e.get("Act") == "forecast":
@@ -440,7 +467,7 @@ def labels_for(fleet, label):
     if label:
         crew.partition_of(fleet, label)
         return [label]
-    own = os.environ.get("CREW_LABEL")
+    own = crew.caller_label(fleet)
     return [own] if own in fleet["partitions"] else list(fleet["partitions"])
 
 

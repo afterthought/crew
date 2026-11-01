@@ -29,7 +29,9 @@
 # recorded. A landing outlives the crew bolt submit that queued it (plan.21): killed once sluice has queued the landing,
 # its waiter on the box calls sluice wait again while sluice is undecided, then reads the landing from sluice's record,
 # recording it landed and closing the bolt; and with the waiter stopped too, ops's crew bolt land reads it from sluice's
-# record first, records it landed and closes it. A bolt no team holds lands once its unit's change is on main; a
+# record first, records it landed and closes it. With wldn's ops, planner and design agent running as their kinds, a
+# bolt submitted from ops's run returns once it is queued, and the landing's read asks the planner and the design
+# agent, or ops with sluice's words for one refused. A bolt no team holds lands once its unit's change is on main; a
 # delete sluice refuses is named in its words, the branch kept on GitHub; a bolt made before gives went through sluice
 # is deleted there once its landing's pull request put it there, no create run for it; dropping a held bolt has sluice
 # delete its branch, and one holding a merge main lacks is kept on GitHub and the host, marked, named and recorded,
@@ -47,7 +49,7 @@
 # the card changed in place saying it would take main first, and a send ticking it, read by crew card read, submits
 # nothing of it (rail-cards, bolt-teams). No agent starts. Every decision on the way is a logic case (tests/py/); how
 # git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the command's wiring once.
-# Reads: plugin/lib/board.py
+# Reads: plugin/lib/board.py plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -527,6 +529,40 @@ eq "$(plan -t Bolt -e "Bolt = 'near-reach'" -c)" "0"
 eq "$(field $box bolt.submit Outcome bolt/near-reach) $(field $box bolt.land By bolt/near-reach)" "landed wldn-ops"
 has "$(field $box bolt.land Why bolt/near-reach)" "read from sluice's record by wldn-ops"
 ok "a landing whose submitter and waiter were both stopped before sluice decided is read by ops's crew bolt land, which records it landed from sluice's record and closes the bolt, saying so"
+
+# wldn's ops, planner and design agent run as their kinds: a bolt submitted from ops's run returns once sluice has
+# queued it, waiting on nothing, and its waiter's read of the landing asks the planner and the design agent in the
+# landing's commit; a second, which conflicts with what main took since it was cut, is read refused and asks ops with
+# sluice's words, keyed by its submission (design Decision 12).
+role_stream wldn ops wldn-main; role_stream wldn planner wldn-main; role_stream wldn design wldn-main
+run_ops() { HOST=$box FLUME_PLACE=$T/flume/places/crew-ops--wldn "$@"; }
+asks() { git --git-dir "$ws" show wldn/main:asks.rec | recsel -t Ask "$@"; }
+crew bolt new run-lands "The run's zones." --repo switchboard-kit >/dev/null
+crew bolt give swb-1 run-lands >/dev/null 2>&1 || fail "swb-1 was not given run-lands"
+on_bolt run-lands "run lands" "feat: the run's zones" || fail "the bolt took no commit"
+touch "$T/sluice-wait-holds"
+run_ops expect_ok crew bolt submit run-lands
+has "$out" "bolt/run-lands is queued on switchboard-kit's main as #"
+has "$out" "this run waits on nothing"
+lacks "$out" "landed on switchboard-kit's main at"
+eq "$(field $box bolt.submit Outcome bolt/run-lands) $(field $box bolt.submit By bolt/run-lands)" "queued wldn-ops"
+rm "$T/sluice-wait-holds"
+until_ok closed run-lands || fail "the waiter's read did not close run-lands:"$'\n'"$(calls)"
+eq "$(asks -e "Names = 'bolt/run-lands'" -P Role,What,Key | tr -s '\n' ' ')" "planner landed landed/run-lands design landed landed/run-lands "
+eq "$(git --git-dir "$ws" log -1 --format=%s "$(act_tip)" -- asks.rec)" "plan(run-lands): land the bolt (wldn-ops)"
+crew bolt new run-held "The run's other zones." --repo switchboard-kit >/dev/null
+crew bolt give swb-1 run-held >/dev/null 2>&1 || fail "swb-1 was not given run-held"
+on_bolt run-held "run held" "feat: the run's other zones" || fail "the bolt took no commit"
+git -C "$k" pull -q origin main; echo "main's own" >> "$k/zones.txt"; commit_all "$k" "feat: main's zones"; push "$k"
+run_ops crew bolt submit run-held >/dev/null 2>&1 || fail "a landing queued from ops's run failed its command"
+until_ok bash -c '[[ $(git --git-dir "$1" show wldn/main:asks.rec 2>/dev/null | recsel -t Ask -e "Role = '"'ops'"'" -c) == 1 ]]' _ "$ws" ||
+  fail "the refused landing asked ops nothing:"$'\n'"$(calls)"
+n=$(field $box bolt.submit Submission bolt/run-held)
+eq "$(asks -e "Role = 'ops'" -P From,What,Names,Key | tr '\n' ' ')" "crew landed bolt/run-held submission/switchboard-kit/$n "
+has "$(asks -e "Role = 'ops'" -P Words)" "conflict: zones.txt"
+ok "a bolt submitted from ops's run returns once it is queued, its landing asking the planner and the design agent in its commit, and one that conflicts asking ops with sluice's words"
+crew bolt drop run-held "its zones conflict with main's" >/dev/null 2>&1 || fail "run-held could not be dropped"
+role_stream wldn ops false; role_stream wldn planner false; role_stream wldn design false
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null

@@ -86,11 +86,19 @@ expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge 
 ok "the README, the skill and the usage say a give is never refused for the bolts a team holds, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
 
 for doc in usage readme skill; do
-  for want in "version 2 or 3" "in Flume stream" "Path: flume" "still closes" \
+  for want in "version 2, 3 or 4" "in Flume stream" "Path: flume" "still closes" \
     "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
   for gone in "due to cross" "due back" "however they went down" "closes what the hold left" "crossed team"; do lacks "${!doc}" "$gone"; done
 done
 ok "the README, the skill and the usage say a team's stream, what a team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
+
+for doc in usage readme skill; do
+  for want in "runs as its kind" "every role stands" "asks.rec" "roles.rec" "crew-<role>--<label>" "end --report <path>" \
+    "open <role>" "land <repo> <name> --brief-file <file>" "delivered [--label L]" "pendingyou watch -- crew _answered" \
+    "ended at its next stop" "never restarted"; do has "${!doc}" "$want"; done
+done
+for doc in usage readme; do has "${!doc}" "turns/<role>.md"; done
+ok "the README, the skill and the usage say a partition's flume, a role that runs as its kind, its asks in asks.rec and its record in roles.rec, crew role start, end, open and land, crew review delivered, the follower's notice of a card's change, and a standing agent of such a role ended at its stop"
 
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)

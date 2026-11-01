@@ -6,11 +6,13 @@
 # from a host with no team, by a signal's full id or its short one; curation's move and a route are written to
 # moves.rec, the route in the unit's own commit, each naming the signal by its short id and writing its full one;
 # a meeting's signal in the blueprints is moved and shown as it stands; a proposal shows a signal's excerpt and routes
-# it on approval; crew trace of a signal begins with its capture; and a program's capture lands with crew signal land
-# from the host that banked its raw record, in one commit and once. How an excerpt is graded and who asserted it, how
-# a capture is named and joined, its files, what a program's capture must hold, and what show and a proposal say are
-# logic cases (tests/py/test_signals.py, test_transcript.py, test_proposal_life.py); recfix's checks of a signal and a
-# move, contract cases (tests/contract/test_recfix.py); each step here checks a command's wiring once.
+# it on approval; crew trace of a signal begins with its capture; a program's capture lands with crew signal land
+# from the host that banked its raw record, in one commit and once; and a capture asks a design agent that runs as its
+# kind, in its own commit. How an excerpt is graded and who asserted it, how a capture is named and joined, its files,
+# what a program's capture must hold, what show and a proposal say and a capture's ask are logic cases
+# (tests/py/test_signals.py, test_transcript.py, test_proposal_life.py); recfix's checks of a signal and a move,
+# contract cases (tests/contract/test_recfix.py); each step here checks a command's wiring once.
+# Reads: plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 # The date, read once: the run's zone puts this moment at local noon, so every date crew takes in local time, a move's
 # among them, falls on this day however long the run takes, across the host's own midnight (read.1).
@@ -148,3 +150,14 @@ CREW_AGENT=swancloud-deployer expect_ok crew signal land "$d" --label wldn
 eq "$out $(tip)" "$dep is already landed on wldn/main; nothing was written $t1"
 HOST=$box expect_fail "$dep/capture.md's raw record is on mac-studio, and a program's capture lands from the host that banked it, not $box" crew signal land "$d" --label wldn
 ok "a program's capture lands from the host that banked its raw record, in one commit on the flywheel's branch, and once"
+
+# Once wldn's design agent runs as its kind, a capture asks it, in the capture's own commit; none did while it stood.
+at asks.rec >/dev/null 2>&1 && fail "a capture asked a design agent that stands"
+role_stream wldn design wldn-main
+t0=$(tip)
+expect_ok crew signal tags-on-stacks "Every stack carries its owner's tags."
+sig=$(id_of "$out")
+eq "$(acts_since "$t0") $(changed | tr '\n' ' ')" "1 asks.rec roles.rec signals/$(dirname "$sig")/01-tags-on-stacks.md signals/$(dirname "$sig")/capture.md "
+eq "$(at asks.rec | recsel -t Ask -P Role,What,Names,Key | tr '\n' ' ')" "design capture signals/$sig signal/$sig "
+has "$out" "asked wldn-design: capture on signals/$sig"
+ok "a capture asks a design agent that runs as its kind, keyed by its signal, in the capture's commit"
