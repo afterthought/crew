@@ -193,6 +193,20 @@ class TestReach:
         assert [(r["Act"], r.get("Of")) for r in requests(w)[1:]] == [("drop", "1")]
         assert w.plan.item("a").get("Bolt") is None and w.plan.bolt("x") is None
 
+    def test_a_drop_no_runner_has_taken_work_of_is_swept_in_the_main_level_hosts_checkout(self, monkeypatch):
+        """bolt-plan "The drop's host does not answer", for a started bolt whose work no runner has reported taking: its
+        branch was made on the main-level host's checkout, so the drop asks sluice there; with no checkout there, why."""
+        b = launched("x", work=[unit("a")]).plan.bolt("x")
+        monkeypatch.setattr(plan, "known_at", lambda *a, **k: None)
+        kept = {"name": CREW, "repo": "afterthought/crew", "dir": "/w/crew", "main": "/w/crew/main"}
+        monkeypatch.setattr(plan.crew, "kit_kept", lambda fleet, host, kit: kept)
+        assert plan.drop_at(FLEET, "madswan", b) == ({"label": "madswan", "machine": "deneb", "stream": None, "kit": kept}, None)
+        monkeypatch.setattr(plan.crew, "kit_kept", lambda fleet, host, kit: None)
+        assert plan.drop_at(FLEET, "madswan", b) == (None, "madswan's main level runs on deneb, and no space there keeps crew, so "
+                                                           "crew can't ask sluice to delete bolt/x there")
+        w = given(("y", None, None), work=[unit("q", bolt="y")])
+        assert plan.drop_at(FLEET, "madswan", w.plan.bolt("y")) == (None, None)
+
     def test_a_bolt_not_started_is_refused(self):
         w = given(("x", None, None), work=[unit("a")])
         with pytest.raises(plan.Refusal, match="^bolt x is not started, so nothing of its work is launched$"):

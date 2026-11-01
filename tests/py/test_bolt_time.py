@@ -291,6 +291,13 @@ def test_the_bolts_submissions_standing_over_the_decided_and_none_of_another_bol
                    {"submitted": mins(40), "started": None, "decided": None, "state": "queued", "what": "#46", "worktree": "bolt/b"}]
 
 
+def test_a_flume_places_submissions_are_the_bolts():
+    """A started bolt's work submits from its Flume place's branch, change/<u>, chore/<c> or fix/<bolt>--<f>."""
+    standing = [{"id": n, "branch": "bolt/b", "state": "queued", "submitted": at(n), "started": None, "worktree": w, "pull_head": None}
+                for n, w in ((61, "change/a"), (62, "chore/c"), (63, "fix/b--gap"), (64, "change/x"), (65, "fix/o--gap"))]
+    assert [x["what"] for x in facts_of([given(0)], standing)["submissions"]] == ["#61", "#62", "#63"]
+
+
 def test_a_landing_by_pull_request_is_the_bolts_by_the_number_its_queued_submit_names():
     """crew-board "A landing by pull request": main's recent events name #52, from pull/9, landed, and the run record's
     queued bolt.submit of b names #52."""

@@ -238,6 +238,15 @@ def test_a_merge_into_the_bolt_is_its_lines_and_a_landing_on_main_the_bolts():
         {"id": 355, "state": "queued", "head": "b" * 40})
 
 
+def test_a_flume_places_submission_is_its_lines():
+    """bolt-teams "A unit's merge under test", for a started bolt's work: Flume submits a place from its own branch,
+    change/<u>, chore/<c> or fix/<bolt>--<f>, as flume-0.3.6's status names it."""
+    subs = [sub(41, "bolt/y", "change/a", "testing"), sub(42, "bolt/y", "chore/bump"), sub(43, "bolt/y", "fix/y--gap", "passed"),
+            sub(44, "bolt/y", "change/bump")]
+    assert plan.submission_rows(subs, "y", LINES)[0] == {
+        "a": {"id": 41, "state": "testing"}, "bump": {"id": 42, "state": "queued"}, "fix/y/gap": {"id": 43, "state": "passed"}}
+
+
 def test_a_landing_by_pull_request_is_the_bolts_it_was_opened_from():
     assert plan.submission_rows([sub(355, "main", "pull/198", pull_head="bolt/y")], "y", LINES)[1]["id"] == 355
     assert plan.submission_rows([sub(355, "main", "pull/198", pull_head="bolt/z")], "y", LINES) == ({}, None)

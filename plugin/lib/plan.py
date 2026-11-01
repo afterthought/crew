@@ -5362,11 +5362,31 @@ def op_bolt_drop(ctx, a):
     gone = [] if a.requeue else [u.name() for u in plan.work_of(a.bolt)]
 
     def after(repo, sha):  # the bolt's branch asked of sluice where its work ran, after its worktrees (plan.19, bolt_branch_asked)
-        t = known_at(ctx.fleet, label, plan.bolt(a.bolt))
+        t, why = drop_at(ctx.fleet, label, plan.bolt(a.bolt))
         if t:
             sweep_on(ctx.fleet, t, f"bolt {a.bolt}", dropped=a.bolt, units=gone)
+        elif why:
+            print(f"sluice was asked no delete of bolt/{a.bolt}: {why}; it is deleted with sluice branch delete bolt/{a.bolt} "
+                  "--into main in a checkout of its kit")
     return Op(label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), "bolt.drop",
               on=[f"bolt/{a.bolt}"], body=a.reason, after=after)
+
+
+def drop_at(fleet, label, b):
+    """Where a dropped bolt's branch and crew's own place of it are swept (sweep_on), as (where, None), or (None, why):
+    where its work runs as the runner that took it reported (known_at); for a started bolt no runner has reported
+    taking work of, the checkout the partition's main-level host keeps of its kit, where its start made its branch
+    (main_kit; Decision 4 of the-team-machinery-leaves); (None, None) for a bolt never started, which has no branch."""
+    if not started(b):
+        return None, None
+    t = known_at(fleet, label, b)
+    if t:
+        return t, None
+    try:
+        t = main_kit(fleet, label, b.get("Repo"))
+    except Refusal as e:
+        return None, str(e)
+    return (t, None) if t else (None, main_kit_said(fleet, label, b.get("Repo"), f"ask sluice to delete bolt/{b.name()} there"))
 
 
 def op_unit_add(ctx, a):
@@ -9093,16 +9113,27 @@ def bolts_view(fleet, a):
         sys.exit("\n".join(errors.values()))
 
 
+def line_branches(name, kind):
+    """The branches a bolt's line submits to the bolt from (code.7): its Flume place's, `<kind>/<name>` as Flume names a
+    place's branch, change/<u> for a unit, chore/<c> for a chore and fix/<bolt>--<f> for a fix (runner.reach, fix_launch;
+    tests/py/flume-0.3.6), and crew's own from before teams left, unit/<u> and a fix's fix/<bolt>/<f>. A fix's line is
+    named by its work, fix/<bolt>/<f>."""
+    if kind == "fix":
+        bolt, _, f = name[len("fix/"):].partition("/")
+        return [name, f"fix/{bolt}--{f}"]
+    return [f"change/{name}", f"unit/{name}"] if kind == "unit" else [f"chore/{name}"]
+
+
 def submission_rows(submissions, bolt, lines):
     """Whose line of a bolt's row each submission standing in sluice's queue is (bolt-teams "A submission's number is
     on its bolt's row from the submit", teams.22), a decision of facts alone (code.7): from the kit's submissions as the
     gather reads them (gather.submissions_of), the bolt, and its lines, [(name, kind)], kind unit, chore or fix, a fix
-    named by its branch, fix/<bolt>/<f>. On bolt/<bolt>, a submission from unit/<u>, chore/<c> or a fix's branch is that
-    line's; on main, one from bolt/<bolt>, or from a pull request, pull/<n>, opened from it, is the bolt's landing.
-    Returns ({name: {id, state}}, {id, state, head} or None), the newest of a line's when it has two, as a resubmission
-    from one worktree replaces the first; a submission naming no line of the plan, a hand submission, is no line's."""
-    branch = {"unit": "unit/{}", "chore": "chore/{}", "fix": "{}"}
-    of = {branch[kind].format(name): name for name, kind in lines}
+    named by its work, fix/<bolt>/<f>. On bolt/<bolt>, a submission from one of a line's branches (line_branches), its
+    Flume place's or crew's own from before, is that line's; on main, one from bolt/<bolt>, or from a pull request,
+    pull/<n>, opened from it, is the bolt's landing. Returns ({name: {id, state}}, {id, state, head} or None), the
+    newest of a line's when it has two, as a resubmission from one worktree replaces the first; a submission naming no
+    line of the plan, a hand submission, is no line's."""
+    of = {b: name for name, kind in lines for b in line_branches(name, kind)}
     rows, landing = {}, None
     for x in sorted(submissions or [], key=lambda x: x["id"]):
         if x["branch"] == f"bolt/{bolt}" and x.get("worktree") in of:
@@ -9385,10 +9416,12 @@ def bolt_facts(entries, plan, bolt, label, host, kit_name, submissions, decided,
     landings = {str(e.get("Submission")) for e in entries if e.get("Act") == "bolt.submit" and e.get("Outcome") == "queued"
                 and e.get("Submission") and f"bolt/{bolt}" in (e.get("On") or [])}
 
+    mine = {b for o in work for b in line_branches(o.split("/", 1)[1], "chore" if o.startswith("chore/") else "unit")}
+
     def of_bolt(x):
         w = x.get("worktree") or ""
         if x.get("branch") == f"bolt/{bolt}":
-            return w in work or w.startswith(fixes)
+            return w in mine or w.startswith((fixes, f"fix/{bolt}--"))
         return x.get("branch") == "main" and (w == f"bolt/{bolt}" or (w.startswith("pull/") and x.get("pull_head") == f"bolt/{bolt}")
                                               or str(x.get("id")) in landings)
     gate = {}
