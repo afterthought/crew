@@ -5,8 +5,8 @@
 #     madswan, madswan-1, -2                                         business (label madswan)
 #     swancloud, swancloud-1                                         personal (label swancloud)
 #
-# Teams: swb-1 (4 units) and swb-2 (2) in wldn-1 and brd-1 in wldn-2 on the box; atl-1 in wldn-5 and apk-1 in
-# madswan-2 on mac-studio. Each host has its own HOME under hosts/<host>/home and its sessions' folders under
+# The teams file holds these three partitions alone, wldn's main level in wldn-3 on the box and madswan's and
+# swancloud's on mac-studio. Each host has its own HOME under hosts/<host>/home and its sessions' folders under
 # hosts/<host>/work/<space>. Commands run as mac-studio unless HOST says otherwise.
 set -euo pipefail
 CREW=$(cd "$TESTS/.." && pwd -P)
@@ -55,8 +55,8 @@ has() { [[ $1 == *"$2"* ]] || fail "expected '$2' in:"$'\n'"$1"; }
 lacks() { [[ $1 != *"$2"* ]] || fail "did not expect '$2' in:"$'\n'"$1"; }
 eq() { [[ $1 == "$2" ]] || fail "expected '$2', got '$1'"; }
 calls() { cat "$CREW_TEST_LOG"; }
-# merge_as <agent> <place> <branch>: what a stage's agent does to merge, as its brief has it: submits the place's head
-# without waiting, then waits on the submission with sluice wait, returning its exit
+# merge_as <agent> <place> <branch>: what Flume does to submit a place's work: submits the place's head without
+# waiting, then waits on the submission with sluice wait, returning its exit
 merge_as() {
   local id
   id=$(cd "$2" && SLUICE_AGENT=$1 sluice submit "$3" --no-wait --json 2>/dev/null | jq -r .id) && [[ $id =~ ^[0-9]+$ ]] || return 2
@@ -64,19 +64,19 @@ merge_as() {
 }
 launches() { cat "$CREW_TEST_CLAUDE_LOG"; }
 
-fixtures() {  # the teams file (version $1, default 4) and the hosts file, written into every host's HOME
-  local v=${1:-4} h
+fixtures() {  # the teams file (version 5, or an older one named: teams_old) and the hosts file, written into every host's HOME
+  local v=${1:-5} h
   for h in mac-studio chuck-herdr-alpha; do
     mkdir -p "$(home_of $h)/.config/crew" "$(home_of $h)/.config/swancloud"
     hosts_json > "$(home_of $h)/.config/swancloud/herdr-hosts.json"
-    if [[ $v == 1 ]]; then teams_v1; else teams_json "$v"; fi > "$(home_of $h)/.config/crew/teams.json"
+    if [[ $v == 5 ]]; then teams_json; else teams_old "$v"; fi > "$(home_of $h)/.config/crew/teams.json"
   done
 }
 
-# teams_json [<version>]: the teams file at that version, 4 unless named: every team on today's path and every
-# partition's main-level roles standing, `flume` false throughout, which a file below 4, or below 3 for a team, does
-# not read
-teams_json() { printf '{ "version": %s,\n' "${1:-4}"; cat <<'EOF'
+# teams_json: the teams file, version 5, its partitions alone, every partition's main-level roles standing, `flume`
+# false throughout
+teams_json() { cat <<'EOF'
+{ "version": 5,
   "partitions": [
     { "label": "wldn", "partition": "clients/willdan", "blueprints": ["WilldanGroup/willdan-blueprints"],
       "state": "WilldanGroup/crew-state", "review": {"every": 5, "hours": 4},
@@ -89,24 +89,15 @@ teams_json() { printf '{ "version": %s,\n' "${1:-4}"; cat <<'EOF'
     { "label": "swancloud", "partition": "personal", "blueprints": ["afterthought/blueprints"],
       "state": "afterthought/crew-state", "review": {"every": 5, "hours": 4},
       "machine": "mac-studio", "session": "swancloud-1",
-      "flume": {"design": false, "planner": false, "reviewer": false, "ops": false, "operator": false} } ],
-  "teams": [
-    { "name": "swb-1", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
-      "units": 4, "repos": ["switchboard-kit", "willdan-blueprints"], "flume": false },
-    { "name": "swb-2", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
-      "units": 2, "repos": ["switchboard-kit", "willdan-blueprints"], "flume": false },
-    { "name": "brd-1", "system": "Breadboard", "machine": "chuck-herdr-alpha", "session": "wldn-2",
-      "units": 2, "repos": ["breadboard-kit", "willdan-blueprints"], "flume": false },
-    { "name": "atl-1", "system": "Atlas", "machine": "mac-studio", "session": "wldn-5",
-      "units": 2, "repos": ["atlas-kit", "willdan-blueprints"], "flume": false },
-    { "name": "apk-1", "system": "Flywheel", "machine": "mac-studio", "session": "madswan-2",
-      "units": 4, "repos": ["flywheel-next", "blueprints"], "flume": false } ] }
+      "flume": {"design": false, "planner": false, "reviewer": false, "ops": false, "operator": false} } ] }
 EOF
 }
 
-teams_v1() { cat <<'EOF'
-{"teams":[{"coders":4,"machine":"chuck-herdr-alpha","name":"swb-1","repos":["switchboard-kit","willdan-blueprints"],"session":"wldn-1","system":"Switchboard"}],"version":1}
-EOF
+# teams_old <version>: the teams file as the machine's configuration wrote it for a crew that ran teams, at that
+# version, its partitions with a team listed beside them, which crew refuses
+teams_old() {
+  teams_json | jq --argjson v "$1" '.version = $v | .teams = [{name: "swb-1", system: "Switchboard", machine: "chuck-herdr-alpha",
+    session: "wldn-1", units: 4, repos: ["switchboard-kit", "willdan-blueprints"], flume: false}]'
 }
 
 hosts_json() {
@@ -176,7 +167,7 @@ world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
   local h
   gitconfig "$HOME"
   for h in mac-studio chuck-herdr-alpha; do mkdir -p "$(home_of $h)" "$T/hosts/$h/work"; gitconfig "$(home_of $h)"; done
-  fixtures "${1:-4}"
+  fixtures
   mkdir -p "$(space chuck-herdr-alpha willdan)/crew" "$(space mac-studio madswan)/crew"
   ln -s "$CREW" "$(space chuck-herdr-alpha willdan)/crew/main"
   ln -s "$CREW" "$(space mac-studio madswan)/crew/main"
@@ -299,7 +290,6 @@ exec(sys.argv[2])
 json.dump(d, open(f, "w"), indent=1)' "$f" "$2"
   done
 }
-team() { echo "[t for t in d['teams'] if t['name'] == '$1'][0]"; }
 part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }
 # role_stream <label> <role> <stream|false>: on every host, the partition's main-level role set to run as its kind in
 # that Flume stream, or to stand (record 0047 move 6)
@@ -307,11 +297,9 @@ role_stream() { local s="'$3'"; [[ $3 == false ]] && s=False; edit teams "$(part
 
 # The Flume world: every bolt's work runs in Flume places, taken by a runner whose configuration names its
 # repository (the user's ruling of 2026-11-01; Decision 1 of the-team-machinery-leaves).
-# flume_world: each team in the teams file naming its partition's label as the stream its work runs in, a runner
-# serving wldn on each host, its own branch wldn/runner/<host> on wldn's state repository, and the box's runner keeping
-# switchboard-kit in its checkout ($k) in stream wldn where the world made one
+# flume_world: a runner serving wldn on each host, its own branch wldn/runner/<host> on wldn's state repository, and
+# the box's runner keeping switchboard-kit in its checkout ($k) in stream wldn where the world made one
 flume_world() {
-  edit teams "for t in d['teams']: t['flume'] = 'madswan' if t['name'] == 'apk-1' else 'wldn'"
   [ -n "${k:-}" ] && keeps chuck-herdr-alpha switchboard-kit "$k"
   runner_writes chuck-herdr-alpha; runner_writes mac-studio
 }

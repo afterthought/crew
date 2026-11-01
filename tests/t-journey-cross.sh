@@ -13,10 +13,6 @@
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
 
-# The teams file at version 3: swb-1's work runs in Flume's stream wldn on its host, and swb-2 names no stream.
-edit teams "d['version'] = 3
-for t in d['teams']: t['flume'] = False
-$(team swb-1)['flume'] = 'wldn'"
 crew bolt new next "What comes next." --repo switchboard-kit >/dev/null
 
 : > "$CREW_TEST_LOG"

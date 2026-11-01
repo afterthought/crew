@@ -2,8 +2,8 @@
 """crew.py: read the teams file and answer from it.
 
   crew.py labels                      every partition's label
-  crew.py brief <team|label> <definition> [name]
-                                      a definition's brief for a team or a partition's main level; name is the agent's own
+  crew.py brief <label> <definition> [name]
+                                      a definition's brief for a partition's main level; name is the agent's own
   crew.py launch <label> <role> [resume]
                                       how crew-role starts a main level's role, as shell assignments
   crew.py tell <agent> "<text>" [--taken]
@@ -22,9 +22,10 @@
 
 The agents themselves, a main level's, are started, greeted and ended by plan.py's commands, through Agents here.
 
-Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
-partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
-data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
+Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a partition's
+`roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here
+from the partition's data; a token with no builder, or data a builder needs and the partition lacks, is an error, never
+blank text."""
 import functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
 # Run as the command, this module is the crew the modules it imports import, so a refusal raised in plan.py, which a
 # tell to a role that runs as its kind writes its ask through, is the Refusal main catches.
@@ -35,19 +36,18 @@ LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
 HOSTS = pathlib.Path.home() / ".config/swancloud/herdr-hosts.json"
 TEAMS = pathlib.Path.home() / ".config/crew/teams.json"
-# The versions of the teams file crew reads: 2; 3, which names each team's Flume setting (record 0050 part 2); and 4,
-# which names, on each partition, the Flume setting of each of its main-level roles (record 0047 move 6).
-VERSIONS = (2, 3, 4)
+# The version of the teams file crew reads (Decision 2 of the-team-machinery-leaves): 5, its partitions alone, each
+# naming the Flume setting of each of its main-level roles (record 0047 move 6), as version 4 did beside its teams.
+VERSION = 5
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
-# The roles a team's entry may override, and those a partition's entry may: each is a definition in roles/.
-TEAM_ROLES = ("conductor", "ops", "construct", "coder", "verify")
-MAIN_ROLES = ("design", "planner", "main-ops", "dispatcher", "operator", "reviewer")
+# The roles a partition's entry may override: each is a definition in roles/.
+MAIN_ROLES = ("design", "planner", "main-ops", "operator", "reviewer")
 # A main level's standing roles, each in the session its partition names for it (record 0035): the design agent, the
 # planner, ops and the operator, the partition's one door. The reviewer opens beside the planner unless named apart.
 MAIN_STANDING = ("design", "planner", "ops", "operator")
 # A main level's roles that may run as Flume kinds crew's release carries (record 0047 move 6), each by the name its
-# agent takes, <label>-<role>: a version-4 partition's `flume` names every one, false while it stands.
+# agent takes, <label>-<role>: a partition's `flume` names every one, false while it stands.
 KIND_ROLES = ("design", "planner", "reviewer", "ops", "operator")
 # What tells whether an agent waits on a question crew's own hook saw it open: piped to the agent's host, whose crew may be older.
 QUESTIONS = (LIB / "questions.py").read_text()
@@ -116,22 +116,19 @@ def checkout(sess, repo):
     return f"{sess['dir']}/{repo.split('/')[-1]}/main"
 
 
-def roles_of(entry, what, allowed, sessions=False):
-    """A team's or partition's role overrides: a role's model or effort, and for a partition's main-level role the
-    session it runs in (record 0035), checked by load against the hosts file."""
+def roles_of(entry, what):
+    """A partition's role overrides: a main-level role's model, effort or the session it runs in (record 0035), checked
+    by load against the hosts file."""
     roles = entry.get("roles") or {}
-    keys = {"model", "effort"} | ({"session"} if sessions else set())
-    says = "'model', 'effort' or 'session'" if sessions else "'model' or 'effort'"
     if not isinstance(roles, dict):
-        fail(f"{what} in {TEAMS}: 'roles' must map a role to its " + ("model, effort or session" if sessions else "model or effort"))
+        fail(f"{what} in {TEAMS}: 'roles' must map a role to its model, effort or session")
     for role, o in roles.items():
-        if role not in allowed:
-            fail(f"{what} in {TEAMS} overrides role '{role}', which it has no definition for. roles: " + " ".join(allowed))
-        if not isinstance(o, dict) or not o or set(o) - keys:
-            fail(f"{what} in {TEAMS}: roles.{role} sets only {says}, not {json.dumps(o)}")
-        if "session" in o and (role == "dispatcher" or not isinstance(o["session"], str) or not o["session"]):
-            fail(f"{what} in {TEAMS}: roles.{role}.session " + ("can't be named: a dispatcher runs on each host its partition's teams run on"
-                                                                  if role == "dispatcher" else "must name a session of the main level's machine"))
+        if role not in MAIN_ROLES:
+            fail(f"{what} in {TEAMS} overrides role '{role}', which it has no definition for. roles: " + " ".join(MAIN_ROLES))
+        if not isinstance(o, dict) or not o or set(o) - {"model", "effort", "session"}:
+            fail(f"{what} in {TEAMS}: roles.{role} sets only 'model', 'effort' or 'session', not {json.dumps(o)}")
+        if "session" in o and (not isinstance(o["session"], str) or not o["session"]):
+            fail(f"{what} in {TEAMS}: roles.{role}.session must name a session of the main level's machine")
         if "effort" in o and o["effort"] not in EFFORTS:
             fail(f"{what} in {TEAMS}: roles.{role}.effort is '{o['effort']}', which is no effort level. levels: " + " ".join(EFFORTS))
         if "model" in o and (not isinstance(o["model"], str) or not o["model"]):
@@ -139,12 +136,10 @@ def roles_of(entry, what, allowed, sessions=False):
     return roles
 
 
-def role_settings(entry, what, version):
-    """A partition's `flume`, the Flume setting of each of its main-level roles (record 0047 move 6): in a version-4
-    file every role of KIND_ROLES named, and no other, each False while it stands or the name of the Flume stream its
-    runs run in on the main level's host; below version 4 every role stands, the file's schema holding no setting."""
-    if version < 4:
-        return {r: False for r in KIND_ROLES}
+def role_settings(entry, what):
+    """A partition's `flume`, the Flume setting of each of its main-level roles (record 0047 move 6): every role of
+    KIND_ROLES named, and no other, each False while it stands or the name of the Flume stream its runs run in on the
+    main level's host."""
     fix = f"regenerate {TEAMS} from the machine's configuration (swancloud's lib/crew-teams.nix)"
     "flume" in entry or fail(f"{what} in {TEAMS} has no 'flume', which names each of its roles, " + ", ".join(KIND_ROLES)
                              + f", false or the name of a Flume stream its host declares: {fix}")
@@ -163,21 +158,22 @@ def role_settings(entry, what, version):
 
 @functools.lru_cache(maxsize=None)
 def load():
-    """The partitions and teams, written by the machine's own configuration (swancloud's lib/crew-teams.nix),
-    never by crew. Every entry is checked here, against the hosts file, before any is used, once a process: a later
-    call is answered with the same fleet. A team's `flume` is its Flume setting (record 0050 part 2): False while it
-    runs today's path, or the name of the Flume stream its work runs in on its host. Version 3 names it on every team;
-    version 2's schema has no setting, so every team of a version-2 file is on today's path, False. A partition's
-    `flume` is the same setting for each of its main-level roles (record 0047 move 6), False while the role stands or
-    the stream its runs run in on the main level's host: version 4 names it on every partition, every role of
-    KIND_ROLES and no other; below 4 every role stands, False."""
+    """The partitions, written by the machine's own configuration (swancloud's lib/crew-teams.nix), never by crew: the
+    file at version 5 (Decision 2 of the-team-machinery-leaves), its partitions alone, each with its main level and its
+    `flume`, the Flume setting of each of its main-level roles (record 0047 move 6), False while the role stands or the
+    stream its runs run in on the main level's host, every role of KIND_ROLES and no other. A file at any other
+    version, one that still lists teams among them, was written for a crew that runs them and is refused, as is a
+    `teams` list in a version-5 file, which holds none (code.5). Every entry is checked here, against the hosts file,
+    before any is used, once a process: a later call is answered with the same fleet."""
     if not TEAMS.exists():
         fail(f"{TEAMS} is missing; the machine's configuration writes it")
     data = json.loads(TEAMS.read_text())
     version = data.get("version")
-    if type(version) is not int or version not in VERSIONS:
-        fail(f"{TEAMS} is version {version}, and crew reads only versions " + ", ".join(map(str, VERSIONS[:-1])) + f" and {VERSIONS[-1]}. "
+    if type(version) is not int or version != VERSION:
+        fail(f"{TEAMS} is version {json.dumps(version)}, and crew reads only version {VERSION}. "
              f"It must be regenerated by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing.")
+    "teams" not in data or fail(f"{TEAMS} lists teams, which version {VERSION} has no place for: crew runs no team. It must be "
+                                f"regenerated by the machine's configuration (swancloud's lib/crew-teams.nix); crew has done nothing.")
     hosts = read_hosts()
     parts = {}
     for p in data.get("partitions") or fail(f"{TEAMS} lists no partitions"):
@@ -210,83 +206,16 @@ def load():
         if sess.get("partition") != name:
             fail(f"{what}'s main level runs in {machine}'s session {session}, which is in partition {sess.get('partition')}, not {name}")
         repo_in(sess, f"{what}'s main level", machine, session, blueprints[0])
-        roles = roles_of(p, what, MAIN_ROLES, sessions=True)
+        roles = roles_of(p, what)
         for defn, o in sorted(roles.items()):
             if "session" in o:
                 _, rs = session_of(hosts, f"{what}'s {defn}", machine, o["session"])
                 rs.get("partition") == name or fail(f"{what}'s {defn} runs in {machine}'s session {o['session']}, which is in "
                                                      f"partition {rs.get('partition')}, not {name}")
         parts[label] = dict(p, label=label, partition=name, ssh=host["ssh"], dir=sess["dir"], checkout=checkout(sess, blueprints[0]),
-                            roles=roles, teams=[], flume=role_settings(p, what, version))
+                            roles=roles, flume=role_settings(p, what))
         parts[label]["sessions"] = {r: role_session(parts[label], r) for r in MAIN_STANDING + ("reviewer",)}
-    by_name = {p["partition"]: p for p in parts.values()}
-    teams = {}
-    for t in data.get("teams") or []:
-        name = need(t, "a team", "name", str)
-        what = f"team {name}"
-        NAME.match(name) or fail(f"{what}: a team's name is lowercase words with dashes")
-        name not in teams or fail(f"{TEAMS} lists team {name} twice")
-        name not in parts or fail(f"{what} has the name of a partition's label")
-        system, machine, session = (need(t, what, f, str) for f in ("system", "machine", "session"))
-        units = need(t, what, "units", int)
-        units > 0 or fail(f"{what}: 'units' must be at least 1")
-        repos = need(t, what, "repos", list)
-        if len(repos) < 2 or not all(isinstance(r, str) and "/" not in r for r in repos) or len(set(repos)) != len(repos):
-            fail(f"{what}: 'repos' is its kits, one or more, then its partition's blueprints repo, each named once, not {json.dumps(repos)}")
-        for gone in ("coders", "base"):
-            gone not in t or fail(f"{what} in {TEAMS} still has '{gone}', which version {version} has no place for")
-        flume = False
-        if version >= 3:
-            "flume" in t or fail(f"{what} in {TEAMS} has no 'flume': it is false, or the name of a Flume stream its host declares")
-            flume = t["flume"]
-            flume is False or isinstance(flume, str) and NAME.match(flume) or fail(
-                f"{what} in {TEAMS}: 'flume' is false, or the name of a Flume stream its host declares, not {json.dumps(flume)}")
-        host, sess = session_of(hosts, what, machine, session)
-        pname = sess.get("partition") or fail(f"{what} runs in {machine}'s session {session}, which {HOSTS} puts in no partition")
-        part = by_name.get(pname) or fail(f"{what} runs in {machine}'s session {session}, of partition {pname}, which {TEAMS} does not list")
-        *held, bp = (repo_in(sess, what, machine, session, r) for r in repos)
-        if bp not in part["blueprints"]:
-            fail(f"{what} names {bp} as its blueprints repo, which is not one of {pname}'s: " + " ".join(part["blueprints"]))
-        # A team holds its kits, one or more (record 0035): a bolt is of one of them, and the team works in that one's
-        # checkout while it holds the bolt (with_kit, held_team); its first is its kit when it holds none.
-        kits = [{"name": k.split("/")[-1], "repo": k, "dir": f"{sess['dir']}/{k.split('/')[-1]}", "main": checkout(sess, k)} for k in held]
-        teams[name] = dict(t, name=name, system=system, machine=machine, session=session, units=units, flume=flume, label=part["label"],
-                           partition=pname, ssh=host["ssh"], kind=host.get("kind", ""), dir=sess["dir"], roles=roles_of(t, what, TEAM_ROLES),
-                           kits=kits, kit=kits[0], blueprints={"name": bp.split("/")[-1], "repo": bp, "main": checkout(sess, bp)})
-        part["teams"].append(name)
-    return {"hosts": hosts, "partitions": parts, "teams": teams}
-
-
-def team_of(fleet, name):
-    return fleet["teams"].get(name) or fail(f"no team '{name}'. teams: " + " ".join(fleet["teams"]))
-
-
-def kits_of(t):
-    """A team's kits, one or more; none for a team crew holds no kit of."""
-    return t.get("kits") or ([t["kit"]] if t.get("kit") else [])
-
-
-def with_kit(t, kit):
-    """A team as it works on a bolt of one of its kits (record 0035): the team with that kit, by name or owner/name, as
-    its kit; refused when it holds several and none by that name. A team of one kit, or none, is as it is, as it was
-    before a team held several."""
-    ks = kits_of(t)
-    if len(ks) < 2:
-        return t
-    k = next((k for k in ks if kit in (k.get("name"), k.get("repo"))), None)
-    k or fail(f"{t['name']} builds " + " and ".join(x.get("name", "?") for x in ks) + f", not {kit}")
-    return t if k == t.get("kit") else dict(t, kit=k)
-
-
-def builds(t, kit):
-    """Whether a team holds a kit, by name or owner/name."""
-    return any(kit in (k.get("name"), k.get("repo")) for k in kits_of(t))
-
-
-def held_team(fleet, t):
-    """A team as its brief names it, as it is: no bolt is held by a team, a started bolt's work running where the runner
-    that took it reported (the-team-machinery-leaves), and the team's briefs leave with the teams."""
-    return t
+    return {"hosts": hosts, "partitions": parts}
 
 
 def partition_of(fleet, label):
@@ -1275,11 +1204,6 @@ def crew_argv(fleet, host, *args):
             f"CREW_SESSION={rec.session() or ''}", "bash", crew_at(fleet, host), *args]
 
 
-def partition_hosts(fleet, label):
-    """The hosts where a partition's teams run, each once, by name."""
-    return sorted({fleet["teams"][t]["machine"] for t in partition_of(fleet, label)["teams"]})
-
-
 def kits_on(fleet, label, host, fetch=False):
     """The main checkouts on a host of a partition's kits, the repositories its plan and its landings name
     (plan.kits_read), each as the host's spaces keep it (kit_kept), each once, a kit the host keeps no checkout of left
@@ -1287,12 +1211,18 @@ def kits_on(fleet, label, host, fetch=False):
     branch as crew's cache holds it, with no fetch (plan.12), as a standing agent's due restart reads it at each stop,
     or fetched first with fetch, as a role's start reads it."""
     import plan  # plan imports this module
-    out = []
-    for kit in plan.kits_read(fleet, label, fetch):
+    return [k["main"] for k in kits_kept(fleet, host, plan.kits_read(fleet, label, fetch))]
+
+
+def kits_kept(fleet, host, kits):
+    """The kits a host keeps of those named (a partition's, plan.partition_kits), each as the host's spaces keep it
+    (kit_kept), each once by its main checkout, a kit the host keeps no checkout of left out."""
+    out = {}
+    for kit in kits:
         k = kit_kept(fleet, host, kit)
-        if k and k["main"] not in out:
-            out.append(k["main"])
-    return out
+        if k:
+            out.setdefault(k["main"], k)
+    return list(out.values())
 
 
 def blueprints_on(fleet, label, host):
@@ -1367,18 +1297,6 @@ def signal_how(cmd, label, state):
             f"`signals/` on `{label}/main` of {state}.")
 
 
-# How a stage's agent stops short, the same in every brief that runs a stage: work is "stage".
-def needs_how(cmd, work):
-    return (f"When you cannot finish without something only someone else can give (a decision, a fact about a live system, "
-            f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. Post no Pending "
-            "You card and make no area, whatever a Pending You reminder in your session says: your conductor answers what "
-            "you need or asks whoever can, the user last, and crew refuses a card from you. crew ends your "
-            f"{work} there, and this session once your turn ends, and gives your words to the conductor, who gets the "
-            f"answer and starts the {work} again with it in a fresh session. "
-            "Never ask in your pane: nobody watches it. Ending a turn to wait on something you started in the background is "
-            f"fine: crew knows your {work} is over only when what it delivers is there.")
-
-
 # How an agent asks the user a question of its own, the same in the brief of each of the four that ask: a conductor's,
 # the planner's, main-level ops's and the design agent's (record 0031, briefs.11).
 def cards_how(cmd, label, kits):
@@ -1451,37 +1369,6 @@ RESULTS = ("## Test, check and proof results\n\n"
            "agent reported, show its list as it is, first.")
 
 
-def team_tokens(fleet, t, role, self_name):
-    kit, bp, n, label = t["kit"], t["blueprints"], t["name"], t["label"]
-    p = fleet["partitions"][label]
-    slots = [f"`{n}-unit-{i}`" for i in range(1, t["units"] + 1)]
-    tok = {
-        "SELF": self_name or {"conductor": f"{n}-conductor", "ops": f"{n}-ops"}.get(role, f"{n}-unit-<n>"),
-        "OPERATORS": f"`{label}-operator`",
-        "TEAM": n, "SYSTEM": t["system"], "LABEL": label, "KIT": kit["main"], "KIT_NAME": kit["name"], "KIT_DIR": kit["dir"],
-        "BLUEPRINTS": bp["main"], "BLUEPRINTS_NAME": bp["name"], "BLUEPRINTS_REPO": bp["repo"], "SIGNALS_REPO": p["blueprints"][0], "STATE_REPO": p["state"],
-        "CONDUCTOR": f"{n}-conductor", "OPS": f"{n}-ops", "UNITS": str(t["units"]), "SLOTS": ", ".join(slots),
-        "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
-        "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
-        "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
-        "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named(kits_of(t))), "RESULTS": RESULTS,
-        "NEEDS": needs_how(f"{HOME}/plugin/bin/crew", "stage"),
-        "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
-    }
-    tok["ROSTER"] = (
-        f"The team: `{n}-conductor` keeps the bolt's units moving through their stages and tells the user where the bolt stands; "
-        f"`{n}-ops` does everything that touches a live system, the bolt's deploys and tests among it; and the unit slots "
-        f"({', '.join(slots)}), each holding one unit, chore or fix in flight, where every stage of it (construct, code, verify, settle, merge) "
-        f"is a fresh agent in its own worktree, a chore's being code, verify and merge. Above the team, at {label}'s main level: `{label}-design`, the design agent, "
-        f"answers design questions; `{label}-planner` plans the partition's bolts; `{label}-dispatch-{t['machine']}` gives this "
-        f"host's teams their bolts; `{label}-ops` lands a proven bolt on main; and `{label}-operator` is the partition's door "
-        f"to the user. " + (f"The team holds the kits {', '.join(k['name'] for k in kits_of(t))}, and takes a bolt of any of them; "
-                            f"the kit this brief names, {kit['name']}, is its bolt's. " if len(kits_of(t)) > 1 else "")
-        + f"The agents named here are reached with `{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run; "
-        f"anything for another team, of this partition or another, or for another partition, is sent with {SENDS}. {SENDERS}")
-    return tok
-
-
 # How a main-level role's work reaches it, the brief's {{TURN}} (design Decision 9, role-runs "A run's brief says how a
 # turn goes"): for a role its partition runs as its kind, how a turn goes, with what is the role's own in a turn
 # (TURN_OWN); for one that stands, that its work reaches it in its pane.
@@ -1510,7 +1397,7 @@ STANDING_TURN = ("You stand in your pane, an agent crew started and keeps up: yo
 
 def turn_said(p, defn):
     """The brief's {{TURN}} for a partition's main-level role, by its definition: how a turn goes for a role its
-    partition runs as its kind (KIND_TURN, TURN_OWN), else how a standing role's work reaches it; a dispatcher stands."""
+    partition runs as its kind (KIND_TURN, TURN_OWN), else how a standing role's work reaches it."""
     role = "ops" if defn == "main-ops" else defn
     if role in KIND_ROLES and p["flume"][role] is not False:
         return KIND_TURN + TURN_OWN.get(defn, "")
@@ -1518,16 +1405,14 @@ def turn_said(p, defn):
 
 
 def main_tokens(fleet, p, role, self_name):
+    import plan  # plan imports this module
     label, host, cmd = p["label"], this_host(), f"{HOME}/plugin/bin/crew"
-    teams = [fleet["teams"][n] for n in sorted(p["teams"])]
-    hosts = partition_hosts(fleet, label)
-    here = [t for t in teams if t["machine"] == host]
-    team_line = lambda t: (f"- `{t['name']}` builds {t['system']} in {' and '.join(k['name'] for k in kits_of(t))}, from {t['blueprints']['repo']}'s plan, on "
-                           f"{t['machine']} in session {t['session']} (account {fleet['hosts'][t['machine']]['sessions'][t['session']]['account']}), "
-                           f"with {t['units']} unit slots; its conductor is `{t['name']}-conductor`")
-    kits = sorted({k["name"] for t in teams for k in kits_of(t)})
+    # The partition's kits, the repositories its plan and its landings name, as crew's cache holds its branch (plan.12),
+    # and those its main level's host keeps a checkout of (Decision 3 of the-team-machinery-leaves).
+    named = plan.kits_read(fleet, label, False)
+    kept = kits_kept(fleet, p["machine"], named)
     names = {"design": f"{label}-design", "planner": f"{label}-planner", "main-ops": f"{label}-ops",
-             "dispatcher": f"{label}-dispatch-{host}", "operator": f"{label}-operator", "reviewer": f"{label}-reviewer"}
+             "operator": f"{label}-operator", "reviewer": f"{label}-reviewer"}
     account = lambda s: fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account", "")
     places = "; ".join(f"`{label}-{r}` in session {s}" + (f" (account {account(s)})" if account(s) else "")
                        for r, s in ((r, role_session(p, r)) for r in MAIN_STANDING + ("reviewer",)))
@@ -1539,15 +1424,12 @@ def main_tokens(fleet, p, role, self_name):
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
         "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
-        "CARDS": cards_how(cmd, label, kits_named({k["repo"]: k for t in teams for k in kits_of(t)}.values())), "RESULTS": RESULTS,
+        "CARDS": cards_how(cmd, label, kits_named(kept)), "RESULTS": RESULTS,
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}", "MAIN_SESSIONS": places,
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "REVIEWER": f"{label}-reviewer", "REVIEWS": f"~/.local/state/crew/{label}-main/reports",
-        "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",
-        "KIT_CHECKOUTS": ", ".join(f"`{c}`" for c in kits_on(fleet, label, p["machine"])) or "none on this host",
-        "TEAMS": "\n".join(team_line(t) for t in teams) or "- no team yet",
-        "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
-        "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
+        "KITS": ", ".join(sorted({k.split("/")[-1] for k in named})) or "none yet",
+        "KIT_CHECKOUTS": ", ".join(f"`{k['main']}`" for k in kept) or "none on this host",
         "OPERATORS": f"`{label}-operator` on {p['machine']}",
         "TEAMS_DOORS": ", ".join(doors) or "none", "TURN": turn_said(p, role),
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
@@ -1560,20 +1442,15 @@ def main_tokens(fleet, p, role, self_name):
         f"`{label}-design`, the design agent, keeps the design true on main and curates signals; `{label}-planner` plans the partition's "
         f"bolts and posts its review batches; `{label}-reviewer`, started fresh for each batch, summarizes its changes; `{label}-ops` lands "
         f"proven bolts on the user's send on each kit's landings card; and `{label}-operator`, the partition's door, works for the user. "
-        f"A dispatcher on each host the partition's teams run on gives that host's teams their bolts: {tok['DISPATCHERS']}. "
-        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
+        f"Any of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
         f"anything for another partition or one of its teams is sent with {SENDS}. {SENDERS}")
     return tok
 
 
-def brief(fleet, scope, role, self_name=""):
-    """A definition's body, filled from the teams file for a team or for a partition's main level."""
-    if scope in fleet["teams"]:
-        role in TEAM_ROLES or fail(f"no definition '{role}' for a team. definitions: " + " ".join(TEAM_ROLES))
-        tok = team_tokens(fleet, held_team(fleet, fleet["teams"][scope]), role, self_name)
-    else:
-        role in MAIN_ROLES or fail(f"no definition '{role}' for a main level. definitions: " + " ".join(MAIN_ROLES))
-        tok = main_tokens(fleet, partition_of(fleet, scope), role, self_name)
+def brief(fleet, label, role, self_name=""):
+    """A definition's body, filled from the teams file for a partition's main level."""
+    role in MAIN_ROLES or fail(f"no definition '{role}' for a main level. definitions: " + " ".join(MAIN_ROLES))
+    tok = main_tokens(fleet, partition_of(fleet, label), role, self_name)
     def fill(m):
         k = m.group(1)
         if k not in tok:

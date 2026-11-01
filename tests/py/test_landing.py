@@ -1333,7 +1333,6 @@ class TestTheLandingsRead:
         self.entries, self.outs, self.ran, self.emitted, self.closed = [dict(self.Q)], [], [], [], []
         self.plan = APlan("b")
         monkeypatch.setattr(plan.crew, "this_host", lambda: "box")
-        monkeypatch.setattr(plan.crew, "with_kit", lambda t, repo: self.T)
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: self.plan)
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: list(self.entries))
         monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: self.T if b else None)

@@ -6038,13 +6038,15 @@ def role_open(fleet, a):
         print(f"the runner on {host} could not launch {run}'s last run: {r['words']}")
 
 
-def land_named(fleet, plan):
-    """The repositories a role's work may land in (runner.role_launch): those the teams file names, every partition's
-    blueprints repositories and every team's kits, as owner/name, and those the plan names as its bolts' and work's
-    Repo. Not a state repository, whose branches crew's own commands alone write (state.1)."""
+def land_named(fleet, label, kits):
+    """The repositories a role's work may land in (runner.role_launch), as owner/name: every partition's blueprints
+    repositories, which the teams file names, and the partition's kits (kits, partition_kits), a kit its plan names by
+    its name alone as the partition's main-level host keeps it (crew.kits_kept), where the role's work is launched. Not
+    a state repository, whose branches crew's own commands alone write (state.1)."""
     named = {b for p in fleet["partitions"].values() for b in p["blueprints"]}
-    named |= {k["repo"] for t in fleet["teams"].values() for k in crew.kits_of(t)}
-    return named | {r.get("Repo") for r in plan.bolts() + plan.work() if r.get("Repo")}
+    host = crew.partition_of(fleet, label)["machine"]
+    named |= {k["repo"] for k in crew.kits_kept(fleet, host, [k for k in kits if "/" not in k])}
+    return named | {k for k in kits if "/" in k}
 
 
 def role_land(fleet, a):
@@ -6069,7 +6071,8 @@ def role_land(fleet, a):
             fail(f"the brief {path} can't be read: {e.strerror or e}")
 
         def change(w):
-            launched, why = runner.role_launch(requests_of(w).recs("Request"), land_named(fleet, w.plan), label, role, host, stream,
+            launched, why = runner.role_launch(requests_of(w).recs("Request"), land_named(fleet, label, kits_at(w.repo, w.tip, w.plan)),
+                                               label, role, host, stream,
                                                a.repo, a.name, brief)
             not why or fail(why)
             act, work, given = launched

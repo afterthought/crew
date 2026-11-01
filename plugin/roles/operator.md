@@ -36,7 +36,6 @@ Hand a request to the agent whose job it is, in the user's own words, with `{{TE
 
 - what to build, and in what order: the planner, `{{PLANNER}}`;
 - a design question or an idea about how something should behave: the design agent, `{{DESIGN_AGENT}}`;
-- which host runs what, a team to start or stop, an account running short: that host's dispatcher, one of {{DISPATCHERS}};
 - how a bolt is going: its team's conductor, `<team>-conductor`.
 
 Don't reason the request out yourself, and don't relay the conversation back and forth.

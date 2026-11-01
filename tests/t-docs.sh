@@ -100,11 +100,13 @@ expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge 
 ok "the README, the skill and the usage say a bolt's work is started by crew bolt start, refused for one started already, and name no give, agreement or dispatcher, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
 
 for doc in usage readme skill; do
-  for want in "version 2, 3 or 4" "in Flume stream" "Path: flume" "no team's conductor, ops or slot" \
+  for want in "version 5, which lists no team" "version 2, 3 or 4 among them" "in Flume stream" "Path: flume" "no team's conductor, ops or slot" \
     "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
-  for gone in "due to cross" "due back" "however they went down" "closes what the hold left" "crossed team"; do lacks "${!doc}" "$gone"; done
+  for gone in "due to cross" "due back" "however they went down" "closes what the hold left" "crossed team" "version 3 of the teams file" \
+    "Version 3 of the teams file" "version-2 file" "version 4 names" "version 4 of the teams file" "at version 2 or 3" "versions 2 and 3" \
+    "<team|label>"; do lacks "${!doc}" "$gone"; done
 done
-ok "the README, the skill and the usage say a team's stream, that crew runs no team's agents, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
+ok "the README, the skill and the usage say the teams file is version 5 and lists no team, an older one refused, that crew runs no team's agents, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
 
 for doc in usage readme skill; do
   for want in "runs as its kind" "every role stands" "asks.rec" "roles.rec" "crew-<role>--<label>" "end --report <path>" \

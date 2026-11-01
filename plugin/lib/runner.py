@@ -949,13 +949,14 @@ def role_launch(requests, named, label, role, host, stream, repo, name, brief):
     host and in the role's stream, at priority 0, its intent the role's run, <label>-<role>, its recipient the role's
     address, <label>/<role>, so its landing, or a wait on its caller, reaches the role's next run, and its brief the
     file's text whole, since the stage's agent is fresh. Refused for a repository not named as its forge address,
-    <owner>/<name>, or one crew does not name (named, the teams file's and the plan's), for a brief with no words, and
+    <owner>/<name>, or one crew does not name (named: the blueprints repositories the teams file names and the
+    partition's kits, plan.land_named), for a brief with no words, and
     while a launch of role/<role>/<name> stands, since the name is in use there."""
     if not FORGE.match(repo):
         return None, f"a repository is named by its forge address, <owner>/<name>, which the runner resolves to its clone, not {repo}"
     if repo not in named:
-        return None, (f"crew names no repository {repo}: a role's work lands in a blueprints repository or a kit the teams file "
-                      "names, or a repository the plan names, and it names " + ", ".join(sorted(n for n in named if FORGE.match(n))))
+        return None, (f"crew names no repository {repo}: a role's work lands in a blueprints repository the teams file names or "
+                      "a kit the partition's plan or landings name, and it names " + ", ".join(sorted(n for n in named if FORGE.match(n))))
     if not brief.strip():
         return None, f"the brief for {name} holds no words, and a chore's agent starts fresh with its brief alone"
     work = f"role/{role}/{name}"
