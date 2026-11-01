@@ -433,11 +433,13 @@ class TestBatchFacts:
         assert plan.batch_subjects(p) == {"x1": "the deployer holds at a failure", "y1": "AWS accounts are named"}
         assert plan.batch_subjects(None) == {}
 
-    def test_the_summary_delivered_gives_every_unit_in_the_batchs_order_with_its_team_commit_subject_and_paragraph(self):
+    def test_the_summary_delivered_gives_every_unit_in_the_batchs_order_with_its_bolt_commit_subject_and_paragraph(self):
+        """Each unit with the name its entry holds between it and its commit: its bolt, or an older entry's team read as
+        written (units_of_batch)."""
         entries = [reviewed(2, [("w1", "swb-2", "ddd1")], 0), reviewed(3, UNITS, 10)]
         f = plan.batch_facts(3, entries, SUMMARY, {"x1": "the tenant's zone is its own"})
         assert (f["n"], f["previous"], f["link"]) == (3, 2, None)
-        assert [(u["unit"], u["team"], u["commit"], u["subject"]) for u in f["units"]] == [
+        assert [(u["unit"], u["bolt"], u["commit"], u["subject"]) for u in f["units"]] == [
             ("x1", "swb-1", "aaa1", "the tenant's zone is its own"), ("x10", "swb-1", "bbb1", "x10"), ("z1", "atl-1", "ccc1", "z1")]
         assert f["units"][1]["paragraph"] == "The reviewer's summary has no section for x10."
         assert plan.batch_facts(1, [reviewed(1, UNITS)], SUMMARY, {})["previous"] is None

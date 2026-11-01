@@ -443,10 +443,10 @@ v1: say what the zone is.
 card batch/1: req_stub-12 closed
 ended batch/1's session, plannotator pid $p1"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request whoami get_request ack_answer "
-eq "$(py_calls | sed -n 5p | cut -d' ' -f2- | jq -r .outcome)" "Read; 1 note sent to its team"
+eq "$(py_calls | sed -n 5p | cut -d' ' -f2- | jq -r .outcome)" "Read; 1 note for its unit"
 gone "$p1"
 [[ ! -e $cards_dir/batch/1 ]] || fail "batch/1's session folder outlived its card"
-eq "$(entries card.close | jq -r 'select(.Key == "batch/1" and .State == "closed") | [.Card, .Outcome] | join(" ")')" "req_stub-12 Read; 1 note sent to its team"
+eq "$(entries card.close | jq -r 'select(.Key == "batch/1" and .State == "closed") | [.Card, .Outcome] | join(" ")')" "req_stub-12 Read; 1 note for its unit"
 ok "the card sent back is read by the planner's crew card read with its note, and crew closes it and ends its session"
 
 raise 2 >/dev/null; p2=$(jq -r .pid "$cards_dir/batch/2/session.json")
@@ -458,7 +458,7 @@ eq "$out" "batch/2: annotated
 $notes
 card batch/2: req_stub-13 withdrawn
 batch/2's session had ended as the user sent it, and batch/2 is forgotten"
-eq "$(py_calls | tail -1 | cut -d' ' -f2- | jq -r .reason)" "Read; 2 notes sent to their teams"
+eq "$(py_calls | tail -1 | cut -d' ' -f2- | jq -r .reason)" "Read; 2 notes for their units"
 ok "the session sent with its annotations is read with every one as the user wrote it, and crew closes the card and forgets the session"
 
 batch 3

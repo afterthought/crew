@@ -116,8 +116,8 @@ def test_a_landing_refused_at_the_bolts_present_head_holds_its_row():
     head = "d" * 40
     held = plan.refusals([submitted("y", "c" * 40), submitted("y", head, "bolt/y did not land: sluice found a conflict")])
     row, = plan.landing_rows(["y"], {"y": facts("y", head)}, held)
-    assert (row["box"], row["why"]) == (False, "held: sluice refused its landing at ddddddd, and it waits for its team's "
-                                               "fix: bolt/y did not land: sluice found a conflict")
+    assert (row["box"], row["why"]) == (False, "held: sluice refused its landing at ddddddd, and it waits for a fix on the "
+                                               "bolt: bolt/y did not land: sluice found a conflict")
     assert plan.refused_at([submitted("y", head, "no")], "y", head) == "no"
 
 
@@ -135,7 +135,7 @@ def test_a_holds_reason_is_sluices_verdict_with_the_conflicts_paths_never_a_plac
               f"WHY='' LEVEL='' SAID={base64.b64encode(verdict.encode()).decode()}\n")  # LANDED's report, handed the verdict
     _, refused = plan.landing_said("y", "crew", "h", landed, old, recorded=True)
     row, = plan.landing_rows(["y"], {"y": facts("y", head)}, plan.refusals([submitted("y", head, refused)]))
-    assert row["why"] == ("held: sluice refused its landing at ddddddd, and it waits for its team's fix: #7 conflict: "
+    assert row["why"] == ("held: sluice refused its landing at ddddddd, and it waits for a fix on the bolt: #7 conflict: "
                           "plugin/lib/plan.py")
     told = plan.landing_said("y", "crew", "h", landed, old, beside=plan.beside_of(f"{tidying}\n", verdict))[1]
     assert "release" not in refused and f"sluice said: {tidying}." in told
@@ -286,7 +286,7 @@ def test_a_left_bolt_with_a_fix_in_flight_or_sluices_refusal_is_held_as_before()
     y, z = plan.landing_rows(["y", "z"], {"y": facts("y", fixes={"fix/y/gap": "A zone is missing."}), "z": facts("z")}, held,
                              takes_main=takes, left={"y", "z"})
     assert (y["box"], y["why"]) == (False, "held for a fix: A zone is missing. (fix/y/gap)")
-    assert (z["box"], z["why"]) == (False, "held: sluice refused its landing at aaaaaaa, and it waits for its team's fix: "
+    assert (z["box"], z["why"]) == (False, "held: sluice refused its landing at aaaaaaa, and it waits for a fix on the bolt: "
                                            "bolt/z did not land: sluice found a conflict")
 
 
@@ -652,9 +652,9 @@ def test_a_landing_whose_entry_is_still_in_flight_is_read_as_still_landing_and_i
     assert plan.decision_at([(a, None, [before])], {}) == a and plan.decision_at([], {}) is None
 
 
-STANDS = ("your send stands for it: it lands once its team's fix has only taken main in and sluice has proven it, with "
+STANDS = ("your send stands for it: it lands once a fix on it has only taken main in and sluice has proven it, with "
           "nothing asked.")
-REFUSED = "held: sluice refused its landing at abc1234, and it waits for its team's fix: x"
+REFUSED = "held: sluice refused its landing at abc1234, and it waits for a fix on the bolt: x"
 
 
 def test_a_ticked_bolt_sluice_refused_is_held_and_the_rest_close_the_card():
@@ -712,7 +712,7 @@ def test_a_ticked_bolt_held_for_any_other_fix_is_held_and_the_card_closed_keepin
     """Only a bolt taking main in leaves the card; one held for another fix closes it, its send kept on the close."""
     step = plan.landings_step([hold("y")], answered("y@abc1234"), ["y"], {"y"})
     assert step == ("close", "Held: y, held for a fix: one zone is missing (fix/y/gap); your send stands for it: it lands "
-                             "once its team's fix has only taken main in and sluice has proven it, with nothing asked.", None,
+                             "once a fix on it has only taken main in and sluice has proven it, with nothing asked.", None,
                     [("y", "abc1234")])
 
 

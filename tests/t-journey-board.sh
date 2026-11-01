@@ -103,7 +103,7 @@ has "$(lane "$b" Inception)" "Every apex should be a zone of its own."
 has "$(lane "$b" Inception)" "exploration  switchboard-kit command-cost"
 eq "$(line_of "$(lane "$b" "Bolt plan")" "zone-one")" "    zone-one  ready"
 con=$(lane "$b" Construction)
-has "$(line_of "$con" "tenant-environments")" "swb-1 on $box  in Flume stream wldn"
+has "$(line_of "$con" "tenant-environments")" "tenant-environments  on $box  in Flume stream wldn"
 eq "$(line_of "$con" "  a  ")" "    a  code 1/2"
 eq "$(line_of "$con" "  c  ")" "    c  verify 2/2"
 lacks "$b" $'\033'
@@ -281,8 +281,9 @@ eq "$(sed -n 3p <<<"$out")" "the other partitions are not linked: $T/served/boar
 ok "a page written as <label>.html links the other partitions' pages beside it, and one whose file and folder name no partition links none and says so"
 
 # crew page --fleet: every partition of the teams file on one page, written beside the partitions' folders, its path
-# and each partition's header printed; its links follow its file as the partition page's do, and a partition's page
-# served as <label>.html links back to the fleet page as index.html. With no use published yet, it says so and each
+# and each partition's header printed, naming no team; its links follow its file as the partition page's do, a
+# subscription's partition opening that page at the subscription's dock, and a partition's page served as <label>.html
+# links back to the fleet page as index.html. With no use published yet, it says so and each
 # subscription says no host has published its use.
 fleet=$(home_of mac-studio)/.local/state/crew/page.html
 usage=$(home_of mac-studio)/.local/state/crew/usage
@@ -293,8 +294,9 @@ eq "$(sed -n 2,4p <<<"$out" | sed -E 's/^as of [0-9-]{10} [0-9:]{5}Z · //' | tr
   "wldn/main $(git --git-dir "$ws" rev-parse --short=7 wldn/main)|madswan/main not started|swancloud/main not started|"
 json=$(block "$fleet")
 eq "$(j '[.partitions[].label] | join(" ")')" "wldn madswan swancloud"
-eq "$(j '.partitions[0].link') $(j '.partitions[0].teams[] | select(.team == "swb-1") | .link')" "wldn/page.html wldn/page.html#dock=team:swb-1"
-eq "$(block "$mine/page.html" | jq -r '.docks["team:swb-1"].title')" "swb-1"
+eq "$(j '.partitions[0].link') $(j '.subscriptions.items[] | select(.account == "credits") | .partitions[] | select(.label == "wldn") | .link')" \
+  "wldn/page.html wldn/page.html#dock=subscription:credits"
+eq "$(block "$mine/page.html" | jq -r '.docks["subscription:credits"].title') $(j '.partitions[0] | has("teams")')" "credits false"
 eq "$(j '.partitions[0].kits[] | select(.kit == "switchboard-kit") | .said[1]')" "tenant-environments in construction; 1 bolt planned; 1 unit queued"
 eq "$(j '[.subscriptions.items[] | .account + " " + .state] | join(", ")')" "credits none, ia none, madswan none, willdan-alex none"
 expect_ok crew page --fleet --out "$T/served/index.html"

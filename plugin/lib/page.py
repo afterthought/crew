@@ -18,10 +18,9 @@ the fleet page, every partition at once.
                                      partitions on it; then every partition of the teams file at once, a block to
                                      each, from one read of all of them, the one crew board makes: where it runs,
                                      each host and the herdr sessions its agents run in with each one's Claude
-                                     account; its kits, each main's last landing and what is queued for it; its
-                                     teams, each one's bolt, slots and what its conductor waits on; and what needs
-                                     attention; each partition a link to its page and each team to its dock there,
-                                     in the layout of the file: <label>.html beside index.html, <label>/page.html
+                                     account; its kits, each main's last landing and what is queued for it; and
+                                     what needs attention; each partition a link to its page, and each partition on
+                                     a subscription to its page at the subscription's dock, in the layout of the file: <label>.html beside index.html, <label>/page.html
                                      beside page.html, none, said so, for any other name; written whole to
                                      ~/.local/state/crew/page.html, beside the partitions' folders, or to --out, with
                                      each published file it could not read printed, and that no use is published
@@ -33,8 +32,8 @@ how they are linked and each one's history are read from the run record's entrie
 the board read, at the commit the entries were read at, which a command fetches once (plan.12); no entry holds them
 (record.3). The deploys are the ops entries of the main level's host and the landings, as ops.environments reads them
 (plan.14), a deploy's release notes the proposals the lineage joins to each bolt it carried. The fleet page is the
-board of every partition from the one read crew board makes of them all, each slot's stage read from the starts and
-ends the run record holds in the board's window (read.5), and each session's account from the hosts file (code.5);
+board of every partition from the one read crew board makes of them all, its landings read from the run record in
+the board's window (read.5), and each session's account from the hosts file (code.5);
 its subscriptions' use is what each host published in this host's ~/.local/state/crew/usage/, which swancloud's
 reader writes and crew only reads, by no ssh and no credential (read.5), beside the work of the sessions on each.
 Each file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and making it
@@ -159,7 +158,7 @@ def labelled(d, pl, st, proposals, items, moves, assertion_of):
             state = st.bolt_state(b)
             state = None if state == "unknown" else state
             host = (st.at(b)[0] or {}).get("machine") if plan.started(b) else None  # where its work runs (plan.bolt_at)
-            n.update(label=b.get("Goal"), status=BOLT.get(state), team=None, facts=[x for x in (host, state) if x])
+            n.update(label=b.get("Goal"), status=BOLT.get(state), facts=[x for x in (host, state) if x])
         else:
             from_entries(n, entries)
 
@@ -197,7 +196,7 @@ def fleet_data(fleet, bd, logs, usage, now):
     """The fleet page's data: every partition of the teams file in its order, from the board of all of them (bd, as
     board.board_data gives it), each partition's run-record entries (logs, by label), the use the hosts published (usage,
     as usage_files reads it) and the time. The record is read in its window, the board's (WINDOW). Each partition is
-    where it runs, its kits and their mains, its teams and how busy each is, and what needs attention; each subscription
+    where it runs, its kits and their mains, and what needs attention, naming no team (fleet-page); each subscription
     its use, who read it and how long ago, and the sessions and partitions on it; and each published file crew could not
     read, with why: each with the words the page says of it; nothing here reads (code.7)."""
     since = board.iso(now - WINDOW)
@@ -208,20 +207,19 @@ def fleet_data(fleet, bd, logs, usage, now):
     read = [h for h in usage if h not in {u["host"] for u in unread}]
     said = ("no host has published any use" if not usage else f"as published by {', '.join(read)}" if read else "no published use could be read")
     return {"made": {"at": board.iso(now), "since": since},
-            "subscriptions": {"said": said, "items": subscriptions(fleet, readings, {t["team"]: t for p in parts for t in p["teams"]}, now)},
+            "subscriptions": {"said": said, "items": subscriptions(fleet, readings, now)},
             "unread_usage": unread, "partitions": parts}
 
 
 def fleet_partition(fleet, part, unread, entries, since):
     """One partition's block: its label and name, the commit its plan was read at and what could not be read, where it
-    runs, its kits, its teams and its attention in the board's words, with how many of its cards are open."""
+    runs, its kits and its attention in the board's words, with how many of its cards are open."""
     l, p = part["label"], fleet["partitions"][part["label"]]
     attention = [board.attention_text(a) for a in part["attention"]]
     mine = {n: why for n, why in unread.items() if n.startswith(f"{l}/main of ") or n == f"the plan of {l}"}
     return {"label": l, "partition": p["partition"], "plan": part["plan"], "unread": mine,
             "commit": f"{l}/main " + (part["plan"][:7] if part["plan"] else "not read" if mine else "not started"),
             "hosts": where(fleet, l, part["hosts"]), "kits": fleet_kits(part, entries, since),
-            "teams": [fleet_team(fleet, part, t, entries) for t in p["teams"]],
             "attention": attention, "attention_said": attention or ["nothing needs attention"], "cards": len(part["cards"]),
             "cards_said": board.many(len(part["cards"]), "card open", "cards open")}
 
@@ -231,11 +229,11 @@ def account_said(account):
 
 
 def where(fleet, label, asked):
-    """Each host the partition runs on, by name: those the board asked (asked, {host: True or why it did not answer})
-    and its main level's, marked answered, not, or not asked when no team of it runs there; under each, in the hosts
-    file's order, each session an agent of the partition runs in, the agents in it, its teams, then its main level's
-    standing roles, and the account the hosts file gives the session, said when it names
-    none (read.2). A session no agent of the partition runs in is left out."""
+    """Each host the partition runs on, by name: those the board asked (asked, {host: True or why it did not answer},
+    its main level's and its runners', plan.hosts_of) and its main level's, marked answered, not, or not asked; under
+    each, in the hosts file's order, each session an agent of the partition runs in, its main level's standing roles
+    in it, and the account the hosts file gives the session, said when it names none (read.2). A session no agent of
+    the partition runs in is left out."""
     p = fleet["partitions"][label]
     placed = agents_in(fleet, label)
     out = []
@@ -245,7 +243,7 @@ def where(fleet, label, asked):
         v = asked.get(h)
         answered = None if h not in asked else v is True
         out.append({"host": h, "answered": answered, "why": None if answered in (True, None) else v,
-                    "said": "answered" if answered else "not asked: no team of it runs there" if answered is None else f"did not answer ({v})",
+                    "said": "answered" if answered else "not asked" if answered is None else f"did not answer ({v})",
                     "sessions": [{"session": s, "agents": agents[s], "account": known.get(s, {}).get("account") or None,
                                   "account_said": account_said(known.get(s, {}).get("account"))}
                                  for s in dict.fromkeys(list(known) + list(agents)) if s in agents]})
@@ -253,25 +251,23 @@ def where(fleet, label, asked):
 
 
 def agents_in(fleet, label):
-    """Which of a partition's agents crew starts in which session, {(host, session): [agent]}: its teams, each in its
-    host's session, then its main level's standing roles in theirs on its host."""
+    """Which of a partition's agents crew starts in which session, {(host, session): [agent]}: its main level's standing
+    roles in theirs on its host, the one kind of agent crew starts (the-team-machinery-leaves)."""
     p = fleet["partitions"][label]
     out = {}
-    for t in p["teams"]:
-        out.setdefault((fleet["teams"][t]["machine"], fleet["teams"][t]["session"]), []).append(t)
     for r in crew.MAIN_STANDING:
         out.setdefault((p["machine"], p["sessions"][r]), []).append(f"{label}-{r}")
     return out
 
 
 def fleet_kits(part, entries, since):
-    """Each kit the partition's teams build, once, in the order the board takes them (teams by name, each team's kits in
-    order), with the teams building it; its main's last landing in the window, the newest bolt.land not refused whose
-    Repo is the kit, or none since the window's start; and what is queued for that main: its held bolts that wait to
-    land, each with its landing's card open or none, those in construction, and its planned bolts and queued units,
+    """Each of the partition's kits, the repositories its plan and its landings name (plan.partition_kits, as the board
+    read them), once, in their order; its main's last landing in the window, the newest bolt.land not refused whose
+    Repo is the kit, or none since the window's start; and what is queued for that main: its started bolts that wait
+    to land, each with its landing's card open or none, those in construction, and its planned bolts and queued units,
     counted."""
     out = []
-    for kit in dict.fromkeys(k for t in sorted(part["teams"], key=lambda t: t["team"]) for k in t["kits"]):
+    for kit in dict.fromkeys(part["kits"]):
         land = next((e for e in reversed(entries) if e.get("Act") == "bolt.land" and not e.get("Refused") and e.get("Repo") == kit), None)
         landing = land and {"bolt": next((o[5:] for o in land["On"] if o.startswith("bolt/")), None), "head": land.get("Head"), "at": land["At"], "by": land.get("By")}
         mine = [b for b in part["construction"] if b["repo"] == kit]
@@ -283,7 +279,7 @@ def fleet_kits(part, entries, since):
                 + ([", ".join(b["bolt"] + (f" ({board.state_said(b['state'])})" if board.state_said(b["state"]) else "") for b in building) + " in construction"] if building else [])
                 + ([board.many(planned, "bolt planned", "bolts planned")] if planned else [])
                 + ([board.many(queued, "unit queued", "units queued")] if queued else []))
-        out.append({"kit": kit, "teams": [t["team"] for t in part["teams"] if kit in t["kits"]], "landing": landing, "since": since,
+        out.append({"kit": kit, "landing": landing, "since": since,
                     "waits": waits, "building": building, "planned": planned, "queued": queued,
                     "said": [landed_said(landing, since), "; ".join(said) or "nothing queued"]})
     return out
@@ -296,51 +292,6 @@ def landed_said(landing, since):
             + f", {landing['at'][:10]} {landing['at'][11:16]}Z" + (f" by {landing['by']}" if landing["by"] else ""))
 
 
-def work_named(s):
-    return ("chore " if s["kind"] == "chore" else "") + s["name"]
-
-
-def fleet_team(fleet, part, name, entries):
-    """A team: its host, session and account, its kits; each bolt it holds with its pips, how many units have merged
-    and its state; each slot holding a unit, chore or fix of its bolt, or free, none at work, since crew runs no stage;
-    and what its conductor waits on: a bolt that waits to land, on the user's word, with its landing's card open or
-    none, else nothing."""
-    t = fleet["teams"][name]
-    account = fleet["hosts"].get(t["machine"], {}).get("sessions", {}).get(t["session"], {}).get("account") or None
-    bolts = [b for b in part["construction"] if b["team"] == name]
-    held = {}
-    for b in bolts:
-        for u in b["units"]:
-            if u["slot"]:
-                held.setdefault(u["slot"], {"kind": u["kind"], "name": u["unit"], "stage": u["stage"]})
-        for f in b["fixes"]:
-            if f["slot"]:
-                held.setdefault(f["slot"], {"kind": "fix", "name": f["fix"], "stage": "merged" if f["merged"] else None})
-    slots = []
-    for n in range(1, t["units"] + 1):
-        s = f"unit-{n}"
-        if s in held:
-            h = held[s]
-            slots.append(dict(h, slot=s, state="held", said=f"{s} holding {work_named(h)}" + (f" ({h['stage']})" if h["stage"] else "") + ", no stage running"))
-        else:
-            slots.append({"slot": s, "state": "free", "said": f"{s} free"})
-    work = [s for s in slots if s["state"] == "work"]
-    landing = next((b for b in bolts if b["state"] == "waits"), None)
-    if landing:
-        card = next((m["card"] for m in landing["markers"] if m["card"]), None)
-        waits = {"on": "landing", "bolt": landing["bolt"], "card": card,
-                 "said": "waits on the landing, on the user's word, " + ("its card open" if card else "no card open")}
-    else:
-        waits = {"on": "nothing", "said": "waits on nothing"}
-    return {"team": name, "host": t["machine"], "session": t["session"], "account": account, "account_said": account_said(account),
-            "kits": [k["name"] for k in crew.kits_of(t)],
-            "bolts": [{"bolt": b["bolt"], "repo": b["repo"], "state": b["state"], "pips": board.pips(b["units"]), "merged": board.merged(b),
-                       "said": " · ".join(x for x in (f"{board.pips(b['units'])} {b['bolt']}", board.merged(b), board.state_said(b["state"])) if x)}
-                      for b in bolts],
-            "holds": "" if bolts else "holds no bolt", "slots": slots, "at_work": len(work),
-            "at_work_said": f"{len(work)} of {t['units']} slots at work", "waits": waits}
-
-
 def fleet_links(path, labels):
     """Where each partition's page is from the fleet page written to path (a PurePath), in the layout of its own file:
     index.html, as swancloud's board serves it beside the partitions' pages, puts each at <label>.html; page.html,
@@ -350,16 +301,14 @@ def fleet_links(path, labels):
 
 
 def linked(d, links):
-    """Each partition of the fleet's data given its page's link, and each team its dock there (#dock=team:<name>, the
-    address the dock keeps), and each subscription's partitions the same link as their blocks; none where links is
+    """Each partition of the fleet's data given its page's link, and each subscription's partitions that link with the
+    subscription's dock open there (#dock=subscription:<account>, the address the dock keeps); none where links is
     None."""
     for p in d["partitions"]:
         p["link"] = links[p["label"]] if links else None
-        for t in p["teams"]:
-            t["link"] = f"{p['link']}#dock=team:{t['team']}" if p["link"] else None
     for s in d["subscriptions"]["items"]:
         for p in s["partitions"]:
-            p["link"] = links[p["label"]] if links else None
+            p["link"] = f"{links[p['label']]}#dock=subscription:{s['account']}" if links else None
 
 
 # ------------------------------------------------------------------------------------------------- the subscriptions
@@ -510,7 +459,7 @@ def reading_said(r, now):
             else f"{r['host']} read {age_said(r['at'], now)}")
 
 
-def subscriptions(fleet, readings, teams, now):
+def subscriptions(fleet, readings, now):
     """Every Claude subscription, by name: each account a session of the hosts file names and each a reading is of
     (usage_checked). Each shows the figures of its newest reading made, which host read it and how long before now; each
     other reading, its host's and how long ago, or the host's words for why it could not read; else that its use could
@@ -527,16 +476,15 @@ def subscriptions(fleet, readings, teams, now):
         out.append(dict({"account": a, "state": state, "said": said, "host": newest and newest["host"], "at": newest and newest["at"]},
                         **(figures(newest, now) if newest else {"windows": [], "models": []}),
                         others=[{"host": r["host"], "at": r["at"], "unread": r["unread"], "said": reading_said(r, now)} for r in mine if r is not newest],
-                        **on_subscription(fleet, a, teams)))
+                        **on_subscription(fleet, a)))
     return out
 
 
-def on_subscription(fleet, account, teams):
+def on_subscription(fleet, account):
     """The sessions and partitions on a subscription, beside its use and computed from nothing of it: each session the
-    hosts file gives account, by host and on each in the file's order, with crew's agents in it across every partition
-    (agents_in), teams first, then main levels' roles, and each team's slots at work and its
-    conductor's wait as its partition's block says them (teams, by name, as fleet_team gives them); and the partitions
-    with an agent in one of them, in the teams file's order, each linked as its block is (linked)."""
+    hosts file gives account, by host and on each in the file's order, with crew's agents in it across every partition,
+    the main levels' roles (agents_in); and the partitions with an agent in one of them, in the teams file's order, each
+    linked to its page at the subscription's dock (linked)."""
     labels = list(fleet["partitions"])
     placed = {l: agents_in(fleet, l) for l in labels}
     sessions, on = [], set()
@@ -545,12 +493,9 @@ def on_subscription(fleet, account, teams):
             if v.get("account") != account:
                 continue
             here = [(l, a) for l in labels for a in placed[l].get((h, s), [])]
-            here.sort(key=lambda x: 0 if x[1] in fleet["teams"] else 1)
             agents = [a for _, a in here]
             on |= {l for l, _ in here}
-            sessions.append({"host": h, "session": s, "agents": agents, "said": ", ".join(agents) or "runs no crew agent",
-                             "teams": [{"team": t, "at_work_said": teams[t]["at_work_said"], "waits_said": teams[t]["waits"]["said"]}
-                                       for t in agents if t in teams]})
+            sessions.append({"host": h, "session": s, "agents": agents, "said": ", ".join(agents) or "runs no crew agent"})
     return {"sessions": sessions, "sessions_said": None if sessions else "no session of herdr-hosts is on it",
             "partitions": [{"label": l, "link": None} for l in labels if l in on],
             "partitions_said": None if on else "no partition's agents run on it"}
@@ -625,12 +570,13 @@ def wait_said(w):
 
 
 def docks(d, fleet, label):
-    """Every item of the page's board and deploys, and every team, given the key of its dock, {key: page}: a signal, a
-    proposal, a planned or held bolt and each of its units, a held bolt's fixes, a queued unit, a landing, a deploy and
-    an operation waiting on an environment; a team, from the strip; and the Claude account of each team's session, a
-    subscription, from the team's dock. Each page is made from the page's data, its lineage and the fleet crew already
-    loaded, and nothing else; an item it names is a link only where it has a dock (record 0038, S27, S28). Every page
-    names, as its `to`, the agent a word from its dock goes to (word_to)."""
+    """Every item of the page's board and deploys given the key of its dock, {key: page}: a signal, a proposal, a
+    planned or started bolt and each of its units, a started bolt's fixes, a queued unit, a landing, a deploy and an
+    operation waiting on an environment; and the Claude account each of the main level's sessions runs on, a
+    subscription, whose dock the fleet page's subscription opens (linked). No team has a dock
+    (the-team-machinery-leaves). Each page is made from the page's data, its lineage and the fleet crew already loaded, and nothing else; an
+    item it names is a link only where it has a dock (record 0038, S27, S28). Every page names, as its `to`, the agent a
+    word from its dock goes to (word_to)."""
     B, p = d["board"], crew.partition_of(fleet, label)
     nodes = {n["id"]: n for n in d["nodes"]}
     read_at = plan.utc(B["read_at"])
@@ -662,13 +608,9 @@ def docks(d, fleet, label):
             w["dock"] = f"operation:{e['env']}/{w['key']}"
             waits.setdefault(w["dock"], {"env": e["env"], "markers": []}).update({k: v for k, v in w.items() if k != "markers"})
             waits[w["dock"]]["markers"] = w.get("markers") or waits[w["dock"]]["markers"]
-    sessions = {}
-    for t in B["teams"]:
-        t["dock"] = f"team:{t['team']}"
-        ft = fleet["teams"][t["team"]]
-        account = fleet["hosts"].get(ft["machine"], {}).get("sessions", {}).get(ft["session"], {}).get("account")
-        sessions[t["team"]] = (ft["machine"], ft["session"], account)
-    keys = {x["dock"] for x in walk(B, d["deploys"])} | {f"subscription:{a}" for _, _, a in sessions.values() if a}
+    known = fleet["hosts"].get(p["machine"], {}).get("sessions", {})
+    sessions = {role: (s, known.get(s, {}).get("account")) for role, s in p["sessions"].items()}  # the main level's
+    keys = {x["dock"] for x in walk(B, d["deploys"])} | {f"subscription:{a}" for _, a in sessions.values() if a}
 
     def link(key):
         return key if key in keys else None
@@ -705,25 +647,22 @@ def docks(d, fleet, label):
                                      ("home", s["home"])],
                               parts=[("assertion", [{"text": nodes[node]["label"]}] if nodes.get(node, {}).get("label") else
                                       [{"text": s["first"]}] if s["first"] else []),
-                                     ("linked", joined(node, "both") if node in nodes else []),
-                                     ("teams", [{"text": t, "key": link(f"team:{t}")} for t in s.get("teams", [])])],
+                                     ("linked", joined(node, "both") if node in nodes else [])],
                               history=d["histories"].get(node, []))
     for x in B["bolt_plan"]["proposals"]:
         node = f"proposal/{x['proposal']}"
         out[x["dock"]] = dock("proposal", x["case"] or f"proposal {x['proposal']}",
                               (f"proposal {x['proposal']}", x["by"] and f"by {x['by']}", x["opened"] and f"opened {x['opened']}"), form="sheet",
                               facts=[("waiting on", "the user")], markers=x["markers"],
-                              parts=[("teams", [{"text": t, "key": link(f"team:{t}")} for t in x["teams"]]),
-                                     ("units and bolts", joined(node, "out") if node in nodes else [])],
+                              parts=[("units and bolts", joined(node, "out") if node in nodes else [])],
                               history=d["histories"].get(node, []))
-    for b in B["bolt_plan"]["planned"] + B["construction"]:
-        held = "team" in b
-        run = (" ".join(x for x in (b.get("team"), f"on {b['host']}" if b["host"] else None) if x) or "where it runs can't be told") \
-            if held else "planned, no team"
+    for b, held in [(b, False) for b in B["bolt_plan"]["planned"]] + [(b, True) for b in B["construction"]]:
+        run = (" ".join(x for x in (f"on {b['host']}" if b["host"] else None, f"in stream {b['stream']}" if b.get("stream") else None) if x)
+               or "where it runs can't be told") if held else "planned, not started"
         landed = landings.get(b["bolt"])
         out[b["dock"]] = dock("bolt", b["bolt"], (b["repo"], run, held and stage_said(b["state"])), form="ledger",
-                              facts=[("goal", b["goal"]), ("repository", b["repo"]), ("team", b.get("team"), link(f"team:{b.get('team')}")),
-                                     ("host", b.get("host")), ("state", stage_said(b["state"]) if held else "planned"), ("server", b.get("url"))],
+                              facts=[("goal", b["goal"]), ("repository", b["repo"]), ("host", b.get("host")), ("stream", b.get("stream")),
+                                     ("state", stage_said(b["state"]) if held else "planned"), ("server", b.get("url"))],
                               markers=b.get("markers"),
                               attention="every unit has landed, and the bolt is still in the plan" if held and b["state"] == "landed" else None,
                               parts=[("units", [unit_row(u) for u in b["units"]]),
@@ -737,14 +676,14 @@ def docks(d, fleet, label):
             out[u["dock"]] = unit_dock(u, b, nodes, d["histories"], link, f"in {b['bolt']}" if held else f"planned in {b['bolt']}")
         for f in b.get("fixes", []):
             out[f["dock"]] = dock("fix", f["fix"], (f"fix of {b['bolt']}",),
-                                  facts=[("state", "merged" if f["merged"] else "not merged"), ("slot", f["slot"]), ("worktree", f["worktree"]), ("server", f["url"])],
+                                  facts=[("state", "merged" if f["merged"] else "not merged"), ("stage", (f.get("flume") or {}).get("stage")),
+                                         ("worktree", f["worktree"]), ("server", f["url"])],
                                   parts=[("bolt", [{"text": b["bolt"], "key": link(b["dock"])}])])
     for u in B["bolt_plan"]["queue"]:
         out[u["dock"]] = unit_dock(u, None, nodes, d["histories"], link, "queued")
     for o in B["operation"]:
         out[o["dock"]] = dock("landing", o["bolt"], ("landed " + o["at"] + (f" by {o['by']}" if o["by"] else ""),), form="record",
-                              facts=[("bolt", o["bolt"], link(f"bolt:{o['bolt']}")), ("landed", o["at"]), ("by", o["by"]),
-                                     ("team", o["team"], link(f"team:{o['team']}"))],
+                              facts=[("bolt", o["bolt"], link(f"bolt:{o['bolt']}")), ("landed", o["at"]), ("by", o["by"])],
                               parts=[("units", [{"text": n, "key": link(f"unit:{n}")} for n in o["units"]]), ("carried by", carrying(o["bolt"]))],
                               history=[e["Id"] for e in sorted(d["entries"].values(), key=lambda e: (e["At"], e["Id"]))
                                        if e.get("Act") == "bolt.land" and f"bolt/{o['bolt']}" in e["On"] and not e.get("Refused")])
@@ -755,22 +694,8 @@ def docks(d, fleet, label):
                         facts=[("state", wait_said(w)), ("environment", w["env"]), ("commit", w["to"]), ("held", "for the user's word" if w.get("held") else None),
                                ("gate", w.get("gate")), ("at", w["at"])],
                         markers=w["markers"], parts=[("text", [{"text": w["text"]}] if w["text"] else []), ("note", [{"text": w["note"]}] if w["note"] else [])])
-    for t in B["teams"]:
-        host, session, account = sessions[t["team"]]
-        mine = [b for b in B["construction"] if b.get("team") == t["team"]]
-        out[t["dock"]] = dock("team", t["team"], (f"{t['kit']} on {t['host']}",),
-                              facts=[("kits", ", ".join(t["kits"])), ("host", host), ("session", session),
-                                     ("account", account or NO_ACCOUNT, link(f"subscription:{account}") if account else None)],
-                              parts=[("bolts held", [{"text": b["bolt"], "key": link(b["dock"])} for b in mine] or [{"text": "holds no bolt"}]),
-                                     ("landings", [{"text": f"{o['bolt']} · landed {o['at']}", "key": link(o["dock"])} for o in B["operation"] if o["team"] == t["team"]]),
-                                     ("signals captured", [{"text": words(s["first"] or s["signal"]), "key": link(s["dock"])}
-                                                           for s in B["inception"]["signals"] if t["team"] in s.get("teams", [])]),
-                                     (f"environment {host}", [deploy_row(x) for x in deps.values() if x["env"] == host]
-                                      + [{"text": f"{w['key']} · {wait_said(w)}", "key": link(k)} for k, w in waits.items() if w["env"] == host])])
-    for account in sorted({a for _, _, a in sessions.values() if a}):
-        rows = [{"text": f"{t} · {h} session {s}", "key": link(f"team:{t}")} for t, (h, s, a) in sessions.items() if a == account]
-        rows += [{"text": f"{label}-{role} · {p['machine']} session {s}"} for role, s in p["sessions"].items()
-                 if fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account") == account]
+    for account in sorted({a for _, a in sessions.values() if a}):
+        rows = [{"text": f"{label}-{role} · {p['machine']} session {s}"} for role, (s, a) in sessions.items() if a == account]
         out[f"subscription:{account}"] = dock("subscription", account, ("Claude account",), parts=[("sessions on it", rows)])
     for key, pg in out.items():
         pg["to"] = word_to(key, label)
@@ -797,7 +722,6 @@ def walk(B, deploys):
     for e in B.get("environments", []) + deploys:
         yield from e["deploys"]
         yield from e["waiting"]
-    yield from B["teams"]
 
 
 def words(text, most=64):
@@ -812,13 +736,13 @@ def stage_said(stage):
 
 
 def unit_dock(u, b, nodes, histories, link, where):
-    """A unit's or chore's dock: in a held bolt's ledger, planned in one no team holds, or queued, its head a slip's."""
+    """A unit's or chore's dock: in a started bolt's ledger, planned in one not started, or queued, its head a slip's."""
     kind = "chore" if u.get("kind") == "chore" else "unit"
     node = f"{kind}/{u['unit']}"
     return dock(kind, u["unit"], (kind, where), form="slip" if b is None else None,
                 facts=[("bolt", b and b["bolt"], b and link(b["dock"])), ("repository", (b or u).get("repo")),
                        ("stage", stage_said(u.get("stage")) if b else "queued"),
-                       ("tasks", f"{u['tasks'][0]} of {u['tasks'][1]} tasks" if u.get("tasks") else None), ("slot", u.get("slot")),
+                       ("tasks", f"{u['tasks'][0]} of {u['tasks'][1]} tasks" if u.get("tasks") else None),
                        ("worktree", u.get("worktree")), ("server", u.get("url")), ("sources", ", ".join(u.get("sources") or []))],
                 parts=[("intent", [{"text": nodes[node]["label"]}] if nodes.get(node, {}).get("label") else [])],
                 history=histories.get(node, []))

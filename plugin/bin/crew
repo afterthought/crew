@@ -356,8 +356,8 @@
 #                                      session, with which commit, and what it led to
 #   crew page     <label> [--out <file>] [--since <time>]
 #                                      the partition's page, one HTML file that loads nothing: it opens on the board,
-#                                      its four lanes drawn as the flywheel mockup draws them, narrowed to one team
-#                                      when chosen, kept across reloads, and its header linking the fleet page and
+#                                      its four lanes drawn as the flywheel mockup draws them, naming no team, and
+#                                      its header linking the fleet page and
 #                                      each other partition's page in the layout of its own file (../page.html and
 #                                      ../<label>/page.html in crew's; index.html and <label>.html beside one written
 #                                      as <label>.html; none, said so, when its file and folder are not the
@@ -376,10 +376,10 @@
 #                                      ~/.local/state/crew/usage/<host>.json, which host read it and how long ago, a
 #                                      reading not made marked, and the sessions and partitions on it; then a block to
 #                                      each partition: each host it runs on and the herdr sessions its agents run in,
-#                                      with each session's Claude account; each kit its teams build, its main's last
-#                                      landing and what is queued for it; each team's bolt, its slots at work, holding
-#                                      or free, and what its conductor waits on; and what needs attention; each
-#                                      partition a link to its page and each team to its dock there (<label>.html
+#                                      with each session's Claude account; each kit its plan and landings name, its
+#                                      main's last landing and what is queued for it; and what needs attention; each
+#                                      partition a link to its page, and each on a subscription to its page at that
+#                                      subscription's dock (<label>.html
 #                                      beside one written as index.html, <label>/page.html beside page.html, none,
 #                                      said so, for any other name); written whole to
 #                                      ~/.local/state/crew/page.html, beside the partitions' folders, or --out, its

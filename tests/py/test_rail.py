@@ -148,7 +148,7 @@ class TestRows:
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {},
                          "refused": {"apex-zones": ("abc1234" + "0" * 33, "bolt/apex-zones did not land: sluice found a conflict")}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1] == (f"apex-zones, on {BOX}, in Flume stream wldn: held: sluice refused its landing at abc1234, until its team's fix "
+        assert land["what"][1] == (f"apex-zones, on {BOX}, in Flume stream wldn: held: sluice refused its landing at abc1234, until a fix "
                                    "moves its head: bolt/apex-zones did not land: sluice found a conflict")
         assert land["cmds"] == []
         held["wldn"]["refused"] = {"apex-zones": ("c" * 40, "an older head's")}

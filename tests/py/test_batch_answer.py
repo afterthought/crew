@@ -193,11 +193,11 @@ class TestAnswer:
         acts = Acts(caller="swancloud-operator")
         answer(acts)
         assert acts.emitted[0]["Act"] == "batch.answer" and acts.emitted[1]["Outcome"] == "Answered in swancloud-operator's pane"
-        assert acts.told == [("swancloud-planner", f'Batch 13 was answered in swancloud-operator\'s pane: "{WORDS}". Send each unit\'s '
-                                                   "part to its conductor, as you send a batch's notes.")]
+        assert acts.told == [("swancloud-planner", f'Batch 13 was answered in swancloud-operator\'s pane: "{WORDS}". Hand each unit\'s '
+                                                   "part on to its work, as you hand on a batch's notes.")]
         out = capsys.readouterr().out.splitlines()
         assert out[0] == "batch 13 answered in swancloud-operator's pane" and WORDS not in out[0]
-        assert out[-1] == "swancloud-planner was told the user's words, to send each unit's part to its conductor"
+        assert out[-1] == "swancloud-planner was told the user's words, to hand each unit's part on to its work"
 
     def test_a_tell_that_fails_is_said_and_the_answer_stands(self, capsys):
         acts = Acts(caller="swancloud-operator", told=False)

@@ -215,7 +215,8 @@ def environments(fleet, label, entries, rows, cards, since, logs):
 
 def board_data(fleet, labels, read, now):
     """The board of each label as data, the fields the page reads (`crew board --json`); an object's partition and kit
-    say whose it is, and nothing names a team (crew-board). Each started bolt is a ledger of its units, chores and fixes,
+    say whose it is, and nothing names a team (crew-board). Each partition lists its kits, the repositories its plan and
+    its landings name (plan.partition_kits), which the fleet page lists. Each started bolt is a ledger of its units, chores and fixes,
     its host and stream where the runner that took its work reported them (plan.bolt_at), each unit or chore with its
     kind, and each of them with its stage from the runner's records and what goes with it (flume, Stages.crossed,
     Stages.fixes) and its merge standing in sluice's queue, as the ledger its landing standing on its kit's main and why
@@ -304,7 +305,7 @@ def board_data(fleet, labels, read, now):
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
         envs = environments(fleet, l, read.get("ops", {}).get(l, []), rows, cards, since, logs)
         mine = sorted((c for c in cards if c["label"] == l), key=lambda c: (c["at"], c["card"]))
-        parts.append({"label": l, "plan": tip, "hosts": hosts,
+        parts.append({"label": l, "plan": tip, "hosts": hosts, "kits": list(read["kits"].get(l, [])),
                       "cards": [{"key": c["key"], "card": c["card"], "by": c["by"], "host": c["host"], "at": iso(c["at"]),
                                  "kind": plan.card_kind(c["key"])} for c in mine],
                       "records": records_proposed(logs, mine),

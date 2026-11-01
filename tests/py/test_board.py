@@ -1327,8 +1327,9 @@ class TestMore:
         d = data(signals=SIGS)
         p = d["partitions"][0]
         assert sorted(d) == ["from", "partitions", "read_at", "unread"]
-        assert sorted(p) == ["asking", "attention", "bolt_plan", "cards", "construction", "environments", "fixing", "hosts", "inception", "label",
-                             "operation", "plan", "records", "runs"]
+        assert sorted(p) == ["asking", "attention", "bolt_plan", "cards", "construction", "environments", "fixing", "hosts", "inception", "kits",
+                             "label", "operation", "plan", "records", "runs"]
+        assert p["kits"] == ["breadboard-kit", "switchboard-kit"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
         assert sorted(te) == ["bolt", "fixes", "goal", "host", "landing", "markers", "record", "repo", "state", "stream", "submissions_error",
                               "time", "units", "url"]

@@ -2301,7 +2301,7 @@ def stopped_at(stopped, bolt, head):
 def refused_at(entries, bolt, head):
     """sluice's refusal of the bolt's landing at head, in the words it was recorded with, or None (rail-cards "A
     refused landing is held on its row"): its last bolt.submit was refused with head submitted; one refused at another
-    head, the bolt's head moved since by its team's fix, holds nothing."""
+    head, the bolt's head moved since by a fix on it, holds nothing."""
     return held_at(refusals(entries), bolt, head)
 
 
@@ -2365,7 +2365,7 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
     the user ticks, its facts carrying stopped, (head, words), when its last landing was stopped at its present head
     (stopped_at), which holds nothing (rail-cards "A landing sluice or its host stopped keeps its box"); or {bolt, box:
     False, why, facts}, held with no box: for a fix in flight on it, in the fix's words, or for sluice's refusal of its
-    landing at its present head, until its team's fix moves the head; or, marked takes_main, taking main first,
+    landing at its present head, until a fix on the bolt moves the head; or, marked takes_main, taking main first,
     forecast to conflict with main, or with only take-main fixes in flight (TAKE_MAIN), each named with its words; but a
     bolt the user left (left, left_now) marked takes_main keeps its box, its facts marked would_main, (main's short
     sha, [paths]), for its row to say it would take main first once ticked (rail-cards "A row the user left says
@@ -2381,7 +2381,7 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
                             else f"held for a fix: {note} ({fix})" if note else f"held for {fix} until it merges or is dropped"
                             for fix, note in sorted(fixes.items()))
         elif at and (at.startswith(f["head"]) or f["head"].startswith(at)):
-            why = f"held: sluice refused its landing at {f['head'][:7]}, and it waits for its team's fix: {words}"
+            why = f"held: sluice refused its landing at {f['head'][:7]}, and it waits for a fix on the bolt: {words}"
         elif b in takes_main and b not in left:
             main, paths = takes_main[b]
             why, main_first = (f"takes main first: forecast to conflict with main on {joined(list(paths))} at {main[:7]}, "
@@ -2499,7 +2499,7 @@ def sent_left(sent, now, in_plan, refused, work=None):
     ticked}), in the order sent, which crew card read land/<kit> prints with or without a card open, so the send is read
     though its card closed before ops read it: each the plan still holds (in_plan) whose head now is read (now, {bolt:
     its head or None}), whose send stands there (send_stands, work bolt_work's between the two), and that sluice did not
-    refuse at its head now (refused, refusals), a refusal at the head sent holding nothing once its team's fix moved it;
+    refuse at its head now (refused, refusals), a refusal at the head sent holding nothing once a fix on it moved it;
     and beside them each it can't tell of, its head now unread or its work not compared, with why (read.1): (bolts,
     [(bolt, why)]). A decision of facts alone (code.7)."""
     work, out, unknown = work or {}, [], []
@@ -2563,8 +2563,8 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
     ("close", outcome, then, standing) once none is still to land, the outcome saying what landed and where GitHub's
     main holds it, what was held and why, what was left and what reads proven since, then the bolts left when rows can
     land, for a new card that follows it, else None, then each ticked bolt held whose send still stands, (bolt, the
-    head they ticked), which the close keeps, saying so, for it to land on that send once its team's fix has only
-    taken main in; a send ticking none closes it at once, landing nothing. A bolt left on the last send is shown
+    head they ticked), which the close keeps, saying so, for it to land on that send once a fix on it has only taken
+    main in; a send ticking none closes it at once, landing nothing. A bolt left on the last send is shown
     unticked on the card that follows only while its head stands."""
     boxed = [r for r in rows if r["box"]]
     now = [(r["bolt"], r["facts"]["head"][:7]) for r in boxed]
@@ -2612,7 +2612,7 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None, here=Fals
     said += [f"{b}'s last landing at {stopped[b][0][:7]} was stopped, nothing of the bolt's: {stopped[b][1].rstrip('.')}; it "
              "lands on your send once that is cleared." for b in lands if b in stopped]
     said += [f"Taking main in first, your send standing for it: {joined([b for b in landing if b in main_first])}."] if len(lands) < len(landing) else []
-    said += [f"Held: {b}, {held[b]}; your send stands for it: it lands once its team's fix has only taken main in and "
+    said += [f"Held: {b}, {held[b]}; your send stands for it: it lands once a fix on it has only taken main in and "
              "sluice has proven it, with nothing asked." if b in standing else
              f"Held: {b}, {held[b]}; {work_said(b, was[b], at[b], work.get(b))}, so a card asks for it again once it reads "
              "proven." for b in ticked if b in held and b not in landing]
@@ -10061,7 +10061,7 @@ def batch_subjects(plan):
 def batch_facts(n, entries, summary, subjects):
     """Batch n's card's facts, as cards.batch_card takes them (record 0031 §5), from the run record's entries on the main
     level's host, oldest first, and the reviewer's summary: n, the batch before it, and each unit in the batch's order
-    with its team, the commit the batch read it at, what it is about (subjects, else its name in words) and the
+    with its bolt (units_of_batch, an older entry's team read as written), the commit the batch read it at, what it is about (subjects, else its name in words) and the
     paragraph the reviewer opened its section with, or a line saying the summary has none. None while the batch's point
     has not come or has passed: the run record holds no batch n, its summary is not there (None), its key is closed
     (batch_closed), the last card act under it a close, but as lost to its owner, or the batch waits on nothing
@@ -10074,9 +10074,9 @@ def batch_facts(n, entries, summary, subjects):
     if key in batch_closed(entries) or key in batch_settled(entries):
         return None
     previous = max((m for m, _, _ in batches(entries) if m < n), default=None)
-    units = [dict(unit=u, team=team, commit=sha, subject=subjects.get(u) or u.replace("-", " "),
+    units = [dict(unit=u, bolt=bolt, commit=sha, subject=subjects.get(u) or u.replace("-", " "),
                   paragraph=summary_paragraph(summary, u) or f"The reviewer's summary has no section for {u}.")
-             for u, team, sha in units_of_batch(held[-1])]
+             for u, bolt, sha in units_of_batch(held[-1])]
     return dict(n=n, previous=previous, units=units, link=None)
 
 
@@ -10106,7 +10106,7 @@ def batch_made(fleet, label, facts, acts):
     n, by = facts["n"], {}
     for u in facts["units"]:
         try:
-            by.setdefault(batch_unit_at(fleet, label, u["team"], u["unit"])["machine"], []).append(u["unit"])
+            by.setdefault(batch_unit_at(fleet, label, u["bolt"], u["unit"])["machine"], []).append(u["unit"])
         except Refusal as e:
             print(f"batch {n}'s card carries nothing {u['unit']} made: {e}", file=sys.stderr)
     for host, names in sorted(by.items()):
@@ -10148,7 +10148,7 @@ def raise_batch(fleet, row, acts=None, note=None):
     t, whys = None, []
     for u in facts["units"]:
         try:
-            t = batch_unit_at(fleet, label, u["team"], u["unit"])
+            t = batch_unit_at(fleet, label, u["bolt"], u["unit"])
             break
         except Refusal as e:
             whys.append(str(e))
@@ -10310,14 +10310,15 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
     record holds (held, as rail_record reads it), and the kits as surveyed: each row's group, its partition, its card
     key, the time it began to wait (shown as a date alone when that is all that is known), what it is, its commands, and
     the document its card asks the user to read: ("page", label, n) for a proposal, ("batch", label, n) for a batch
-    card, whose units, their teams and the commits the batch read them at the row holds too, None for a landing. A
+    card, whose units and the commits the batch read them at the row holds too, each unit named with its bolt, None for
+    a landing. A
     proposal's row is keyed by its chain's card, proposal/<first>, the first proposal it was rewritten from. A
     verify report is no row: its findings are fixed in one round with no card (teams.17). A batch is one row, keyed
     batch/<n>, holding every unit, until its card closes or it waits on nothing (batch_settled); a batch posted as cards
     of five before a batch was one card is a row for each card posted, keyed batch/<n>-<k>, until it closes or the units
-    it holds wait on nothing. Each kit with a bolt a team holds whose every unit has merged is one landing row, keyed
-    land/<kit>, main-level ops's (record 0031 as amended 2026-10-23), naming each such bolt in the plan's order with its
-    team and what it waits on (bolts, each {bolt, team, host, can}): a bolt can land only once
+    it holds wait on nothing. Each kit with a started bolt whose every unit has merged is one landing row, keyed
+    land/<kit>, main-level ops's (record 0031 as amended 2026-10-23), naming each such bolt in the plan's order with
+    the host its work runs on and what it waits on (bolts, each {bolt, host, at, can, line}): a bolt can land only once
     its verification is green, sluice's verdict on its last landing (kit.verification, record 0025), every unit's latest
     change has been in a batch whose card the user has answered, no fix is in flight on it, sluice did not refuse its
     landing at its head (refusals, held's refused) and the run record holds no conflict with main forecast at its head
@@ -10353,9 +10354,8 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
                 k = key.partition("-")[2]
                 card = f", card {k} of {-(-len(units) // 5)}" if k else ""
                 rows.append(dict(group="batches", label=l, key=key, at=utc(at), doc=("batch", l, n),
-                                 units=[u for u, *_ in part], teams={u: team for u, team, _ in part},
-                                 commits={u: sha for u, _, sha in part},
-                                 what=[f"batch {n} ({l}){card}: " + ", ".join(f"{u} ({team})" for u, team, _ in part)],
+                                 units=[u for u, *_ in part], commits={u: sha for u, _, sha in part},
+                                 what=[f"batch {n} ({l}){card}: " + ", ".join(f"{u} ({bolt})" for u, bolt, _ in part)],
                                  cmds=([("open", opener(fleet, main, here, f))] if f else [])
                                  + [("answer", f'crew tell {l}-planner "On batch {n}: "')]))
     for l, _, _, plan in found:
@@ -10396,7 +10396,7 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
             if not lands and fixes:  # a fix started on the bolt holds its landing
                 lands = [f"lands once {either(sorted(fixes))} has merged or been dropped"]
             elif not lands and refused:  # sluice refused its landing at this head (refused_at)
-                lands = [f"held: sluice refused its landing at {head[:7]}, until its team's fix moves its head: {refused}"]
+                lands = [f"held: sluice refused its landing at {head[:7]}, until a fix moves its head: {refused}"]
             elif not lands and conflict and left_of(held.get(l, {}).get("left") or [], f"land/{kit_name}", {b.name(): head}):
                 lands = [f"left by the user: takes main first once ticked, forecast to conflict with main on {joined(conflict[1])}"]
             elif not lands and conflict:  # forecast at this head to conflict with what main holds (main_conflict)
@@ -11593,7 +11593,7 @@ def reading_open(fleet, label, key, facts):
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], crew.this_host(), facts.get("host"))
     not why or fail(why)
     if key.startswith("batch/"):
-        units = [(u["unit"], u["team"], u["commit"]) for u in facts["units"]]
+        units = [(u["unit"], u["bolt"], u["commit"]) for u in facts["units"]]
         return session_open(d, f"{key}'s session", lambda: batch_folder_write(fleet, label, facts["n"], units))
     if key.startswith("land/"):
         folder = d / facts["head"][:7]
@@ -11942,13 +11942,14 @@ def reading_read(key, got, decided, answered=None, held=False, recorded=True):
 
 
 def read_outcome(notes):
-    """A batch card's close once the user has read the batch (review-batches): with no notes, or the notes that go to
-    the units' teams, counted when crew can count them (None when it cannot)."""
+    """A batch card's close once the user has read the batch (review-batches): with no notes, or the notes the planner
+    hands on to their units' work (Decision 6 of the-team-machinery-leaves), counted when crew can count them (None when
+    it cannot)."""
     if notes == 0:
         return "Read; no notes"
     if notes is None:
-        return "Read; its notes sent to their teams"
-    return f"Read; {notes} note{'' if notes == 1 else 's'} sent to {'its team' if notes == 1 else 'their teams'}"
+        return "Read; its notes for their units"
+    return f"Read; {notes} note{'' if notes == 1 else 's'} for {'its unit' if notes == 1 else 'their units'}"
 
 
 def waited(name, decided, recorded, gone=False):
@@ -12438,9 +12439,10 @@ def settled_refusal(n, kit, v):
 
 
 def answer_said(n, by, words):
-    """What crew card answer tells the planner when the operator recorded the answer (review-batches, "Notes reach the
-    unit's conductor"): the batch, whose pane, and the user's words whole, to send on as a batch's notes."""
-    return (f'Batch {n} was answered in {by}\'s pane: "{words}". Send each unit\'s part to its conductor, as you send a '
+    """What crew card answer tells the planner when the operator recorded the answer (review-batches; Decision 6 of
+    the-team-machinery-leaves, a batch's notes the planner's to hand on): the batch, whose pane, and the user's words
+    whole, to hand on as a batch's notes."""
+    return (f'Batch {n} was answered in {by}\'s pane: "{words}". Hand each unit\'s part on to its work, as you hand on a '
             "batch's notes.")
 
 
@@ -12481,7 +12483,7 @@ def batch_answer(fleet, a, acts=None):
               else f"card {key}: no card of it is held on any host")
     if kind == "operator":
         if acts.tell(owner, answer_said(n, who, words)):
-            print(f"{owner} was told the user's words, to send each unit's part to its conductor")
+            print(f"{owner} was told the user's words, to hand each unit's part on to its work")
         else:
             print(f"crew could not tell {owner} the user's words, and batch {n} stands answered: tell {owner} them "
                   "yourself with crew tell, as the user wrote them")

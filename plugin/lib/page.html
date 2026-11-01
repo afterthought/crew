@@ -1,8 +1,8 @@
 <!doctype html>
 <!-- crew's page: page.py puts the partitions' links and the flywheel's data in the two placeholders below and writes
-     the file whole. It opens on the partition's board, narrowed to the team last chosen; its lineage is the flow
-     view, and its deploys, by environment, the deploys view, each one switch away. A click or Enter on any item of the
-     board, a team of the strip or a deploy of the deploys view opens its dock over the board, the page page.py made
+     the file whole. It opens on the partition's board; its lineage is the flow view, and its deploys, by environment,
+     the deploys view, each one switch away. A click or Enter on any item of the board or a deploy of the deploys view
+     opens its dock over the board, the page page.py made
      for it (D.docks); the dock answers nothing, and its last section takes a word to the item's agent, posted to the
      page's own address on Send, the one request the page makes. Everything it draws is in this file: no font, script or
      style is loaded from anywhere, and the only links are to the fleet page and the other partitions' pages beside it.
@@ -61,9 +61,6 @@ h1,h2,h3,h4{margin:0;font-weight:700;text-wrap:balance}
 .parts a.part:hover{color:var(--ink);background:var(--surface2)}
 .parts .part[aria-current]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent);border-radius:4px 4px 0 0}
 .parts .fleet{font-size:12px;font-weight:600;color:var(--accent);margin-right:6px}
-.team{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3)}
-.team select{padding:3px 6px;font-size:12px;max-width:100%}
-body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 
 /* ---------- the board view ---------- */
 #view-board{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
@@ -76,7 +73,6 @@ body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 .host.gone .hm b{color:var(--warn)}
 .hosts .sep{width:1px;height:20px;background:var(--line);margin:0 4px;flex:none}
 .hosts .mark{white-space:normal;overflow-wrap:anywhere}
-.host.tm .hn{font-weight:700}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
 .dot.gone{background:var(--crit)}
 .lanes{flex:1;min-height:0;overflow-x:auto;display:grid;grid-template-columns:minmax(225px,.95fr) minmax(185px,.6fr) minmax(330px,1.45fr) minmax(215px,.9fr)}
@@ -110,7 +106,6 @@ body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 .sheet .sh-k{font:600 9.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
 .sheet .sh-title{font-family:var(--sans);font-size:15px;font-weight:800;letter-spacing:-.01em;border-bottom:1px solid var(--ink);padding:1px 0 4px;margin-bottom:5px;line-height:1.2}
 .sheet .sh-meta{font:11px var(--mono);color:var(--ink3);line-height:1.5}
-.sheet .sh-foot{margin-top:auto;padding-top:6px;border-top:1px solid var(--line2);font:11px var(--mono);color:var(--ink3)}
 /* slip: a queued unit, hanging off the head above it */
 .slip{position:relative;margin:-8px 8px 12px 30px;background:var(--surface2);border:1px solid var(--line);border-left:0;border-radius:0 3px 3px 0;padding:5px 9px 6px;font-size:12px}
 .slip::before{content:"";position:absolute;left:-16px;top:-8px;width:15px;height:18px;border-left:2px solid var(--ink3);border-bottom:2px solid var(--ink3);border-radius:0 0 0 8px}
@@ -157,11 +152,11 @@ body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 .mark .mk-t{font-weight:500}
 .mark.approve{color:var(--accent);border-color:var(--accent)} .mark.attention{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
 /* long names and addresses break rather than run past the edge */
-.sh-title,.sh-meta,.sh-foot,.sl-n,.sl-to,.lg-name,.lg-un,.lg-at,.lg-mach,.rc-name,.rc-env,.quote,.xp,.counter,.mark{overflow-wrap:anywhere}
+.sh-title,.sh-meta,.sl-n,.sl-to,.lg-name,.lg-un,.lg-at,.lg-mach,.rc-name,.rc-env,.quote,.xp,.counter,.mark{overflow-wrap:anywhere}
 /* every item that opens a dock */
 [data-dock]{cursor:pointer}
 .quote[data-dock]:hover,.sheet[data-dock]:hover,.slip[data-dock]:hover,.record[data-dock]:hover,.dp[data-dock]:hover{border-color:var(--ink3)}
-.lg-unit[data-dock]:hover,.lg-mach[data-dock]:hover,.host.tm:hover{border-color:var(--accent)}
+.lg-unit[data-dock]:hover,.lg-mach[data-dock]:hover{border-color:var(--accent)}
 
 /* ---------- the dock: one panel over the right of the board, slid in, so nothing under it moves ---------- */
 .scrim{position:absolute;inset:0;background:transparent;display:none;z-index:8}
@@ -329,7 +324,6 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   <div class="seg" role="group" aria-label="View">
     <button type="button" data-view="board" aria-pressed="true">board</button><button type="button" data-view="flow" aria-pressed="false">flow</button><button type="button" data-view="deploys" aria-pressed="false">deploys</button>
   </div>
-  <label class="team">team <select id="team"></select></label>
   <span class="meta mono" id="made"></span>
 </header>
 <main id="view-board" aria-label="Board">
@@ -439,7 +433,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     return t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate()) + " " + pad(t.getHours()) + ":" + pad(t.getMinutes());
   }
 
-  // A lane: its head, then sections of objects, each object carrying the teams it belongs to; the empty line last.
+  // A lane: its head, then sections of objects, each with its weight in the lane's count; the empty line last.
   var LANES = [];
   function lane(id, title, sub, chip) {
     var sec = $(id), h = el("div", "lane-h"), n = el("span", "n");
@@ -457,8 +451,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     L.sections.push(s);
     return s;
   }
-  function obj(s, x, teams, weight) {
-    x.dataset.teams = (teams || []).join(" ");
+  function obj(s, x, weight) {
     s.objs.push({ el: x, n: weight || 1 });
     return x;
   }
@@ -480,9 +473,8 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     if (row.childNodes.length) x.append(row);
   }
 
-  // A bolt's units as a chain, in plan order: merged and landed as done links, a unit being built with its stage,
-  // tasks, slot and dev server, and every other one queued with its stage beside its name; all of them queued for a
-  // bolt no team holds.
+  // A bolt's units as a chain, in plan order: merged and landed as done links, a unit being built with its stage and
+  // tasks, and every other one queued with its stage beside its name; all of them queued for a bolt not started.
   var BUILDING = ["construct", "code", "verify", "settle"], MERGED = ["merged", "landed"];
   function chain(x, units, queued) {
     if (!units.length) return;
@@ -497,28 +489,22 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       if (kind === "building") {
         var tasks = (u.stage === "code" || u.stage === "verify") && u.tasks ? " " + u.tasks[0] + "/" + u.tasks[1] : "";
         link.append(el("span", "lg-ut", u.stage + tasks));
-        var at = [u.slot, u.url].filter(Boolean).join(" · ");
-        if (at) link.append(el("span", "lg-at", at));
+        if (u.url) link.append(el("span", "lg-at", u.url));
       }
       c.append(link);
     });
     x.append(c);
   }
-  // A ledger's head: its repository, its name, and the team holding it, which opens the team's dock, then the rest.
-  function ledgerHead(x, repo, bolt, run, team) {
+  // A ledger's head: its repository, its name, then where its work runs and its state.
+  function ledgerHead(x, repo, bolt, run) {
     var h = el("div", "lg-head");
     if (repo) h.append(el("span", "lg-repo", repo));
     h.append(el("span", "lg-name", bolt));
-    if (run || team) {
-      var r = el("span", "lg-run");
-      if (team) r.append(item(el("span", null, team), "team:" + team));
-      r.append(run || "");
-      h.append(r);
-    }
+    if (run) h.append(el("span", "lg-run", run));
     x.append(h);
   }
 
-  // The hosts the board asked, a silent one marked, then what needs attention. Never narrowed.
+  // The hosts the board asked, a silent one marked, then what needs attention.
   var strip = $("strip");
   strip.append(el("span", "lab", "hosts"));
   Object.keys(B.hosts).forEach(function (h) {
@@ -530,14 +516,6 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       pill.title = v;
     }
     pill.append(el("span", "dot" + (v === true ? "" : " gone")), el("span", "hn", h), hm);
-    strip.append(pill);
-  });
-  // Then the partition's teams, in the teams file's order, each opening its dock. Never narrowed.
-  if (B.teams.length) strip.append(el("span", "sep"), el("span", "lab", "teams"));
-  B.teams.forEach(function (t) {
-    var pill = item(el("span", "host tm"), t.dock);
-    pill.append(el("span", "hn", t.team), el("span", "hm", "on " + t.host));
-    pill.title = t.kits.join(", ");
     strip.append(pill);
   });
   var SAID = {
@@ -569,26 +547,26 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       q.append(qm);
       g.append(q);
     });
-    inc.sec.append(obj(sigs, g, mine[0].teams, mine.length));
+    inc.sec.append(obj(sigs, g, mine.length));
   });
   var xps = section(inc, "explorations");
   B.inception.explorations.forEach(function (e) {
     var x = el("div", "xp");
     x.append(el("span", "xp-kit", e.kit), el("span", "xp-n", e.name));
     if (e.first) x.append(el("div", "xp-t", e.first));
-    inc.sec.append(obj(xps, x, e.teams));
+    inc.sec.append(obj(xps, x));
   });
 
-  // Bolt plan, the gate: each open proposal a sheet, each planned bolt a ledger no team holds, each queued unit a slip.
+  // Bolt plan, the gate: each open proposal a sheet, waiting on the user alone; each planned bolt a ledger not
+  // started; each queued unit a slip.
   var bp = lane("lane-plan", "Bolt plan", "proposals · planned bolts · the queue", "gate");
   var sheets = section(bp, null);
   B.bolt_plan.proposals.forEach(function (d) {
     var x = item(el("article", "sheet"), d.dock);
     x.append(el("span", "sh-k", "proposal " + d.proposal), el("div", "sh-title", d.case || "proposal " + d.proposal),
       el("div", "sh-meta", "by " + (d.by || "-") + " · opened " + (d.opened || "-")));
-    if (d.waiting.length) x.append(el("div", "sh-foot", "waiting on " + d.waiting.map(function (t) { return t + "-conductor"; }).join(", ")));
     marks(x, d.markers);
-    bp.sec.append(obj(sheets, x, d.teams));
+    bp.sec.append(obj(sheets, x));
   });
   var planned = section(bp, "planned");
   B.bolt_plan.planned.forEach(function (b) {
@@ -596,7 +574,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     ledgerHead(x, b.repo, b.bolt, null);
     if (b.goal) x.title = b.goal;
     chain(x, b.units, true);
-    bp.sec.append(obj(planned, x, b.teams));
+    bp.sec.append(obj(planned, x));
   });
   var queue = section(bp, "queue");
   B.bolt_plan.queue.slice().sort(function (a, b) { return (a.repo || "") < (b.repo || "") ? -1 : (a.repo || "") > (b.repo || "") ? 1 : 0; })
@@ -606,23 +584,25 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       if (u.repo) x.append(el("span", "sl-repo", u.repo));
       x.append(el("span", "sl-n", u.unit));
       if (u.sources.length) x.append(el("span", "sl-to", u.sources.join(", ")));
-      bp.sec.append(obj(queue, x, u.teams));
+      bp.sec.append(obj(queue, x));
     });
 
-  // Construction: each held bolt a ledger, headed by its repository, its name, its team and host, and its state when
-  // it is not active; its units as a chain, its fixes on the machinery row, its server at the foot.
-  var con = lane("lane-construction", "Construction", "held bolts · units in flight");
+  // Construction: each started bolt a ledger, headed by its repository, its name, the host and stream its work runs
+  // in, as the runner that took it reported them, and its state when it is not active; its units as a chain, its
+  // fixes on the machinery row, with no slot; a server only where the board gives one.
+  var con = lane("lane-construction", "Construction", "bolts in flight · units in flight");
   var ledgers = section(con, null);
   B.construction.forEach(function (b) {
     var x = item(el("div", "ledger"), b.dock);
-    ledgerHead(x, b.repo, b.bolt, (b.host ? " on " + b.host : "") + (b.state !== "active" ? " · " + b.state : ""), b.team);
+    ledgerHead(x, b.repo, b.bolt, [b.host ? "on " + b.host : "", b.stream ? "stream " + b.stream : "", b.state !== "active" ? b.state : ""]
+      .filter(Boolean).join(" · "));
     if (b.goal) x.title = b.goal;
     marks(x, b.markers, b.state === "landed" ? "every unit has landed, and the bolt is still in the plan" : null);
     chain(x, b.units);
     b.fixes.forEach(function (f) {
       var r = item(el("div", "lg-mach"), f.dock);
       r.append(el("span", null, f.merged ? "fix merged" : "fix"), el("span", "lg-fn", f.fix));
-      [f.slot, f.url].filter(Boolean).forEach(function (t) { r.append(el("span", null, t)); });
+      if (f.url) r.append(el("span", null, f.url));
       x.append(r);
     });
     if (b.url) {
@@ -630,7 +610,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       foot.append(el("span", null, "server"), el("span", "ep", b.url));
       x.append(foot);
     }
-    con.sec.append(obj(ledgers, x, b.teams));
+    con.sec.append(obj(ledgers, x));
   });
 
   // Where a deploy stands, in a word for its stamp and a class for its colour.
@@ -658,13 +638,8 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     var x = item(el("div", "record"), o.dock), h = el("div", "rc-head");
     h.append(el("span", "rc-name", o.bolt), el("span", "rc-at", o.at ? local(o.at) : ""));
     x.append(h, el("span", "rc-stamp", "landed" + (o.by ? " by " + o.by : "")));
-    if (o.team || o.units.length) {
-      var env = el("div", "rc-env");
-      if (o.team) env.append(item(el("span", null, o.team), "team:" + o.team));
-      env.append((o.team && o.units.length ? " · " : "") + o.units.join(", "));
-      x.append(env);
-    }
-    op.sec.append(obj(records, x, o.teams));
+    if (o.units.length) x.append(el("div", "rc-env", o.units.join(", ")));
+    op.sec.append(obj(records, x));
   });
   (B.environments || []).forEach(function (e) {
     if (!e.deploys.length && !e.waiting.length) return;
@@ -675,14 +650,14 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       x.append(h, el("span", "rc-stamp " + st[1], st[0] + (d.word && d.word.by && d.answer === "approved" ? " · " + d.word.by : "")));
       x.append(el("div", "rc-env", from(d) + " · " + carries(d)));
       marks(x, d.markers);
-      op.sec.append(obj(envs, x, e.teams));
+      op.sec.append(obj(envs, x));
     });
     e.waiting.forEach(function (w) {
       var x = item(el("div", "record"), w.dock), h = el("div", "rc-head");
       h.append(el("span", "rc-name", w.key), el("span", "rc-at", local(w.at)));
       x.append(h, el("div", "rc-env", [waitSaid(w), w.text || w.note].filter(Boolean).join(" · ")));
       marks(x, w.markers);
-      op.sec.append(obj(envs, x, e.teams));
+      op.sec.append(obj(envs, x));
     });
   });
   LANES.forEach(function (L) { L.sec.append(L.empty); });
@@ -764,25 +739,19 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     });
   })();
 
-  // Each lane shows the objects of the team chosen, or all of them; a section with none left loses its head, and a
-  // lane with none says so. Units and fixes go with their ledger.
-  function narrow(team) {
-    LANES.forEach(function (L) {
-      var k = 0;
-      L.sections.forEach(function (s) {
-        var shown = 0;
-        s.objs.forEach(function (o) {
-          var v = !team || o.el.dataset.teams.split(" ").indexOf(team) >= 0;
-          o.el.hidden = !v;
-          if (v) { shown++; k += o.n; }
-        });
-        if (s.head) s.head.hidden = !shown;
-      });
-      L.n.textContent = String(k);
-      L.empty.textContent = team ? "nothing here for " + team : "nothing here";
-      L.empty.hidden = k > 0;
+  // Each lane counts its objects; a section with none loses its head, and a lane with none says so. Units and fixes
+  // go with their ledger.
+  LANES.forEach(function (L) {
+    var k = 0;
+    L.sections.forEach(function (s) {
+      var shown = 0;
+      s.objs.forEach(function (o) { shown++; k += o.n; });
+      if (s.head) s.head.hidden = !shown;
     });
-  }
+    L.n.textContent = String(k);
+    L.empty.textContent = "nothing here";
+    L.empty.hidden = k > 0;
+  });
 
   // ------------------------------------------------------------------------------------------------ the flow view
   var flowShown = (function () {
@@ -1179,13 +1148,12 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     if (ev.key === "Escape" && shown) { ev.preventDefault(); closeDock(); }
   });
 
-  // ------------------------------------------------------------------------------------------- the team and the view
-  // Each is kept in the page's address (#team=<name>&view=flow), so a reload or a page written over this one opens
-  // on it, and in the browser for this partition, for when the address names none. The browser may refuse its
-  // storage, on a page opened from disk or in a private window; the address alone then keeps it. A team the
-  // partition no longer has is shown as all teams, and the address is left as it is. The dock open is kept in the
-  // address too (#dock=<key>), and only there: a reload opens it again, and a key this page holds no dock for is
-  // dropped from the address, the board shown with none open.
+  // ------------------------------------------------------------------------------------------------------- the view
+  // It is kept in the page's address (#view=flow), so a reload or a page written over this one opens on it, and in the
+  // browser for this partition, for when the address names none. The browser may refuse its storage, on a page opened
+  // from disk or in a private window; the address alone then keeps it. The dock open is kept in the address too
+  // (#dock=<key>), and only there: a reload opens it again, and a key this page holds no dock for is dropped from the
+  // address, the board shown with none open.
   var KEY = "crew-page:" + D.label + ":";
   function stored(k) { try { return localStorage.getItem(KEY + k); } catch (e) { return null; } }
   function store(k, v) { try { localStorage.setItem(KEY + k, v); } catch (e) { /* the address keeps it */ } }
@@ -1212,23 +1180,6 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     if (k !== "dock") store(k, v);
   }
 
-  var TEAMS = B.teams.map(function (t) { return t.team; }), pick = $("team");
-  pick.append(el("option", null, "all teams"));
-  pick.options[0].value = "";
-  B.teams.forEach(function (t) {
-    var o = el("option", null, t.team + " on " + t.host);
-    o.value = t.team;
-    o.title = t.kit;
-    pick.append(o);
-  });
-  function team(t) {
-    t = TEAMS.indexOf(t) >= 0 ? t : "";
-    pick.value = t;
-    document.body.dataset.team = t;
-    narrow(t);
-  }
-  pick.addEventListener("change", function () { team(pick.value); keep("team", pick.value); });
-
   var VIEWS = { board: $("view-board"), flow: $("view-flow"), deploys: $("view-deploys") };
   function view(v) {
     v = VIEWS[v] ? v : "board";
@@ -1245,7 +1196,6 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
 
   function open() {
     var f = fragment();
-    team("team" in f ? f.team : stored("team"));
     view("view" in f ? f.view : stored("view"));
     if (f.dock && DOCKS[f.dock]) {
       if (f.dock !== shown) openDock(f.dock);

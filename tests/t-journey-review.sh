@@ -172,7 +172,7 @@ $notes
 card batch/1: req_stub-1 withdrawn
 batch/1's session had ended as the user sent it, and batch/1 is forgotten"
 [[ ! -e $(home_of $box)/$cards/batch/1 ]] || fail "batch/1's session folder outlived its card"
-eq "$(entries $box card.close | jq -r '[.Card, .Key, .State, .Outcome] | join(" ")')" "req_stub-1 batch/1 withdrawn Read; 1 note sent to its team"
+eq "$(entries $box card.close | jq -r '[.Card, .Key, .State, .Outcome] | join(" ")')" "req_stub-1 batch/1 withdrawn Read; 1 note for its unit"
 ok "a batch card's one session reads the summary and every unit's change, archived at its bolt's commit, from its team's host, the link on its card and the same again while it serves; the rail's refresh tells the planner once that it was sent, with none of the user's words, crew card wait is refused naming the read, and the planner's crew card read returns the words and closes the card, which forgets the session"
 
 # m1 is started, its work taken by mac-studio's runner, which keeps atlas-kit, and z1's place lands on it there.
