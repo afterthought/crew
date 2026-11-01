@@ -55,8 +55,15 @@ PARTITION_KITS = {"wldn": ["atlas-kit", "breadboard-kit", "switchboard-kit"], "m
 
 @pytest.fixture(autouse=True)
 def kits(monkeypatch):
-    """Each partition's kits as its plan and landings name them (plan.kits_read), with no branch read."""
+    """Each partition's kits as its plan and landings name them (plan.kits_read), with no branch read; and where a batch's
+    unit was built (plan.batch_unit_at) as a runner took its bolt's work, a case's batch naming between its unit and
+    commit a name FLEET gives a host and kit, and none for any other name."""
     monkeypatch.setattr(plan, "kits_read", lambda fleet, label: list(PARTITION_KITS.get(label, [])))
+
+    def unit_at(fleet, label, bolt, unit):
+        t = FLEET["teams"].get(bolt) or plan.fail(f"no runner has reported taking bolt {bolt}'s work yet, so crew can't tell where it runs")
+        return dict(t, label=label)
+    monkeypatch.setattr(plan, "batch_unit_at", unit_at)
 
 
 def key(name, k, tool="post_request", label="wldn"):
@@ -1134,9 +1141,9 @@ class TestLandingPreview:
             bolt="b1", why="unit b has not merged: it is verify")
         assert acts.ended == acts.releases == [("wldn", "land/b1")] and acts.sessions == []
 
-    def test_off_its_teams_host_a_row_is_refused_naming_it(self, monkeypatch):
+    def test_off_its_host_a_row_is_refused_naming_it(self, monkeypatch):
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, FLEET["teams"]["swb-1"]))
-        with pytest.raises(plan.Refusal, match="bolt b1's row is read on chuck-herdr-alpha, where swb-1, which holds it, runs"):
+        with pytest.raises(plan.Refusal, match="bolt b1's row is read on chuck-herdr-alpha, where the runner that took its work runs"):
             plan.land_row(FLEET, "wldn", "b1", ReadingActs())
 
 
@@ -2460,7 +2467,7 @@ class TestBatch:
         assert [u.get("made") for u in facts["units"]] == [None, [["code", [self.DEMO]]], None, None]
         assert facts["units"][1]["up"] == {"demo": up}
         err = capsys.readouterr().err
-        assert "batch 7's card carries nothing w1 made: its team gone-9 is not in the teams file" in err
+        assert "batch 7's card carries nothing w1 made: no runner has reported taking bolt gone-9's work yet" in err
         assert ("batch 7's card carries nothing x1 and y1 made this raise: chuck-herdr-alpha did not answer (ssh: connect "
                 "to host chuck-herdr-alpha port 22: Operation timed out)") in err
         lines = built.batch_card(facts)["card"]["artifacts"][0]["lines"]

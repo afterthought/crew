@@ -37,7 +37,7 @@ import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, 
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import asks, crew, gather, ops, plan, record, runner, sites  # noqa: E402
+import asks, crew, gather, ops, plan, record, runner  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 # Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button. An operation's
@@ -244,7 +244,6 @@ def board_data(fleet, labels, read, now):
         unread, logs = read["unread"].get(l, {}), read.get("logs", {}).get(l, [])
         teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "kits": [k["name"] for k in crew.kits_of(fleet["teams"][t])],
                   "host": fleet["teams"][t]["machine"], "stream": fleet["teams"][t]["flume"] or None} for t in p["teams"]]
-        streams = {t["team"]: t["stream"] for t in teams}
 
         def building(repo):
             return [t["team"] for t in teams if repo and repo in t["kits"]]
@@ -252,7 +251,7 @@ def board_data(fleet, labels, read, now):
         def ordered(ts):
             return [t for t in p["teams"] if t in ts]
         hosts = {}  # each host asked for its kits, never for its run record, which is read from the branch (read.5)
-        for h in sorted(crew.partition_hosts(fleet, l)):
+        for h in plan.hosts_of(fleet, l, read.get("runs")):
             v = sv.get(h)
             hosts[h] = f"its kits: {v['error']}" if v and not v["ok"] else True
         attention = [{"what": "host", "name": h, "why": v} for h, v in hosts.items() if v is not True]
@@ -275,7 +274,7 @@ def board_data(fleet, labels, read, now):
             """The teams of each bolt a proposal's changes name, the team holding it or else those building its
             repository; and, where a change makes a bolt or names the queue, those building that bolt's repository or
             the unit's. A change that names no repository adds none."""
-            bolts = {b.name(): (plan.team_name(fleet, b), b.get("Repo")) for b in pl.bolts()}
+            bolts = {b.name(): (None, b.get("Repo")) for b in pl.bolts()}  # no team holds a bolt (the-team-machinery-leaves)
             units = {u.name(): u.get("Repo") for u in pl.work()}
             out = []
             for c in d["changes"]:
@@ -302,42 +301,40 @@ def board_data(fleet, labels, read, now):
         planned, queue, construction = [], [], []
         runs = (read.get("runs") or {}).get(l)
         if pl:
-            st = plan.Stages(fleet, pl, sv, read.get("runs"))
+            st = plan.Stages(fleet, pl, sv, read.get("runs"), l)
             for b in pl.bolts():
                 units = pl.work_of(b.name())
                 if not plan.started(b):
                     planned.append({"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "teams": building(b.get("Repo")),
                                     "units": [{"unit": u.name(), "kind": plan.kind_of(u), "stage": st.of(u.name())["stage"]} for u in units]})
                     continue
-                t = plan.known_team(fleet, b)
+                t = st.at(b)[0]  # where its work runs, as the runner that took it reported (plan.bolt_at)
                 k, _ = st.kit(b) if t else (None, None)
                 k = k or {}
 
-                def url(path):  # none for a started bolt's work, whose places are Flume's (crew-board, _open.md)
-                    return (sites.url_of(fleet, here, t["machine"], k.get("sites", {}).get(path, {}), k.get("routes"))[0]
-                            if path and k and not crossed else None)
                 state = st.bolt_state(b) if t else "unknown"
-                crossed = t is not None and b.get("Path") == "flume"
-                silent = st.unread(b) if crossed else None
+                silent = st.unread(b)
                 if silent:
                     attention.append({"what": "runner", "name": silent[0], "why": silent[1]})
                 unread = k.get("submissions_error")
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
                                                      [(u.name(), plan.kind_of(u)) for u in units])
                 recorded = landing_of(logs, b.name())
-                team = t["name"] if t else None
+                # its team, a label alone for the views that draw one until they go: the first of the partition building
+                # its kit; its host and stream are where the runner that took its work reported them (plan.bolt_at)
+                team = (building(b.get("Repo")) or [None])[0]
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": team, "host": t["machine"] if t else None,
-                          "stream": streams.get(team), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
-                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [team], "units": [], "fixes": [],
+                          "stream": t["stream"] if t else None, "given": b.get("Path"), "state": state, "url": None,  # its places are Flume's (crew-board, _open.md)
+                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [team] if team else [], "units": [], "fixes": [],
                           "landing": landing, "submissions_error": unread, "record": recorded,
                           "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
                                             "slot": None, "submission": subs.get(u.name()),
-                                            "worktree": s["worktree"], "url": url(s["worktree"]), "flume": s.get("flume")})
+                                            "worktree": s["worktree"], "url": None, "flume": s.get("flume")})
                 ledger["fixes"] = [{"fix": w, "merged": x["stage"] in ("merged", "landed"), "slot": None, "submission": None, "worktree": None,
-                                    "url": None, "flume": x} for w, _, x in (st.fixes(b) if crossed else [])]
+                                    "url": None, "flume": x} for w, _, x in st.fixes(b)]
                 construction.append(ledger)
                 if state == "landed" or (recorded or {}).get("unclosed"):
                     attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {recorded['unclosed']}"
@@ -411,9 +408,10 @@ def flume_waits(construction, runs, label):
     each take-main fix of a crossed bolt that has not merged, landed or been dropped, the fixes of main first, {fix,
     repo, host, stage, said}; stage and said, as runner.piece_said says them."""
     asking, fixing = [], []
-    for l, s in runner.fixes_on(*runs, label, "main") if runs else []:
+    for l, s in runner.fixes_on(*runs, "main") if runs else []:
         if s["stage"] not in ("merged", "landed", "dropped"):
-            fixing.append(dict(fix=l.get("Name"), repo=(l.get("Work") or "").split("/")[2], host=l.get("Host"),
+            took = runner.taken(runs[1], runner.number(l.get("Request")))[0]
+            fixing.append(dict(fix=l.get("Name"), repo=(l.get("Work") or "").split("/")[2], host=took["host"] if took else None,
                                **dict(zip(("stage", "said"), runner.piece_said(s)))))
     for b in construction:
         for x in b["units"] + b["fixes"]:
@@ -1381,10 +1379,11 @@ def sweeps_after(m, readings, unchecked):
 
 def readings_hosts(fleet, labels):
     """The hosts whose card readings folders the follower stamps, with the partitions of each, {host: [labels]}: each
-    partition's main machine and every host its teams run on, where its card sessions are swept (plan.sweep_sessions)."""
+    partition's main machine and every host its runners answer on, as crew's cache holds their branches with no fetch
+    (plan.partition_hosts, plan.12), where its card sessions are swept (plan.sweep_sessions)."""
     out = {}
     for l in labels:
-        for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
+        for h in plan.partition_hosts(fleet, l, fetch=False):
             out.setdefault(h, []).append(l)
     return out
 
@@ -1836,7 +1835,7 @@ class Follower:
                                                      read["kits"]))
             self.left = card_left(swept)
         ended, unchecked = plan.sweep_sessions(fleet, read["found"], read["sv"], read["rows"], read["cards"], read["unread"],
-                                               read.get("batched") or {}, todo["sessions"]) if todo["sessions"] else ([], [])
+                                               read.get("batched") or {}, todo["sessions"], read.get("runs")) if todo["sessions"] else ([], [])
         said = io.StringIO()
         with contextlib.redirect_stderr(said):
             told = plan.reckon_batches(fleet, read["found"], read, plan.batch_told(self.told, read["found"], tick))

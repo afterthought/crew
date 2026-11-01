@@ -137,9 +137,11 @@ class TestTheCardChanges:
         monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
         kit = {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}
-        fleet = dict(FLEET, teams={t: dict(v, kit=kit) for t, v in FLEET["teams"].items()})
+        # a was built where the runner that took its bolt's work reported switchboard-kit (plan.batch_unit_at)
+        monkeypatch.setattr(plan, "batch_unit_at", lambda fleet, label, bolt, unit: {"label": label, "machine": "chuck-herdr-alpha",
+                                                                                     "stream": "wldn", "kit": kit})
         acts = Acts(self.HELD, status, {"made": {"a": [["code", [NOTES]]]}, "previews": {}})
-        plan.raise_batch(fleet, {"label": "wldn", "key": "batch/7"}, acts, note="a recorded notes")
+        plan.raise_batch(FLEET, {"label": "wldn", "key": "batch/7"}, acts, note="a recorded notes")
         return acts
 
     def test_a_card_that_waits_is_changed_in_place_carrying_the_line(self, monkeypatch, tmp_path):

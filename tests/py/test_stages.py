@@ -55,9 +55,10 @@ def test_work_whose_stage_crew_cannot_tell_is_not_dropped():
 # ------------------------------------------------------------------------- a crossed team's work, from the runner's records
 
 class TestCrossed:
-    """bolt-plan "A crossed team's work reads its stage from the runner's records" and "A crossed place's stage is where
+    """bolt-plan "A started bolt's work reads its stage from the runner's records" and "A started place's stage is where
     Flume's status has it" (Decision 8 of teams-cross-to-flume-as-their-bolts-land): plan.Stages answers runner.stage_of
-    for each unit and chore of a bolt marked Path: flume, never reading a place in the kit."""
+    for each unit and chore of a bolt marked Path: flume, from the runner that took its launch, never reading a place in
+    the kit, and reads the kit where that runner reported it (the user's ruling of 2026-11-01)."""
     FLEET = crossed_fleet_read()
 
     @pytest.fixture(autouse=True)
@@ -65,12 +66,13 @@ class TestCrossed:
         monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
 
     def stages(self, runners, main=(), chores=(), runs=None):
-        """Stages of x given to crossed crw-4 holding a, b after a, and chore c, launched as requests 1 to 3, with deneb's
-        runner as given (facts.ran), and crew's kit as read on deneb holding main's changes and chores."""
+        """Stages of x, started, holding a, b after a, and chore c, launched as requests 1 to 3, with the partition's runners
+        as given (facts.ran, deneb's), and crew's kit as read on deneb holding main's changes and chores."""
         from facts import launched
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("c", "x", [], "chore", [])],
                                fleet=self.FLEET)
-        return plan.Stages(self.FLEET, p, crew_read(main, chores, {"x": {}}), runs={"madswan": runs if runs is not None else (requests, runners)})
+        return plan.Stages(self.FLEET, p, crew_read(main, chores, {"x": {}}), runs={"madswan": runs if runs is not None else (requests, runners)},
+                           label="madswan")
 
     def test_a_dependent_waits_on_the_work_it_comes_after(self):
         """bolt-plan "A dependent waits": b's launch answered held, a's place not yet landed."""
@@ -79,11 +81,16 @@ class TestCrossed:
         assert (s["stage"], s["flume"]["after"], s["worktree"]) == ("waiting", ["unit/a"], None)
 
     def test_the_runners_host_silent_reads_every_crossed_piece_unknown(self):
-        """bolt-plan "The runner's host is silent": deneb's runner branch can't be read."""
-        st = self.stages({})
-        why = "no runner answers on deneb: madswan/runner/deneb does not exist"
-        assert [(st.of(n)["stage"], st.of(n)["why"]) for n in "abc"] == [("unknown", why)] * 3
+        """bolt-plan "The runner's host is silent": deneb's runner branch can't be read, so crew can't tell which runner
+        took each launch; with no runner answering for the partition at all, nothing takes them (read.1)."""
+        silent = {"deneb": runner.host_read("madswan", "deneb", "5e1f0c2a" + "0" * 32, {}, {"runner.rec": "recfix refused it"})}
+        st = self.stages(silent)
+        why = "deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: recfix refused it"
+        assert [(st.of(n)["stage"], st.of(n)["why"]) for n in "abc"] == [
+            ("unknown", f"no runner crew read has taken request {n}, and {why}") for n in (1, 2, 3)]
         assert st.unread(st.plan.bolt("x")) == ("deneb's runner", why)
+        none = self.stages({})
+        assert none.of("a")["why"] == "no runner answers for the partition: no <label>/runner/<host> branch exists, so nothing takes request 1"
 
     def test_requests_crew_cant_read_read_every_crossed_piece_unknown(self):
         st = self.stages(None, runs="could not fetch madswan/main of afterthought/crew-state over https: no network")
@@ -134,7 +141,7 @@ class TestCrossed:
         from facts import ran
         st = self.stages(ran({4: "code"}))
         requests, _ = st.runs["madswan"]
-        fix = plan.Rec("Request", [("Request", "4"), ("Act", "launch"), ("Host", "deneb"), ("Work", "fix/x/tidy"), ("Name", "x--tidy"),
+        fix = plan.Rec("Request", [("Request", "4"), ("Act", "launch"), ("Work", "fix/x/tidy"), ("Name", "x--tidy"),
                                    ("Base", "bolt/x"), ("Kind", "fix")])
         st.runs["madswan"] = (requests + [fix], st.runs["madswan"][1])
         assert [(w, s["stage"]) for w, _, s in st.fixes(st.plan.bolt("x"))] == [("fix/x/tidy", "code")]

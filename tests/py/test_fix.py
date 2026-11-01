@@ -18,12 +18,10 @@ class TestAFixOfAStartedBolt:
         self.FLEET = crossed_fleet()
 
     def bolt(self, runners=None, work=("a",)):
-        """x, started through crw-4, crossed in stream madswan on deneb, its units launched as the start launches them."""
+        """x, started, its units launched in crew's repository as the start launches them."""
         w = FactsWrite(flume_plan([("x", None, None)], [(u, "x", [], "unit", []) for u in work]), runners=runners, label="madswan")
-        b = w.plan.bolt("x")
-        b.set("Team", "crw-4")
-        b.set("Path", "flume", after="Team")
-        plan.reach_places(self.FLEET, w, "x", dict(self.FLEET["teams"]["crw-4"]))
+        w.plan.bolt("x").set("Path", "flume")
+        plan.reach_places(self.FLEET, w, "x")
         return w
 
     def fix(self, w, mode, name, words=""):
@@ -35,10 +33,10 @@ class TestAFixOfAStartedBolt:
     def test_a_review_note_marked_fix_is_a_launch_of_a_fix_on_the_bolts_branch(self):
         """The planner runs crew fix x rail-word "Say 'land' for a started bolt" on a batch's note."""
         w = self.bolt()
-        assert self.fix(w, "start", "rail-word", "Say 'land' for a started bolt") == dict(n=2, host="deneb", stream="madswan")
+        assert self.fix(w, "start", "rail-word", "Say 'land' for a started bolt") == dict(n=2, host=None, repo="crew")
         assert self.launches(w)[1] == {
-            "Request": "2", "Act": "launch", "Host": "deneb", "Work": "fix/x/rail-word", "Repo": "afterthought/crew", "Kind": "fix",
-            "Name": "x--rail-word", "Base": "bolt/x", "Stream": "madswan", "Priority": "1", "Intent": "madswan/x",
+            "Request": "2", "Act": "launch", "Work": "fix/x/rail-word", "Repo": "crew", "Kind": "fix",
+            "Name": "x--rail-word", "Base": "bolt/x", "Priority": "1", "Intent": "madswan/x",
             "Recipient": "madswan/planner", "Brief": "Say 'land' for a started bolt"}
         assert w.subject == "plan(x): fix rail-word"
 
@@ -52,13 +50,13 @@ class TestAFixOfAStartedBolt:
     def test_drop_drops_its_launch(self):
         w = self.bolt(runners=ran({2: "code"}))
         self.fix(w, "start", "rail-word", "Say land.")
-        assert self.fix(w, "drop", "rail-word") == dict(n=3, host="deneb", stream="madswan")
-        assert self.launches(w)[2] == {"Request": "3", "Act": "drop", "Host": "deneb", "Work": "fix/x/rail-word", "Of": "2"}
+        assert self.fix(w, "drop", "rail-word") == dict(n=3, host="deneb", repo="crew")
+        assert self.launches(w)[2] == {"Request": "3", "Act": "drop", "Work": "fix/x/rail-word", "Of": "2"}
         assert w.subject == "plan(x): drop fix rail-word"
 
     @pytest.mark.parametrize("at, said", [
         ("landed", "^fix/x/rail-word has merged into bolt/x, so it is not dropped: what it changed is the bolt's, and a new fix undoes it$"),
-        (None, "^can't tell whether fix/x/rail-word's place has merged into bolt/x, so it is not dropped: no runner answers on deneb")])
+        (None, "^can't tell whether fix/x/rail-word's place has merged into bolt/x, so it is not dropped: no runner answers for the partition")])
     def test_a_merged_fix_or_one_crew_cant_read_is_not_dropped(self, at, said):
         w = self.bolt(runners=ran({2: at}) if at else None)
         self.fix(w, "start", "rail-word", "Say land.")
@@ -87,8 +85,8 @@ class TestAFixOfAStartedBolt:
             self.fix(w, "start", name, f"Fix {name}.")
         self.fix(w, "drop", "gone")
         requests = plan.Plan(w.files["requests.rec"]).recs("Request")
-        assert runner.fixes_in_flight(requests, ran({2: "code", 3: "landed"}), "madswan", "x") == {"fix/x/rail-word": "Fix rail-word."}
-        assert runner.fixes_in_flight(requests, {}, "madswan", "x") == {"fix/x/rail-word": "Fix rail-word.", "fix/x/tidy": "Fix tidy."}
+        assert runner.fixes_in_flight(requests, ran({2: "code", 3: "landed"}), "x") == {"fix/x/rail-word": "Fix rail-word."}
+        assert runner.fixes_in_flight(requests, {}, "x") == {"fix/x/rail-word": "Fix rail-word.", "fix/x/tidy": "Fix tidy."}
         assert plan.landing_unready([("a", "unit", "merged")], "h" * 40, "passed", ["fix/x/rail-word"]) == "fix/x/rail-word is in flight on it"
         row = plan.landing_rows(["x"], {"x": {"head": "h" * 40, "fixes": {"fix/x/rail-word": "Fix rail-word."}}}, {})[0]
         assert (row["box"], row["why"]) == (False, "held for a fix: Fix rail-word. (fix/x/rail-word)")

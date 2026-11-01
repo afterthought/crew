@@ -569,7 +569,7 @@ class TestTheSubmission:
     once it landed, the landing recorded at main now and the bolt closed as it lands; one that did not land has its pull
     request drafted and is recorded at the head submitted, the rest going on, and the command exits non-zero naming
     it."""
-    T = {"name": "swb-1", "machine": "box", "kit": {"name": "k", "main": "/k/main", "dir": "/k", "repo": "o/k"}}
+    T = {"label": "wldn", "machine": "box", "stream": "wldn", "kit": {"name": "k", "main": "/k/main", "dir": "/k", "repo": "o/k"}}
     BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\nSUBMISSION_OWN=\n"
 
     @pytest.fixture(autouse=True)
@@ -599,13 +599,13 @@ class TestTheSubmission:
         bolt = lambda s, n: {"Bolt": n, "Team": "swb-1", "Repo": "k"}
         monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, type("P", (), {"bolt": bolt})()))
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: type("P", (), {"bolt": bolt})())
-        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: (teams or {}).get(b["Bolt"], self.T))
+        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: (teams or {}).get(b["Bolt"], self.T))
         monkeypatch.setattr(plan, "READ", type("R", (), {"drop_kit": lambda s, h, m: None})())
         monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: ran_.append(("MAIN" if script == plan.MAIN else "POLICY", host))
                             or (before if script == plan.MAIN else said))
         monkeypatch.setattr(plan.crew, "this_host", lambda: here[0])
         monkeypatch.setattr(plan.crew, "crew_argv", lambda fleet, host, *args: ["crew", *args])
-        monkeypatch.setattr(plan, "team_state", lambda t: self.tmp / f"{t['name']}-team")
+        monkeypatch.setattr(plan, "landing_state", lambda t: self.tmp / f"{t['label']}-crew")
         monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", f"{label}/main"))
         monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "tip")
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [
@@ -703,11 +703,11 @@ class TestTheSubmission:
 
     def test_the_submission_is_recorded_queued_with_its_number_before_any_wait(self, monkeypatch):
         """bolt-teams "The number is recorded before the wait": once sluice has queued it as #7, the bolt.submit names
-        the bolt and its team, Outcome queued, sluice's number, the head submitted and main before, and the kit, before
+        the bolt, Outcome queued, sluice's number, the head submitted and main before, and the kit, before
         crew waits on #7."""
         self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")])
         (act, on, f), = self.queued
-        assert (act, on) == ("bolt.submit", ["bolt/b", "team/swb-1"])
+        assert (act, on) == ("bolt.submit", ["bolt/b"])
         assert {k: f[k] for k in ("Outcome", "Submission", "Head", "Base", "Repo")} == dict(Outcome="queued", Submission="7", Head=TIP, Base=OLD, Repo="k")
         assert not f.get("frm") and "Chars" not in f
         assert self.order.index("queued") < self.order.index("WAIT")
@@ -1005,7 +1005,7 @@ class TestTheSubmission:
         assert self.scripts() == ["MAIN", "COPIES", "OVERVIEW", "SUBMISSIONS", "POLICY", "SUBMIT", "LANDED", "SUBMISSIONS", "SUBMIT", "WAIT", "READ",
                                   "STATUS", "LANDED", "MARK"]
         (_, on, q), = self.queued
-        assert (on, q["Submission"], q["Head"]) == (["bolt/b", "team/swb-1"], "160", tip)
+        assert (on, q["Submission"], q["Head"]) == (["bolt/b"], "160", tip)
         assert self.emitted == [("bolt.submit", ["bolt/b"], {"why": "bolt(b): landed on main at bbbbbbb", "Outcome": "landed", "Submission": "160",
                                                              "Head": tip})] and self.closed == ["b"]
 
@@ -1336,8 +1336,10 @@ class TestTheLandingsRead:
         monkeypatch.setattr(plan.crew, "with_kit", lambda t, repo: self.T)
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: self.plan)
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: list(self.entries))
-        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: self.T if b else None)
-        monkeypatch.setattr(plan, "team_state", lambda t: tmp_path / f"{t['name']}-team")
+        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: self.T if b else None)
+        # a bolt gone from the plan read where its launches ran, which requests.rec keeps (plan.landing_at)
+        monkeypatch.setattr(plan, "launched_at", lambda fleet, label, bolt, repo, run=None: self.T)
+        monkeypatch.setattr(plan, "landing_state", lambda t: tmp_path / f"{t['label']}-crew")
         monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", f"{label}/main"))
         monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "tip")
         monkeypatch.setattr(plan, "READ", type("R", (), {"drop_kit": lambda s, h, m: None})())
@@ -1361,7 +1363,7 @@ class TestTheLandingsRead:
 
     def test_it_runs_only_on_the_teams_host(self, monkeypatch):
         monkeypatch.setattr(plan.crew, "this_host", lambda: "mac-studio")
-        with pytest.raises(plan.Refusal, match=r"^bolt b's landing is read on box, where swb-1, which holds it, runs, not on mac-studio$"):
+        with pytest.raises(plan.Refusal, match=r"^bolt b's landing is read on box, where the runner that took its work runs, not on mac-studio$"):
             plan.landing_read(self.F, "wldn", "b")
         assert self.ran == [] and self.emitted == []
 
@@ -1391,7 +1393,7 @@ class TestTheLandingsRead:
     def test_a_read_waiting_on_one_that_closed_the_bolt_says_its_close_and_closes_nothing(self, monkeypatch, tmp_path, capsys):
         """"Two reads at once": the second waits on the first's lock, and reads the plan afresh under it, so it says
         what the first said of the outcome and of its close, recording and closing nothing."""
-        mark = tmp_path / "swb-1-team" / "landings" / "b.412"
+        mark = tmp_path / "wldn-crew" / "landings" / "b.412"
         mark.parent.mkdir(parents=True)
         mark.write_text(json.dumps({"landed": True, "words": "bolt/b landed", "out": "bolt/b landed\n", "err": "",
                                     "closed_out": "b has landed at k's bbbbbbb; swb-1 holds no bolt\n", "closed_err": ""}))
@@ -1492,9 +1494,12 @@ class TestTheLandingsRead:
         plan.landing_read(self.F, "wldn", "b")
         assert self.closed == []
 
-    def test_a_bolt_the_plan_no_longer_holds_is_read_on_the_team_its_queued_entry_names(self, tmp_path):
+    def test_a_bolt_the_plan_no_longer_holds_is_read_where_its_launches_ran(self, monkeypatch, tmp_path):
+        """Its queued entry names its kit, and requests.rec keeps its launches, so the runner that took them still says
+        where it ran (plan.launched_at)."""
         self.plan = APlan()
-        mark = tmp_path / "swb-1-team" / "landings" / "b.412"
+        monkeypatch.setattr(plan, "launched_at", lambda fleet, label, bolt, repo, run=None: dict(self.T, kit=dict(self.T["kit"], name=repo)))
+        mark = tmp_path / "wldn-crew" / "landings" / "b.412"
         mark.parent.mkdir(parents=True)
         mark.write_text(json.dumps({"landed": True, "words": "bolt/b landed on k's main at bbbbbbb"}))
         assert plan.landing_read(self.F, "wldn", "b") == (True, "bolt/b landed on k's main at bbbbbbb")
@@ -1518,18 +1523,23 @@ class TestWhoReads:
     def test_which_bolts_a_teams_read_reads(self, now, stages, marked, due):
         assert plan.landing_read_due(now, stages, marked) is due
 
-    def test_the_teams_read_reads_only_the_bolts_due(self, monkeypatch):
-        t = dict(TestTheSubmission.T, label="wldn")
+    def test_the_sweeps_read_reads_only_the_bolts_due_whose_work_runs_here(self, monkeypatch):
+        """bolt-teams "A landing nothing recorded is read by the rail's sweep" (the-team-machinery-leaves): of the started
+        bolts whose work runs on this host (plan.bolts_on), those whose landing may have an outcome nothing recorded."""
         bolts = {"b": ["landed"], "c": ["code"], "d": []}
         pl = type("P", (), {"work_of": lambda s, b: [type("U", (), {"name": lambda s, n=f"{b}-{i}": n})() for i in range(len(bolts[b]))]})()
         read = []
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: pl)
-        monkeypatch.setattr(plan, "team_bolts", lambda fleet, p, team: [type("B", (), {"name": lambda s, n=b: n, "get": lambda s, k: None})() for b in bolts])
-        monkeypatch.setattr(plan, "stages_for", lambda fleet, p, bs: type("S", (), {"of": lambda s, u: {"stage": bolts[u.split("-")[0]][int(u.split("-")[1])]}})())
+        monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "chuck-herdr-alpha")
+        monkeypatch.setattr(plan, "bolts_on", lambda fleet, label, p, host, run=None: [
+            type("B", (), {"name": lambda s, n=b: n, "get": lambda s, k: None})() for b in bolts] if host == "chuck-herdr-alpha" else [])
+        monkeypatch.setattr(plan, "known_at", lambda fleet, label, b, run=None: dict(TestTheSubmission.T, label=label))
+        monkeypatch.setattr(plan, "stages_for", lambda fleet, label, p, bs: type("S", (), {"of": lambda s, u: {"stage": bolts[u.split("-")[0]][int(u.split("-")[1])]}})())
         monkeypatch.setattr(plan, "landing_now", lambda t, b: (f"/k/places/land-{b}", False, False))
         monkeypatch.setattr(plan, "landing_marked", lambda t, b: b == "d")
         monkeypatch.setattr(plan, "landing_read", lambda fleet, label, b: read.append(b) or plan.fail("crew can't read b's landing") if b == "d" else read.append(b))
-        plan.reap_landings({}, t)
+        plan.reap_landings({}, "wldn")
         assert read == ["b", "d"]
 
     def test_crew_bolt_land_reads_a_queued_landing_first_and_says_when_the_read_closed_it(self, monkeypatch, capsys):
@@ -1537,7 +1547,7 @@ class TestWhoReads:
         P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "swb-1", "Repo": "k"} if n in held else None})
         monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, P()))
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
-        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TestTheSubmission.T)
+        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: TestTheSubmission.T)
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [TestTheLandingsRead.Q])
         monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", f"{label}/main"))
         monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "tip")
@@ -1551,7 +1561,7 @@ class TestWhoReads:
         P = type("P", (), {"bolt": lambda s, n: {"Bolt": n, "Team": "swb-1", "Repo": "k"}, "work_of": lambda s, b: []})
         monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, P()))
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
-        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TestTheSubmission.T)
+        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: TestTheSubmission.T)
         monkeypatch.setattr(plan, "landing_read_on", lambda *a: pytest.fail("a read ran"))
         monkeypatch.setattr(plan, "host_run", lambda *a: plan.fail("went on to read main"))
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [submitted("b", Outcome="landed", Submission="412")])
@@ -1571,9 +1581,9 @@ def test_a_close_by_a_read_records_its_bolt_land_in_ops_name_with_its_why(monkey
     wrote = []
     monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, P()))
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
-    monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TestTheSubmission.T)
+    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: TestTheSubmission.T)
     monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: TestTheSubmission.BEFORE)
-    monkeypatch.setattr(plan, "stages_for", lambda fleet, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
+    monkeypatch.setattr(plan, "stages_for", lambda fleet, label, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
     monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [])
     monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append((subject, k.get("by"), k.get("why"))))
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
@@ -1645,12 +1655,12 @@ class TestSubmitDecisions:
             "crew bolt submit lands one kit's bolts at a time, and y is crew's and w is swancloud's: submit each kit's in a "
             "command of its own")
 
-    def test_a_bolt_named_twice_or_held_by_no_team_is_refused(self):
-        assert plan.submit_refusal(["y", "z", "y"], {"y": "k", "z": "k"}, {"y": "t", "z": "t"}) == (
+    def test_a_bolt_named_twice_or_not_started_is_refused(self):
+        assert plan.submit_refusal(["y", "z", "y"], {"y": "k", "z": "k"}, {"y": "box", "z": "box"}) == (
             "crew bolt submit names y twice: each bolt lands once, in the order given")
-        assert plan.submit_refusal(["y", "z"], {"y": "k", "z": "k"}, {"y": "t", "z": None}) == (
-            "bolt z is held by no team, so it has no branch to submit")
-        assert plan.submit_refusal(["y", "z"], {"y": "k", "z": "k"}, {"y": "t", "z": "t"}) is None
+        assert plan.submit_refusal(["y", "z"], {"y": "k", "z": "k"}, {"y": "box", "z": None}) == (
+            "bolt z is not started, so it has no branch to submit")
+        assert plan.submit_refusal(["y", "z"], {"y": "k", "z": "k"}, {"y": "box", "z": "box"}) is None
 
     def test_a_refusal_before_anything_is_submitted_is_recorded_on_each_bolt_named(self):
         assert plan.named(argparse.Namespace(cmd="bolt", sub="submit", bolt=["y", "z"])) == ["bolt/y", "bolt/z"]
@@ -2246,7 +2256,7 @@ class TestThePullRequest:
     whenever the user's word does not stand", "The next landing on the user's word readies the pull request"): what
     crew does to it, decided from facts alone (plan.pull_act), what it says (plan.pull_said), and its reads and marks on
     the team's host, only in a kit whose main takes pull requests (plan.pull_hold)."""
-    T = {"name": "crw-5", "machine": "box", "kit": {"name": "k", "main": "/k/main", "dir": "/k", "repo": "o/k"}}
+    T = {"label": "madswan", "machine": "box", "stream": "madswan", "kit": {"name": "k", "main": "/k/main", "dir": "/k", "repo": "o/k"}}
 
     @pytest.mark.parametrize("pull, want, act", [
         (None, "held", None), (None, "live", None),
@@ -2529,7 +2539,8 @@ class TestACrossedBoltLands:
         fleet = crossed_fleet_read()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("c", "x", [], "chore", [])],
                                fleet=fleet)
-        return plan.Stages(fleet, p, crew_read(main, bolts={"x": {"verdict": verdict}}), runs={"madswan": (requests, ran(at))})
+        return plan.Stages(fleet, p, crew_read(main, bolts={"x": {"verdict": verdict}}), runs={"madswan": (requests, ran(at))},
+                           label="madswan")
 
     def test_every_piece_merged_and_green_at_its_head_reads_proven(self):
         """crew-rail "A crossed bolt proven": a, b and c merged by the runner's records, sluice green at x's head."""

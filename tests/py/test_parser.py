@@ -10,7 +10,7 @@ RUNS = [
     ["rail", "--label", "wldn"],
     ["card", "sweep", "--label", "wldn"],
     ["state", "init", "wldn"],
-    ["_sweep", "wldn", "switchboard-kit", "--landed", "b", "--outcome", "Landed.", "--units", "a", "c"],
+    ["_sweep", "wldn", "switchboard-kit", "--dir", "/kit", "--landed", "b", "--outcome", "Landed.", "--units", "a", "c"],
     ["bolt", "submit", "b", "--label", "wldn"],
     ["bolt", "submit", "b", "--excerpt", "Land crw-5's bolt"],
     ["bolt", "leave", "b", "c", "--excerpt", "Hold the phone bolt", "--label", "wldn"],

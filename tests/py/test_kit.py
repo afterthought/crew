@@ -137,10 +137,6 @@ class TestWhereABoltLives:
     def test_by_origins_when_the_host_has_none(self):
         assert kit.bolt_lives(at(tracked=self.SHA, at_tracked=b64(ON_GITHUB)), "b") == "origin"
 
-    def test_a_place_is_cut_where_it_lives(self):
-        assert kit.place_base(at(self.SHA, at_local=b64(ON_GITHUB)), "b") == "origin/bolt/b"
-        assert kit.place_base(at(self.SHA, at_local=b64(POLICY)), "b") == "bolt/b"
-
     @pytest.mark.parametrize("said, why", [
         (at(), "crew can't tell where bolt/b lives: this host has neither bolt/b nor origin/bolt/b"),
         ("fatal: bad\n", "crew can't read where bolt/b lives from: fatal: bad"),

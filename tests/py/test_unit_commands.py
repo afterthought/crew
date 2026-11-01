@@ -100,11 +100,6 @@ class TestMove:
     def test_a_unit_already_in_the_bolt_is_refused(self):
         assert "is already in tenant-environments" in refusal(fresh(), f"unit move a {TE}")
 
-    def test_a_unit_with_a_worktree_goes_only_to_a_held_bolt(self):
-        assert "a queued unit has none" in refusal(fresh(), "unit move c queue", stages={"c": "planned"})
-        assert refusal(fresh(), "unit move c apex-zones", stages={"c": "planned"}) == (
-            "bolt apex-zones is held by no team, so it has no branch to rebase c onto")
-
     def test_merged_work_does_not_move(self):
         assert "unit c has merged into tenant-environments, so it can't move" in refusal(fresh(), "unit move c console-pages", stages={"c": "merged"})
 

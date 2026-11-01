@@ -124,8 +124,8 @@ class FactsWrite:
             def gone(self, kind, name, word=None):
                 plan.fail(f"no {word or kind.lower()} {name} in {self.label}/main")
 
-            def runner_of(self, host):
-                return runner.of_host(runners or {}, self.label, host)
+            def runners(self):
+                return dict(runners or {})
         w = W(None, label, None, plan.Plan(text))
         w.files = dict(files or {})
         return w
@@ -145,10 +145,10 @@ def known(w, stages=None, taken=(), n=None, chores_taken=(), fleet=None):
             return {"stage": st, "worktree": f"/kit/places/{name}" if st not in ("ready", "waiting", "unknown") else None,
                     "open": [], "head": None, "why": "its host did not answer" if st == "unknown" else None}
 
-        def stages(self, p, bolts):
+        def stages(self, label, p, bolts):
             return self
 
-        def stage(self, p, name):
+        def stage(self, label, p, name):
             return self.of(name)
 
         def free(self, label, kit, names):
@@ -156,7 +156,7 @@ def known(w, stages=None, taken=(), n=None, chores_taken=(), fleet=None):
                 why = plan.name_taken(kit, x, taken, chores_taken)
                 not why or plan.fail(why)
 
-        def first_open(self, p, bolt):
+        def first_open(self, label, p, bolt):
             return next((u.name() for u in p.work_of(bolt) if self.of(u.name())["stage"] not in ("merged", "landed")), None)
 
         def kit(self, kit):  # the partition the command runs as, as plan.plan_for has it given a label
@@ -228,16 +228,20 @@ def flume_plan(bolts=(), work=()):
 FLUME = pathlib.Path(__file__).parent / "flume-0.3.6"
 
 
-def ran(launched=None, held=(), host="deneb", label="madswan"):
+def ran(launched=None, held=(), host="deneb", label="madswan", repository="/crew/main"):
     """A host's runner as crew reads it from its branch (runner.host_read): each launch in launched, {request's number:
     the flume 0.3.6 status fixture its place stands at (tests/py/flume-0.3.6/<name>.json)}, answered launched and
-    carried in places.rec at the fixture's own place, and each in held answered held."""
+    carried in places.rec at the fixture's own place, its repository given as repository, the kit's folder on host where
+    crew reads it (runner.where), and its stream the partition's label, as the runner's configuration gives it; and each
+    in held answered held."""
     import json
     import plan
     import runner
     answers, places = "", ""
     for n, name in (launched or {}).items():
         status = json.loads((FLUME / f"{name}.json").read_text())
+        for p in status["status"]["places"]:
+            p.update(repository=repository, stream={"name": label, "from": "intent"})
         where = status["status"]["places"][0]["place"].split("@")[0]
         answers += f"\nRequest: {n}\nOutcome: launched\nPlace: {where}\nAt: 2026-10-31T12:01:00Z\n"
         places += f"\nRequest: {n}\nPlace: {where}\nAt: 2026-10-31T12:02:00Z\nStatus: {json.dumps(status)}\n"
@@ -247,15 +251,15 @@ def ran(launched=None, held=(), host="deneb", label="madswan"):
     return {host: runner.host_read(label, host, "5e1f0c2a" + "0" * 32, files, {})}
 
 
-def launched(bolts, work=(), team="crw-4", fleet=None, held=()):
-    """madswan's plan (flume_plan) with each bolt in bolts started and its work launched with team as a start launches
-    it (plan.reach_places), and each of held, (bolt, a team), planned and not started: (the plan, requests.rec's
-    records as the writes leave them). The requests name their writer: set CREW_AGENT first."""
+def launched(bolts, work=(), team=None, fleet=None, held=()):
+    """madswan's plan (flume_plan) with each bolt in bolts started and its work launched as a start launches it
+    (plan.reach_places), and each of held, (bolt, a team), planned and not started: (the plan, requests.rec's records
+    as the writes leave them). The requests name their writer: set CREW_AGENT first."""
     import plan
     import runner
     fleet = fleet or crossed_fleet()
     w = FactsWrite(flume_plan([(b, None, None) for b in [*bolts, *(b for b, _ in held)]], work), label="madswan")
     for b in bolts:
         w.plan.bolt(b).set("Path", "flume")
-        plan.reach_places(fleet, w, b, fleet["teams"][team])
+        plan.reach_places(fleet, w, b)
     return w.plan, plan.Plan(w.files.get("requests.rec") or runner.REQUESTS).recs("Request")

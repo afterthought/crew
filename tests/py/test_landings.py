@@ -26,8 +26,18 @@ FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-stud
 
 @pytest.fixture(autouse=True)
 def kits(monkeypatch):
-    """swancloud's kits as its plan and landings name them (plan.kits_read), with no branch read."""
+    """swancloud's kits as its plan and landings name them (plan.kits_read), with no branch read; and where each started
+    bolt's and each kit's work runs as the runner that took it reported (plan.bolt_at, plan.kit_at), on the host and in
+    the folder FLEET gives each kit, with no runner read."""
     monkeypatch.setattr(plan, "kits_read", lambda fleet, label: list(KITS))
+
+    def kit_where(label, kit):
+        t = next((t for t in FLEET["teams"].values() if t["kit"]["name"] == (kit or "").split("/")[-1]), None)
+        return dict(t, label=label, stream=t["flume"]) if t else None
+    monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
+    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: kit_where(label, b.get("Repo")) if plan.started(b) else None)
+    monkeypatch.setattr(plan, "kit_at", lambda fleet, label, kit, run=None: kit_where(label, kit) or plan.fail(
+        f"no runner has reported taking {kit}'s work yet, so crew can't tell where it runs"))
 
 
 # ------------------------------------------------------------------------------------- what a land/ key names
@@ -210,20 +220,19 @@ class TestCrossedTakesMain:
         monkeypatch.setenv("CREW_AGENT", "madswan-ops")
 
     def launched(self):
-        """crossed crw-4's x, its unit a launched as a give launches it."""
+        """x, started, its unit a launched as a start launches it."""
         from facts import FactsWrite, crossed_fleet, flume_plan
-        fleet = crossed_fleet()
-        w = FactsWrite(flume_plan([("x", "crw-4", "flume")], [("a", "x", [], "unit", [])]), label="madswan")
-        plan.reach_places(fleet, w, "x", fleet["teams"]["crw-4"])
-        return w, fleet["teams"]["crw-4"]
+        w = FactsWrite(flume_plan([("x", None, "flume")], [("a", "x", [], "unit", [])]), label="madswan")
+        plan.reach_places(crossed_fleet(), w, "x")
+        return w, "madswan"
 
     def test_a_landing_refused_for_a_conflict_launches_one_take_main_fix_with_sluices_words(self):
         """main-level ops's crew bolt submit x reads sluice refusing x for a conflict with main at 4d3d9be."""
         import runner
         w, t = self.launched()
-        act, host, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
-        assert (act, host, work, given["Kind"], given["Name"], given["Base"], given["Recipient"]) == (
-            "launch", "deneb", "fix/x/take-main-4d3d9be", "fix", "x--take-main-4d3d9be", "bolt/x", "madswan/planner")
+        act, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
+        assert (act, work, given["Repo"], given["Kind"], given["Name"], given["Base"], given["Recipient"]) == (
+            "launch", "fix/x/take-main-4d3d9be", "crew", "fix", "x--take-main-4d3d9be", "bolt/x", "madswan/planner")
         assert given["Brief"] == (
             "Take main into the bolt: merge origin/main, at 4d3d9be, into this place, cut from bolt/x, resolving each conflicting "
             "path keeping both intents, main's and the bolt's; sluice refused the bolt's landing for its conflict with main: "
@@ -234,14 +243,14 @@ class TestCrossedTakesMain:
         """A later read of the same refusal finds x--take-main-4d3d9be standing."""
         import runner
         w, t = self.launched()
-        act, host, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
-        plan.request(w, act, host, work, **given)
+        act, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
+        plan.request(w, act, work, **given)
         assert runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS) is None
 
     def test_its_row_says_it_takes_main_first(self):
         import runner
         w, t = self.launched()
-        brief = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)[3]["Brief"]
+        brief = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)[2]["Brief"]
         held = plan.refusals([submitted("x", "a" * 40, "#137 conflict: README.md, plugin/lib/plan.py")])
         x, = plan.landing_rows(["x"], {"x": facts("x", fixes={"fix/x/take-main-4d3d9be": brief})}, held)
         assert (x["box"], x["takes_main"], x["why"]) == (False, True, f'takes main first: take-main-4d3d9be taking main in: "{brief}"')
@@ -469,10 +478,10 @@ def test_a_bolts_own_work_is_its_non_merge_commits_main_lacks_gained_and_lost_be
     assert got == {"z": dict(head="e" * 40, gained=[], lost=[], why=None)}
 
 
-def test_a_kit_no_team_builds_reads_no_work_and_says_why(monkeypatch):
+def test_a_kit_no_runner_has_reported_reads_no_work_and_says_why(monkeypatch):
     monkeypatch.setattr(plan, "kit_git", lambda *a, **k: plan.fail("no git"))
     assert plan.bolt_work(FLEET, "swancloud", "flywheel", {"z": ("abc1234", "d" * 40)}) == {"z": dict(
-        head="d" * 40, gained=[], lost=[], why="no team of swancloud builds flywheel, so crew reads no checkout of it")}
+        head="d" * 40, gained=[], lost=[], why="no runner has reported taking flywheel's work yet, so crew can't tell where it runs")}
 
 
 def test_a_fetch_refused_reads_no_work_in_gits_words(monkeypatch):

@@ -352,6 +352,9 @@ class OnTheTip:
                             if path == "proposals.rec" else None)
         for name in ("row_card_post", "row_card_change", "row_card_close"):
             monkeypatch.setattr(plan, name, lambda *a, name=name, **kw: self.called.append((name, a, kw)) or "req_2")
+        # no runner has reported taking the kit's work, so the card is filed in the partition's blueprints (plan.kit_at)
+        monkeypatch.setattr(plan, "runners", lambda repo, label: {})
+        monkeypatch.setattr(plan, "kit_at", lambda fleet, label, kit, run=None: plan.fail(f"no runner has reported taking {kit}'s work yet"))
 
 
 class TestSweptOnThePlanAsItStands(OnTheTip):

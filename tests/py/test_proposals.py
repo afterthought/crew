@@ -264,15 +264,14 @@ class TestStartProposed:
         after = plan.check_ops(self.FLEET, "wldn", self.write(), args(*self.DOS), 1, plan.Drawn).plan
         assert plan.started(after.bolt("pages")) and self.read == []
 
-    def test_its_approval_starts_the_bolt_on_its_kits_host_in_its_stream(self):
+    def test_its_approval_starts_the_bolt_and_launches_its_work_in_its_repository(self):
         w = self.write()
         ops, _ = plan.apply_all(self.FLEET, "wldn", w, args(*self.DOS), 1)
         assert [op.act for op in ops] == ["bolt.start"] and self.read == ["chuck-herdr-alpha"]
         assert plan.started(w.plan.bolt("pages")) and w.plan.bolt("pages").get("Team") is None
         assert [(r.get("Act"), r.get("Host"), r.get("Stream"), r.get("Work"), r.get("Base"), r.all("After"))
                 for r in plan.Plan(w.files["requests.rec"]).recs("Request") if r.get("Act") == "launch"] == [
-            ("launch", "chuck-herdr-alpha", "wldn", "unit/p1", "bolt/pages", []),
-            ("launch", "chuck-herdr-alpha", "wldn", "unit/p2", "bolt/pages", ["1"])]
+            ("launch", None, None, "unit/p1", "bolt/pages", []), ("launch", None, None, "unit/p2", "bolt/pages", ["1"])]
 
     def test_one_naming_a_bolt_started_already_is_refused_whole(self):
         said, _ = refused(plan.check_ops, self.FLEET, "wldn", self.write(), args("bolt start pages", "bolt start deploys"), 1, plan.Drawn)

@@ -222,13 +222,6 @@ def bolt_home(said, bolt):
     return lives, bolt_remote(text, f"bolt/{bolt}", f"{DECLARATION} at main")
 
 
-def place_base(said, bolt):
-    """The ref a new place of a bolt is cut from and tracks, from where the bolt lives (bolt_lives, plan.19):
-    origin/bolt/<bolt> for a bolt on GitHub, which PLACE fetches first, so the place holds every merge sluice landed
-    there from any host; the host's own bolt/<bolt> for a bolt made before gives went through sluice."""
-    return f"origin/bolt/{bolt}" if bolt_lives(said, bolt) else f"bolt/{bolt}"
-
-
 def land_copies(said, bolt):
     """What LAND_COPIES printed of a bolt's two copies for its landing (plan.19), as {"own", "there", "remote", "held",
     "ahead", "lacks", "beyond", "read"}: read, git's words when origin could not be asked or fetched, the rest None;

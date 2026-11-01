@@ -284,16 +284,9 @@ def builds(t, kit):
 
 
 def held_team(fleet, t):
-    """A team as it works on the bolt it holds: with that bolt's kit as its kit when it holds several kits; a team of
-    one kit, one holding no bolt, and one whose plan can't be read, as it is."""
-    if len(kits_of(t)) < 2:
-        return t
-    import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
-    try:
-        repo = plan.held_repo(this.load(), t)
-    except this.Refusal:
-        return t
-    return with_kit(t, repo) if repo else t
+    """A team as its brief names it, as it is: no bolt is held by a team, a started bolt's work running where the runner
+    that took it reported (the-team-machinery-leaves), and the team's briefs leave with the teams."""
+    return t
 
 
 def partition_of(fleet, label):

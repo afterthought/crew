@@ -80,35 +80,42 @@ def kits(ok=True):
 PLACED = {"a": ("code", (1, 2)), "b": ("construct", None), "done-one": ("landed", None)}
 
 
-def flume_status(name, place, tasks=None):
-    """A flume 0.3.6 status fixture (facts.FLUME) of the place at path place, its tasks (ticked, in all) where given."""
+def flume_status(name, place, tasks=None, repository=None):
+    """A flume 0.3.6 status fixture (facts.FLUME) of the place at path place, its tasks (ticked, in all) where given, in
+    the kit's folder on its host (repository) where given."""
     s = json.loads((FLUME / f"{name}.json").read_text())
     p = s["status"]["places"][0]
     p["place"] = place + p["place"][len(p["place"].split("@")[0]):]
+    if repository:
+        p["repository"] = repository
+    p["stream"] = {"name": "wldn", "from": "intent"}  # the stream the box's runner gives wldn's work
     if tasks:
         p["tasks"] = [{"text": f"1.{i + 1}", "ticked": i < tasks[0], "group": 0} for i in range(tasks[1])]
     return json.dumps(s)
 
 
+# Each kit's folder on the box, as Flume's status of a place the box's runner took names it (runner.where).
+KEPT = {"switchboard-kit": "/kit/main", "breadboard-kit": "/b/main"}
+
+
 def flume_runs(p, placed):
     """wldn's requests and runners as the board reads them (plan.runner_facts): a launch of each unit and chore of each
-    started bolt in p, in the plan's order, on the host of the team its kit's work runs with, as a start writes them,
-    and that host's runner answering each launch of placed launched with its place at {unit: (fixture, tasks)}, the
-    rest unanswered."""
+    started bolt in p, in the plan's order, in its bolt's repository, as a start writes them, and the box's runner
+    answering each launch of placed launched with its place at {unit: (fixture, tasks)} in the kit's folder there (KEPT),
+    the rest unanswered."""
     import runner
     requests, answers, places = [], "", ""
     for b in p.bolts() if p else []:
-        t = plan.known_team(FLEET, b)
-        for u in p.work_of(b.name()) if t else []:
+        for u in p.work_of(b.name()) if plan.started(b) else []:
             n, k = len(requests) + 1, plan.kind_of(u)
-            requests.append(plan.Rec("Request", [("Request", str(n)), ("Act", "launch"), ("Host", t["machine"]), ("Work", f"{k}/{u.name()}"),
+            requests.append(plan.Rec("Request", [("Request", str(n)), ("Act", "launch"), ("Work", f"{k}/{u.name()}"),
                                                  ("Repo", b.get("Repo")), ("Kind", "change" if k == "unit" else "chore"), ("Name", u.name()),
-                                                 ("Base", f"bolt/{b.name()}"), ("Stream", t["flume"]), ("Priority", "1")]))
+                                                 ("Base", f"bolt/{b.name()}"), ("Priority", "1")]))
             if u.name() in placed:
                 fixture, tasks = placed[u.name()]
                 where = f"/flume/places/{u.name()}"
                 answers += f"\nRequest: {n}\nOutcome: launched\nPlace: {where}\nAt: {ago(100)}\n"
-                places += f"\nRequest: {n}\nPlace: {where}\nAt: {ago(90)}\nStatus: {flume_status(fixture, where, tasks)}\n"
+                places += f"\nRequest: {n}\nPlace: {where}\nAt: {ago(90)}\nStatus: {flume_status(fixture, where, tasks, KEPT[b.get('Repo')])}\n"
     files = {"runner.rec": plan.Plan(runner.RUNNER + f"\nHost: {BOX}\nVersion: 0.1.0\nSince: {ago(300)}\n"),
              "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)}
     return {"wldn": (requests, {BOX: runner.host_read("wldn", BOX, "5e1f0c2a" + "0" * 32, files, {})})}
@@ -467,7 +474,10 @@ class TestRefresh:
         monkeypatch.setattr(plan, "rail_text", lambda fleet, labels, read, now: f"rail of {labels[0]}" + (", served" if read["served"] else ""))
         monkeypatch.setattr(board, "here_read", lambda fleet, l: {"host": "mac-studio", "version": None, "held": None, "agents": {}})
         monkeypatch.setattr(board, "agent_views", lambda data: {"read_at": data["read_at"], "views": {}})
-        monkeypatch.setattr(plan, "sweep_sessions", lambda fleet, found, sv, rows, cards, unread, batched, only=None: self.swept.append(only) or ([], []))
+        monkeypatch.setattr(plan, "sweep_sessions", lambda fleet, found, sv, rows, cards, unread, batched, only=None, runs=None:
+                            self.swept.append(only) or ([], []))
+        # wldn's runner answers on the box, its branch in crew's cache (plan.runner_tips, read with no fetch)
+        monkeypatch.setattr(plan, "runner_tips", lambda repo, label, fetch=True: {BOX: "r" * 40} if label == "wldn" else {})
         test = self
 
         class Here(board.Follower):
@@ -843,9 +853,10 @@ def test_the_session_sweep_after_nothing_moved_asks_the_host_the_last_could_not_
     found = [("wldn", "WilldanGroup/crew-state", "a" * 40, the_plan())]
     only = plan.sessions_unchecked([{"label": "wldn", "host": BOX, "why": "did not answer (exit 255)"}])
     assert only == {"wldn": {BOX}}
-    assert plan.sweep_sessions(FLEET, found, {}, [], [], {}, {}, only) == ([], []) and asked == [BOX]
+    runs = {"wldn": ([], {BOX: {}})}  # wldn's runner answers on the box (plan.hosts_of)
+    assert plan.sweep_sessions(FLEET, found, {}, [], [], {}, {}, only, runs) == ([], []) and asked == [BOX]
     asked.clear()
-    plan.sweep_sessions(FLEET, found, {}, [], [], {}, {})
+    plan.sweep_sessions(FLEET, found, {}, [], [], {}, {}, runs=runs)
     assert asked == [BOX, "mac-studio"], "a refresh after a change did not sweep every host"
     assert plan.sessions_unchecked([]) == {}
 
@@ -865,8 +876,8 @@ def test_the_check_asks_each_host_once_for_its_kits_and_its_readings(monkeypatch
     assert asked == [(BOX, ["/kit/main"], ["wldn"]), ("mac-studio", [], ["wldn", "swancloud"]), ("macbook-pro", ["/b/main"], ["wldn"])]
     assert got == {"kits": {(BOX, "/kit/main"): "s", ("macbook-pro", "/b/main"): None}, "readings": {BOX: "r", "mac-studio": "r", "macbook-pro": None},
                    "overviews": {}, "routes": {}}
-    fleet = {"partitions": {"wldn": {"machine": "mac-studio", "teams": ["swb-1", "swb-2"]}, "swancloud": {"machine": "mac-studio", "teams": []}},
-             "teams": {"swb-1": {"machine": BOX}, "swb-2": {"machine": BOX}}}
+    fleet = {"partitions": {"wldn": {"machine": "mac-studio", "state": "o/state"}, "swancloud": {"machine": "mac-studio", "state": "o/state"}}}
+    monkeypatch.setattr(plan, "runner_tips", lambda repo, label, fetch=True: {BOX: "r" * 40} if label == "wldn" and not fetch else {})
     assert board.readings_hosts(fleet, ["wldn", "swancloud"]) == {BOX: ["wldn"], "mac-studio": ["wldn", "swancloud"]}
 
 
@@ -1153,7 +1164,7 @@ class TestKept:
             asked.append((host, sorted(k["main"] for k in req["kits"]), req.get("stamped")))
             return {k["main"]: {"ok": True, "stamp": "new"} for k in req["kits"]}, None
         monkeypatch.setattr(plan, "gathered", gathered)
-        held = [(t, None) for t in FLEET["partitions"]["wldn"]["teams"]]
+        held = [(FLEET["teams"][t], None) for t in FLEET["partitions"]["wldn"]["teams"]]
         k = plan.Kept()
         monkeypatch.setattr(plan.READ, "follower", k)
         first = plan.survey(FLEET, held, board=True)
@@ -1173,7 +1184,7 @@ class TestKept:
         k = plan.Kept()
         k.queued = {(BOX, "/kit/main"): [[{"id": 41, "branch": "bolt/te"}], None]}
         monkeypatch.setattr(plan.READ, "follower", k)
-        plan.survey(FLEET, [("swb-1", "te")], board=True)
+        plan.survey(FLEET, [(FLEET["teams"]["swb-1"], "te")], board=True)
         assert [x.get("queued") for x in asked[0]["kits"]] == [[[{"id": 41, "branch": "bolt/te"}], None]]
         assert "queued" not in k.used[BOX]["/kit/main"][0], "the kit was kept by a request that names its queue"
 
@@ -1182,14 +1193,14 @@ class TestKept:
                             ({k["main"]: {"ok": True, "stamp": "s"} for k in req["kits"]}, None))
         k = plan.Kept()
         monkeypatch.setattr(plan.READ, "follower", k)
-        sv = plan.survey(FLEET, [(t, None) for t in FLEET["partitions"]["wldn"]["teams"]], board=True)
+        sv = plan.survey(FLEET, [(FLEET["teams"][t], None) for t in FLEET["partitions"]["wldn"]["teams"]], board=True)
         assert sv[BOX] == {"ok": False, "error": "ssh: connect timed out"}
         assert {m: a for m, (_, a) in k.used[BOX].items()} == {"/kit/main": None, "/b/main": None}
 
     def test_a_survey_of_any_other_command_is_served_nothing_the_follower_kept(self, monkeypatch):
         asked = []
         monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: asked.append(host) or ({k["main"]: {"ok": True} for k in req["kits"]}, None))
-        plan.survey(FLEET, [("swb-1", None)], board=True)
+        plan.survey(FLEET, [(FLEET["teams"]["swb-1"], None)], board=True)
         assert asked == [BOX] and plan.READ.follower is None
 
     def test_a_state_file_at_a_tip_already_listed_is_its_kept_blob_and_starts_no_git(self, monkeypatch):
@@ -1285,10 +1296,11 @@ class TestRailFrame:
 
 
 class TestMore:
-    def test_a_proposal_adding_to_a_started_bolt_belongs_to_the_team_its_work_runs_with(self):
+    def test_a_proposal_adding_to_a_started_bolt_belongs_to_the_teams_building_its_kit(self):
+        """No team holds a started bolt (the-team-machinery-leaves), so a proposal naming one is the kit's teams'."""
         props = [{"label": "wldn", "proposal": 2, "by": "chuck@mac-studio", "opened": "2026-10-12", "case": "Tenants get d.",
                   "changes": [{"do": 'unit add d "Unit d." --bolt tenant-environments', "bolts": ["tenant-environments"]}]}]
-        assert data(props=props)["partitions"][0]["bolt_plan"]["proposals"][0]["teams"] == ["swb-1"]
+        assert data(props=props)["partitions"][0]["bolt_plan"]["proposals"][0]["teams"] == ["swb-1", "swb-2"]
 
     def test_a_captures_age_is_said_from_its_time_and_a_date_as_it_is(self):
         sigs = [dict(SIGS[0], captured_by="otter", at=ago(5 * 60)), dict(SIGS[1], captured_by="otter", at=ago(3 * 60))]
@@ -1852,9 +1864,12 @@ class TestCrossed:
         assert "  crew  fix x--take-main-4d3d9be  code 6/26  on deneb" in self.views(ran({3: "code"}), extra=[fix])["madswan-ops"]
 
     def test_a_runner_crew_cant_read_is_named_for_attention(self):
-        d = self.data({})
-        assert {"what": "runner", "name": "deneb's runner", "why": "no runner answers on deneb: madswan/runner/deneb does not exist"} in (
-            d["partitions"][0]["attention"])
+        import runner
+        d = self.data({"deneb": runner.host_read("madswan", "deneb", "5e1f0c2a" + "0" * 32, {}, {"runner.rec": "recfix refused it"})})
+        assert {"what": "runner", "name": "deneb's runner", "why": "deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: "
+                "recfix refused it"} in d["partitions"][0]["attention"]
+        assert {"what": "runner", "name": "madswan's runners", "why": "no runner answers for madswan: its state repository holds no "
+                "madswan/runner/<host>"} in self.data({})["partitions"][0]["attention"]
         assert {u["stage"] for b in d["partitions"][0]["construction"] if b["bolt"] == "x" for u in b["units"]} == {"unknown"}
 
     def test_a_crossed_pieces_pip_is_the_stage_it_waits_at(self):

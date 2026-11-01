@@ -73,15 +73,6 @@ class TestDrop:
         assert units_of(w, repo=KIT) == ["a-console-page", "a-console-filter"]
         assert w.plan.unit("a-console-filter").all("After") == []
 
-    def test_requeue_is_refused_while_a_unit_of_a_held_bolt_has_a_worktree(self):
-        assert refusal(fresh(), 'bolt drop tenant-environments "x" --requeue', stages={"lint-once": "construct"}) == (
-            "unit lint-once has a worktree at /kit/places/lint-once, and a queued unit has none")
-
-    def test_requeue_is_refused_while_a_units_stage_cannot_be_told(self):
-        assert refusal(fresh(), 'bolt drop tenant-environments "x" --requeue', stages={"lint-once": "unknown"}) == (
-            "cannot tell unit lint-once's stage: its host did not answer")
-
-
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
 WHERE = "/kit/main/.config/sluice.toml"
 POLICY = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
@@ -166,9 +157,10 @@ def kitted(**flume):
 
 class TestStart:
     """bolt-plan "A bolt's work starts by crew bolt start" (Decision 14 of the-team-machinery-leaves; plan.19): the start
-    runs on the host of the team building the bolt's kit in a Flume stream (plan.kit_team), and is refused, with the
-    plan unchanged and no branch made, for a bolt started already, a kit no team builds in a stream, a held host, or a
-    host with no runner branch (plan.start_check), before the kit's policy and sluice are read. Its launches are the
+    makes the bolt's branch on the host of a team building its kit (plan.building_team) until where crew acts on a kit no
+    runner has reported is ruled, and is refused, with the plan unchanged and no branch made, for a bolt started already,
+    a kit no team builds, a held host, or a partition no runner answers for (plan.start_check), before the kit's policy
+    and sluice are read. Its launches are the
     cross tests' (test_cross.py); its commit and branch the cross journey's (t-journey-cross)."""
     HOST = "chuck-herdr-alpha"
 
@@ -186,21 +178,22 @@ class TestStart:
 
     def checked(self, fleet=None):
         fleet = fleet or kitted()
-        return plan.start_check(fleet, "wldn", plan.kit_team(fleet, "wldn", KIT), "b")
+        return plan.start_check(fleet, "wldn", plan.building_team(fleet, "wldn", KIT), "b")
 
-    def test_a_bolts_work_runs_on_the_host_of_the_team_building_its_kit_in_a_stream(self):
-        assert [(t["name"], t["machine"], t["flume"], t["kit"]["name"]) for t in (plan.kit_team(kitted(), "wldn", k) for k in (KIT, BOARD))] == [
-            ("swb-1", self.HOST, "wldn", KIT), ("swb-2", self.HOST, "wldn", BOARD)]
+    def test_a_bolts_branch_is_made_on_the_host_of_a_team_building_its_kit(self):
+        assert [(t["name"], t["machine"], t["kit"]["name"]) for t in (plan.building_team(kitted(), "wldn", k) for k in (KIT, BOARD))] == [
+            ("swb-1", self.HOST, KIT), ("swb-2", self.HOST, BOARD)]
 
     def test_a_bolt_started_already_is_refused(self):
         assert refusal(fresh(), "bolt start tenant-environments") == "bolt tenant-environments is started already"
 
-    def test_a_kit_no_team_builds_in_a_stream_is_refused_naming_it(self):
+    def test_a_kit_no_team_builds_is_refused_naming_it(self):
         w = fresh()
-        fleet = kitted(**{"swb-1": False})
+        fleet = kitted()
+        fleet = dict(fleet, teams={n: t for n, t in fleet["teams"].items() if n != "swb-1"})
         with pytest.raises(plan.Refusal) as e:
             apply(w, "bolt start console-pages", ctx=known(w, fleet=fleet))
-        assert str(e.value) == f"no team of wldn builds {KIT} in a Flume stream, so crew can't tell where its work runs"
+        assert str(e.value) == f"no team of wldn builds {KIT}, so crew has no host to make bolt/console-pages on"
         assert not plan.started(w.plan.bolt("console-pages"))
 
     def test_a_held_host_is_refused_before_anything_else_is_read(self, reads):
@@ -211,12 +204,12 @@ class TestStart:
                                 f"until crew go {self.HOST}")
         assert self.read == [("hold", self.HOST)]
 
-    def test_a_host_with_no_runner_branch_is_refused_before_the_kit_is_read(self, reads):
-        self.tips = {"mac-studio": "a" * 40}
+    def test_a_partition_no_runner_answers_for_is_refused_before_the_kit_is_read(self, reads):
+        self.tips = {}
         with pytest.raises(plan.Refusal) as e:
             self.checked()
-        assert str(e.value).startswith(f"no runner answers on {self.HOST}: wldn/runner/{self.HOST} does not exist, so nothing would "
-                                       "launch the bolt's work there")
+        assert str(e.value).startswith("no runner answers for wldn: its state repository holds no wldn/runner/<host>, so nothing "
+                                       "would take the bolt's work")
         assert self.read == [("hold", self.HOST), ("runners", "WilldanGroup/crew-state", "wldn")]
 
     def test_a_free_host_with_its_runner_answering_has_the_kits_policy_and_sluice_checked(self, reads):
@@ -411,7 +404,8 @@ class TestWhereABoltIsRead:
         fleet = crossed_fleet_read()
         p, requests = launched(["b"], work=[("a", "b", [], "unit", []), ("done", "b", [], "unit", [])], fleet=fleet)
         unread = {"exists": False, "head": None, "head_at": None, "verdict": None, "error": why}
-        st = plan.Stages(fleet, p, crew_read(main=["done"], bolts={"b": unread}), runs={"madswan": (requests, ran({1: "code", 2: "landed"}))})
+        st = plan.Stages(fleet, p, crew_read(main=["done"], bolts={"b": unread}), runs={"madswan": (requests, ran({1: "code", 2: "landed"}))},
+                         label="madswan")
         assert (st.of("a")["stage"], st.of("a")["worktree"]) == ("code", None)
         assert st.of("done")["stage"] == "landed"
         assert st.bolt_state(p.bolt("b")) == "unknown"
@@ -420,7 +414,7 @@ class TestWhereABoltIsRead:
 class TestWhenABoltIsFetched:
     """bolt-plan "A bolt on GitHub is fetched where a decision rests on it" (plan.18, plan.19, design Decision 3): crew
     bolts asks each kit's GitHub fetched first; every other read fetches nothing. b is started, its work running on box,
-    where swb-1 builds its kit in stream wldn."""
+    where the runner that took it reported the kit in /kit/main (plan.bolt_at)."""
     FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "teams": ["swb-1"]}},
              "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "flume": "wldn",
                                  "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
@@ -428,9 +422,14 @@ class TestWhenABoltIsFetched:
                 "bolts": {"b": {"exists": True, "at": "origin/bolt/b", "changes": [], "archived": [], "open": {}, "chores": [],
                                 "head": "d" * 40, "head_at": "2026-10-23T09:00:00Z", "verdict": ""}}}
 
+    WHERE = {"label": "wldn", "machine": "box", "stream": "wldn", "kit": {"main": "/kit/main", "dir": "/kit/main", "name": KIT, "repo": KIT}}
+
     def asked(self, monkeypatch, kept=None):
         asks = []
         monkeypatch.setattr(plan, "READ", plan.Reading())
+        monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
+        monkeypatch.setattr(plan, "rail_runs", lambda found: {"wldn": ([], {})})
+        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: self.WHERE if plan.started(b) else None)
         if kept:
             plan.READ.keep_kits("box", kept)
 
@@ -449,7 +448,6 @@ class TestWhenABoltIsFetched:
         asks = self.asked(monkeypatch)
         p = self.plan()
         monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("wldn", "o/state", "f" * 40, p)])
-        monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: ([], {}))
         with pytest.raises(SystemExit) as e:
             plan.bolts_view(self.FLEET, argparse.Namespace(label="wldn", bolt=None, json=True))
         assert e.value.code == 0
@@ -458,14 +456,14 @@ class TestWhenABoltIsFetched:
     def test_a_read_on_every_team_read_fetches_nothing(self, monkeypatch):
         """bolt-plan "The board does not fetch"."""
         asks = self.asked(monkeypatch)
-        plan.stages_for(self.FLEET, self.plan(), self.plan().bolts())
+        plan.stages_for(self.FLEET, "wldn", self.plan(), self.plan().bolts())
         assert [("fetch" in a) for a in asks] == [False]
 
     def test_a_fetching_survey_is_asked_though_the_command_has_read_the_kit(self, monkeypatch):
         asks = self.asked(monkeypatch, kept={"/kit/main": self.KIT_READ})
-        plan.stages_for(self.FLEET, self.plan(), self.plan().bolts())
+        plan.stages_for(self.FLEET, "wldn", self.plan(), self.plan().bolts())
         assert asks == []
-        st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
+        st = plan.stages_for(self.FLEET, "wldn", self.plan(), self.plan().bolts(), fetch=True)
         assert [a.get("fetch") for a in asks] == [True]
         assert st.kit(self.plan().bolt("b"))[0]["bolts"]["b"]["at"] == "origin/bolt/b"
 
@@ -474,16 +472,16 @@ class TestWhenABoltIsFetched:
         self.asked(monkeypatch)
         why = "cannot fetch /kit/main from GitHub: fatal: unable to access 'https://github.com/o/k/': Could not resolve host"
         monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: ({"/kit/main": {"ok": False, "error": why}}, None))
-        st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
+        st = plan.stages_for(self.FLEET, "wldn", self.plan(), self.plan().bolts(), fetch=True)
         assert st.kit(self.plan().bolt("b")) == (None, f"box: {why}")
         assert st.bolt_state(self.plan().bolt("b")) == "unknown"
 
 
 class TestCrewBoltsCrossed:
-    """crew bolts, text and JSON, reads a piece's stage from the runner's records and says the stream it runs in
-    (Decisions 8 and 14 of teams-cross-to-flume-as-their-bolts-land; bolt-plan "A started bolt's work reads its stage
-    from the runner's records"): x is started, its work running with crw-4, the first by name of the two teams building
-    crew in stream madswan on deneb, its a in code and b after a held; y is planned, not started."""
+    """crew bolts, text and JSON, reads a piece's stage from the runner's records and says the host and stream it runs
+    in as that runner reported (Decisions 8 and 14 of teams-cross-to-flume-as-their-bolts-land; bolt-plan "A started
+    bolt's work reads its stage from the runner's records"; the user's ruling of 2026-11-01): x is started, its work taken
+    by deneb's runner in stream madswan, its a in code and b after a held; y is planned, not started."""
 
     @pytest.fixture(autouse=True)
     def writer(self, monkeypatch):
@@ -500,10 +498,10 @@ class TestCrewBoltsCrossed:
     def bolts(self, d):
         return {b["bolt"]: b for b in d["partitions"][0]["plans"][0]["bolts"]}
 
-    def test_a_bolts_json_gives_its_teams_stream_and_each_pieces_runner_stage(self):
+    def test_a_bolts_json_gives_its_host_and_stream_and_each_pieces_runner_stage(self):
         from facts import ran
         x = self.bolts(self.data(ran({1: "code"}, held=[2])))["x"]
-        assert (x["given"], x["stream"]) == ("flume", "madswan")
+        assert (x["given"], x["host"], x["stream"]) == ("flume", "deneb", "madswan")
         assert [(u["unit"], u["stage"], u["tasks"], u["worktree"]) for u in x["units"]] == [("a", "code", (6, 26), None),
                                                                                            ("b", "waiting", None, None)]
         assert x["units"][1]["flume"] == {"stage": "waiting", "after": ["unit/a"]}
@@ -512,18 +510,21 @@ class TestCrewBoltsCrossed:
         """bolt-plan "A unit in code" and "A dependent waits"."""
         from facts import ran
         out = plan.bolts_text(self.data(ran({1: "code"}, held=[2]))).splitlines()
-        assert "x  crew  crw-4 @ deneb, in Flume stream madswan  active" in out
+        assert "x  crew  @ deneb, in Flume stream madswan  active" in out
         assert f"  {'a':<40} {'code 6/26':<12} flume/change--teams-cross-to-flume-as-their-bolts-land" in out
         assert f"  {'b':<40} {'waiting':<12}   on a" in out
 
     def test_a_runner_crew_cant_read_is_named_and_its_work_reads_unknown(self):
-        """bolt-plan "The runner's host is silent"."""
-        d = self.data({})
+        """bolt-plan "The runner's host is silent": deneb's runner can't be read, and then no runner answers at all."""
+        import runner
+        why = "deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: recfix refused it"
+        d = self.data({"deneb": runner.host_read("madswan", "deneb", "5e1f0c2a" + "0" * 32, {}, {"runner.rec": "recfix refused it"})})
         assert {u["stage"] for u in self.bolts(d)["x"]["units"]} == {"unknown"}
-        assert d["runners_unread"] == {"deneb's runner": "no runner answers on deneb: madswan/runner/deneb does not exist"}
+        assert d["runners_unread"] == {"deneb's runner": why}
         assert plan.bolts_text(d).splitlines()[-1] == (
-            "deneb's runner can't be read (no runner answers on deneb: madswan/runner/deneb does not exist): the stages of the "
-            "work crossed to Flume there are unknown")
+            f"deneb's runner can't be read ({why}): the stages of the work crossed to Flume there are unknown")
+        none = "no runner answers for madswan: its state repository holds no madswan/runner/<host>"
+        assert self.data({})["runners_unread"] == {"madswan's runners": none}
 
     def test_a_question_and_sluices_words_are_on_the_pieces_line(self):
         """bolt-plan "A construct that asked" and "Sent back by sluice"."""

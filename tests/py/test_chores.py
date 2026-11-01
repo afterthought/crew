@@ -166,9 +166,9 @@ class TestStage:
         fleet = crossed_fleet_read()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("bump", "x", [], "chore", [])], fleet=fleet)
         runs = {"madswan": (requests, ran({1: "landed", 2: "landed"}))}
-        st = plan.Stages(fleet, p, crew_read(main=["a"], bolts={"x": {}}), runs=runs)
+        st = plan.Stages(fleet, p, crew_read(main=["a"], bolts={"x": {}}), runs=runs, label="madswan")
         assert st.bolt_state(p.bolt("x")) == "active"
-        st = plan.Stages(fleet, p, crew_read(main=["a"], chores=["bump"], bolts={"x": {}}), runs=runs)
+        st = plan.Stages(fleet, p, crew_read(main=["a"], chores=["bump"], bolts={"x": {}}), runs=runs, label="madswan")
         assert st.bolt_state(p.bolt("x")) == "landed"
 
 

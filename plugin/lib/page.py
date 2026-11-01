@@ -114,7 +114,7 @@ def from_entries(node, entries):
 def describe(fleet, label, repo, tip, d, pl=None, sv=None):
     """Each node's label and present status, read from the flywheel's state at tip: a signal's assertion and whether
     a move has taken it; an item's subject, lane and state; a proposal's first line of case and its state; a unit's
-    intent and stage, read from its kit as crew bolts reads it; a bolt's goal, team and state. pl and sv, when given,
+    intent and stage, read from its kit as crew bolts reads it; a bolt's goal, host and state. pl and sv, when given,
     are the plan at tip and the survey of its kits another read already made, so neither is read again. Returns the
     hosts whose kits did not answer, {host: why}; their units' and bolts' stages are left blank."""
     pl = pl or plan.read(repo, f"{label}/main", tip)
@@ -124,8 +124,8 @@ def describe(fleet, label, repo, tip, d, pl=None, sv=None):
         return {r.get(key): r for r in plan.Plan(text).recs(kind)} if text else {}
     proposals, items, moves = recs("proposals.rec", "Proposal", "Proposal"), recs("agenda.rec", "Item", "Item"), recs("moves.rec", "Move", "Signal")
     if sv is None:
-        sv = plan.survey(fleet, [(n, b.name(), b.get("Repo")) for b in pl.bolts() for n in [plan.team_name(fleet, b)] if n])
-    labelled(d, pl, plan.Stages(fleet, pl, sv), proposals, items, moves, lambda name: plan.signal_text(fleet, label, name)[0])
+        sv = plan.survey(fleet, [(t, b.name()) for b in pl.bolts() for t in [plan.known_at(fleet, label, b)] if t])
+    labelled(d, pl, plan.Stages(fleet, pl, sv, label=label), proposals, items, moves, lambda name: plan.signal_text(fleet, label, name)[0])
     return {h: f"its kits: {v['error']}" for h, v in sv.items() if not v["ok"]}
 
 
@@ -158,8 +158,8 @@ def labelled(d, pl, st, proposals, items, moves, assertion_of):
             b = pl.bolt(name)
             state = st.bolt_state(b)
             state = None if state == "unknown" else state
-            team = plan.team_name(st.fleet, b)
-            n.update(label=b.get("Goal"), status=BOLT.get(state), team=team, facts=[x for x in (team, state) if x])
+            host = (st.at(b)[0] or {}).get("machine") if plan.started(b) else None  # where its work runs (plan.bolt_at)
+            n.update(label=b.get("Goal"), status=BOLT.get(state), team=None, facts=[x for x in (host, state) if x])
         else:
             from_entries(n, entries)
 
@@ -718,7 +718,8 @@ def docks(d, fleet, label):
                               history=d["histories"].get(node, []))
     for b in B["bolt_plan"]["planned"] + B["construction"]:
         held = "team" in b
-        run = (f"{b['team']} on {b['host']}" if b["host"] else b["team"]) if held else "planned, no team"
+        run = (" ".join(x for x in (b.get("team"), f"on {b['host']}" if b["host"] else None) if x) or "where it runs can't be told") \
+            if held else "planned, no team"
         landed = landings.get(b["bolt"])
         out[b["dock"]] = dock("bolt", b["bolt"], (b["repo"], run, held and stage_said(b["state"])), form="ledger",
                               facts=[("goal", b["goal"]), ("repository", b["repo"]), ("team", b.get("team"), link(f"team:{b.get('team')}")),

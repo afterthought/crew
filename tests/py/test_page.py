@@ -88,10 +88,13 @@ class TestLabels:
         pl = plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", "swb-1")], units=[]))
 
         class St:
-            fleet = FLEET  # whose teams say which team a started bolt's work runs with (plan.team_name)
+            fleet = FLEET
 
             def of(self, name):
                 return {"stage": "code"}
+
+            def at(self, b):  # where a started bolt's work runs, as the runner that took it reported (plan.bolt_at)
+                return {"machine": "chuck-herdr-alpha"}, None
 
             def bolt_state(self, b):
                 return "active"
@@ -232,6 +235,11 @@ class TestSitesOfAStartedBolt:
         monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("madswan", "afterthought/crew-state", "tip0", p)])
         monkeypatch.setattr(plan, "survey", lambda fleet, held, sites=False: sv)
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        # x's work taken by deneb's runner, which reported crew in /crew/main (plan.known_at); madswan's hosts its main
+        # level's and its runners' (plan.partition_hosts)
+        monkeypatch.setattr(plan, "rail_runs", lambda found: {"madswan": ([], {})})
+        monkeypatch.setattr(plan, "known_at", lambda fleet, label, b, run=None: dict(fleet["teams"]["crw-4"], label=label))
+        monkeypatch.setattr(plan, "partition_hosts", lambda fleet, label, fetch=True: ["deneb"])
         return sites.sites(fleet, ["madswan"])
 
     def test_a_started_bolt_is_listed_with_no_server_saying_why(self, monkeypatch):
@@ -240,7 +248,7 @@ class TestSitesOfAStartedBolt:
 
     def test_its_line_says_where_its_work_runs(self, monkeypatch):
         line = next(l for l in sites.text(self.listed(monkeypatch)).splitlines() if l.strip().startswith("x "))
-        assert line.endswith("its work runs in Flume's places, whose servers crew does not show yet  [crw-4]")
+        assert line.endswith("its work runs in Flume's places, whose servers crew does not show yet  [crew]")
 
 
 class TestMore:
@@ -249,17 +257,20 @@ class TestMore:
         pl = plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", "swb-1")], units=[("a", "switchboard-kit", "tenant-environments", [])]))
 
         class Unknown:
-            fleet = FLEET  # swb-1 builds switchboard-kit in stream wldn, so tenant-environments' work runs with it
+            fleet = FLEET
 
             def of(self, name):
                 return {"stage": "unknown"}
+
+            def at(self, b):  # no runner has reported taking tenant-environments' work
+                return None, "no runner has reported taking bolt tenant-environments' work yet"
 
             def bolt_state(self, b):
                 return "unknown"
         page.labelled(d, pl, Unknown(), {}, {}, {}, lambda name: None)
         by = {n["id"]: n for n in d["nodes"]}
         assert [by["unit/a"].get(k) for k in ("label", "stage", "status")] == ["Unit a.", None, None]
-        assert [by["bolt/tenant-environments"].get(k) for k in ("status", "team")] == [None, "swb-1"]
+        assert [by["bolt/tenant-environments"].get(k) for k in ("status", "team", "facts")] == [None, None, []]
 
     def test_the_page_opens_on_the_board_in_the_mockups_forms_with_a_phone_layout_and_the_teams_to_narrow_it_to(self):
         rest = re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D, PurePath("/s/wldn/page.html")), flags=re.S)
@@ -405,7 +416,8 @@ class TestDocks:
         assert p["facts"] == [["waiting on", "the user"]]
         assert [(m["glyph"], m["card"]["by"]) for m in p["markers"]] == [("✓", "wldn-planner")]
         assert {"title": "units and bolts", "rows": [{"text": "unit d"}]} in p["parts"]
-        assert {"title": "teams", "rows": [{"text": "swb-1", "key": "team:swb-1"}]} in p["parts"]
+        # no team holds a started bolt, so a proposal naming one is the teams' building its kit (the-team-machinery-leaves)
+        assert {"title": "teams", "rows": [{"text": "swb-1", "key": "team:swb-1"}, {"text": "swb-2", "key": "team:swb-2"}]} in p["parts"]
 
     def test_a_started_bolts_dock_is_a_ledger_of_its_units_and_fixes_and_a_planned_ones_says_no_team(self):
         d = self.paged()
@@ -584,6 +596,9 @@ def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labell
 
         def of(self, name):
             return {"stage": "verify"}
+
+        def at(self, b):
+            return {"machine": "chuck-herdr-alpha"}, None
 
         def bolt_state(self, b):
             return "active"

@@ -442,10 +442,11 @@ case $cmd in
   tell) [[ ${2:-} == --board && $# == 2 ]] && { py tell --board; exit; }
     py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
   send) py send "${2:?usage: crew send <partition> \"<text>\"}" "${3:?usage: crew send <partition> \"<text>\"}" ;;
-  _sweep)  # crew _sweep <label> <kit> [--landed <bolt> --outcome <words>] [--units <unit>...]: the kit's read on its
-    # host, which a landing or a drop of one of its bolts asks for there: each landing of its bolts nothing recorded read,
-    # and crew's own landing places and marked bolt branches whose bolt is over removed; after a landing, sluice asked to
-    # delete the bolt's branch once the landing's place is gone, and the bolt's landing card closed there with the words
+  _sweep)  # crew _sweep <label> <kit> --dir <folder> [--landed <bolt> --outcome <words>] [--units <unit>...]: the
+    # kit's read on the host a bolt's work runs on, in its folder there, which a landing or a drop of the bolt asks for:
+    # each landing of its bolts nothing recorded read, and crew's own landing places and marked bolt branches whose bolt
+    # is over removed; after a landing, sluice asked to delete the bolt's branch once the landing's place is gone, and
+    # the bolt's landing card closed there with the words
     need_label "${2:-}"; one _sweep "${args[@]:1}" ;;
   _preview)  # crew _preview <label> <key> <thing> <branch> <revision>: the preview of a thing a card carries, asked
     # of sluice and waited on to its end in a process of its own on the team's host, which crew card preview hands it
@@ -456,20 +457,20 @@ case $cmd in
     # a card in a role's run's name is an ask of the role, reading nothing of the card but its ids and asker; never
     # forwarded, the notice being this host's
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
-  _card-preview | _preview-release)  # crew _card-preview <label> <key> <thing> <team> [--done], on the team's host:
+  _card-preview | _preview-release)  # crew _card-preview <label> <key> <thing> [--done], on its work's host:
     # a card's thing brought up or put away there, which crew card preview hands it to; crew _preview-release <label>
     # <key>: every preview brought up from a card released on this host, which the card's close hands it to (code.3)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
-  _made | _batch-card)  # crew _made <label> <unit>... [--card <key>] --json, on the units' team's host: what each
+  _made | _batch-card)  # crew _made <label> <unit>... [--card <key>] --json, on the units' host: what each
     # unit's stages recorded as made, kept there, which a batch's raise reads; crew _batch-card <label> <n> [--note
     # <words>], on the partition's main machine: batch n's card raised, which a stage's new made line hands there
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
-  _land-row | _land-card)  # crew _land-row <label> <bolt> --json, on the bolt's team's host: its row on its kit's
+  _land-row | _land-card)  # crew _land-row <label> <bolt> --json, on the bolt's host: its row on its kit's
     # landings card, its reading and preview opened or ended there; crew _land-card <label> <kit> [--note <words>], on
     # the partition's main machine: the kit's landings card raised from each row, which every event that changes a row
     # hands there (Decision 2 of one-landings-card-lands-the-proven-bolts-in-order, code.3)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
-  _landing-read)  # crew _landing-read <label> <bolt>, on the bolt's team's host: its landing read from sluice's record
+  _landing-read)  # crew _landing-read <label> <bolt>, on the bolt's host: its landing read from sluice's record
     # of its queued submission, its outcome recorded once sluice has it out (plan.21), run by the landing's waiter as it
     # stops and by every crew act that reads the bolt after
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;

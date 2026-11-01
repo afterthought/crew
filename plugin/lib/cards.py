@@ -769,16 +769,22 @@ def landings_form(n):
     return "approve" if n <= 1 else "multi" if n <= BOXES else "lists"
 
 
+def conductor_of(r):
+    """The conductor a landings row names, from a row facts gave one or a team, None for a started bolt, whose work no
+    team holds (the-team-machinery-leaves)."""
+    return r.get("conductor") or (f"{r['team']}-conductor" if r.get("team") else None)
+
+
 def row_bits(r):
     """A landings row's counts, the batches its units were read in (None when none was), sluice's verdict and when,
-    and its conductor."""
+    and its conductor (conductor_of), None where it names none."""
     units, chores, batches = list(r["units"]), list(r.get("chores") or []), r.get("batches") or {}
     parts = ([plural(len(units), "unit")] if units else []) + ([plural(len(chores), "chore")] if chores else [])
     read = sorted({batches[u] for u in units if u in batches})
     return (joined(parts) if parts else "nothing to land",
             f"read in batch{'' if len(read) == 1 else 'es'} {joined([str(b) for b in read])}" if read else None,
             f"green at {r['head'][:7]}" + (f" since {r['at']}" if r.get("at") else ""),
-            r.get("conductor") or f"{r['team']}-conductor")
+            conductor_of(r))
 
 
 def stopped_said(r):
@@ -805,7 +811,7 @@ def row_paragraph(n, r):
     landing at its head (stopped_said), and its reading, preview and pull request as links."""
     units, chores = list(r["units"]), list(r.get("chores") or [])
     moved = r.get("moved") or 0
-    lines = [f"**{n}. {r['bolt']}** · {r.get('conductor') or r['team'] + '-conductor'}"
+    lines = [f"**{n}. {r['bolt']}**" + (f" · {conductor_of(r)}" if conductor_of(r) else "")
              + (" · *left on your last send*" if r.get("left") else ""), ""]
     lines += [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores] + [""]
     _, read, green, _ = row_bits(r)
@@ -892,7 +898,7 @@ def landings_card(f):
     previews = [(f"Preview {r['bolt']}: {label}", url) for r in rows for label, url in preview_said(r.get("preview"))[1]]
     pulls = [(f"Pull request #{r['pr']['number']} for {r['bolt']}, opened by sluice", r["pr"]["url"]) for r in rows if r.get("pr")]
     links = reads + previews + pulls
-    background = ("\n\n".join(f"{i}. {r['bolt']} ({r.get('conductor') or r['team'] + '-conductor'}): {row_counts(r)}. "
+    background = ("\n\n".join(f"{i}. {r['bolt']}" + (f" ({conductor_of(r)})" if conductor_of(r) else "") + f": {row_counts(r)}. "
                               + forecast_said(r.get("forecast") or [], r.get("forecast_why"))
                               + (f" Read it: {r['link']}" if r.get("link") else
                                  f" Its reading could not be opened: {r['unread']}" if r.get("unread") else "")

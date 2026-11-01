@@ -281,19 +281,20 @@ def here(monkeypatch):
 
 
 def bolts(submissions=None, error=None, at="code"):
-    """crew bolts of wldn's plan, its bolt y started and its work launched on swb-1's host, a's place at the Flume 0.3.6
-    status fixture named (tests/py/flume-0.3.6/<at>.json), the kit's submissions in sluice's queue as given."""
+    """crew bolts of wldn's plan, its bolt y started and its work launched, taken by the runner on the box, which keeps
+    switchboard-kit in /kit/main, a's place at the Flume 0.3.6 status fixture named (tests/py/flume-0.3.6/<at>.json), the
+    kit's submissions in sluice's queue as given."""
     from facts import FactsWrite, ran
     import runner
     w = FactsWrite(plan_text(bolts=[("y", "switchboard-kit", "swb-1")],
                              units=[("a", "switchboard-kit", "y", []), ("b", "switchboard-kit", "y", []), ("bump", "switchboard-kit", "y", [], "chore")]))
-    plan.reach_places(FLEET, w, "y", FLEET["teams"]["swb-1"])
+    plan.reach_places(FLEET, w, "y")
     requests = plan.Plan(w.files.get("requests.rec") or runner.REQUESTS).recs("Request")
     kit = {"ok": True, "main": [], "fixes": [], "places": {}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": []}},
            **({"submissions": submissions} if submissions is not None else {}), **({"submissions_error": error} if error else {})}
     sv = {BOX: {"ok": True, "kits": {"/kit/main": kit}}}
     return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, w.plan)], sv, {},
-                           runs={"wldn": (requests, ran({1: at}, host=BOX, label="wldn"))})
+                           runs={"wldn": (requests, ran({1: at}, host=BOX, label="wldn", repository="/kit/main"))})
 
 
 def held(d):
@@ -307,7 +308,7 @@ def test_crew_bolts_shows_a_merge_under_test_on_its_line_and_the_landing_on_the_
     assert {u["unit"]: u["submission"] for u in b["units"]} == {"a": {"id": 41, "state": "testing"}, "b": None, "bump": None}
     assert (b["landing"], b["submissions_error"]) == ({"id": 355, "state": "queued", "head": "d" * 40}, None)
     out = plan.bolts_text(d).splitlines()
-    assert out[1] == f"y  switchboard-kit  swb-1 @ {BOX}, in Flume stream wldn  active  landing #355 queued"
+    assert out[1] == f"y  switchboard-kit  @ {BOX}, in Flume stream wldn  active  landing #355 queued"
     assert "  a                                        submitted #413 flume/change--teams-cross-to-flume-as-their-bolts-land" in out
     assert json.loads(json.dumps(d))["partitions"][0]["plans"][0]["bolts"][0]["units"][0]["submission"] == {"id": 41, "state": "testing"}
 

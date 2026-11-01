@@ -95,11 +95,11 @@ class TestCrossed:
                           "runner": None, "answers": answers, "places": places}}
 
     def amend(self, runners, n=None, proposals=None):
-        """a and b after it, launched on started x with crw-4 as the start launched them, then a amended."""
+        """a and b after it, launched on started x as the start launched them, then a amended."""
         w = FactsWrite(flume_plan([("x", None, None)], [("a", "x", [], "unit", ["README.md"]), ("b", "x", ["a"], "unit", [])]),
                        runners=runners, label="madswan")
         w.plan.bolt("x").set("Path", "flume")
-        plan.reach_places(self.FLEET, w, "x", self.FLEET["teams"]["crw-4"])
+        plan.reach_places(self.FLEET, w, "x")
         if proposals:
             w.files["proposals.rec"] = proposals
         apply(w, 'unit amend a "Build a another way."', ctx=known(w, n=n, fleet=self.FLEET))
@@ -109,7 +109,7 @@ class TestCrossed:
     def test_a_unit_in_code_is_a_retry_of_its_construct_with_the_amendments_words(self):
         """The user approves an amendment of a, whose place on crw-4's runner is in code."""
         w, new = self.amend(self.reading("launched", "code"))
-        assert new == [{"Request": "3", "Act": "retry", "Host": "deneb", "Work": "unit/a", "Of": "1", "Stage": "construct",
+        assert new == [{"Request": "3", "Act": "retry", "Work": "unit/a", "Of": "1", "Stage": "construct",
                         "Words": "Build a another way. Sources: README.md. This unit's intent was amended by the user; revise the "
                                  "existing change to it."}]
         assert (w.plan.unit("a").get("Intent"), w.plan.unit("a").get("Amended")) == ("Build a another way.", None)
@@ -130,9 +130,11 @@ class TestCrossed:
 
     def test_a_runner_crew_cannot_read_refuses_the_amendment(self):
         with pytest.raises(plan.Refusal, match="^can't tell how far unit/a's place has got, so the amendment can't reach it: "
-                                               "no runner answers on deneb: madswan/runner/deneb does not exist$"):
+                                               "no runner answers for the partition: no <label>/runner/<host> branch exists, so "
+                                               "nothing takes request 1$"):
             self.amend({})
-        with pytest.raises(plan.Refusal, match="the amendment can't reach it: deneb's runner can't be read"):
+        with pytest.raises(plan.Refusal, match="the amendment can't reach it: no runner crew read has taken request 1, and deneb's runner "
+                                               "can't be read"):
             self.amend(self.reading(why="deneb's runner can't be read: madswan/runner/deneb at aaaaaaa: it holds no runner.rec"))
 
     def test_a_place_that_has_merged_is_not_amended(self):

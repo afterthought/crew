@@ -76,7 +76,7 @@ def submit(monkeypatch, tmp_path):
     monkeypatch.setattr(plan, "CONTEXT", {})
     monkeypatch.setattr(plan, "locate", lambda fleet, kind, name, label: ("swancloud", "crew", "tip", Plan()))
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
-    monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TEAM)
+    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: TEAM)
     monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
     monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(
         "MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE)))
@@ -103,7 +103,7 @@ def submit(monkeypatch, tmp_path):
     monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
     monkeypatch.setattr(plan.crew, "crew_argv", lambda fleet, host, *args: ["crew", *args])
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: Plan())
-    monkeypatch.setattr(plan, "team_state", lambda t: tmp_path / "team")
+    monkeypatch.setattr(plan, "landing_state", lambda t: tmp_path / "crew")
     monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", f"{label}/main"))
     monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "tip")
     monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [
@@ -251,10 +251,10 @@ class TestTheWordsAtAClose:
         tidied, wrote = [], []
         monkeypatch.setattr(plan, "locate", lambda *a: ("swancloud", None, None, P()))
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
-        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TEAM)
+        monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: TEAM)
         monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
         monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: BEFORE.replace(f"GITHUB={OLD}", f"GITHUB={NEW}"))
-        monkeypatch.setattr(plan, "stages_for", lambda fleet, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
+        monkeypatch.setattr(plan, "stages_for", lambda fleet, label, pl, bs: type("S", (), {"of": lambda s, u: {"stage": "landed"}})())
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: entries)
         monkeypatch.setattr(plan, "write", lambda fleet, label, change, subject, **k: wrote.append(k.get("by")))
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
@@ -287,7 +287,7 @@ def leave(monkeypatch):
     monkeypatch.setattr(plan, "CONTEXT", {})
     monkeypatch.setattr(plan, "locate", lambda fleet, kind, name, label: ("swancloud", "crew", "tip", Plan()))
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
-    monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: got["teams"].get(b["Bolt"]))
+    monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: got["teams"].get(b["Bolt"]))
     monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (
         (got["rows"][b["Bolt"]], None) if b["Bolt"] in got["rows"] else (None, "lands once its verification is green; now failed")))
     monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
@@ -337,9 +337,9 @@ class TestTheStop:
             leave["run"]("  ")
         assert leave["emitted"] == []
 
-    def test_a_bolt_no_team_holds_or_not_proven_has_no_landing_to_stop(self, leave):
+    def test_a_bolt_not_started_or_not_proven_has_no_landing_to_stop(self, leave):
         leave["teams"].pop("z")
-        with pytest.raises(plan.Refusal, match="bolt z is held by no team, so it has no landing to stop"):
+        with pytest.raises(plan.Refusal, match="bolt z is not started, so it has no landing to stop"):
             leave["run"](bolts=("y", "z"))
         leave["teams"]["z"], leave["rows"] = TEAM, {"y": leave["rows"]["y"]}
         with pytest.raises(plan.Refusal, match="bolt z does not read proven, so it has no landing to stop: lands once its "

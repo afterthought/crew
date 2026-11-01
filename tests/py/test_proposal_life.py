@@ -366,6 +366,11 @@ class TestRaise:
     def acts(self, monkeypatch):
         self.called = []
         monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+        # switchboard-kit's work runs where the runner that took it reported it, in /w/switchboard-kit/main (plan.kit_at)
+        monkeypatch.setattr(plan, "runners", lambda repo, label: {})
+        monkeypatch.setattr(plan, "kit_at", lambda fleet, label, kit, run=None: {
+            "label": label, "machine": "chuck-herdr-alpha", "stream": "wldn",
+            "kit": {"name": KIT, "repo": f"WilldanGroup/{KIT}", "main": f"/w/{KIT}/main", "dir": f"/w/{KIT}/main"}})
         def act(name):
             def called(*a, **kw):  # the act builds the card first, as row_card_post and row_card_change do
                 name == "row_card_close" or a[3](a[4])
