@@ -415,19 +415,18 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 py() { python3 "$here/../lib/crew.py" "$@"; }
-teams() { py teams || exit 1; }
 this_host() { hostname -s; }
 usage() { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
-orig=("$@"); forced=(); greet=(); args=()
-for a in "$@"; do case $a in --force) forced=(--force) ;; --no-greet) greet=(--no-greet) ;; *) args+=("$a") ;; esac; done
+orig=("$@"); forced=(); args=()
+for a in "$@"; do case $a in --force) forced=(--force) ;; *) args+=("$a") ;; esac; done
 set -- ${args[@]+"${args[@]}"}
 cmd=${1:-}
 
 # ------------------------------------------------------------------------------------------- where a command runs
 
-# Every command is one Python process (code.7): exec'd below, or run by `one`, which runs a command on a team or a main
-# level on the host its agents run on. Who asks, and the Claude session behind them, go with a command run on another
+# Every command is one Python process (code.7): exec'd below, or run by `one`, which runs a command on a main level, or
+# on a kit, on the host it acts on. Who asks, and the Claude session behind them, go with a command run on another
 # host, so what it records there names them (code.3). A role's run is started by Flume with nothing of crew's in its
 # environment: in a place named as a run's, crew-<role>--<label>, it is named here as its role, <label>-<role>, and
 # given its partition, as crew-role names a standing agent, so every command runs, and is carried, as the role.
@@ -441,7 +440,7 @@ there() {  # there <host's ssh name> <crew on that host> <args...>: run a crew c
   local target=$1 remote=$2; shift 2
   ssh -o BatchMode=yes "$target" "$(printf '%q ' env "$(identity)" "CREW_LABEL=${CREW_LABEL:-}" "CREW_SESSION=${CALLER_SESSION:-}" bash "$remote" "$@")"
 }
-one() {  # one <plan.py entry> <args...>: the command as one Python process. Run on another host than its agents', the
+one() {  # one <plan.py entry> <args...>: the command as one Python process. Run on another host than the one it acts on, the
   # process does nothing there but say on its descriptor 3 where they run, how crew runs there and the asker's session,
   # and the command is run there instead.
   local to rc=0
@@ -451,13 +450,11 @@ one() {  # one <plan.py entry> <args...>: the command as one Python process. Run
   [[ -z ${REMOTE_CREW_REFUSED:-} ]] || { echo "$REMOTE_CREW_REFUSED" >&2; exit 1; }
   there "$SSH_TARGET" "$REMOTE_CREW" "${orig[@]}"; exit $?
 }
-need_team() { [[ -n ${1:-} ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }; }
 need_label() { [[ -n ${1:-} ]] || { echo "which partition? partitions: $(py labels | tr '\n' ' ')" >&2; exit 2; }; }
 
 # ------------------------------------------------------------------------------------------------- commands
 
 case $cmd in
-  list) teams ;;
   bolts | bolt | unit | chore | fix | signal | state | plan | rail | card | record | answer) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   role)  # crew role start | end --report <path> "<what was done>" | land <repo> <name> --brief-file <file>: a role's
     # run's start, end and work that lands, in its place on its main level's host; and crew role open <role>, the
@@ -472,17 +469,11 @@ case $cmd in
   tell) [[ ${2:-} == --board && $# == 2 ]] && { py tell --board; exit; }
     py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
   send) py send "${2:?usage: crew send <team or partition> \"<text>\"}" "${3:?usage: crew send <team or partition> \"<text>\"}" ;;
-  status)
-    if [[ -n ${2:-} ]]; then one _status "$2" ${forced[@]+"${forced[@]}"}
-    else first=1; for t in $(teams); do [[ $first == 1 ]] || echo; first=0; bash "$0" status "$t" || true; done; fi ;;
-  up | close | rebuild | down) need_team "${2:-}"; one _team "$cmd" "$2" ${forced[@]+"${forced[@]}"} ;;
-  restart | resume) need_team "${2:-}"; one _team "$cmd" "$2" "${@:3}" ${forced[@]+"${forced[@]}"} ${greet[@]+"${greet[@]}"} ;;
-  clear) need_team "${2:-}"; one _team clear "$2" "${3:?usage: crew clear <team> conductor|ops}" ${forced[@]+"${forced[@]}"} ;;
-  _tidy)  # crew _tidy <team> [--landed <bolt> --outcome <words>]: free the slots whose work has merged or been dropped,
-    # and remove the worktrees whose work is over (a plan write that ends work asks for it on the team's host); after a
-    # landing, have sluice delete the bolt's branch once the landing's place is gone, and close the bolt's landing card
-    # there with the words
-    need_team "${2:-}"; one _tidy "${args[@]:1}" ${forced[@]+"${forced[@]}"} ;;
+  _sweep)  # crew _sweep <label> <kit> [--landed <bolt> --outcome <words>] [--units <unit>...]: the kit's read on its
+    # host, which a landing or a drop of one of its bolts asks for there: each landing of its bolts nothing recorded read,
+    # and crew's own landing places and marked bolt branches whose bolt is over removed; after a landing, sluice asked to
+    # delete the bolt's branch once the landing's place is gone, and the bolt's landing card closed there with the words
+    need_label "${2:-}"; one _sweep "${args[@]:1}" ;;
   _preview)  # crew _preview <label> <key> <thing> <branch> <revision>: the preview of a thing a card carries, asked
     # of sluice and waited on to its end in a process of its own on the team's host, which crew card preview hands it
     # to (code.9)

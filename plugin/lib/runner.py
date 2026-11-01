@@ -1,7 +1,6 @@
 """crew's side of the runner's interface (flywheel-runner core.2), and the decisions over a bolt's work given through
-Flume: a team's work runs in Flume places on its host, in the stream its teams.json entry names (crew.load's `flume`),
-and a team runs no standing agent and has no slots, every standing-agent or slot command of it refused
-(crossed_refusal).
+Flume: a kit's work runs in Flume places on its host, in the stream its team's teams.json entry names (crew.load's
+`flume`), until the runner's own record gives both.
 
 crew asks a host's runner for work by requests on the flywheel's branch, requests.rec (REQUESTS), each appended in the
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
@@ -43,16 +42,6 @@ def runnerless(label, host, tips):
     return (f"no runner answers on {host}: {runner_branch(label, host)} does not exist, so nothing would launch the bolt's "
             "work there; a start waits for the runner (flywheel-runner) to serve the partition there")
 
-
-def crossed_refusal(team, host, what):
-    """What crew says refusing crew <what> of a team (Decision 15 of teams-cross-to-flume-as-their-bolts-land; Decision 1
-    of the-team-machinery-leaves): a team runs no conductor, ops or slot, its work running in Flume places on its host,
-    which crew bolts shows."""
-    return (f"{team}'s work runs in Flume places on {host}, which crew bolts shows; it runs no conductor, ops or slot, so "
-            f"crew {what} has nothing of it to act on")
-
-
-# ------------------------------------------------------------------------------------------------- the requests
 
 REQUESTS = """\
 # crew's requests of each host's runner: a launch of a Flume place for a

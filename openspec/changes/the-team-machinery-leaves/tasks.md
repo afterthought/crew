@@ -28,7 +28,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`: `log
 
 ## 4. A team's agents, tells and branch hint leave
 
-- [ ] 4.1 `crew list`, `crew status|up|rebuild|close|restart|resume|clear|down <team>`, `_status`, `_team` and `_tidy` are gone, with the team's standing agents, their slots, slots file and panes, their greetings, `crew-role`'s team forms and `crew revive`'s team branch (design Decision 10; Task notes 4.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-roles t-journey-main` ends with "0 failed".
+- [x] 4.1 `crew list`, `crew status|up|rebuild|close|restart|resume|clear|down <team>`, `_status`, `_team` and `_tidy` are gone, with the team's standing agents, their slots, slots file and panes, their greetings, `crew-role`'s team forms and `crew revive`'s team branch (design Decision 10; Task notes 4.1); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-roles t-journey-main` ends with "0 failed".
 - [ ] 4.2 `crew hold`, `crew go` and `crew update` reach the main-level roles alone, and the branch hint is gone whole (design Decision 12; Task notes 4.2); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-hold t-session-hook` ends with "0 failed".
 - [ ] 4.3 `crew send` takes a partition's label alone, `crew tell` and the board's word reach no team agent, and a word on a bolt, unit or fix goes to the planner (operator-agent and board-page deltas; Task notes 4.3); verify `tests/suite logic` ends with "0 failed", and `tests/suite t-journey-main` ends with "0 failed".
 - [ ] 4.4 The usage header, README and the skill name no team command, team agent or team as a send's target, together (`docs.2`; Task notes 4.4); verify `tests/suite t-docs` ends with "0 failed".

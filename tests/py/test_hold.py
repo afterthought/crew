@@ -45,12 +45,12 @@ class TestDue:
         assert crew.update_due(released, None, "def", None) == (True, "its brief, model, effort or folders changed")
         assert crew.update_due(released, C1, "def", None) == (True, "its brief, model, effort or folders changed")
 
-    def test_one_that_recorded_its_launch_and_no_commit_is_not_due_and_says_a_pin_bump_needs_a_rebuild(self):
+    def test_one_that_recorded_its_launch_and_no_commit_is_not_due_and_says_a_pin_bump_needs_its_main_level_brought_up_again(self):
         released = dict(STARTED, commit=None, version=None)
         for commit in (None, C1):
             due, why = crew.update_due(released, commit, "abc", None)
             assert not due and why == crew.NO_COMMIT_SAID
-        assert "can't tell whether its plugin changed since it started" in why and "crew rebuild" in why
+        assert "can't tell whether its plugin changed since it started" in why and "crew main down and crew main up" in why
         assert "until crew reads its release where it runs" in why
 
     def test_crew_that_cannot_tell_whether_the_plugin_changed_restarts_nothing_and_says_so(self):
@@ -156,21 +156,19 @@ class TestKindEnd:
 
 class TestStanding:
     @pytest.mark.parametrize("name, role", [
-        ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("wldn-design", ("wldn", "design")),
-        ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "ops")), ("wldn-operator", ("wldn", "operator")),
+        ("wldn-design", ("wldn", "design")), ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "ops")),
+        ("wldn-operator", ("wldn", "operator")), ("swb-1-conductor", None), ("swb-1-ops", None),
         ("wldn-dispatch-chuck-herdr-alpha", None), ("swb-1-unit-2", None), ("wldn-reviewer", None), ("nobody", None)])
-    def test_only_a_standing_agent_is_restarted_for_an_update(self, name, role):
+    def test_only_a_main_levels_standing_agent_is_restarted_for_an_update(self, name, role):
         assert crew.standing_role(FLEET, name) == role
 
-    def test_the_agents_on_a_host_are_its_teams_and_its_main_levels(self, monkeypatch):
-        fleet = {"teams": {"crw-4": {"machine": "deneb", "label": "swancloud"}, "swc-1": {"machine": "mac-studio", "label": "swancloud"},
-                           "pay-1": {"machine": "deneb", "label": "madswan"}},
-                 "partitions": {"swancloud": {"machine": "deneb", "teams": ["crw-4", "swc-1"]},
+    def test_the_agents_on_a_host_are_its_main_levels(self, monkeypatch):
+        fleet = {"teams": {"crw-4": {"machine": "deneb", "label": "swancloud"}, "pay-1": {"machine": "deneb", "label": "madswan"}},
+                 "partitions": {"swancloud": {"machine": "deneb", "teams": ["crw-4"]},
                                 "madswan": {"machine": "mac-studio", "teams": ["pay-1"]}}}
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
-        assert crew.agents_here(fleet) == ["pay-1-conductor", "pay-1-ops", "crw-4-conductor", "crw-4-ops",
-                                           "swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"]
-        assert crew.agents_here(fleet, "madswan") == ["pay-1-conductor", "pay-1-ops"]
+        assert crew.agents_here(fleet) == ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator"]
+        assert crew.agents_here(fleet, "madswan") == []
 
 
 class TestStarts:

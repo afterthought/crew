@@ -4,77 +4,76 @@
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 
-expect_ok crewpy teams; eq "$out" $'swb-1\nswb-2\nbrd-1\natl-1\napk-1'
 expect_ok crewpy labels; eq "$out" $'wldn\nmadswan\nswancloud'
 
 edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'max'}}; $(team swb-1)['roles'] = {'coder': {'model': 'claude-opus-5-5'}}"
-expect_ok crewpy teams
+expect_ok crewpy labels
 ok "roles overrides on a team and a partition"
 
 edit teams "$(part wldn)['roles'] = {'conductor': {'effort': 'max'}}"
-expect_fail "overrides role 'conductor', which it has no definition for" crewpy teams
+expect_fail "overrides role 'conductor', which it has no definition for" crewpy labels
 edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'extreme'}}"
-expect_fail "roles.planner.effort is 'extreme', which is no effort level" crewpy teams
+expect_fail "roles.planner.effort is 'extreme', which is no effort level" crewpy labels
 edit teams "$(part wldn)['roles'] = {}; $(team swb-1)['roles'] = {'fable': {'effort': 'high'}}"
-expect_fail "overrides role 'fable'" crewpy teams
+expect_fail "overrides role 'fable'" crewpy labels
 edit teams "$(team swb-1)['roles'] = {}"
 ok "an override naming an unknown role or effort is refused"
 
 world_teams() { fixtures 2; }
 edit teams "del $(team brd-1)['units']"
-expect_fail "team brd-1 in" crewpy teams; has "$out" "has no 'units'"
+expect_fail "team brd-1 in" crewpy labels; has "$out" "has no 'units'"
 world_teams
 edit teams "del $(part madswan)['session']"
-expect_fail "partition madswan in" crewpy teams; has "$out" "has no 'session'"
+expect_fail "partition madswan in" crewpy labels; has "$out" "has no 'session'"
 world_teams
 edit teams "$(team swb-1)['coders'] = 4"
-expect_fail "still has 'coders'" crewpy teams
+expect_fail "still has 'coders'" crewpy labels
 world_teams
 ok "a missing or retired field is an error"
 
 edit teams "del $(part wldn)['state']"
-expect_fail "partition wldn in" crewpy teams
+expect_fail "partition wldn in" crewpy labels
 has "$out" "names no state repository ('state')"; has "$out" "swancloud's lib/crew-teams.nix"
 world_teams
 edit teams "$(part madswan)['state'] = 'crew-state'"
-expect_fail "partition madswan: 'state' is its state repository as GitHub owner/name, not \"crew-state\"" crewpy teams
+expect_fail "partition madswan: 'state' is its state repository as GitHub owner/name, not \"crew-state\"" crewpy labels
 world_teams
-expect_ok crewpy teams
+expect_ok crewpy labels
 ok "a partition without a state repository, or with one not named owner/name, is refused, naming the fix"
 
 edit teams "del $(part wldn)['review']"
-expect_fail "partition wldn in" crewpy teams
+expect_fail "partition wldn in" crewpy labels
 has "$out" "has no batch setting ('review', with 'every' and 'hours')"; has "$out" "swancloud's lib/crew-teams.nix"
 world_teams
 edit teams "del $(part madswan)['review']['hours']"
-expect_fail "partition madswan in" crewpy teams; has "$out" "has no batch setting ('review', with 'every' and 'hours')"
+expect_fail "partition madswan in" crewpy labels; has "$out" "has no batch setting ('review', with 'every' and 'hours')"
 world_teams
 edit teams "$(part madswan)['review']['every'] = 0"
-expect_fail "partition madswan: 'review.every' is how many changes make a batch, a whole number of at least 1, not 0" crewpy teams
+expect_fail "partition madswan: 'review.every' is how many changes make a batch, a whole number of at least 1, not 0" crewpy labels
 world_teams
 edit teams "$(part swancloud)['review']['hours'] = '4'"
-expect_fail "partition swancloud: 'review.hours' is how many hours make a batch due, a number above 0, not \"4\"" crewpy teams
+expect_fail "partition swancloud: 'review.hours' is how many hours make a batch due, a number above 0, not \"4\"" crewpy labels
 world_teams
-expect_ok crewpy teams
+expect_ok crewpy labels
 ok "a partition without its batch setting, or with one crew can't read, is refused, naming the field and the fix"
 
 # A team in a clients/willdan session naming afterthought's blueprints: refused, naming wldn's blueprints repos.
 edit hosts "d['hosts']['mac-studio']['sessions']['wldn-5']['repos'].append('afterthought/blueprints')"
 edit teams "$(team atl-1)['repos'] = ['atlas-kit', 'blueprints']"
-expect_fail "names afterthought/blueprints as its blueprints repo, which is not one of clients/willdan's: WilldanGroup/willdan-blueprints" crewpy teams
+expect_fail "names afterthought/blueprints as its blueprints repo, which is not one of clients/willdan's: WilldanGroup/willdan-blueprints" crewpy labels
 world_teams
 ok "a blueprints repo of another partition is refused"
 
 edit hosts "d['hosts']['mac-studio']['sessions']['madswan-2']['partition'] = None"
-expect_fail "which $(home_of mac-studio)/.config/swancloud/herdr-hosts.json puts in no partition" crewpy teams
+expect_fail "which $(home_of mac-studio)/.config/swancloud/herdr-hosts.json puts in no partition" crewpy labels
 fixtures 2
 edit teams "$(team swb-1)['repos'] = ['rocs-kit', 'willdan-blueprints']"
-expect_fail "does not keep rocs-kit" crewpy teams
+expect_fail "does not keep rocs-kit" crewpy labels
 fixtures 2
 ok "a session with no partition, or a repo its space does not keep, is refused"
 
 fixtures 1
-expect_fail "must be regenerated by the machine's configuration" crewpy teams
+expect_fail "must be regenerated by the machine's configuration" crewpy labels
 has "$out" "crew reads only versions 2, 3 and 4"
-expect_fail "must be regenerated" crew status swb-1
+expect_fail "must be regenerated" crew bolts
 ok "version 1 is refused with the fix named"

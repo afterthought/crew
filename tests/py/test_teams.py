@@ -1,17 +1,13 @@
 """Teams, the main level and their agents (teams.2, teams.6, teams.7, teams.11, plan.15): crew.load for what a team's
 session resolves its partition, kit and blueprints to and what its Flume setting is, crew.role_stream and
 crew.kind_role_of for which of a partition's main-level roles run as their kinds, crew.greet_waits for one look of
-a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
-crew.greeted_roles for which of a team's agents a command greets and crew.ops_greeting for what its ops is told,
-crew.operator_session for where an operator runs, crew.tab_holds for what an operator's tab holds,
+a greeting's wait, crew.standing_greeting for what a main level's agent is greeted with, crew.operator_session for where an operator runs, crew.tab_holds for what an operator's tab holds,
 crew.dead_said for a pane herdr lists with no terminal behind it and crew.opens_at for where a pane opens again,
 crew.last_conversation for where a role resumes,
 crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
 crew.main_named and crew.identity_withheld for whether a main level's agent herdr resumed gets its identity back on this host,
-plan.amended_said for what a conductor brought back is told, plan.kind_said for what crew main status says of a role
-that runs as its kind, and what crew up, restart, resume, clear and needs decide
-before they act. Starting, greeting, reviving and taking them down through the command are the teams journey's
-(t-journey-teams, t-journey-main)."""
+and plan.kind_said for what crew main status says of a role that runs as its kind. Starting, greeting, reviving and
+taking them down through the command are the main level's journey's (t-journey-main)."""
 import json
 import os
 
@@ -350,67 +346,12 @@ class TestStandingGreeting:
             "main(wldn): greet wldn-operator", "crew main up wldn starts and greets it")
 
     @pytest.mark.parametrize("name, said", [
-        ("swb-1-ops", "swb-1-ops is one of team swb-1's agents, not one crew starts outside a team"),
+        ("swb-1-ops", "no agent swb-1-ops: crew starts none by that name"),
         ("wldn-reviewer", "wldn-reviewer is sent its batch as its prompt by crew review, and is not greeted"),
         ("nobody", "no agent nobody: crew starts none by that name")])
     def test_a_teams_agent_the_reviewer_and_an_unknown_name_are_refused(self, name, said):
         with pytest.raises(crew.Refusal, match=said):
             crew.standing_greeting(FLEET, name)
-
-
-class TestTeamGreetings:
-    """Every agent crew starts gets a first message, so it has a conversation a resume after a herdr restart can pick up
-    (teams.7): crw-2's give of 2026-10-19 restarted its conductor and ops and greeted only the conductor, so herdr's
-    resume of crw-2-ops found no conversation and left its pane a shell, and crew resume then started it fresh and
-    ungreeted again."""
-
-    @pytest.mark.parametrize("act", ["up", "rebuild", "restart", "give"])
-    def test_each_role_a_command_starts_fresh_is_greeted_ops_with_the_conductor(self, act):
-        assert crew.greeted_roles(act, ["conductor", "ops"], ["conductor", "ops"]) == ["conductor", "ops"]
-        assert crew.greeted_roles(act, ["ops"], ["ops"]) == ["ops"]
-
-    def test_a_restart_told_not_to_greet_greets_none_since_its_caller_does(self):
-        assert crew.greeted_roles("restart", ["conductor", "ops"], ["conductor", "ops"], greet=False) == []
-
-    def test_a_resume_greets_what_it_had_to_start_fresh_and_nothing_it_brought_back_with_its_conversation(self):
-        assert crew.greeted_roles("resume", ["ops"], ["ops"]) == ["ops"]
-        assert crew.greeted_roles("resume", ["conductor", "ops"], ["ops"]) == ["ops"]
-        assert crew.greeted_roles("resume", ["conductor", "ops"], []) == []
-
-    def test_a_revive_greets_the_conductor_it_brought_back_and_ops_only_when_it_started_fresh(self):
-        assert crew.greeted_roles("revive", ["conductor", "ops"], []) == ["conductor"]
-        assert crew.greeted_roles("revive", ["ops"], []) == []
-        assert crew.greeted_roles("revive", ["ops"], ["ops"]) == ["ops"]
-
-    def test_ops_is_told_who_it_is_what_its_team_holds_and_to_wait_to_be_told(self):
-        assert crew.ops_greeting("crw-2", "tells-reach-the-pane") == (
-            "You are crw-2's ops; your team holds the bolt tells-reach-the-pane. Nothing is asked of you now: reply in "
-            "one line, then wait until your conductor or I tell you what is needed.")
-        assert "your team holds no bolt. Nothing is asked of you now" in crew.ops_greeting("crw-2", None)
-
-    def test_a_conductor_of_a_team_holding_two_bolts_is_told_both_and_its_bolts_row(self):
-        """A give beside a waiting bolt restarts the conductor fresh at its next stop (teams.16); the waiting bolt is a
-        row of its kit's landings card, main-level ops's, crew tells the conductor when its reading is sent, and it
-        starts no wait (bolt-teams "A give while the conductor waits on its landing card")."""
-        said = plan.two_bolts_said("ssh-fix", "doctor-rows", "swancloud", "swancloud")
-        assert said == (
-            "Your team now builds the bolt ssh-fix. Bolt doctor-rows waits to land, a row of swancloud's landings card, "
-            "swancloud-ops's: crew tells you when the user sends land/doctor-rows's reading, and crew card read "
-            "land/doctor-rows then gives its notes.")
-        assert "card wait" not in said
-
-    def test_status_names_the_bolt_a_team_builds_and_the_one_waiting_to_land(self):
-        assert plan.two_held_said("swc-1", "ssh-fix", "doctor-rows") == "swc-1 builds ssh-fix; doctor-rows waits to land"
-
-    def test_ops_of_a_team_holding_two_bolts_is_told_the_one_it_builds_and_the_one_waiting(self):
-        assert crew.ops_greeting("swc-1", "ssh-fix", waiting="doctor-rows").startswith(
-            "You are swc-1's ops; your team builds the bolt ssh-fix. Bolt doctor-rows waits to land. Nothing is asked of you now")
-
-    def test_a_plan_crew_could_not_read_is_said_rather_than_no_bolt(self):
-        said = crew.ops_greeting("crw-2", None, "wldn/main of afterthought/crew-state could not be read:\nfatal: unable to access")
-        assert "crew could not read which bolt your team holds (wldn/main of afterthought/crew-state could not be read: fatal: " \
-               "unable to access). Nothing is asked of you now" in said
-        assert "holds no bolt" not in said
 
 
 class TestPlaces:
@@ -549,10 +490,10 @@ class TestResume:
 
 
 class TestBriefBack:
-    SAVED = {"CREW_AGENT": "swb-1-conductor", "CREW_LABEL": "wldn", "CREW_CWD": "/kit", "CREW_ROLE": "conductor"}
+    SAVED = {"CREW_AGENT": "wldn-planner", "CREW_LABEL": "wldn", "CREW_CWD": "/blueprints", "CREW_ROLE": "planner"}
 
     def test_a_compaction_of_a_session_herdr_resumed_gives_its_agents_brief_back(self):
-        assert crew.brief_due("compact", False, self.SAVED) == "swb-1-conductor"
+        assert crew.brief_due("compact", False, self.SAVED) == "wldn-planner"
 
     @pytest.mark.parametrize("source", ["resume", "startup", "clear", "fork", None])
     def test_any_other_start_gives_none_a_resume_keeping_the_brief_in_its_transcript(self, source):
@@ -566,13 +507,11 @@ class TestBriefBack:
         assert crew.brief_due("compact", False, saved) is None
 
     @pytest.mark.parametrize("name, recorded, found", [
-        ("swb-1-unit-2", "coder", ("swb-1", "coder")), ("swb-1-unit-2", "verify", ("swb-1", "verify")),
-        ("swb-1-conductor", "conductor", ("swb-1", "conductor")), ("wldn-ops", "main-ops", ("wldn", "main-ops"))])
+        ("wldn-planner", "planner", ("wldn", "planner")), ("wldn-ops", "main-ops", ("wldn", "main-ops"))])
     def test_the_brief_is_built_from_the_definition_crew_role_recorded(self, name, recorded, found):
         assert crew.brief_role(FLEET, name, recorded) == found
 
     @pytest.mark.parametrize("name, found", [
-        ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("atl-1-ops", ("atl-1", "ops")),
         ("wldn-design", ("wldn", "design")), ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "main-ops")),
         ("wldn-reviewer", ("wldn", "reviewer")), ("wldn-operator", ("wldn", "operator"))])
     def test_a_session_recorded_before_crew_role_named_its_definition_is_given_the_one_its_name_gives(self, name, found):
@@ -584,19 +523,22 @@ class TestBriefBack:
         with pytest.raises(crew.Refusal, match="no agent wldn-dispatch-chuck-herdr-alpha: crew starts none by that name"):
             crew.brief_role(FLEET, "wldn-dispatch-chuck-herdr-alpha", None)
 
-    def test_a_unit_slots_name_gives_no_definition_since_its_stage_does(self):
-        with pytest.raises(crew.Refusal, match="swb-1-unit-2's session record names no definition"):
-            crew.brief_role(FLEET, "swb-1-unit-2", "")
+    @pytest.mark.parametrize("name", ["swb-1-conductor", "swb-1-ops", "swb-1-unit-2"])
+    def test_a_teams_agents_name_is_no_agent_crew_starts(self, name):
+        """the-team-machinery-leaves Decision 10: crew starts no team's conductor, ops or slot, so a session recorded
+        as one is given no brief."""
+        with pytest.raises(crew.Refusal, match=f"no agent {name}: crew starts none by that name"):
+            crew.brief_role(FLEET, name, "conductor")
 
     def test_a_name_crew_starts_no_agent_by_is_refused(self):
         with pytest.raises(crew.Refusal, match="no agent swb-9-conductor"):
             crew.brief_role(FLEET, "swb-9-conductor", "conductor")
 
     def test_the_brief_comes_back_whole_behind_a_line_saying_what_it_is_and_to_read_a_file_it_is_cut_to(self):
-        said = crew.brief_back_said("swb-1-conductor", "You are swb-1's conductor.\n\nKeep the bolt moving.")
+        said = crew.brief_back_said("wldn-planner", "You are wldn's planner.\n\nPlan the partition's bolts.")
         first, rest = said.split("\n\n", 1)
-        assert first.startswith("[crew] This is your brief as swb-1-conductor") and "read that file whole now" in first
-        assert rest == "You are swb-1's conductor.\n\nKeep the bolt moving."
+        assert first.startswith("[crew] This is your brief as wldn-planner") and "read that file whole now" in first
+        assert rest == "You are wldn's planner.\n\nPlan the partition's bolts."
 
 
 class TestIdentityOnItsHost:
@@ -640,33 +582,8 @@ def test_a_partition_crew_does_not_know_is_refused_and_one_with_no_teams_has_no_
 
 
 def test_a_greeting_never_taken_says_the_tell_that_would_send_it_once_the_agent_is_ready():
-    again = "once it is ready: crew tell swb-1-conductor 'Read where your bolt stands.'"
-    assert crew.untaken_said("swb-1-conductor", "its greeting", "never", "sent twice", again) == (
-        "swb-1-conductor did not take its greeting, sent twice; nothing is left typed; " + again)
-    assert crew.untaken_said("swb-1-conductor", "its greeting", "unread", "it went to work") == (
-        "crew could not tell whether swb-1-conductor took its greeting: it went to work; nothing more was sent")
-
-
-class TestStandingCommands:
-    """What crew up, restart, resume, clear and needs decide before they act on an agent (teams.2), as plan.py's
-    commands decide them in one process; acting on the agents is the teams journey's (t-journey-teams)."""
-
-    def test_named_roles_are_acted_on_and_none_named_is_every_standing_role(self):
-        assert crew.roles_picked(["ops"], ("conductor", "ops")) == ["ops"]
-        assert crew.roles_picked([], ("conductor", "ops")) == ["conductor", "ops"]
-
-    def test_a_role_the_scope_has_not_is_refused_naming_its_roles(self):
-        with pytest.raises(crew.Refusal) as e:
-            crew.roles_picked(["fable"], ("conductor", "ops"))
-        assert str(e.value) == "no role 'fable' here; roles: conductor ops"
-
-    def test_a_team_with_an_agent_up_is_not_brought_up_over_it(self):
-        assert crew.already_up_said("swb-1-conductor", "swb-1") == "swb-1-conductor is already up; use: crew restart swb-1"
-
-    @pytest.mark.parametrize("status, force, said", [
-        (None, False, "swb-1-ops is not up."),
-        ("working", False, "swb-1-ops is working; add --force to clear it anyway."),
-        ("working", True, None), ("idle", False, None), ("blocked", False, None)])
-    def test_clear_is_sent_only_to_an_agent_that_is_up_and_not_working_unless_forced(self, status, force, said):
-        assert crew.clear_refusal("swb-1-ops", status, force) == said
-
+    again = "once it is ready: crew tell wldn-design 'Read where wldn stands.'"
+    assert crew.untaken_said("wldn-design", "its greeting", "never", "sent twice", again) == (
+        "wldn-design did not take its greeting, sent twice; nothing is left typed; " + again)
+    assert crew.untaken_said("wldn-design", "its greeting", "unread", "it went to work") == (
+        "crew could not tell whether wldn-design took its greeting: it went to work; nothing more was sent")

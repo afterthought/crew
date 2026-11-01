@@ -1,123 +1,14 @@
-"""A team's slots, panes and status on its host (teams.1, teams.2, teams.9, teams.15, read.1, read.2), as crew unit run,
-crew unit wait, crew fix and crew status decide them in one process: crew.slot_for for the slot a unit or fix runs in,
-crew.lent_for for the slot a fix that finds every slot in flight takes lent, and Team.take and Team.give_back for the
-lending kept in the team's files (record 0045), crew.reaped for what a team's read does with a slot, crew.held_object
-for how the run record names what a slot holds,
-crew.slot_pane_at for where a slot's pane opens, crew.listed for reading herdr's listings, crew.herdr_made for reading
-what herdr made, crew.name_back for when crew gives an agent its dropped name back and crew.found_answer for reading
-an agent on another host, crew.context_of and crew.holds_said for what status shows, and the words crew says when a
-stage is refused. Taking a slot, starting its agent and sending its prompt through the command are the units journey's
-(t-journey-units, t-journey-slots)."""
+"""A main level's panes and agents on its host (teams.2, teams.9, read.1, read.2), as its commands read them in one
+process: crew.listed for reading herdr's listings, crew.herdr_made for reading what herdr made, crew.name_back for when
+crew gives an agent its dropped name back and crew.found_answer for reading an agent on another host, and the words
+crew says when it ends or starts an agent. Starting its agents through the command is the main level's journey's
+(t-journey-main)."""
 import json
 import types
 
 import pytest
 
 import crew
-
-SLOTS = ["unit-1", "unit-2", "unit-3", "unit-4"]
-
-
-class TestSlotFor:
-    def test_work_a_slot_holds_runs_there_and_takes_nothing(self):
-        held = [["unit-1", "unit", "a", "/p/a"], ["unit-2", "unit", "b", "/p/b"]]
-        assert crew.slot_for("swb-1", SLOTS, held, "b") == ("unit-2", False)
-
-    def test_new_work_takes_the_first_slot_that_holds_nothing(self):
-        held = [["unit-1", "unit", "a", "/p/a"], ["unit-3", "fix", "fix/te/tidy", "/p/fix-te--tidy"]]
-        assert crew.slot_for("swb-1", SLOTS, held, "c") == ("unit-2", True)
-
-    def test_with_every_slot_in_flight_new_work_is_refused_naming_what_each_holds(self):
-        held = [[s, "unit", u, f"/p/{u}"] for s, u in zip(SLOTS, "abcd")]
-        with pytest.raises(crew.Refusal) as e:
-            crew.slot_for("swb-1", SLOTS, held, "e")
-        assert str(e.value) == "all 4 of swb-1's slots are in flight: unit-1 holds a; unit-2 holds b; unit-3 holds c; unit-4 holds d"
-
-    def test_work_waiting_in_a_slot_lent_to_a_fix_is_refused_until_the_fix_gives_it_back(self):
-        held = [["unit-1", "unit", "a", "/p/a"], ["unit-2", "fix", "fix/te/tidy", "/p/fix-te--tidy"]]
-        with pytest.raises(crew.Refusal) as e:
-            crew.slot_for("swb-1", SLOTS, held, "b", [["unit-2", "chore", "b", "/p/chore-b"]])
-        assert str(e.value) == ("b waits in swb-1-unit-2, lent to fix/te/tidy: it goes on there once that fix has merged "
-                                "or been dropped")
-
-
-class TestLentFor:
-    """A fix that finds every slot in flight (teams.1, teams.3, record 0045): crw-5 on 2026-10-28, four verified chores
-    in its four slots with no agent running, waiting on one fix that could get no slot."""
-
-    HELD = [[s, "chore", c, f"/p/chore-{c}"] for s, c in zip(SLOTS, "abcd")]
-
-    def test_with_every_slot_holding_verified_work_waiting_the_fix_takes_the_first_lent(self):
-        assert crew.lent_for("crw-5", SLOTS, self.HELD, {s: "idle" for s in SLOTS}, set()) == "unit-1"
-        assert crew.lent_for("crw-5", SLOTS, self.HELD, {}, set()) == "unit-1"
-
-    def test_a_slot_whose_agent_is_running_is_never_lent(self):
-        status = {"unit-1": "working", "unit-2": "blocked", "unit-3": "done"}
-        assert crew.lent_for("crw-5", SLOTS, self.HELD, status, set()) == "unit-3"
-
-    def test_a_slot_whose_stage_is_under_way_or_that_holds_a_fix_is_never_lent(self):
-        held = [["unit-1", "fix", "fix/b/other", "/p/fix-b--other"]] + self.HELD[1:]
-        assert crew.lent_for("crw-5", SLOTS, held, {}, {"unit-2", "unit-3"}) == "unit-4"
-
-    def test_with_no_slot_that_can_be_lent_the_fix_is_refused_naming_why_each_is_not(self):
-        held = [["unit-1", "fix", "fix/b/other", "/p/fix-b--other"]] + self.HELD[1:]
-        with pytest.raises(crew.Refusal) as e:
-            crew.lent_for("crw-5", SLOTS, held, {"unit-2": "working", "unit-4": "blocked"}, {"unit-3"})
-        assert str(e.value) == ("all 4 of crw-5's slots are in flight, and none can be lent to a fix: unit-1 holds fix/b/other; "
-                                "unit-2's agent is working on b; unit-3's stage on c has not ended; unit-4's agent is blocked on d")
-
-
-class TestReaped:
-    @pytest.mark.parametrize("stage, said", [
-        ("merged", "swb-1-unit-1 is free: a has merged into its bolt"),
-        ("landed", "swb-1-unit-1 is free: a has landed on main"),
-        ("dropped", "swb-1-unit-1 is free: a was dropped from the plan"),
-        ("left", "swb-1-unit-1 is free: a has left swb-1's bolt"),
-    ])
-    def test_a_slot_whose_work_is_over_is_freed_once_its_agent_is_not_working(self, stage, said):
-        assert crew.reaped("swb-1-unit-1", "swb-1", "a", stage, "idle") == ("free", said)
-
-    @pytest.mark.parametrize("stage, said", [
-        ("merged", None),
-        ("dropped", "swb-1-unit-1 still holds a, dropped from the plan: its agent is working; it is freed once that settles"),
-        ("left", "swb-1-unit-1 still holds a, which has left swb-1's bolt: its agent is working; it is freed once that settles"),
-    ])
-    def test_while_its_agent_works_it_is_kept(self, stage, said):
-        assert crew.reaped("swb-1-unit-1", "swb-1", "a", stage, "working") == ("keep", said)
-
-    def test_a_slot_lent_to_a_fix_is_given_back_to_the_work_it_was_lent_from(self):
-        assert crew.reaped("swb-1-unit-2", "swb-1", "fix/te/tidy", "merged", "idle", "b") == (
-            "free", "swb-1-unit-2 is given back to b: fix/te/tidy has merged into its bolt")
-
-    @pytest.mark.parametrize("stage", ["construct", "code", "verify", "fix", "unknown", "none"])
-    def test_work_that_goes_on_keeps_its_slot_and_says_nothing(self, stage):
-        assert crew.reaped("swb-1-unit-1", "swb-1", "a", stage, None) == (None, None)
-
-
-class TestHeldObject:
-    def test_a_unit_is_named_as_a_unit(self):
-        assert crew.held_object("unit", "a") == "unit/a"
-
-    def test_a_fix_named_with_its_bolt_is_named_as_it_is(self):
-        assert crew.held_object("fix", "fix/tenant-environments/tidy") == "fix/tenant-environments/tidy"
-
-    def test_a_fix_given_before_its_name_held_its_bolt_takes_the_bolt_its_branch_tracks(self):
-        assert crew.held_object("fix", "fix/tidy", "bolt/tenant-environments") == "fix/tenant-environments/tidy"
-
-
-class TestSlotPaneAt:
-    def test_the_first_slot_in_flight_opens_the_units_workspace(self):
-        assert crew.slot_pane_at([("conductor", "w1:p1"), ("ops", "w1:p2")], lambda p: True) == (None, None)
-
-    def test_a_new_pane_halves_the_newest_slot_pane_right_when_an_odd_number_are_open_and_down_when_even(self):
-        panes = [("conductor", "w1:p1"), ("unit-1", "w2:p3"), ("ops", "w1:p2"), ("unit-3", "w2:p5")]
-        assert crew.slot_pane_at(panes[:2], lambda p: True) == ("w2:p3", "right")
-        assert crew.slot_pane_at(panes, lambda p: True) == ("w2:p5", "down")
-
-    def test_a_slot_pane_closed_is_not_counted(self):
-        panes = [("unit-1", "w2:p3"), ("unit-2", "w2:p4")]
-        assert crew.slot_pane_at(panes, lambda p: p != "w2:p4") == ("w2:p3", "right")
-
 
 # herdr 0.9.3's answers on mac-studio, 2026-10-12: `agent list` of a session, and of one whose server is not running.
 LISTED = {"id": "cli:agent:list", "result": {"type": "agent_list", "agents": [
@@ -245,51 +136,22 @@ class TestMade:
         class Herdr:
             def run(self, *args):
                 acts.append(args[:2])
-                return types.SimpleNamespace(returncode=0, stdout=created(workspace_id="", label="crw-2 units"), stderr="")
+                return types.SimpleNamespace(returncode=0, stdout=created(workspace_id="", label="wldn"), stderr="")
 
-        agents = crew.Agents(None, "team", "crw-2", "crew", "crw-2", tmp_path, None, "/w", None)
+        agents = crew.Agents(None, "main", "wldn", "wldn", "wldn-3", tmp_path, (), "/w", None)
         agents.herdr = Herdr()
         agents.ensure()
         with pytest.raises(crew.Refusal):
-            agents.workspace("crw-2 units", "/w")
-        assert (tmp_path / "layout").read_text() == "" and agents.get("layout", crew.ws_key("crw-2 units")) == ""
+            agents.workspace("wldn", "/w")
+        assert (tmp_path / "layout").read_text() == "" and agents.get("layout", crew.ws_key("wldn")) == ""
         assert acts == [("workspace", "create")]
-
-
-def record(**v):
-    """A transcript record as Claude Code writes it: one line of JSON with no spaces between its fields."""
-    return json.dumps(v, separators=(",", ":"))
-
-
-def turn(used, sidechain=False):
-    return record(type="assistant", isSidechain=sidechain, timestamp="2026-10-12T09:30:00.000Z",
-                  message={"usage": {"input_tokens": 10, "cache_read_input_tokens": used, "cache_creation_input_tokens": None}})
-
-
-class TestStatus:
-    def test_a_standing_agents_context_is_its_last_own_turns_its_compactions_counted_and_its_start_read(self):
-        lines = [record(type="user", timestamp="2026-10-11T22:05:00.000Z"), turn(150000), record(type="user", isCompactSummary=True),
-                 turn(250000), turn(900000, sidechain=True)]
-        assert crew.context_of(lines, 1000000) == ("250k", "25%", "1", "10-11T22:05")
-
-    def test_a_session_with_no_turn_yet_uses_nothing(self):
-        assert crew.context_of([record(type="user")], 1000000) == ("0k", "0%", "0", "")
-
-    def test_a_slot_shows_its_work_and_stage_with_its_tasks_in_code_or_verify(self):
-        assert crew.holds_said({"name": "a", "stage": "verify", "counts": "3/3"}, ["unit-1", "unit", "a", "/p/a"]) == "a  verify 3/3"
-        assert crew.holds_said({"name": "b", "stage": "construct", "counts": "0/2"}, ["unit-2", "unit", "b", "/p/b"]) == "b  construct"
-
-    def test_work_held_whose_stage_was_not_read_is_unknown_and_a_free_slot_holds_nothing(self):
-        assert crew.holds_said(None, ["unit-1", "unit", "a", "/p/a"]) == "a  unknown"
-        assert crew.holds_said(None, None) == ""
 
 
 class TestRefused:
 
     def test_a_working_agent_is_ended_only_with_force(self):
-        assert crew.working_said("swb-1-unit-4") == "swb-1-unit-4 is working; add --force to end it anyway."
+        assert crew.working_said("wldn-planner") == "wldn-planner is working; add --force to end it anyway."
 
-    @pytest.mark.parametrize("stage, said", [(None, "swb-1-ops started in w1:p2"), ("resume", "swb-1-ops resumed in w1:p2"),
-                                             ("code", "swb-1-ops started code in w1:p2")])
+    @pytest.mark.parametrize("stage, said", [(None, "wldn-ops started in w1:p2"), ("resume", "wldn-ops resumed in w1:p2")])
     def test_a_role_started_says_how(self, stage, said):
-        assert crew.started_said("swb-1-ops", "w1:p2", stage) == said
+        assert crew.started_said("wldn-ops", "w1:p2", stage) == said

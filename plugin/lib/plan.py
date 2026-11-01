@@ -1564,13 +1564,13 @@ GIVE_READ = POLICY + r"""echo "SLUICE=$(sluice --version 2>&1 | tr '\n' ' ')"
 # branch too, crew marks that branch in the kit's git config, branch.bolt/<bolt>.crew, so the tidy knows it as crew's
 # (read.4), and fetches GitHub's copy, origin/bolt/<bolt>, where the bolt is read from then (gather.bolt_read), before
 # the give's plan write; a mark git refused, or a fetch that failed, is said on standard error, and the give goes on,
-# since the branch is made and the team's next read fetches it again.
+# since the branch is made and crew's next read of the bolt fetches it again.
 BOLT_CREATE = r"""cd "$1" || exit 3
 sluice branch create "bolt/$2" --from main --json; rc=$?
 if [ "$rc" = 0 ]; then
   git config "branch.bolt/$2.crew" given || echo "git could not mark bolt/$2 as crew's" >&2
   git fetch -q origin "+refs/heads/bolt/$2:refs/remotes/origin/bolt/$2" >&2 \
-    || echo "git could not fetch bolt/$2 from GitHub; the team's next read fetches it again" >&2
+    || echo "git could not fetch bolt/$2 from GitHub; crew's next read of the bolt fetches it again" >&2
 fi
 exit $rc
 """
@@ -1640,36 +1640,36 @@ def main_held(name, machine, said):
 
 
 def sweep_on(fleet, t, what, landed=None, dropped=None, units=()):
-    """The team's read on its host after a landing or a drop there (team_tidy, code.3), which reads each landing of its
-    bolts nothing recorded (reap_landings, plan.21): run in this process
-    when that is this host, else crew _tidy there as the one asking, saying what it did: the sweep of crew's own
-    landing place and marked branch of the bolt, and, after a landing, the bolt's landing card closed there with the
-    words (landing_cards_closed) and its branch deleted by sluice once the landing's place is gone (land_delete,
-    plan.19), landed being (bolt, the outcome recorded, what Pending You is sent in its place or None, whether the user
-    answered it in a conversation); after a drop (dropped, the bolt), its branch asked of sluice by the sweep's judgment
-    of it (bolt_branch_asked); after either, what the bolt's units (units) recorded as made, kept there, removed
-    (made_drop). A host that does not answer, or whose read fails, leaves that to the team's next read, the delete
-    named with its command, and the write stands."""
+    """The kit's read on its host after a landing or a drop of one of its bolts (kit_read, code.3), t being the kit's
+    team, whose host it is until 5.2 reads it from the runner's record: run in this process when that is this host,
+    else crew _sweep there as the one asking, saying what it did: each landing of the kit's bolts nothing recorded read
+    (reap_landings, plan.21), the sweep of crew's own landing place and marked branch of the bolt, and, after a landing,
+    the bolt's landing card closed there with the words (landing_cards_closed) and its branch deleted by sluice once the
+    landing's place is gone (land_delete, plan.19), landed being (bolt, the outcome recorded, what Pending You is sent in
+    its place or None, whether the user answered it in a conversation); after a drop (dropped, the bolt), its branch
+    asked of sluice by the sweep's judgment of it (bolt_branch_asked); after either, what the bolt's units (units)
+    recorded as made, kept there, removed (made_drop). A host that does not answer, or whose read fails, leaves that to
+    the kit's next read, the delete named with its command, and the write stands."""
     bolt, outcome, said, here = landed or (None, None, None, False)
+    kit_name = t["kit"]["name"]
     if t["machine"] == crew.this_host():
         try:
-            team_tidy(fleet, argparse.Namespace(team=t["name"], force=False, landed=bolt, outcome=outcome, said=said, here=here,
-                                                units=list(units)))
+            kit_read(fleet, t, bolt, outcome, said, here, units)
         except Refusal as e:
-            print(f"{t['name']}'s read after {what} failed ({e}): the team's next read sweeps what is over")
+            print(f"{kit_name}'s read after {what} failed ({e}): its next read sweeps what is over")
         return
     more = (["--landed", bolt, "--outcome", outcome] + (["--said", said] if said else []) + (["--here"] if here else [])) if landed else []
     more += ["--units", *units] if units else []
-    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"], *more))
+    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_sweep", t["label"], kit_name, *more))
     READ.drop_kit(t["machine"], t["kit"]["main"])
     if r.returncode:
         why = "did not answer" if r.returncode == 255 else "failed (" + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1] + ")"
-        print(f"{t['name']}'s host {why}, so what crew made for {what} is not swept yet: the team's next read sweeps it")
+        print(f"{kit_name}'s host {t['machine']} {why}, so what crew made for {what} is not swept yet: the kit's next read sweeps it")
     elif (r.stdout + r.stderr).strip():
         print((r.stdout + r.stderr).strip())
     if landed and r.returncode == 255:  # nothing ran there, the land's delete among it
         print(deleted_said(landed[0], t["machine"], r.returncode, r.stdout, r.stderr))
-    if dropped and r.returncode == 255:  # the team's next read asks it, the bolt's branch marked given and in no plan
+    if dropped and r.returncode == 255:  # the kit's next read asks it, the bolt's branch marked given and in no plan
         print(dropped_said(dropped, t["machine"], r.returncode, r.stdout, r.stderr))
 
 
@@ -1782,15 +1782,15 @@ def dropped_said(bolt, host, code, out, err, again=False):
     code), read as deleted_said reads it (delete_heard): deleted, from GitHub or, for a bolt made before, from the host;
     gone already, which refuses nothing; kept where it lives, at its tip, in sluice's words when sluice refused, as it
     does while main lacks the tip or a submission is queued on it, named as the drop's unmerged work, the user's; and,
-    when the host did not answer, crew can't read what sluice said or sluice failed, the command, which the team's next
+    when the host did not answer, crew can't read what sluice said or sluice failed, the command, which the kit's next
     read asks again. Asked again (again), once main holds a kept branch's tip: removed, or still kept in sluice's
     words."""
     if code:
-        return unasked(bolt, host, code, out, err) + "; the team's next read asks it"
+        return unasked(bolt, host, code, out, err) + "; the kit's next read asks it"
     h = delete_heard(bolt, host, out)
     on, frm = (f" on {h['where']}", f" from {h['where']}") if h["where"] else ("", "")
     if h["rc"] not in (0, 1, 2):
-        return f"bolt/{bolt} may still stand{on}: {h['words']}; the team's next read asks sluice again"
+        return f"bolt/{bolt} may still stand{on}: {h['words']}; the kit's next read asks sluice again"
     if h["gone"]:
         return (f"bolt/{bolt} is removed: main now holds bolt {bolt}'s tip, and sluice deleted it{frm} at {h['gone'][:7]}" if again
                 else f"sluice deleted bolt/{bolt}{frm} at {h['gone'][:7]}")
@@ -3301,7 +3301,7 @@ def bolt_land(fleet, a, by=None, close_why=None):
 # as the one who asked (plan.21), from the kit's main checkout, and empties crew-landing; an answer naming neither
 # empties it at once. The waiter ends with the Claude session that ran the landing, CLAUDE_PID as Claude Code gives it
 # (wait_session), its process looked at every ten seconds and the waiter ended once it is gone, reading nothing, so no
-# wait of crew's outlives its caller (teams.24), and the team's next read records the landing then (reap_landings); one
+# wait of crew's outlives its caller (teams.24), and the kit's next read records the landing then (reap_landings); one
 # run from a shell, or over ssh, which carries no CLAUDE_PID, runs to its outcome. It decides nothing (code.7): it prints, as
 # shell assignments, RC, the submission's exit; TIP, the bolt's tip that was submitted; OLD, the host's own main before,
 # empty when it has none; ID, the submission's number from sluice's JSON, and PULL, the pull request's, each empty when
@@ -7813,8 +7813,8 @@ def plan_of(fleet, label):
         return None
 
 
-def tidy(fleet, a):
-    """The sweep of what crew made in the team's kit checkout, on this host (bolt-teams "crew removes only its own
+def tidy(fleet, t, landed=None):
+    """The sweep of what crew made in the kit's checkout, on this host (bolt-teams "crew removes only its own
     worktrees", plan.9, plan.19): each landing's place, <kit>/places/land-<bolt> on bolt/<bolt>, which git could not
     remove after its submission or a stopped landing left, goes once no plan has its bolt, kept and named while its
     submission is still with sluice (landing_now), while it is locked or has uncommitted changes, or while sluice's
@@ -7826,12 +7826,11 @@ def tidy(fleet, a):
     (bolt_branch_gone, record 0003), and any other, a dropped bolt's among them, only by sluice's delete, which keeps
     it, marked dropped, named and recorded, while main lacks its tip, and is asked again once main holds it
     (bolt_branch_asked, plan.19); crew's marks are read once, before the worktrees are judged, and a mark whose branch
-    sluice's delete removed is unset then, saying nothing (marks_gone). At a landing (a.landed, the bolt), the landing's
+    sluice's delete removed is unset then, saying nothing (marks_gone). At a landing (landed, the bolt), the landing's
     place gone, sluice is asked to delete the bolt's branch before it is judged (land_delete). Every other worktree, a
     place of Flume's among them, is left alone. Nothing is removed when a plan the kit's work goes in can't be read.
     Once a worktree is removed, the command's next step reads the kit again. Returns the paths of the worktrees it
     removed."""
-    t = at_work(fleet, a.team)
     main, kdir, kit = os.path.realpath(t["kit"]["main"]), os.path.realpath(t["kit"]["dir"]), t["kit"]["name"]
     trees = gather.worktrees(main)
     errors, labels = {}, sorted({o["label"] for o in kit_teams(fleet, kit)})
@@ -7906,10 +7905,10 @@ def tidy(fleet, a):
     # a dropped bolt's kept while main lacks its tip (plan.19); a deletion sluice's guard refuses, while a submission to
     # it waits, is kept and named.
     worked = {w.get("branch") for w in trees} - freed
-    if getattr(a, "landed", None):  # the land's delete, asked now that the landing's place is gone (plan.19)
-        b = f"bolt/{a.landed}"
+    if landed:  # the land's delete, asked now that the landing's place is gone (plan.19)
+        b = f"bolt/{landed}"
         holder = next((w["path"] for w in trees if w.get("branch") == b), None) if b in worked else None
-        print(land_delete(t, main, a.landed, holder))
+        print(land_delete(t, main, landed, holder))
         unmark_gone(main, marks)
         if marks.get(b) != "landed":  # asked of sluice once, here: only a landed mark is judged again below
             marks.pop(b, None)
@@ -8188,26 +8187,42 @@ def wt_left_branch(out, path):
         return False
 
 
-# ------------------------------------------------ the end of a team's read, and a bolt's conflict with main
+# ------------------------------------------------ a kit's read after a landing or a drop, and a bolt's conflict with main
 
 
-def team_read(fleet, t, landed=None):
-    """A team's read on its host: the landing of each bolt the team holds that may have an outcome or a close nothing
-    recorded read (reap_landings); then the sweep of crew's own worktrees and marked bolt branches, at a landing
-    (landed, the bolt) having sluice delete the bolt's branch once the landing's place is gone (tidy, land_delete); then
-    each bolt the team holds that is local until it lands said, once (bolts_local_said, plan.19). What any of them
-    refuses is said on standard error."""
+def kit_sweep(fleet, a):
+    """crew _sweep <label> <kit> [--landed <bolt> --outcome <words> [--said <words>] [--here]] [--units <unit>...], on
+    the kit's host, which a landing or a drop hands it to (sweep_on, code.3): the kit's read there (kit_read)."""
+    t = kit_team(fleet, a.label, a.kit)
+    arrived(fleet, t["machine"])
+    kit_read(fleet, t, a.landed, a.outcome, a.said, a.here, a.units)
+
+
+def kit_read(fleet, t, landed=None, outcome=None, said=None, here=False, units=()):
+    """A kit's read on its host, the host its work runs on (t, the kit's team, until 5.2 reads the host from the
+    runner's record), which a landing or a drop asks for there (sweep_on): the landing of each started bolt of the kit
+    that may have an outcome or a close nothing recorded read (reap_landings); then the sweep of crew's own landing
+    places and marked bolt branches, at a landing (landed, the bolt) having sluice delete the bolt's branch once the
+    landing's place is gone (tidy, land_delete); then each bolt of it that is local until it lands said, once
+    (bolts_local_said, plan.19); what the units of a bolt that landed or was dropped (units) recorded as made, kept here
+    for its batch's card, removed (made_drop); and after a landing, the bolt's card closed here with the outcome
+    (landing_cards_closed). What any of them refuses is said on standard error."""
     reap_landings(fleet, t)
     try:
-        tidy(fleet, argparse.Namespace(team=t["name"], landed=landed))
+        tidy(fleet, t, landed)
     except Refusal as e:
         print(e, file=sys.stderr)
     try:
         plan = plan_of(fleet, t["label"])
-        for said in bolts_local_said(fleet, t, plan) if plan else []:
-            print(said)
+        for line in bolts_local_said(fleet, t, plan) if plan else []:
+            print(line)
     except Refusal as e:
         print(e, file=sys.stderr)
+    dropped = made_drop(t["label"], list(units))
+    if dropped:
+        print(dropped)
+    if landed:
+        landing_cards_closed(fleet, t, landed, outcome or "", said, here)
 
 
 def main_conflict(entries, bolt, head):
@@ -8333,14 +8348,6 @@ def arrived(fleet, machine):
     record.session()
 
 
-def on_team_host(fleet, t, force=False):
-    """A team's command where it runs (arrived), with the team's state folder there."""
-    arrived(fleet, t["machine"])
-    team = crew.Team(fleet, t, force)
-    team.ensure()
-    return team
-
-
 def not_held(label=None, act=None, on=()):
     """A command that would start an agent refused while this host is held (teams.19): said, and for an act that moves
     work recorded refused (stopped); nothing when it is not held."""
@@ -8351,13 +8358,6 @@ def not_held(label=None, act=None, on=()):
     if label and act:
         stopped(label, act, list(on), said)
     fail(said)
-
-
-def not_crossed(fleet, t, what):
-    """crew <what> of a team refused at once, before any pane or slot is read (runner.crossed_refusal; Decision 15 of
-    teams-cross-to-flume-as-their-bolts-land, teams.2; Decision 1 of the-team-machinery-leaves): a team runs no
-    conductor, ops or slot, its work running in Flume places on its host."""
-    fail(runner.crossed_refusal(t["name"], t["machine"], what))
 
 
 def stopped(label, act, on, said):
@@ -8544,76 +8544,8 @@ def main_fix_change(fleet, w, kit, name, mode, words):
     return dict(n=request(w, act, host, work, **given), host=host, stream=given["Stream"])
 
 
-def team_status(fleet, a):
-    """crew status <team>, on the team's host: the team's read (team_read); then its conductor and ops, each with its pane,
-    its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of);
-    each slot with its pane, its agent's state and what it holds (crew.holds_said); the work waiting in each slot lent
-    to a fix (crew.lent_said, teams.1); and, while the team holds two bolts, the one it builds and the one that waits to
-    land (two_held_said, teams.16)."""
-    t = at_work(fleet, a.team)
-    team = on_team_host(fleet, t, a.force)
-    team_read(fleet, t)
-    print(crew.status_row(f"{t['name']}@{t['machine']}", "pane", "state", "context", "pct", "compacts", "started", "holds"))
-    window = int(os.environ.get("WINDOW") or 1000000)
-    for role in ("conductor", "ops"):
-        pane = team.pane(role)
-        st, cells = team.status(role), ("-",) * 4
-        if st:
-            sess = (team.herdr.agent(pane) or {}).get("agent_session")
-            sid = sess.get("value") if isinstance(sess, dict) else None
-            found = sorted(pathlib.Path.home().glob(f".claude*/projects/*/{sid}.jsonl")) if isinstance(sid, str) and sid else []
-            try:
-                if found:
-                    with open(found[0], encoding="utf-8", errors="replace") as f:
-                        cells = crew.context_of(f, window)
-            except OSError:
-                pass
-        print(crew.status_row(team.agent_of(role), pane or "-", st or "not up", *cells, ""))
-    for slot in team.slots:
-        holds = crew.holds_said(None, team.held(slot))
-        print(crew.status_row(team.agent_of(slot), team.pane(slot) or "-", (team.status(slot) or "not up") if holds else "free",
-                              "-", "-", "-", "-", holds))
-    for line in team.lines("lent"):
-        if len(line) > 2:
-            print(crew.lent_said(t["name"], line[0], line[2], (team.held(line[0]) or [None] * 3)[2] or "a fix"))
-    built, waiting, unread = team_holds(fleet, t)
-    if unread:
-        print(f"which bolts {t['name']} holds can't be told: {unread}", file=sys.stderr)
-    elif waiting:
-        print(two_held_said(t["name"], built, waiting))
-
-
-def two_held_said(team, built, waiting):
-    """What crew status says of a team holding two bolts (teams.16): the one it builds and the one that waits to land."""
-    return f"{team} builds {built}; {waiting} waits to land"
-
-
-def team_tidy(fleet, a):
-    """crew _tidy <team> [--landed <bolt> --outcome <words> [--said <words>] [--here]], on the team's host: the team's
-    read (team_read), which a landing or a drop asks for there (sweep_on); the conductor's and ops's
-    panes told the branch they work for now, none once the bolt has landed or been dropped, and each whose session
-    carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing, the bolt's branch
-    deleted by sluice once the landing's place is gone (land_delete, plan.19), and its card closed there with the words
-    (landing_cards_closed); and what the units of a bolt that landed or was dropped (--units) recorded as made, kept
-    here for its batch's card, removed (made_drop)."""
-    t = at_work(fleet, a.team)
-    team = on_team_host(fleet, t, a.force)
-    team_read(fleet, t, a.landed)
-    said = made_drop(t["label"], a.units)
-    if said:
-        print(said)
-    import hold  # hold imports this module
-    due = set(team.hint_standing(crew.team_bolt(t)))
-    for name in sorted(due):
-        hold.hand(name)
-    if a.landed:
-        landing_cards_closed(fleet, t, a.landed, a.outcome or "", a.said, a.here)
-
-
-# ------------------------------------------------------------- the standing agents' commands, one process each
-
 def greeting(fleet, agents, roles):
-    """Each agent outside a team that a command started or brought back is greeted (teams.7), side by side, so one
+    """Each agent of a main level that a command started or brought back is greeted (teams.7), side by side, so one
     waiting on a question holds back no other; a greeting that can't be sent fails nothing. Returns the greetings, for
     the command to wait on before it ends (greeted)."""
     import threading
@@ -8633,188 +8565,6 @@ def greeted(greetings):
     """Once every greeting has been sent, or given up on."""
     for th in greetings:
         th.join()
-
-
-def greet_team(fleet, t, roles, bolt=None, notice=""):
-    """Each of a team's roles a command greets (crew.greeted_roles), side by side, so neither waits on the other
-    (teams.7): the conductor told to read where its bolt stands and carry on, before anyone asks it anything, the
-    greeting opening with the notice of its restart when there is one, then the bolt a give has just given it, else,
-    when its team holds two, the bolt it builds and the one waiting to land with its landing card and fixes
-    (conductor_bolts, teams.16), and the units of its bolts that wait amended, for it to start their construct
-    (plan.15); ops told who it is, the bolt its team holds, and to wait to be told. What each is told is read before
-    either is sent; a greeting that can't be sent fails nothing. Returns the greetings, for the command to wait on
-    before it ends (greeted)."""
-    import threading
-    sends = []
-    if "conductor" in roles:
-        said = [notice]
-        try:
-            said += [f"Your team now holds the bolt {bolt}."] if bolt else [conductor_bolts(fleet, t)]
-        except Refusal as e:
-            said.append(f"crew could not read what your team holds ({e}): read crew bolts.")
-        first = " ".join(x for x in said if x)
-        sends.append(lambda first=first: crew.greet(fleet, t["name"], first=f"{first} " if first else ""))
-    if "ops" in roles:
-        try:
-            held, waiting, unread = (bolt, None, None) if bolt else team_holds(fleet, t)
-        except Refusal as e:
-            held, waiting, unread = None, None, str(e)
-        sends.append(lambda: crew.greet_ops(fleet, t["name"], held, unread, waiting=waiting))
-
-    def send(greet):
-        try:
-            greet()
-        except Refusal as e:
-            print(e, file=sys.stderr)
-    out = [threading.Thread(target=send, args=(s,)) for s in sends]
-    for th in out:
-        th.start()
-    return out
-
-
-def conductor_bolts(fleet, t):
-    """What a team's conductor started afresh is told of the two bolts its team holds (two_bolts_said), read on the
-    team's host, where its cards are: "" when it holds one or none."""
-    plan = plan_of(fleet, t["label"])
-    held = [b.name() for b in team_bolts(fleet, plan, t)] if plan is not None else []
-    if len(held) < 2:
-        return ""
-    new, old = held[:2]
-    return two_bolts_said(new, old, plan.bolt(old).get("Repo") or t["kit"]["name"], t["label"])
-
-
-def two_bolts_said(new, old, kit, label):
-    """What a conductor started afresh while its team holds two bolts is told first (teams.16): the bolt it builds
-    (new), the one that waits to land (old), a row of its kit's landings card, main-level ops's, that crew tells it when
-    the user sends that bolt's reading and crew card read then gives the notes, with no wait to start (teams.24)."""
-    return (f"Your team now builds the bolt {new}. Bolt {old} waits to land, a row of {kit}'s landings card, {label}-ops's: "
-            f"crew tells you when the user sends land/{old}'s reading, and crew card read land/{old} then gives its notes.")
-
-
-def team_holds(fleet, t):
-    """The bolt a team builds (team_building), for its ops's greeting, or None when it holds none, and the bolt that
-    waits to land beside it, or None; and what crew could not read of its plan or of which bolt it builds, else None,
-    which the greeting says rather than name no bolt (read.1)."""
-    CONTEXT["label"] = t["label"]
-    errors = {}
-    found = plans(fleet, [t["label"]], errors)
-    plan = found[0][3] if found else None
-    built = None
-    if plan:
-        try:
-            built = team_building(fleet, plan, t)
-        except Refusal as e:
-            errors[f"which bolt {t['name']} builds"] = str(e)
-    return (built, next((b.name() for b in team_bolts(fleet, plan, t) if b.name() != built), None) if built else None,
-            "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()) or None)
-
-
-def picked(team, roles):
-    """The standing roles a command names, or all of them (crew.roles_picked); a role there is none of stops it, said,
-    with exit 2."""
-    try:
-        return crew.roles_picked(roles, team.standing)
-    except Refusal as e:
-        print(e, file=sys.stderr)
-        raise Stopped(2)
-
-
-def started_all(team):
-    """Each standing role of a team started fresh: the roles started. One that can't start stops the command."""
-    for role in team.standing:
-        if not team.start(role):
-            raise Stopped(1)
-    return list(team.standing)
-
-
-def team_cmd(fleet, a):
-    """crew up|close|rebuild|restart|resume|clear|down <team>, on the team's host, one process (code.7): the team's
-    conductor and ops started, brought back, cleared or ended there (teams.2, teams.6, teams.7), each act recorded
-    (record.1). close and rebuild end every agent, working or not. Every act but close is refused at once, a team
-    running no standing agent (not_crossed); close still closes what an older crew left standing."""
-    t = at_work(fleet, a.team)
-    if a.act != "close":
-        not_crossed(fleet, t, f"{a.act} {t['name']}")
-    team = on_team_host(fleet, t, a.force or a.act in ("close", "rebuild"))
-    name = t["name"]
-    if a.act in ("up", "rebuild", "restart", "resume"):
-        not_held()
-    if a.act == "up":
-        for role in team.standing:
-            not team.status(role) or fail(crew.already_up_said(team.agent_of(role), name))
-        team.mark(down=False)
-        team.panes()
-        started = started_all(team)
-        team.record("team.up", f"team({name}): up", started)
-        greeted(greet_team(fleet, t, crew.greeted_roles("up", started, team.fresh)))
-    elif a.act == "close":
-        team.teardown()
-        team.mark(down=True)
-        team.record("team.close", f"team({name}): close", team.ended)
-        print(f"{name} is closed")
-    elif a.act == "rebuild":  # a slot whose work is over, its agent ended with the rest, is freed rather than kept
-        team.teardown()
-        team.mark(down=False)
-        team.panes()
-        started = started_all(team)
-        team.record("team.rebuild", f"team({name}): rebuild", started)
-        greeted(greet_team(fleet, t, crew.greeted_roles("rebuild", started, team.fresh)))
-    elif a.act == "restart":
-        roles, stopped_ = picked(team, a.roles), []
-        team.mark(down=False)
-        for role in roles:
-            why = team.stop(role)
-            print(why, file=sys.stderr) if why else stopped_.append(role)
-        team.panes()
-        for role in stopped_:
-            if not team.start(role):
-                raise Stopped(1)
-            team.record("agent.restart", f"team({name}): restart {role}", [role])
-        greeted(greet_team(fleet, t, crew.greeted_roles("restart", stopped_, team.fresh, a.greet)))
-    elif a.act == "resume":
-        roles, back = picked(team, a.roles), []
-        team.mark(down=False)
-        team.panes()
-        for role in roles:
-            if team.status(role):
-                print(f"{team.agent_of(role)} is already up")
-                continue
-            if team.start(role, "resume"):
-                team.record("agent.resume", f"team({name}): resume {role}", [role])
-            else:
-                print(f"{team.agent_of(role)} did not come back with its conversation; starting it fresh")
-                if not team.start(role):
-                    raise Stopped(1)
-                team.record("agent.start", f"team({name}): start {role}", [role])
-            back.append(role)
-        greeted(greet_team(fleet, t, crew.greeted_roles("resume", back, team.fresh)))
-    elif a.act == "clear":
-        role = picked(team, a.roles[:1])[0]
-        agent, pane = team.agent_of(role), team.pane(role)
-        why = crew.clear_refusal(agent, team.status(role), team.force)
-        not why or fail(why)
-        r = team.herdr.run("agent", "prompt", pane, "/clear")
-        r.returncode == 0 or fail((r.stderr or "").strip() or f"herdr could not send /clear to {agent}")
-        crew.nap(2)
-        if not team.give_name(pane, agent):
-            raise Stopped(1)
-        team.record("agent.clear", f"team({name}): clear {role}", [role])
-        print(f"{agent} cleared")
-    else:
-        for role in (*team.standing, *team.slots):
-            why = team.stop(role)
-            if why:
-                print(why, file=sys.stderr)
-        team.mark(down=True)
-        team.record("team.down", f"team({name}): down", team.ended)
-        print(f"{name} is down; its panes are still there.")
-
-
-def elsewhere(fleet, host, *argv):
-    """crew on another host, run as the one asking (crew_argv) and never prompting (code.3): its process, its output
-    this command's."""
-    return subprocess.Popen(["ssh", "-o", "BatchMode=yes", fleet["hosts"][host]["ssh"], shlex.join(crew.crew_argv(fleet, host, *argv))],
-                            stdin=subprocess.DEVNULL)
 
 
 def moved_role(fleet, label, ms):
@@ -9104,45 +8854,44 @@ def retire_operator(fleet, label):
 
 
 def revive_cmd(fleet, a):
-    """crew revive, after a restart: on this host, each team's and main level's in each of its sessions
-    standing role whose pane came back with no agent in it, or dead, closed and opened again in its layout first (crew.revived,
-    teams.2), picked up from its last conversation, a team's conductor greeted, and its ops when it had none to pick up
-    (crew.greeted_roles), and every agent brought back outside a team greeted; one taken down with crew down stays
-    down. What can't be revived is said, and the rest still are. Nothing is revived while this host is held (teams.19):
-    crew go revives it."""
+    """crew revive, after a restart: on this host, each main level's standing role, in each of its sessions, whose pane
+    came back with no agent in it, or dead, closed and opened again in its layout first (crew.revived, teams.2), picked
+    up from its last conversation and greeted; one taken down with crew main down stays down. What can't be revived is
+    said, and the rest still are. Nothing is revived while this host is held (teams.19): crew go revives it."""
     not_held()
     greetings = []
-    every = [(kind, scope, a) for kind, scope in crew.here(fleet)
-             for a in ([None] if kind == "team" else crew.mains(fleet, scope))]
-    for kind, scope, agents in every:
-        try:
-            agents = agents or crew.Team(fleet, crew.team_of(fleet, scope))
-            if not agents.lines("panes"):
-                continue
-            if agents.down():
-                print(f"{scope} was taken down; it stays down")
-                continue
-            if kind == "team":
-                not_crossed(fleet, agents.t, f"revive {scope}")
-            back, ways = [], {r: crew.revived(agents.herdr.item(agents.pane(r)), agents.status(r)) for r in agents.standing}
-            if "dead" in ways.values():
-                agents.panes()
-            for role in agents.standing:
-                if not ways[role]:
-                    continue
-                if ways[role] == "empty":
-                    crew.nap(10)
-                    if agents.status(role, fresh=True):  # herdr may still be resuming it
-                        continue
-                if not agents.start(role, "resume"):
-                    continue
-                agents.record("agent.resume", f"{kind}({scope}): resume {agents.agent_of(role)}", [role])
-                back.append(role)
-            greetings += (greet_team(fleet, agents.t, crew.greeted_roles("revive", back, agents.fresh)) if kind == "team"
-                          else greeting(fleet, agents, back))
-        except Refusal as e:
-            print(e, file=sys.stderr)
+    for label in crew.here(fleet):
+        for agents in crew.mains(fleet, label):
+            greetings += revive_main(fleet, label, agents)
     greeted(greetings)
+
+
+def revive_main(fleet, label, agents):
+    """One session of a main level revived (revive_cmd): the greetings it set going."""
+    try:
+        if not agents.lines("panes"):
+            return []
+        if agents.down():
+            print(f"{label} was taken down; it stays down")
+            return []
+        back, ways = [], {r: crew.revived(agents.herdr.item(agents.pane(r)), agents.status(r)) for r in agents.standing}
+        if "dead" in ways.values():
+            agents.panes()
+        for role in agents.standing:
+            if not ways[role]:
+                continue
+            if ways[role] == "empty":
+                crew.nap(10)
+                if agents.status(role, fresh=True):  # herdr may still be resuming it
+                    continue
+            if not agents.start(role, "resume"):
+                continue
+            agents.record("agent.resume", f"main({label}): resume {agents.agent_of(role)}", [role])
+            back.append(role)
+        return greeting(fleet, agents, back)
+    except Refusal as e:
+        print(e, file=sys.stderr)
+        return []
 
 
 # ----------------------------------------------------------------------------------------------- crew bolts
@@ -15030,11 +14779,8 @@ def parser(cls=argparse.ArgumentParser, only=None):
     g.add_argument("--excerpt-file", help="a file holding them, for words the shell would mangle")
     x.add_argument("--label")
 
-    # The commands on a team and on a partition's main level, each one process on the host its agents run on (bash crew
+    # The commands on a partition's main level and on a kit's host, each one process on the host it acts on (bash crew
     # runs them, and forwards them when one names another host).
-    x = sub.add_parser("_status")
-    x.add_argument("team")
-    x.add_argument("--force", action="store_true")
     x = sub.add_parser("_preview")
     x.add_argument("label")
     x.add_argument("key")
@@ -15071,20 +14817,14 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("n", type=int)
     x.add_argument("--note")
-    x = sub.add_parser("_tidy")
-    x.add_argument("team")
-    x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_sweep")
+    x.add_argument("label")
+    x.add_argument("kit")
     x.add_argument("--landed")
     x.add_argument("--outcome")
     x.add_argument("--units", nargs="+", default=[])
     x.add_argument("--said")
     x.add_argument("--here", action="store_true")
-    x = sub.add_parser("_team")
-    x.add_argument("act", choices=("up", "close", "rebuild", "restart", "resume", "clear", "down"))
-    x.add_argument("team")
-    x.add_argument("roles", nargs="*")
-    x.add_argument("--force", action="store_true")
-    x.add_argument("--no-greet", dest="greet", action="store_false")
     x = sub.add_parser("_main")
     x.add_argument("act", choices=("up", "down", "status"))
     x.add_argument("label")
@@ -15117,12 +14857,11 @@ COMMANDS = {
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("chore", "add"): direct(("chore", "add")), ("chore", "order"): direct(("chore", "order")), ("chore", "after"): direct(("chore", "after")),
     ("chore", "move"): direct(("chore", "move")), ("chore", "drop"): direct(("chore", "drop")),
-    ("_status", None): team_status, ("_preview", None): preview_handed,
+    ("_preview", None): preview_handed,
     ("_preview-release", None): preview_release_cmd, ("_card-preview", None): card_preview_cmd,
     ("_land-row", None): land_row_cmd, ("_land-card", None): land_card_cmd, ("_landing-read", None): landing_read_cmd,
     ("_made", None): made_cmd, ("_batch-card", None): batch_card_cmd,
-    ("_tidy", None): team_tidy,
-    ("_team", None): team_cmd, ("_main", None): main_cmd,
+    ("_sweep", None): kit_sweep, ("_main", None): main_cmd,
     ("_review", None): review_cmd, ("review-delivered", None): review_delivered, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
     ("_answered", None): card_answered,
     ("signal", None): signal, ("signal-move", None): signal_move,
@@ -15130,8 +14869,8 @@ COMMANDS = {
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "answer"): plan_answer,
 }
-# The commands on a team and on a main level, each one process on the host its agents run on.
-TEAM_COMMANDS = {(c, None) for c in ("_status", "_tidy", "_team", "_main", "_review", "_console", "_revive")}
+# The commands on a main level and on a kit's host, each one process on the host it acts on.
+HOST_COMMANDS = {(c, None) for c in ("_sweep", "_main", "_review", "_console", "_revive")}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "start"): "bolt.start", ("bolt", "order"): "bolt.order",
@@ -15155,8 +14894,6 @@ def named(a):
     for bolt in (a.bolt if isinstance(getattr(a, "bolt", None), list) else [getattr(a, "bolt", None)]):  # crew bolt submit names several
         if bolt and bolt != "queue":
             out.append(f"bolt/{bolt}")
-    if getattr(a, "team", None):
-        out.append(f"team/{a.team}")
     if a.cmd == "signal-move":
         out.append(f"signals/{a.signal}")
     if a.cmd == "signal-land" and crew.NAME.match(pathlib.Path(a.dir).name):
@@ -15173,8 +14910,6 @@ def named(a):
 def refused(fleet, a, key, e):
     """A refused command that would have moved work, in its partition's run record, with crew's reason."""
     label = CONTEXT.get("label") or getattr(a, "label", None) or crew.caller_label(fleet)
-    if not label and getattr(a, "team", None) in fleet["teams"]:
-        label = fleet["teams"][a.team]["label"]
     if label in fleet["partitions"]:
         record.emit(label, ACTS[key], named(a), refused=getattr(e, "recorded", None) or str(e))
 
@@ -15187,7 +14922,7 @@ def main(argv):
     args = (ap if ap is not None and argv[0] in ap.built else parser()).parse_args(argv)
     fleet = crew.load()
     key = (args.cmd, getattr(args, "sub", None))
-    if key in TEAM_COMMANDS:  # one process says what each of its steps did, in the order they did it
+    if key in HOST_COMMANDS:  # one process says what each of its steps did, in the order they did it
         sys.stdout.reconfigure(line_buffering=True)
     try:
         may_write(fleet, key, args)

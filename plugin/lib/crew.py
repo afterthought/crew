@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """crew.py: read the teams file and answer from it.
 
-  crew.py teams                       every team's name
   crew.py labels                      every partition's label
   crew.py brief <team|label> <definition> [name]
                                       a definition's brief for a team or a partition's main level; name is the agent's own
-  crew.py launch <team|label> <role> [stage|resume]
-                                      how crew-role starts the role, as shell assignments
+  crew.py launch <label> <role> [resume]
+                                      how crew-role starts a main level's role, as shell assignments
   crew.py hint <agent> <pane>         tell a team's conductor's or ops's pane again the branch it works for, for
                                       sluice's plugins, as after herdr resumed it bare
   crew.py tell <agent> "<text>" [--taken]
@@ -23,13 +22,12 @@
   crew.py run-name                    the name and partition of the role's run FLUME_PLACE is, as shell assignments of
                                       CREW_AGENT and CREW_LABEL; nothing for a place that is no run
 
-The agents themselves, a team's and a main level's, are started, greeted and ended by plan.py's commands, through
-Agents and Team here.
+The agents themselves, a main level's, are started, greeted and ended by plan.py's commands, through Agents here.
 
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import collections, functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+import functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
 # Run as the command, this module is the crew the modules it imports import, so a refusal raised in plan.py, which a
 # tell to a role that runs as its kind writes its ask through, is the Refusal main catches.
 if __name__ == "__main__":
@@ -409,10 +407,8 @@ def team_of_agent(fleet, name):
 
 
 def place_of_agent(fleet, name):
-    """The host and herdr session an agent crew starts runs in, from its name alone."""
-    t = team_of_agent(fleet, name)
-    if t:
-        return t["machine"], t["session"]
+    """The host and herdr session an agent crew starts runs in, from its name alone: a main level's standing role or
+    its reviewer."""
     for p in fleet["partitions"].values():
         l = p["label"]
         for role in MAIN_STANDING + ("reviewer",):
@@ -423,9 +419,6 @@ def place_of_agent(fleet, name):
 
 def label_of_agent(fleet, name):
     """The partition an agent crew starts works for, from its name alone."""
-    t = team_of_agent(fleet, name)
-    if t:
-        return t["label"]
     for l in fleet["partitions"]:
         if name in (f"{l}-{r}" for r in MAIN_STANDING + ("reviewer",)):
             return l
@@ -756,12 +749,8 @@ def pane_holds(name, pane, item, agent):
 
 
 def held_in(fleet, name):
-    """The Agents an agent crew starts is kept in on its host and its role there, from its name alone: a team's for
-    its conductor, ops or a unit slot, or a main level's for its roles and its reviewer; None for a name crew starts no
-    agent by."""
-    t = team_of_agent(fleet, name)
-    if t:
-        return Team(fleet, t), name[len(t["name"]) + 1:]
+    """The Agents an agent crew starts is kept in on its host and its role there, from its name alone: a main level's
+    for its roles and its reviewer; None for a name crew starts no agent by."""
     label = label_of_agent(fleet, name)
     if not label:
         return None
@@ -770,8 +759,8 @@ def held_in(fleet, name):
 
 
 def holding_of(fleet, name):
-    """The Agents a standing agent's role is kept in and that role, from its name alone: a team's or a main level's;
-    None for a name that is no standing agent's (standing_role)."""
+    """The Agents a standing agent's role is kept in and that role, from its name alone, a main level's; None for a
+    name that is no standing agent's (standing_role)."""
     return held_in(fleet, name) if standing_role(fleet, name) else None
 
 
@@ -1195,14 +1184,7 @@ def read_back(pane, sid, size, text):
         pane.sleep(1)
 
 
-GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
-            "start each stage that is ready.")
-
-# A team's ops is told who it is and what its team holds, and set to nothing: its work comes from its conductor or the user.
-OPS_GREETING = ("You are {team}'s ops; {holds}. Nothing is asked of you now: reply in one line, then wait until your "
-                "conductor or I tell you what is needed.")
-
-# The greeting of each agent crew starts outside a team, by role: the reads its brief already teaches, and what is its own.
+# The greeting of each agent crew starts, by role: the reads its brief already teaches, and what is its own.
 GREETINGS = {
     "design": ("Read where {label} stands with `crew bolts` and `crew rail`, and the signals waiting for curation, tell me in "
                "a few lines, then carry on with what is yours: curate the signals that have no move."),
@@ -1259,60 +1241,17 @@ def greet_waits(name, status, asking, asked, out_of_time, hint, text):
     return None, None
 
 
-def greet(fleet, team, first="", wait=90):
-    """Get a team's conductor going: tell it to read where its bolt stands and carry on."""
-    t = team_of(fleet, team)
-    name = f"{t['name']}-conductor"
-    return greet_agent(fleet, name, first + GREETING, [f"agent/{name}", f"team/{t['name']}"], t["label"],
-                       f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
-
-
-def greet_ops(fleet, team, bolt, unread=None, wait=90, waiting=None):
-    """Give a team's ops its first message (teams.7): who it is, what its team holds, and to wait to be told."""
-    t = team_of(fleet, team)
-    name = f"{t['name']}-ops"
-    return greet_agent(fleet, name, ops_greeting(t["name"], bolt, unread, waiting), [f"agent/{name}", f"team/{t['name']}"],
-                       t["label"], f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
-
-
-def ops_greeting(team, bolt, unread=None, waiting=None):
-    """What a team's ops is greeted with (teams.7): who it is, the bolt its team holds or that it holds none, and, when
-    it holds two, the one it builds and the one that waits to land (waiting, teams.16), and that it waits to be told,
-    so it starts nothing of its own; when crew could not read the plan (unread), it says so rather than name no bolt
-    (read.1)."""
-    holds = (f"crew could not read which bolt your team holds ({' '.join(unread.split())})" if unread
-             else f"your team builds the bolt {bolt}. Bolt {waiting} waits to land" if bolt and waiting
-             else f"your team holds the bolt {bolt}" if bolt else "your team holds no bolt")
-    return OPS_GREETING.format(team=team, holds=holds)
-
-
-def greeted_roles(act, started, fresh, greet=True):
-    """The standing roles of a team a command greets once it has started them (teams.7), in the order started: each that
-    began a new conversation (fresh), since Claude Code keeps a conversation only once it has had a message, and a
-    herdr restart's resume of one that never had one leaves its pane a shell (teams.6); and the conductor crew revive
-    brought back with its conversation, to carry on with its bolt. A conductor crew resume brought back with its
-    conversation is sent the units that wait amended instead (plan.15), and ops brought back with its own waits to be
-    told. act is up, rebuild, restart, resume, revive or give; with greet false (restart --no-greet) none is, since the
-    command's caller greets them, as a bolt's give does."""
-    if not greet:
-        return []
-    return [r for r in started if r in fresh or (act == "revive" and r == "conductor")]
-
-
 def greet_standing(fleet, name, wait=90):
-    """Get an agent crew starts outside a team going (a main level's design agent, planner, ops or operator): tell it to read where its partition stands and carry on with what is its role's. A team's agent,
-    or a name crew starts no agent by, is refused."""
+    """Get an agent crew starts going (a main level's design agent, planner, ops or operator): tell it to read where its
+    partition stands and carry on with what is its role's. A name crew starts no agent by is refused."""
     label, text, why, hint = standing_greeting(fleet, name)
     return greet_agent(fleet, name, text, [f"agent/{name}"], label, why, hint, wait)
 
 
 def standing_greeting(fleet, name):
-    """The greeting of an agent crew starts outside a team, by its role, read from its name alone: its partition, the
-    text, the greet entry's why, and how it is started when it is not up. A team's agent, the reviewer, sent its batch
-    as its prompt, and a name crew starts no agent by are refused."""
-    t = team_of_agent(fleet, name)
-    t is None or fail(f"{name} is one of team {t['name']}'s agents, not one crew starts outside a team; "
-                      f"crew up {t['name']} greets its conductor")
+    """The greeting of an agent crew starts, by its role, read from its name alone: its partition, the text, the greet
+    entry's why, and how it is started when it is not up. The reviewer, sent its batch as its prompt, and a name crew
+    starts no agent by are refused."""
     label = label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
     host, _ = place_of_agent(fleet, name)
     role = name[len(label) + 1:]  # design, planner, ops, operator or reviewer
@@ -1378,16 +1317,6 @@ def definition(role):
     return meta, m.group(2)
 
 
-def slot_of(t, slot):
-    """What a unit slot holds, from the team's state on its host: kind (unit or fix), name, and its place."""
-    path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
-    for line in (path.read_text().splitlines() if path.exists() else []):
-        f = line.split()
-        if f and f[0] == slot:
-            return {"kind": f[1], "name": f[2], "place": f[3]}
-    fail(f"{t['name']}-{slot} holds no unit or fix")
-
-
 def team_bolt(t, then=""):
     """The bolt a team builds, the one given last when it holds two (plan.team_building, teams.16), from the plan; None
     when it holds none. A plan that can't be read, or a pair of bolts crew can't tell the newer of, is reported, with
@@ -1442,35 +1371,17 @@ def hint_agent(fleet, name, pane):
     r.returncode == 0 or fail(f"herdr did not take {name}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}")
 
 
-# A unit's stages and the definition each is started from.
-STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "settle": "coder", "merge": "coder", "fix": "coder"}
-def launch(fleet, scope, role, extra=None, where=True):
-    """How crew-role starts a role: its folder, agent name, partition, the definition it comes from, the
-    folders it may also reach, the model and effort after the teams file's override, and the branch sluice's plugins
-    are told it works for (hint_branch). With where false, a team's conductor and ops are given the kit's main checkout
-    and no branch without reading the plan for its bolt, as what an agent's start is made of reads them (launch_now)."""
-    if scope in fleet["teams"]:
-        t = held_team(fleet, fleet["teams"][scope])
-        label, roles, kit, bp = t["label"], t["roles"], t["kit"], t["blueprints"]
-        if role in ("conductor", "ops"):
-            bolt = team_bolt(t, f"; starting in {kit['main']}") if where else None
-            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=bolt_place(t, bolt) or kit["main"], dirs=[kit["dir"], bp["main"]],
-                        branch=hint_branch(role, bolt))
-        elif re.match(r"^unit-[1-9][0-9]*$", role):
-            int(role[5:]) <= t["units"] or fail(f"{t['name']} has {t['units']} unit slots, so no {role}")
-            extra in STAGES or fail(f"{t['name']}-{role}: which stage? stages: " + " ".join(STAGES))
-            held = slot_of(t, role)
-            spec = dict(defn=STAGES[extra], name=f"{t['name']}-{role}", cwd=held["place"], dirs=[kit["main"], bp["main"]])
-        else:
-            fail(f"no role '{role}' on team {t['name']}. roles: conductor ops unit-<n>")
+def launch(fleet, label, role):
+    """How crew-role starts a partition's main-level role: its folder, agent name, partition, the definition it comes
+    from, the folders it may also reach, the model and effort after the teams file's override, and the branch sluice's
+    plugins are told it works for, none."""
+    p = partition_of(fleet, label)
+    roles = p["roles"]
+    main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"])])
+    if role in MAIN_STANDING + ("reviewer",):
+        spec = dict(main, defn="main-ops" if role == "ops" else role, name=f"{label}-{role}")
     else:
-        p = partition_of(fleet, scope)
-        label, roles = p["label"], p["roles"]
-        main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"])])
-        if role in MAIN_STANDING + ("reviewer",):
-            spec = dict(main, defn="main-ops" if role == "ops" else role, name=f"{label}-{role}")
-        else:
-            fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer operator")
+        fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer operator")
     meta, _ = definition(spec["defn"])
     o = roles.get(spec["defn"], {})
     return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]), branch=spec.get("branch"))
@@ -1823,15 +1734,12 @@ def identity_withheld(name, label, here, main, unread=None):
 
 
 def brief_role(fleet, name, recorded):
-    """The scope and definition an agent's brief is built from: the definition crew-role recorded starting it from
-    (recorded), else, for a session recorded before crew-role named it, the one its name gives; a unit slot's name
-    gives none, its definition being its stage's. Refused for a name crew starts no agent by."""
-    t = team_of_agent(fleet, name)
-    scope = t["name"] if t else label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
-    role = name[len(scope) + 1:].split("-")[0]  # conductor, ops, unit; design, planner, ops, reviewer, operator
-    named = (role if role in ("conductor", "ops") else None) if t else {"ops": "main-ops"}.get(role, role)
-    return scope, recorded or named or fail(f"{name}'s session record names no definition, and a unit slot's is its stage's, "
-                                            "so its brief can't be told")
+    """The partition and definition an agent's brief is built from: the definition crew-role recorded starting it from
+    (recorded), else, for a session recorded before crew-role named it, the one its name gives. Refused for a name crew
+    starts no agent by."""
+    label = label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
+    role = name[len(label) + 1:]  # design, planner, ops, reviewer, operator
+    return label, recorded or {"ops": "main-ops"}.get(role, role)
 
 
 def brief_back_said(name, text):
@@ -2007,30 +1915,26 @@ def launch_digest(l, text):
 
 def launch_now(fleet, scope, role):
     """The digest of what crew-role would start a standing role with now (launch_digest), read without the plan."""
-    l = launch(fleet, scope, role, where=False)
+    l = launch(fleet, scope, role)
     return launch_digest(l, brief(fleet, scope, l["defn"], l["name"]))
 
 
 def standing_role(fleet, name):
-    """The scope and role crew-role starts a standing agent as, from its name alone: (team, conductor|ops) or (label,
-    design|planner|ops|operator); None for a unit slot, the reviewer, or a name crew starts no agent by. Only a standing agent outlives a stage, so only it is restarted for an update (teams.19)."""
-    t = team_of_agent(fleet, name)
-    if t:
-        role = name[len(t["name"]) + 1:]
-        return (t["name"], role) if role in ("conductor", "ops") else None
+    """The partition and role crew-role starts a standing agent as, from its name alone: (label,
+    design|planner|ops|operator); None for the reviewer, or a name crew starts no agent by. Only a standing agent
+    outlives a batch, so only it is restarted for an update (teams.19)."""
     label = label_of_agent(fleet, name)
     role = name[len(label) + 1:] if label else ""
     return (label, role) if role in MAIN_STANDING else None
 
 
 def agents_here(fleet, label=None):
-    """The standing agents crew runs on this host, by name, of one partition or of every one: each team's conductor
-    and ops, and the main level's roles whose machine this is."""
+    """The standing agents crew runs on this host, by name, of one partition or of every one: the main level's roles
+    whose machine this is."""
     host, out = this_host(), []
     for l, p in sorted(fleet["partitions"].items()):
         if label not in (None, l):
             continue
-        out += [f"{t}-{r}" for t in sorted(p["teams"]) if fleet["teams"][t]["machine"] == host for r in ("conductor", "ops")]
         out += [f"{l}-{r}" for r in MAIN_STANDING if p["machine"] == host]
     return out
 
@@ -2062,7 +1966,8 @@ def start_of(name):
 # What the update check says of a start that recorded its launch but no crew commit, as one on a host that loads crew
 # from its release, where there is no git to read the commit from (record 0050 as amended 2026-10-30).
 NO_COMMIT_SAID = ("crew can't tell whether its plugin changed since it started, its start having recorded no crew commit: "
-                  "a bump of crew's pin restarts it only by crew rebuild, until crew reads its release where it runs")
+                  "a bump of crew's pin restarts it only by crew main down and crew main up, until crew reads its release "
+                  "where it runs")
 
 
 def update_due(started, commit, launch, loaded):
@@ -2152,8 +2057,8 @@ def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
 
 def resolve(fleet, scope, role, extra):
     """How a role starts, and with "resume" the session it picks up: its last conversation, in the folder that began
-    it, which since a conductor moves into its bolt's worktree need not be where the role starts today."""
-    l = launch(fleet, scope, role, None if extra == "resume" else extra)
+    it, which need not be where the role starts today."""
+    l = launch(fleet, scope, role)
     found = last_conversation(l["name"]) if extra == "resume" else None
     return (dict(l, cwd=found[1]), found[0]) if found else (l, None)
 
@@ -2164,7 +2069,7 @@ def launch_shell(fleet, scope, role, extra):
     works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
     A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said), and on
     every host when its partition runs it as its kind (kind_said)."""
-    if scope not in fleet["teams"] and role in MAIN_STANDING + ("reviewer",):
+    if role in MAIN_STANDING + ("reviewer",):
         p, here = partition_of(fleet, scope), this_host()
         p["flume"][role] is False or fail(kind_said(p["label"], role))
         p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
@@ -2183,17 +2088,13 @@ def launch_shell(fleet, scope, role, extra):
 
 
 def here(fleet):
-    """What crew runs on this host: its teams, and the main levels whose machine is here, each of their sessions apart
-    (mains). A console runs no agent and is not listed."""
-    host, out = this_host(), []
-    out += [("team", n) for n, t in sorted(fleet["teams"].items()) if t["machine"] == host]
-    for label, p in sorted(fleet["partitions"].items()):
-        if p["machine"] == host:
-            out.append(("main", label))
-    return out
+    """What crew runs on this host: the labels of the main levels whose machine is here, each of whose sessions is one
+    Agents (mains). A console runs no agent and is not listed."""
+    host = this_host()
+    return [label for label, p in sorted(fleet["partitions"].items()) if p["machine"] == host]
 
 
-# ------------------------------------------------------------------------------------------ a team's slots and panes
+# ------------------------------------------------------------------------------------------ a main level's panes
 
 def nap(seconds):
     """A pause between looks at a pane: the host's sleep, which crew's tests stub to return at once."""
@@ -2219,159 +2120,9 @@ def exit_asks(screen):
     return bool(screen) and all(w in screen for w in EXIT_ASKS)
 
 
-def slot_for(team, slots, held, name, lent=()):
-    """The slot a unit or fix runs in (teams.1): the one holding it, else the first of the team's slots that holds
-    nothing, as (slot, whether it is newly taken); held is the slots file's lines, split. Refused, naming what each
-    holds, when every slot is in flight; and for work waiting in a slot lent to a fix (lent, the lent file's lines,
-    split), which goes on there once the fix's slot is freed (lent_said)."""
-    for f in held:
-        if f[2:3] == [name]:
-            return f[0], False
-    for f in lent:
-        if f[2:3] == [name]:
-            fail(lent_said(team, f[0], name, next((h[2] for h in held if h[0] == f[0] and len(h) > 2), "a fix")))
-    holding = {f[0] for f in held if len(f) > 2}
-    free = [s for s in slots if s not in holding]
-    free or fail(f"all {len(slots)} of {team}'s slots are in flight: " + "; ".join(f"{f[0]} holds {' '.join(f[2:3])}" for f in held))
-    return free[0], True
-
-
-def reaped(agent, team, name, stage, status, lent=None):
-    """What a team's read does with a slot (teams.1): ("free", what it says) once its work has merged, landed, been
-    dropped from the plan or left the team's bolt and its agent is not working, a slot lent to a fix given back to the
-    work it was lent from (lent, its name); ("keep", what it says, or None) while that agent works; (None, None) while
-    its work goes on."""
-    if stage not in ("merged", "landed", "dropped", "left"):
-        return None, None
-    if status == "working":
-        return "keep", {"dropped": f"{agent} still holds {name}, dropped from the plan: its agent is working; it is freed once that settles",
-                        "left": f"{agent} still holds {name}, which has left {team}'s bolt: its agent is working; it is freed once that "
-                                "settles"}.get(stage)
-    why = {"dropped": f"{name} was dropped from the plan", "landed": f"{name} has landed on main",
-           "left": f"{name} has left {team}'s bolt"}.get(stage, f"{name} has merged into its bolt")
-    return "free", f"{agent} is given back to {lent}: {why}" if lent else f"{agent} is free: {why}"
-
-
-# The states herdr reads of an agent that runs: at work, or stopped on a question with its turn open (Herdr.status).
-RUNNING = ("working", "blocked")
-
-
-def lent_for(team, slots, held, status, owed):
-    """The slot a fix takes lent when every slot is in flight (teams.1, teams.3, record 0045), until crew launches
-    through Flume: the first of the team's slots holding a unit or chore whose agent is not running, herdr reading it
-    neither working nor blocked (status, by slot), and that owes no stage an end (owed, the slots the stages file
-    names), so its work waits and holds no agent; held is the slots file's lines, split. Refused, naming why each slot
-    is not lent, when none is: a slot holding a fix, one whose agent runs and one whose stage is under way are never
-    lent, so a team never runs more agents than it has slots."""
-    lines = {f[0]: f for f in held if len(f) > 2}
-    why = []
-    for s in slots:
-        f = lines.get(s)
-        if not f:
-            continue
-        if f[1] == "fix":
-            why.append(f"{s} holds {f[2]}")
-        elif status.get(s) in RUNNING:
-            why.append(f"{s}'s agent is {status[s]} on {f[2]}")
-        elif s in owed:
-            why.append(f"{s}'s stage on {f[2]} has not ended")
-        else:
-            return s
-    fail(f"all {len(slots)} of {team}'s slots are in flight, and none can be lent to a fix: " + "; ".join(why))
-
-
-def lent_said(team, slot, work, fix):
-    """What crew says of work waiting in a slot lent to a fix (teams.1): it goes on there once the fix's slot is freed."""
-    return f"{work} waits in {team}-{slot}, lent to {fix}: it goes on there once that fix has merged or been dropped"
-
-
-def held_object(kind, name, bolt=""):
-    """What a slot holds, as the run record names it (record.6): unit/<unit>, chore/<chore>, or a fix's
-    fix/<bolt>/<name>, one given as fix/<name> before a fix's name held its bolt taking the bolt its branch tracks
-    (bolt)."""
-    if kind == "chore":
-        return f"chore/{name}"
-    if kind != "fix":
-        return f"unit/{name}"
-    if name.startswith("fix/") and "/" in name[4:]:
-        return name
-    import gather  # standard library only, as every host's crew pipes it
-    return f"fix/{gather.bolt_of(bolt) or bolt}/{name[4:] if name.startswith('fix/') else name}"
-
-
-def slot_pane_at(panes, live):
-    """Where a slot's new pane opens in "<team> units": halving the newest slot pane open, to its right when an odd
-    number are open and below it when an even number are, as (that pane, right or down); (None, None) when none is,
-    and the workspace opens anew. panes is the panes file's (role, pane) in the order they opened; live(pane) whether
-    a pane is there."""
-    open_ = [p for role, p in panes if role.startswith("unit-") and live(p)]
-    return (open_[-1], "right" if len(open_) % 2 else "down") if open_ else (None, None)
-
-
 def started_said(name, pane, stage=None):
     """What crew says of a role it started, fresh at a stage or brought back with its conversation."""
     return f"{name} resumed in {pane}" if stage == "resume" else f"{name} started {stage} in {pane}" if stage else f"{name} started in {pane}"
-
-
-TIMESTAMP = re.compile(r'"timestamp":"([^"]*)"')
-
-
-def context_of(lines, window):
-    """What crew status shows of a standing agent's session, from its transcript's lines: the context its last turn
-    used, in thousands of tokens and as a share of the window; the compactions it has had; and when it began, its
-    month, day and minute. The last turn is the last of the session's own records, not a subagent's, among the last 40
-    that carry a usage."""
-    usage, compactions, began = collections.deque(maxlen=40), 0, ""
-    for line in lines:
-        if '"usage"' in line:
-            usage.append(line)
-        compactions += '"isCompactSummary":true' in line
-        if not began:
-            m = TIMESTAMP.search(line)
-            began = m.group(1)[5:16] if m else ""
-    used = 0
-    for line in usage:
-        try:
-            v = json.loads(line)
-        except ValueError:
-            continue
-        u = v.get("message", {}).get("usage") if isinstance(v, dict) and not v.get("isSidechain") and isinstance(v.get("message"), dict) else None
-        if isinstance(u, dict):
-            used = sum(u.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
-    return f"{used // 1000}k", f"{used * 100 // window}%", str(compactions), began
-
-
-def holds_said(s, line):
-    """What crew status says a slot holds: from slot_stages' answer for it (s), its unit or fix and that work's stage,
-    with its tasks done and total in code or verify; from the slots file's line alone, its work and that its stage is
-    unknown; "" for a free slot."""
-    if s:
-        return f"{s['name']}  {s['stage']}" + (f" {s['counts']}" if s.get("counts") and s["stage"] in ("code", "verify") else "")
-    return f"{line[2]}  unknown" if line and len(line) > 2 else ""
-
-
-def status_row(*cells):
-    return "%-26s %-8s %-9s %8s %5s %8s  %-12s %s" % cells
-
-
-def roles_picked(named, standing):
-    """The standing roles a command acts on: those named, each one of the scope's standing roles, else all of them;
-    refused, naming the roles, for any other."""
-    for r in named:
-        r in standing or fail(f"no role '{r}' here; roles: {' '.join(standing)}")
-    return list(named) or list(standing)
-
-
-def already_up_said(agent, team):
-    """What crew up says of a team one of whose agents is already up: it starts none over it (teams.2)."""
-    return f"{agent} is already up; use: crew restart {team}"
-
-
-def clear_refusal(agent, status, force):
-    """Why crew clear sends no /clear to an agent (teams.2), or None: it is not up, or works and is not forced."""
-    if status is None:
-        return f"{agent} is not up."
-    return f"{agent} is working; add --force to clear it anyway." if status == "working" and not force else None
 
 
 def moved_said(scope, was, session):
@@ -2389,9 +2140,8 @@ def ws_key(label):
 
 class Agents:
     """The agents crew starts in one herdr session of this host and their panes, as one crew command acts on them there
-    (code.3): a team's (Team), a main level's, or a console's (standing). The panes, layout and
-    slots files of its state folder change only by writing a new file over the old (teams.9), and its herdr session is
-    read through the command's Herdr. A working agent is ended only when force is given (teams.2); `ended` names each
+    (code.3): a main level's, or a console's (standing). The panes and layout files of its state folder change only by
+    writing a new file over the old (teams.9), and its herdr session is read through the command's Herdr. A working agent is ended only when force is given (teams.2); `ended` names each
     role whose agent this command ended, and `fresh` each it started with a new conversation, none picked up."""
 
     def __init__(self, fleet, kind, scope, label, session, state, standing, cwd, machine, host=None, force=False):
@@ -2418,7 +2168,7 @@ class Agents:
             print(f"{why}; set aside in {stale}", file=sys.stderr)
         if was != self.session:
             where.write_text(self.session + "\n")
-        for f in ("panes", "layout", "slots"):
+        for f in ("panes", "layout"):
             (self.state / f).touch()
 
     def lines(self, f):
@@ -2457,8 +2207,8 @@ class Agents:
         (self.state / "down").touch() if down else (self.state / "down").unlink(missing_ok=True)
 
     def record(self, act, why, roles):
-        """One entry for an act on its agents, naming each, and a team's the team (record.1); none when it names none."""
-        on = ([f"team/{self.scope}"] if self.kind == "team" else []) + [f"agent/{self.agent_of(r)}" for r in roles]
+        """One entry for an act on its agents, naming each (record.1); none when it names none."""
+        on = [f"agent/{self.agent_of(r)}" for r in roles]
         if on:
             import record as rec  # record imports this module
             rec.emit(self.label, act, on, why=why)
@@ -2494,7 +2244,7 @@ class Agents:
     def panes(self):
         """Each standing role's pane, opened when it is not there, a dead one closed first (mend): a main level's roles
         in this session one tab each in the <label> workspace, in MAIN_STANDING's order, the first opening the workspace
-        when it is not there. A team's are Team.panes; a console's tabs are crew console up's."""
+        when it is not there. A console's tabs are crew console up's."""
         self.mend(self.standing)
         for role in self.standing:
             if not self.herdr.live(self.pane(role)):
@@ -2573,7 +2323,7 @@ class Agents:
         return False
 
     def start(self, role, stage=None):
-        """Start a role in its pane, fresh, at a stage for a slot, or picking up its last conversation with "resume"
+        """Start a role in its pane, fresh, or picking up its last conversation with "resume"
         (teams.2, teams.6): never over an agent still running. Its shell is cleared and moved to the folder the role
         runs in, which herdr keeps for the pane and Claude finds its conversation from; crew-role starts it there, it is
         given its name, and Claude's folder-trust question alone is answered for it, never the Bypass Permissions
@@ -2640,20 +2390,6 @@ class Agents:
         if r.returncode:
             print(f"herdr did not take {pane}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}", file=sys.stderr)
 
-    def hint_standing(self, bolt):
-        """Each standing role's pane that is up told the branch it works for now, its team holding bolt or none, after
-        a plan write that ends the team's bolt (teams.20): the names of those whose session carries another, which only
-        a restart changes (branch_due)."""
-        due = []
-        for role in self.standing:
-            pane = self.pane(role)
-            if self.herdr.live(pane):
-                branch = hint_branch(role, bolt)
-                self.hint(pane, branch)
-                if branch_due(start_of(self.agent_of(role)), branch)[0]:
-                    due.append(self.agent_of(role))
-        return due
-
     def start_standing(self):
         """Each standing role started that is not up, said when one is: the roles started. One that can't start stops
         the command."""
@@ -2674,8 +2410,8 @@ class Agents:
         self.drop("panes", role)
 
     def teardown(self):
-        """Every agent of its panes file ended, each pane closed and each workspace of its layout closed; the slots still
-        say what is in flight. An agent that could not be ended is said and left."""
+        """Every agent of its panes file ended, each pane closed and each workspace of its layout closed. An agent that
+        could not be ended is said and left."""
         for role, *_ in self.lines("panes"):
             why = self.stop(role)
             if why:
@@ -2733,109 +2469,9 @@ def standing(fleet, kind, label, force=False):
     return Agents(fleet, "console", label, label, label, state, (), sess["dir"], host, host, force)
 
 
-class Team(Agents):
-    """A team's agents on its host: its conductor and ops, and its unit slots, each holding a unit or fix in flight."""
-
-    def __init__(self, fleet, t, force=False):
-        super().__init__(fleet, "team", t["name"], t["label"], t["session"], pathlib.Path.home() / f".local/state/{t['name']}-team",
-                         ("conductor", "ops"), t["kit"]["main"], t["machine"], force=force)
-        self.t, self.name = t, t["name"]
-        self.slots = [f"unit-{n}" for n in range(1, t["units"] + 1)]
-
-    def holding(self, name):
-        """The slot holding a unit or fix, or None."""
-        return next((l[0] for l in self.lines("slots") if l[2:3] == [name]), None)
-
-    def held(self, slot):
-        """The slots file's line for a slot, split, or None."""
-        return next((l for l in self.lines("slots") if l[0] == slot), None)
-
-    def lent(self, slot):
-        """The work waiting in a slot lent to a fix, its line as the slots file held it, split, or None (teams.1)."""
-        return next((l for l in self.lines("lent") if l[0] == slot and len(l) > 2), None)
-
-    def panes(self):
-        """The team's workspace, "<team>": its conductor tab holding the conductor and ops, and no git tab, on a Mac as
-        on a box; each opened when its pane is not there, a dead one closed first (mend), and the conductor's beside ops
-        when only ops' is there (opened). A git tab an earlier crew opened there is left as it stands, the user's to
-        close."""
-        t, live = self.t, self.herdr.live
-        self.mend(("conductor", "ops"))
-        if not live(self.pane("conductor")):
-            self.opened(self.name, "conductor", t["kit"]["main"], "conductor", beside=self.pane("ops"))
-        if not live(self.pane("ops")):
-            self.put("panes", "ops", self.split(self.pane("conductor"), "right", t["kit"]["main"]))
-
-    def slot_pane(self, slot, path):
-        """The slot's pane, opened in "<team> units" when it is not there (slot_pane_at), a dead one closed first (mend);
-        the workspace exists only while a slot is in flight."""
-        self.mend((slot,))
-        if self.herdr.live(self.pane(slot)):
-            return
-        newest, way = slot_pane_at([(l[0], l[1]) for l in self.lines("panes") if len(l) > 1], self.herdr.live)
-        if newest:
-            p = self.split(newest, way, path)
-        else:
-            tab, p = self.workspace(f"{self.name} units", path)
-            self.herdr.run("tab", "rename", tab, "units")
-        self.put("panes", slot, p)
-
-    def take(self, kind, name, place):
-        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken)."""
-        held = self.lines("slots")
-        slot, new = slot_for(self.name, self.slots, held, name, self.lines("lent"))
-        if new:
-            self.write("slots", held + [[slot, kind, name, place]])
-        return slot, new
-
-    def give_back(self, slot):
-        """The slot's line dropped, and the work it was lent from, if any, back in it (teams.1): that work's name, or
-        None."""
-        back = self.lent(slot)
-        self.write("slots", [l for l in self.lines("slots") if l[0] != slot] + ([back] if back else []))
-        if back:
-            self.drop("lent", slot)
-        return back[2] if back else None
-
-    def free(self, slot, bolt="", held=None):
-        """End a slot's agent, close its pane and give the slot back, recorded (teams.1), to the work it was lent from
-        when it was lent to a fix (give_back); the units workspace goes with the last slot. None once it is free, else
-        what crew says of the agent it could not end (stop). bolt is the bolt a fix given as fix/<name> is of, read from
-        its branch when not given. With held, a list, the slot.free entry is put there as (label, on, why, place) for
-        the command to write once its tidy has run, naming the place it removed (plan.9)."""
-        why = self.stop(slot)
-        if why:
-            return why
-        line = self.held(slot)
-        self.give_back(slot)
-        if line and len(line) > 2:
-            if line[1] == "fix" and not bolt and not (line[2].startswith("fix/") and "/" in line[2][4:]):
-                bolt = subprocess.run(["git", "-C", self.t["kit"]["main"], "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{line[2]}"],
-                                      capture_output=True, text=True).stdout.strip()
-            entry = (self.label, [f"agent/{self.agent_of(slot)}", held_object(line[1], line[2], bolt)],
-                     f"team({self.name}): free {self.agent_of(slot)}", line[3] if len(line) > 3 else "")
-            if held is not None:
-                held.append(entry)
-            else:
-                import record as rec  # record imports this module
-                rec.emit(entry[0], "slot.free", entry[1], why=entry[2])
-        if self.lines("slots"):
-            self.close_pane(slot)
-            return None
-        w = self.get("layout", ws_key(f"{self.name} units"))
-        if w:
-            self.herdr.run("workspace", "close", w)
-        self.drop("layout", ws_key(f"{self.name} units"))
-        for s in self.slots:
-            self.drop("panes", s)
-        return None
-
-
 def main(a):
     fleet = load()
-    if a[:1] == ["teams"]:
-        print("\n".join(fleet["teams"]))
-    elif a[:1] == ["labels"]:
+    if a[:1] == ["labels"]:
         print("\n".join(fleet["partitions"]))
     elif a[:1] == ["brief"] and len(a) >= 3:
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))

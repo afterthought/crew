@@ -172,12 +172,6 @@ class TestStage:
         assert st.bolt_state(p.bolt("x")) == "landed"
 
 
-class TestSlotsAndPlaces:
-    def test_a_slot_holding_a_chore_is_freed_on_its_object(self):
-        import crew
-        assert crew.held_object("chore", "bump") == "chore/bump" and crew.held_object("unit", "a") == "unit/a"
-
-
 class TestBolts:
     def test_a_landing_waits_for_its_chores_to_land(self):
         stage = {"a": "landed", "bump": "merged"}

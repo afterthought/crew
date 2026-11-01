@@ -138,19 +138,13 @@ def stamp(t=None):
 # ------------------------------------------------------------------------------------------- what crew reads
 
 def agents_on_host(fleet):
-    """Every Agents crew keeps on this host: each team's and each of its main levels' sessions."""
-    out = []
-    for kind, scope in crew.here(fleet):
-        if kind == "team":
-            out.append(crew.Team(fleet, crew.team_of(fleet, scope)))
-        elif kind == "main":
-            out += crew.mains(fleet, scope)
-    return out
+    """Every Agents crew keeps on this host: each session of each of its main levels."""
+    return [a for label in crew.here(fleet) for a in crew.mains(fleet, label)]
 
 
 def roles_of(a):
-    """The roles of an Agents' panes file that hold an agent: its standing roles, a team's slots and the reviewer."""
-    return [r for r, *_ in a.lines("panes") if r in a.standing or r.startswith("unit-") or r == "reviewer"]
+    """The roles of an Agents' panes file that hold an agent: its standing roles and the reviewer."""
+    return [r for r, *_ in a.lines("panes") if r in a.standing or r == "reviewer"]
 
 
 def own_work(info):
@@ -168,14 +162,14 @@ def own_work(info):
 
 def labels_here(fleet):
     """The partitions crew runs anything for on this host."""
-    return sorted({fleet["teams"][s]["label"] if k == "team" else s for k, s in crew.here(fleet)})
+    return crew.here(fleet)
 
 
 def facts_here(fleet):
     """What crew reads of each crew agent up on this host, for busy_said, and the count of crew's tests running."""
     facts = []
     for a in agents_on_host(fleet):
-        owed = {l[0]: f"{l[2]} of {l[1]}" for l in a.lines("stages") if len(l) > 2} if isinstance(a, crew.Team) else {}
+        owed = {}
         for role in roles_of(a):
             name, pane = a.agent_of(role), a.pane(role)
             status = a.status(role, fresh=True)
@@ -369,7 +363,7 @@ def hand(name):
 
 
 def holding(fleet, name):
-    """The Agents an agent's standing role is kept in, and that role: a team's or a main level's."""
+    """The Agents an agent's standing role is kept in, and that role: a main level's."""
     return crew.holding_of(fleet, name) or fail(f"{name} is no standing agent of crew's: only those are restarted for an update")
 
 
@@ -453,10 +447,8 @@ def renew(fleet, a):
     started = started or {}
     moved = crew.branch_due(started, branch)[1] if branch is not crew.UNREAD else None
     notice = renew_notice(started.get("version"), version, changes_for(started.get("commit"), commit) + ([moved] if moved else []))
-    if isinstance(agents, crew.Team) and role == "conductor":
-        plan.greeted(plan.greet_team(fleet, agents.t, ["conductor"], notice=notice))
-    elif role in agents.fresh:  # it had no conversation to pick up, so it is greeted as any fresh start is
-        plan.greeted(plan.greet_team(fleet, agents.t, [role]) if isinstance(agents, crew.Team) else plan.greeting(fleet, agents, [role]))
+    if role in agents.fresh:  # it had no conversation to pick up, so it is greeted as any fresh start is
+        plan.greeted(plan.greeting(fleet, agents, [role]))
     else:
         crew.tell(fleet, name, notice, taken=True, what="the notice of its restart")
     print(f"{name} is restarted on crew {version or (commit or '?')[:7]}")

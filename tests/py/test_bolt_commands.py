@@ -135,14 +135,14 @@ class TestDropDeletes:
         """bolt-plan "The drop's host does not answer"."""
         assert plan.dropped_said("b", self.HOST, 255, "", "ssh: connect to host") == (
             "chuck-herdr-alpha did not answer, so sluice was not asked to delete bolt/b: sluice branch delete bolt/b "
-            "--into main there; the team's next read asks it")
+            "--into main there; the kit's next read asks it")
 
     def test_words_crew_cannot_read_leave_it_to_the_next_read(self):
         """read.2: what is not sluice's document decides nothing."""
         assert plan.dropped_said("b", self.HOST, 0, deleted("delete.json").replace("RC=0", "RC=x"), "").startswith(
             "bolt/b may still stand on GitHub: crew can't read what sluice's branch delete said from:")
         assert plan.dropped_said("b", self.HOST, 0, deleted("delete.json").replace("RC=0", "RC=x"), "").endswith(
-            "; the team's next read asks sluice again")
+            "; the kit's next read asks sluice again")
 
     def test_asked_again_once_main_holds_its_tip(self):
         """bolt-plan "Main comes to hold a dropped bolt's work"."""

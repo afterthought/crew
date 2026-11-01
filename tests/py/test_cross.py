@@ -17,23 +17,6 @@ def team(flume, name="crw-4"):
     return {"name": name, "flume": flume, "label": "madswan", "machine": "deneb"}
 
 
-class TestNoStandingAgent:
-    """A team runs no standing agent: every standing-agent or slot command of it is refused at once, naming where its
-    work runs, with nothing read (Decision 15)."""
-    FLEET = {"teams": {}, "partitions": {"madswan": {"label": "madswan"}}}
-
-    def test_a_teams_command_is_refused_naming_flume_its_host_and_crew_bolts(self):
-        assert runner.crossed_refusal("crw-4", "deneb", "up crw-4") == (
-            "crw-4's work runs in Flume places on deneb, which crew bolts shows; it runs no conductor, ops or slot, so crew up "
-            "crw-4 has nothing of it to act on")
-
-    @pytest.mark.parametrize("flume", ["madswan", False])
-    def test_every_team_is_refused_whatever_its_stream_and_no_plan_is_read(self, monkeypatch, flume):
-        monkeypatch.setattr(plan, "plans", lambda *a, **k: pytest.fail("not_crossed read a plan"))
-        with pytest.raises(plan.Refusal, match="^crw-4's work runs in Flume places on deneb"):
-            plan.not_crossed(self.FLEET, team(flume), "up crw-4")
-
-
 # ------------------------------------------------------------------------------------- a crossed team's bolt launched
 
 FLEET = crossed_fleet()

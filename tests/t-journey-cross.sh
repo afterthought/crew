@@ -1,6 +1,6 @@
 # A team's work through Flume, through the crew command on the stubs (record 0050 parts 2 and 3; the change
-# teams-cross-to-flume-as-their-bolts-land; Decision 1 of the-team-machinery-leaves): every team runs no conductor, ops
-# or slot, so crew up of one is refused at once, naming Flume and crew bolts, with no pane opened. crew bolt start of a
+# teams-cross-to-flume-as-their-bolts-land; Decisions 1 and 10 of the-team-machinery-leaves): crew runs no team's
+# conductor, ops or slot, so crew up is no command, answered with crew's usage, with no host reached and no pane opened. crew bolt start of a
 # bolt whose kit no team builds in a stream is refused, and of one whose kit's team runs where no runner answers, the
 # plan unchanged and no branch made; once a runner answers, sluice makes the bolt's branch, the plan marks the bolt Path:
 # flume, naming no team, and requests.rec on the state branch holds a launch of each of its units and chores, and no
@@ -20,11 +20,10 @@ $(team swb-1)['flume'] = 'wldn'"
 crew bolt new next "What comes next." --repo switchboard-kit >/dev/null
 
 : > "$CREW_TEST_LOG"
-expect_fail "swb-1's work runs in Flume places on $box, which crew bolts shows; it runs no conductor, ops or slot, so crew up swb-1 has nothing of it to act on" \
-  crew up swb-1
+expect_fail "crew bolts" crew up swb-1
 grep -q "ssh $box " "$CREW_TEST_LOG" && fail "crew up of a team went to its host"
 [[ -e $(home_of $box)/.stub-herdr/wldn-1.json ]] && fail "crew up of a team opened a pane"
-ok "crew up of a team is refused at once, naming Flume and crew bolts, and opens no pane"
+ok "crew up is no command: crew answers it with its usage, reaching no host and opening no pane"
 
 crew bolt new board "The board." --repo breadboard-kit >/dev/null
 plan_at=$(act_tip)
