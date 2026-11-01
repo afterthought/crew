@@ -8,7 +8,7 @@
 ## ADDED Requirements
 
 ### Requirement: A bolt is created, dropped and landed through crew
-`crew bolt new` SHALL add a bolt with its repo, goal and sources; `crew bolt order` moves it; `crew bolt drop` SHALL remove it and its units, or with `--requeue` queue them, refusing `--requeue` while a unit has a place. `crew bolt submit` SHALL submit its branch to its kit's main through sluice; `crew bolt land` SHALL remove a landed bolt and its units, and land and drop SHALL have sluice delete its branch, keeping and naming one holding work main lacks. No command SHALL give a bolt to a team.
+`crew bolt new` SHALL add a bolt with its repo, goal and sources; `crew bolt order` moves it; `crew bolt drop` SHALL remove it and its units, or with `--requeue` queue them, and in either case SHALL drop each of the bolt's launches still standing in the drop's own commit, a requeued unit's among them, so a requeued unit is launched afresh once a bolt it is placed in is started. `crew bolt submit` SHALL submit its branch to its kit's main through sluice; `crew bolt land` SHALL remove a landed bolt and its units, and land and drop SHALL have sluice delete its branch, keeping and naming one holding work main lacks. No command SHALL give a bolt to a team.
 
 #### Scenario: Landing too early
 - **WHEN** `crew bolt land` runs while one of the bolt's units has not landed on main
@@ -35,8 +35,8 @@
 - **THEN** the drop names the host and the command, and the bolt is gone from the plan
 
 #### Scenario: Requeuing a unit that has a place
-- **WHEN** `crew bolt drop <bolt> --requeue` runs while one of the bolt's units has a place
-- **THEN** it is refused, naming the unit and its place, and the plan is unchanged
+- **WHEN** `crew bolt drop x "Later." --requeue` runs while unit `a` of started `x` has a launched place
+- **THEN** `a` is in its repository's queue with no bolt or `After`, `x` is gone from the plan, and `requests.rec` gains a drop of `a`'s launch, in the drop's commit
 
 #### Scenario: A give
 - **WHEN** anyone runs `crew bolt give swb-1`

@@ -188,8 +188,9 @@ class TestReach:
         assert [(r["Act"], r["Work"], r.get("Of")) for r in requests(w)[3:]] == [
             ("drop", "unit/a", "1"), ("drop", "chore/c", "2"), ("drop", "fix/x/tidy", "3")]
         w = launched("x", work=[unit("a")])
-        ops(w, 'bolt drop x "Later." --requeue')
+        ops(w, 'bolt drop x "Later." --requeue')  # bolt-plan "Requeuing a unit that has a place": its launch dropped, not refused
         assert [(r["Act"], r.get("Of")) for r in requests(w)[1:]] == [("drop", "1")]
+        assert w.plan.item("a").get("Bolt") is None and w.plan.bolt("x") is None
 
     def test_a_bolt_not_started_is_refused(self):
         w = given(("x", None, None), work=[unit("a")])
