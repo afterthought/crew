@@ -1,41 +1,12 @@
-"""A unit's stage, read from its place and its Amended mark (plan.6, state.2): plan.place_stage; a drop refused for work
-whose stage crew cannot tell (read.1); and a started bolt's work, its stage read from the runner's records: plan.Stages."""
+"""A drop refused for work whose stage crew cannot tell (read.1); and a started bolt's work, its stage read from the
+runner's records and never from a place in the kit (bolt-plan "A unit's stage is read from the runner, or from the plan
+before its bolt starts"): plan.Stages."""
 import pytest
 
-from facts import FactsWrite, apply, crew_read, known, madswan_fleet, plan_text
+from facts import FactsWrite, apply, crew_read, flume_plan, known, madswan_fleet, plan_text
 
 import plan
 import runner
-
-
-def place(done=0, total=0, planning=False, head=None):
-    return {"tasks": (done, total) if total else None, "planning": planning, "head": head}
-
-
-@pytest.mark.parametrize("pl, stage", [
-    (place(), "construct"),
-    (place(planning=True), "planned"),
-    (place(0, 5, planning=True), "planned"),
-    (place(2, 5, planning=True), "code"),
-    (place(5, 5, planning=True), "verify"),
-], ids=["nothing written", "planning, no tasks", "tasks, none done", "some done", "all done"])
-def test_an_unmarked_unit_reads_its_stage_from_its_tasks(pl, stage):
-    assert plan.place_stage(pl) == stage
-
-
-@pytest.mark.parametrize("mark", ["intent", "proposal/124"])
-def test_an_amended_unit_reads_amended_until_construct_runs_again(mark):
-    assert plan.place_stage(place(5, 5, planning=True), mark) == "amended"
-    assert plan.place_stage(None, mark) == "amended"
-
-
-def test_a_unit_whose_construct_started_again_is_in_construct_until_it_commits():
-    assert plan.place_stage(place(5, 5, planning=True, head="abc123"), "abc123") == "construct"
-    assert plan.place_stage(None, "abc123") == "construct"
-
-
-def test_once_construct_has_committed_again_the_mark_stops_counting():
-    assert plan.place_stage(place(1, 6, planning=True, head="def456"), "abc123") == "code"
 
 
 def fresh():
@@ -104,6 +75,22 @@ class TestCrossed:
         s = self.stages(ran({1: "code"})).of("a")
         assert (s["stage"], s["tasks"]) == ("code", (6, 26))
         assert runner.piece_said(s["flume"]) == ("code 6/26", "")
+
+    def test_a_worktree_of_crews_from_before_is_not_read(self):
+        """bolt-plan "A worktree of crew's from before": a unit/a place in the kit with every task ticked reads nothing
+        for a; its stage is the runner's."""
+        from facts import ran
+        st = self.stages(ran({1: "code"}))
+        k = st.survey["deneb"]["kits"]["/crew/main"]
+        k["places"]["a"] = {"path": "/crew/places/unit-a", "tasks": [5, 5], "planning": True, "open": [], "branch": "unit/a", "bolt": "x"}
+        assert (st.of("a")["stage"], st.of("a")["tasks"]) == ("code", (6, 26))
+
+    def test_a_bolt_not_started_reads_ready_or_waiting_from_the_plan(self):
+        """bolt-plan "A bolt not started": a with no After ready, b after a waiting, and nothing of a runner read."""
+        p = plan.Plan(flume_plan([("y", None, None)], [("a", "y", [], "unit", []), ("b", "y", ["a"], "unit", []), ("q", None, [], "unit", [])]))
+        st = plan.Stages(self.FLEET, p, {}, runs={}, label="madswan")
+        assert [st.of(n)["stage"] for n in ("a", "b", "q")] == ["ready", "waiting", "queued"]
+        assert st.runs == {}
 
     def test_a_construct_that_asked_needs_an_answer_with_its_question(self):
         """bolt-plan "A construct that asked"."""

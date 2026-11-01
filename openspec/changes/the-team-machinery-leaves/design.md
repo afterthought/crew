@@ -168,10 +168,11 @@ Each removal retires the rule or the clause named, on records 0047 (move 5, and 
 | `teams.24` | "a stage wait of today's runs as the conductor's background command" | task group 2 |
 | `plan.4` | a proposal touching a held bolt waits on its conductor's agreement | task group 3 |
 | `plan.5` | "held bolt" read as a team's | task group 3 |
+| `plan.6` | a marked unit reading amended, then construct, its code, verify and merge refused until its construct has committed again: a started bolt's stages are the runner's, and crew reads no stage from a place | task groups 3, 10 |
 | `plan.8` | the forecast on a conductor's wait; the team taking main in | task group 2 |
 | `plan.9`, `plan.10` | crew's removal of `unit/`, `chore/` and `fix/` places and their branches | task group 2 |
-| `plan.11` | a chore built by crew's code, verify and merge stages, its slot | task group 2 |
-| `plan.13` | a unit holding a slot goes back to waiting (record 0040) | task group 2 |
+| `plan.11` | a chore built by crew's code, verify and merge stages, its slot; a dependent of a chore starting once the chore's code has delivered | task groups 2, 10 |
+| `plan.13` | a unit holding a slot goes back to waiting (record 0040); a dependent's construct starting once its After work has finished construct, never waiting on a merge, where a started bolt's dependent launches once its After work has landed on the bolt, as the crossed path has it | task groups 2, 10 |
 | `plan.15` | the construct handed to the team's host; a conductor brought back starts it | task group 2 |
 | `plan.16` | the landing card raised in the conductor's name and passed on by tell; a bolt no team holds; a bolt held for its team's fix | task groups 3, 5 |
 | `plan.17` | whole: crew makes no place ready | task group 2 |

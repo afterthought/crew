@@ -1257,17 +1257,6 @@ def amended(mark):
     return mark == "intent" or (mark or "").startswith("proposal/")
 
 
-def place_stage(pl, mark=None):
-    """The stage of a unit that has neither landed nor merged, from its place and its Amended mark. A marked unit is
-    amended until construct runs again, and in construct while its head is still where construct started; once that
-    construct has committed the mark stops counting (plan.6). Otherwise: verify, code, planned or construct, from its
-    tasks and its planning."""
-    if mark and (amended(mark) or not pl or pl.get("head") == mark):
-        return "amended" if amended(mark) else "construct"
-    done, total = pl["tasks"] or (0, 0)
-    return "verify" if total and done == total else "code" if done else "planned" if pl["planning"] else "construct"
-
-
 # The stages at which a unit has finished construct: its change is committed, and a unit after it may be constructed.
 CONSTRUCTED = ("planned", "code", "verify", "merged", "landed")
 
