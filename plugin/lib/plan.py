@@ -23,7 +23,7 @@ five times. A write that changes several files is one commit; its run-record ent
                                              card and still-proposed record's another host holds or its owner lost,
                                              saying the older copy is dead, and tries again the reading of a batch's, a
                                              long proposal's or a kit's landings card that stands without it, ten
-                                             minutes on, a landings card's rows' each on its team's host
+                                             minutes on, a landings card's rows' each where its bolt's work runs
   crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
                                              the design agent's record at each turn of its status, read on the kit's
                                              main, raising its card unless settled in the pane, the user's yes read in
@@ -32,7 +32,8 @@ five times. A write that changes several files is one commit; its run-record ent
                                              a revision and closing it on accepted or rejected
   crew card session|end <key> [<unit>]       a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
-                                             a batch card's one per unit on that unit's team's host; a reading
+                                             a batch's on the main level's host and a landing's where its bolt's work
+                                             runs, as the runner that took it reported; a reading
                                              started anew, or given again to a card standing without it, changing its
                                              open card to carry the link, each try recorded; and its end, which a
                                              card's close brings too. crew card wait is refused, naming crew card
@@ -50,12 +51,12 @@ five times. A write that changes several files is one commit; its run-record ent
   crew bolt order <bolt> --before <bolt>|--first|--last
   crew bolt drop <bolt> "<reason>" [--requeue]
                                              the bolt and its units out of the plan, or with --requeue its units
-                                             queued, refused while one has a worktree; its worktrees then go from its
-                                             team's host
+                                             queued, each of its launches still standing dropped either way; sluice
+                                             then asked to delete its branch where its work ran
   crew bolt land <bolt>                      once every unit has landed on main, recording the commit main then
-                                             holds; its worktree then goes from its team's host, unless it has
-                                             uncommitted changes; a bolt no team holds lands once each unit's change
-                                             is on its kit's main
+                                             holds; its landing's worktree then goes from the host its work ran on,
+                                             unless it has uncommitted changes; a bolt never started lands once each
+                                             unit's change is on its kit's main
   crew bolt submit <bolt>... [--excerpt "<the user's words>"] [--label L]
                                              main-level ops's landing of one kit's bolts through sluice, in order; with
                                              --excerpt, on the user's words in ops's pane, submitted only once crew
@@ -69,8 +70,9 @@ five times. A write that changes several files is one commit; its run-record ent
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]
-  crew unit amend <unit> "<new intent>"      a unit's intent replaced; one with a worktree is marked amended, and its
-                                             construct runs again at once on its team's host, its conductor told
+  crew unit amend <unit> "<new intent>"      a unit's intent replaced; one whose place is launched is marked amended
+                                             and its construct retried with the amendment's words, as the write's own
+                                             request
   crew unit order <unit> --before <unit>|--first|--last
   crew unit after <unit> <unit>...|--none
   crew unit move <unit> <bolt>|queue [--unblocks <bolt>]
@@ -78,7 +80,7 @@ five times. A write that changes several files is one commit; its run-record ent
   crew chore add <chore> "<words>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew chore order|after|move|drop ...       as a unit's, of a chore: planned maintenance that changes nothing a spec
-                                             says must be true, built in its bolt by code, verify and merge
+                                             says must be true, built in its bolt as Flume's chore kind
   crew plan propose <file> [--replaces <n>]  the planner's proposal: a Case and the plan commands it would run (Do);
                                              crew raises its card in the planner's name, or changes the card of the
                                              one it replaces
@@ -156,7 +158,7 @@ HEADER = """\
 %unique: Repo Goal
 
 %rec: Unit
-%doc: One OpenSpec change named Unit, built on unit/<Unit> at <Repo>/places/<Unit>; or, marked Kind: chore, a chore: planned maintenance with no change, its Intent its words, built on chore/<Unit> at <Repo>/places/chore-<Unit>.
+%doc: One OpenSpec change named Unit, built in a Flume place of its bolt's; or, marked Kind: chore, a chore: planned maintenance with no change, its Intent its words, built in a Flume place of the chore kind.
 %key: Unit
 %type: Unit regexp /^[a-z0-9][a-z0-9-]*$/
 %type: Bolt rec Bolt

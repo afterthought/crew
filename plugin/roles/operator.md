@@ -65,7 +65,7 @@ An agent that tells you it waits on the user is making sure they know, since the
 
 ## Showing what is running
 
-On request, list the running dev servers with `{{TEAM_CMD}} sites {{LABEL}}`: each bolt with its units and fixes, and the URL of each one's dev server, if one runs. {{SHOWING}} A unit with no URL has no server running: say so rather than starting one.
+On request, list the running dev servers with `{{TEAM_CMD}} sites {{LABEL}}`: each host that keeps a kit, and each bolt in flight, whose work runs in Flume's places, where crew finds no dev server, so it shows no URL for them until the runner reports a place's addresses. {{SHOWING}} A bolt or unit with no URL has no server crew can show: say so rather than starting one.
 
 ## Talking to the user
 
