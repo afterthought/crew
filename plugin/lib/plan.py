@@ -7786,14 +7786,6 @@ def unit_kit_team(fleet, label, t, unit):
     return crew.with_kit(t, b.get("Repo"))
 
 
-def bolt_of_team(fleet, t):
-    """The bolt a team builds (team_building), from its plan; refused when it holds none, the plan can't be read, or
-    which of two bolts it builds can't be told."""
-    repo, ref = state_of(fleet, t["label"])
-    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
-    return team_building(fleet, read(repo, ref, tip), t) or fail(f"no started bolt's work runs with {t['name']}")
-
-
 def kit_git(fleet, t, where, *args, ok=(0,)):
     """git in a checkout of the team's kit, on the team's host: (exit status, output); refused in git's words when it
     exits with a status outside ok."""

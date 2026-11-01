@@ -3,12 +3,11 @@
 
   crew hold <host>|--all "<why>" [--now]
                                  hold each host named: crew starts no agent there until crew go, and every standing
-                                 agent up there is told to finish the step it is in and start nothing new; a stage
-                                 already running ends as it would. With --now every crew agent there is ended at once,
-                                 a stage's included, which its conductor runs again after go
+                                 agent up there, a main level's, is told to finish the step it is in and start nothing
+                                 new. With --now every crew agent there is ended at once
   crew hold status [<host>|--all]
                                  each host's hold, and what still works there: an agent working, waiting on a question
-                                 to the user or running background work of its own, a stage not yet ended, crew's tests
+                                 to the user or running background work of its own, crew's tests
   crew hold wait [<host>|--all] [--timeout <ms>]
                                  wait until each host is quiet, then end every crew agent there, its panes kept, so
                                  herdr can be restarted or the host rebooted; half an hour unless --timeout says
@@ -42,18 +41,18 @@ EXITING = 120
 LOOK = 10
 
 HOLD_NOTICE = ("{host} is held by {by}: {why}. Finish the step you are in, then start nothing new: crew starts no agent on "
-               "{host} until crew go {host}, and refuses a stage, a fix, a give or a review there meanwhile. A stage "
-               "already running ends as it would: let it end, and run no next one. Then end your turn and wait to be told.")
+               "{host} until crew go {host}, and refuses every command that would there meanwhile. Then end your turn "
+               "and wait to be told.")
 GO_NOTICE = "{host} is no longer held: crew starts agents there again. Carry on with what is yours."
 
 
 # ------------------------------------------------------------------------------------------- what crew decides
 
 def hosts_named(fleet, which):
-    """The hosts a command acts on: every host crew runs agents on, a team's or a main level's, for --all; else the one
-    named, which must be a host of the hosts file."""
+    """The hosts a command acts on: every host crew runs agents on, each partition's main level's, for --all; else the
+    one named, which must be a host of the hosts file."""
     if which in (None, "--all"):
-        return sorted({t["machine"] for t in fleet["teams"].values()} | {p["machine"] for p in fleet["partitions"].values()})
+        return sorted({p["machine"] for p in fleet["partitions"].values()})
     which in fleet["hosts"] or fail(f"{which} is no host of the fleet's hosts file. hosts: " + " ".join(sorted(fleet["hosts"])))
     return [which]
 
@@ -68,12 +67,10 @@ def crew_wait(command):
 def busy_said(facts, tests):
     """What still works on a held host (teams.19), from what crew read of each crew agent up there and of crew's
     tests: an agent working, one waiting on a question to the user, one running background work of its own other than
-    crew's waits, a stage still owed its end, and one crew can't read (read.1). Empty once the host is quiet."""
+    crew's waits, and one crew can't read (read.1). Empty once the host is quiet."""
     out = []
     for f in facts:
         name = f["name"]
-        if f.get("owes"):
-            out.append(f"{name}'s {f['owes']} has not ended")
         if f.get("unread"):
             out.append(f"crew can't tell what {name} is doing: {f['unread']}")
         elif f["status"] == "working":
@@ -108,8 +105,8 @@ def renew_exited(holds, unread, marked, session, down):
     """Whether a restart for an update starts an agent it finds not up, with no stop (teams.19): only one an earlier
     restart's keys ended, from facts: whether herdr lists its pane with an agent in it (pane_holds: False for none,
     None when unread), what crew could not read of the pane, the session an earlier restart that could not see it exit
-    typed its exit into (its mark, None when none), the session of its last start, and whether its team or main level
-    was taken down. An agent the user ended by hand, or one a crash took, has no mark naming its session and
+    typed its exit into (its mark, None when none), the session of its last start, and whether its main level was taken
+    down. An agent the user ended by hand, or one a crash took, has no mark naming its session and
     stays crew revive's. Returns (start, why not)."""
     if down:
         return False, "it was taken down; it stays down"
@@ -169,17 +166,16 @@ def facts_here(fleet):
     """What crew reads of each crew agent up on this host, for busy_said, and the count of crew's tests running."""
     facts = []
     for a in agents_on_host(fleet):
-        owed = {}
         for role in roles_of(a):
             name, pane = a.agent_of(role), a.pane(role)
             status = a.status(role, fresh=True)
-            f = {"name": name, "status": status, "owes": owed.get(role)}
-            if status is not None:
-                _, f["asking"], unread = crew.waits_on_question(fleet, name)
-                own, unread2 = own_work(a.herdr.agent(pane, fresh=True)) if not unread else (None, None)
-                f.update(own=own, unread=unread or unread2)
-            if status is not None or f["owes"]:
-                facts.append(f)
+            if status is None:
+                continue
+            f = {"name": name, "status": status}
+            _, f["asking"], unread = crew.waits_on_question(fleet, name)
+            own, unread2 = own_work(a.herdr.agent(pane, fresh=True)) if not unread else (None, None)
+            f.update(own=own, unread=unread or unread2)
+            facts.append(f)
     r = subprocess.run(["python3", "-c", ops.SLOTS], capture_output=True, text=True)
     tests = int(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip().isdigit() else 0
     return facts, tests
@@ -368,11 +364,9 @@ def holding(fleet, name):
 
 
 def renew(fleet, a):
-    """crew _renew <agent>: an agent an update made due (crew.due_of), or whose team's bolt changed under it (teams.20),
-    restarted on crew as it now is, once herdr reads it
-    idle with no question open and no background work of its own but crew's waits (renew_ready), within a.wait seconds;
-    a conductor fresh, as its restart always is, and every other role with its conversation; greeted, or told what
-    changed, and recorded. One process at a time per agent; nothing while the host is held. It ends with the agent
+    """crew _renew <agent>: an agent an update made due (crew.due_of) restarted on crew as it now is, once herdr reads
+    it idle with no question open and no background work of its own but crew's waits (renew_ready), within a.wait
+    seconds, with its conversation; greeted when it had none to pick up, else told what changed, and recorded. One process at a time per agent; nothing while the host is held. It ends with the agent
     running: one still up when its stop gives up is watched for EXITING looks and started the moment it goes, or left
     as it was, still due, when it never does, with a mark naming the session its exit was typed into; and one a later
     restart finds those keys ended (renew_exited) is started with no stop. A main level's agent whose role now runs as
@@ -389,13 +383,12 @@ def renew(fleet, a):
         print(f"{name} is already being restarted")
         return
     deadline = time.monotonic() + a.wait
-    branch = crew.branch_now(fleet, name)  # read once: it reads the plan
     gone = False  # an earlier restart's keys ended it, so it is started with no stop
     while True:
         if crew.held():
             print(f"{host} is held; crew go {host} hands {name} what it is due")
             return
-        due, why, started = crew.due_of(fleet, name, branch=branch)
+        due, why, started = crew.due_of(fleet, name)
         if not due:
             print(f"{name} is not due a restart" + (f": {why}" if why else ""))
             return
@@ -439,14 +432,12 @@ def renew(fleet, a):
             if not agents.exited(role, EXITING):
                 print(f"{why}; it runs on as it was, still due: the end of its next turn hands it back", file=sys.stderr)
                 return
-    fresh = role == "conductor"
-    if not agents.start(role, None if fresh else "resume"):
+    if not agents.start(role, "resume"):
         raise Stopped(1)
     mark.unlink(missing_ok=True)
     agents.record("agent.renew", f"update({host}): restart {name}", [role])
     started = started or {}
-    moved = crew.branch_due(started, branch)[1] if branch is not crew.UNREAD else None
-    notice = renew_notice(started.get("version"), version, changes_for(started.get("commit"), commit) + ([moved] if moved else []))
+    notice = renew_notice(started.get("version"), version, changes_for(started.get("commit"), commit))
     if role in agents.fresh:  # it had no conversation to pick up, so it is greeted as any fresh start is
         plan.greeted(plan.greeting(fleet, agents, [role]))
     else:

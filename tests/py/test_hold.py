@@ -179,8 +179,8 @@ class TestStarts:
         (tmp_path / "other").write_text("CREW_AGENT=wldn-design\n")
         import os
         os.utime(tmp_path / "old", (1, 1))
-        assert crew.start_of("wldn-ops") == {"session": "new", "commit": C2, "version": "v0.13.0", "launch": "abc", "branch": None}
-        assert crew.start_of("wldn-design") == {"session": "other", "commit": None, "version": None, "launch": None, "branch": None}
+        assert crew.start_of("wldn-ops") == {"session": "new", "commit": C2, "version": "v0.13.0", "launch": "abc"}
+        assert crew.start_of("wldn-design") == {"session": "other", "commit": None, "version": None, "launch": None}
         assert crew.start_of("wldn-planner") is None
 
 
@@ -201,20 +201,19 @@ class TestHeld:
 
 class TestQuiet:
     def test_a_host_is_quiet_once_nothing_of_crews_works_there(self):
-        assert hold.busy_said([{"name": "crw-4-conductor", "status": "idle", "asking": False, "own": [], "owes": None, "unread": None}], 0) == []
+        assert hold.busy_said([{"name": "swancloud-design", "status": "idle", "asking": False, "own": [], "unread": None}], 0) == []
 
     def test_what_still_works_is_said_each_its_own_way(self):
-        facts = [{"name": "crw-4-conductor", "status": "working", "asking": False, "own": [], "owes": None, "unread": None},
-                 {"name": "crw-4-ops", "status": "blocked", "asking": False, "own": [], "owes": None, "unread": None},
-                 {"name": "swancloud-planner", "status": "idle", "asking": True, "own": [], "owes": None, "unread": None},
-                 {"name": "swancloud-ops", "status": "idle", "asking": False, "own": ["wt submit main"], "owes": None, "unread": None},
-                 {"name": "crw-4-unit-1", "status": "idle", "asking": False, "own": [], "owes": "code of a-unit", "unread": None},
-                 {"name": "crw-4-unit-2", "status": "idle", "asking": False, "own": None, "owes": None, "unread": "herdr names no session for it"}]
+        facts = [{"name": "swancloud-design", "status": "working", "asking": False, "own": [], "unread": None},
+                 {"name": "swancloud-operator", "status": "blocked", "asking": False, "own": [], "unread": None},
+                 {"name": "swancloud-planner", "status": "idle", "asking": True, "own": [], "unread": None},
+                 {"name": "swancloud-ops", "status": "idle", "asking": False, "own": ["wt submit main"], "unread": None},
+                 {"name": "swancloud-reviewer", "status": "idle", "asking": False, "own": None, "unread": "herdr names no session for it"}]
         assert hold.busy_said(facts, 2) == [
-            "crw-4-conductor is working", "crw-4-ops waits on a question to you in its pane",
+            "swancloud-design is working", "swancloud-operator waits on a question to you in its pane",
             "swancloud-planner waits on a question to you in its pane",
-            "swancloud-ops runs 1 background task of its own: wt submit main", "crw-4-unit-1's code of a-unit has not ended",
-            "crew can't tell what crw-4-unit-2 is doing: herdr names no session for it", "2 of crew's tests are running"]
+            "swancloud-ops runs 1 background task of its own: wt submit main",
+            "crew can't tell what swancloud-reviewer is doing: herdr names no session for it", "2 of crew's tests are running"]
 
     @pytest.mark.parametrize("command, wait", [
         ("crew unit wait a-unit --timeout 3600000", True), ("crew chore wait c", True), ("crew card wait batch/3", True),
@@ -255,19 +254,19 @@ class TestRenew:
 
     def test_a_restarts_mark_names_the_session_its_exit_was_typed_into_and_a_stale_one_goes_as_it_is_read(self, tmp_path, monkeypatch):
         monkeypatch.setattr(hold, "RENEW", tmp_path)
-        mark = tmp_path / "swb-1-ops.exiting"
-        assert hold.marked_exit("swb-1-ops", "sid-1") is None
+        mark = tmp_path / "wldn-ops.exiting"
+        assert hold.marked_exit("wldn-ops", "sid-1") is None
         mark.write_text("sid-1\n")
-        assert hold.marked_exit("swb-1-ops", "sid-1") == "sid-1" and mark.exists()
-        assert hold.marked_exit("swb-1-ops", "sid-2") == "sid-1" and not mark.exists()
+        assert hold.marked_exit("wldn-ops", "sid-1") == "sid-1" and mark.exists()
+        assert hold.marked_exit("wldn-ops", "sid-2") == "sid-1" and not mark.exists()
         assert hold.EXITING * 5 == 600
 
     def test_an_agent_taken_down_stays_down(self):
         assert hold.renew_exited(False, None, "sid-1", "sid-1", True) == (False, "it was taken down; it stays down")
 
     def test_a_pane_crew_cannot_read_starts_nothing_and_says_why(self):
-        assert hold.renew_exited(None, "herdr lists no pane w1:p2, which crew keeps for swb-1-ops", "sid-1", "sid-1", False) == (
-            False, "crew can't tell whether its pane holds it: herdr lists no pane w1:p2, which crew keeps for swb-1-ops")
+        assert hold.renew_exited(None, "herdr lists no pane w1:p2, which crew keeps for wldn-ops", "sid-1", "sid-1", False) == (
+            False, "crew can't tell whether its pane holds it: herdr lists no pane w1:p2, which crew keeps for wldn-ops")
 
     def test_a_restarted_agent_is_told_the_crew_it_started_on_the_one_it_runs_now_and_what_changed(self):
         said = hold.renew_notice("v0.12.1", "v0.13.0", ["feat(teams): a host is held", "fix(board): x"])
@@ -287,17 +286,17 @@ class TestRenew:
         # on their landing-card waits and read as blocked (signal 2026-10-22-swancloud-dispatch-deneb-bddc208d/01).
         monkeypatch.setattr(crew, "nap", lambda seconds: None)
         for waits in (True, False):
-            agents = crew.Agents(None, "team", "swc-4", "swancloud", "swancloud", tmp_path / str(waits), None, "/w", None)
+            agents = crew.Agents(None, "main", "swancloud", "swancloud", "swancloud", tmp_path / str(waits), ("ops",), "/w", None)
             agents.herdr = Exiting()
             agents.ensure()
-            agents.put("panes", "conductor", "w8:p1")
-            why = agents.stop("conductor", waits=waits)
+            agents.put("panes", "ops", "w8:p1")
+            why = agents.stop("ops", waits=waits)
             enters = [a for a in agents.herdr.acts if a[:2] == ("agent", "send-keys")]
             if waits:
-                assert why is None and agents.ended == ["conductor"]
+                assert why is None and agents.ended == ["ops"]
                 assert enters == [("agent", "send-keys", "w8:p1", "enter")]
             else:
-                assert why == "swc-4-conductor did not exit (busy or waiting on the user); it was left running"
+                assert why == "swancloud-ops did not exit (busy or waiting on the user); it was left running"
                 assert enters == [] and agents.herdr.state == "blocked"
 
     def lingering(self, tmp_path, monkeypatch, reads):
@@ -385,10 +384,11 @@ class Lingering:
 
 
 class TestHosts:
-    def test_all_is_every_host_crew_runs_agents_on_and_one_named_must_be_a_host(self):
-        fleet = {"teams": {"a": {"machine": "deneb"}, "b": {"machine": "box"}}, "partitions": {"l": {"machine": "mac-studio"}},
+    def test_all_is_every_main_levels_host_and_one_named_must_be_a_host(self):
+        fleet = {"teams": {"a": {"machine": "deneb"}, "b": {"machine": "box"}},
+                 "partitions": {"l": {"machine": "mac-studio"}, "m": {"machine": "deneb"}},
                  "hosts": {"deneb": {}, "box": {}, "mac-studio": {}, "macbook-pro": {}}}
-        assert hold.hosts_named(fleet, "--all") == ["box", "deneb", "mac-studio"]
+        assert hold.hosts_named(fleet, "--all") == ["deneb", "mac-studio"]
         assert hold.hosts_named(fleet, "macbook-pro") == ["macbook-pro"]
         with pytest.raises(crew.Refusal, match="nowhere is no host of the fleet's hosts file. hosts: box deneb mac-studio macbook-pro"):
             hold.hosts_named(fleet, "nowhere")

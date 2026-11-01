@@ -6,8 +6,6 @@
                                       a definition's brief for a team or a partition's main level; name is the agent's own
   crew.py launch <label> <role> [resume]
                                       how crew-role starts a main level's role, as shell assignments
-  crew.py hint <agent> <pane>         tell a team's conductor's or ops's pane again the branch it works for, for
-                                      sluice's plugins, as after herdr resumed it bare
   crew.py tell <agent> "<text>" [--taken]
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
@@ -396,14 +394,6 @@ def on_machine(fleet, host, argv, input=None):
         return subprocess.run(argv, input=input, capture_output=True, text=True)
     return subprocess.run(["ssh", "-o", "BatchMode=yes", fleet["hosts"][host]["ssh"], shlex.join(argv)],
                           input=input, capture_output=True, text=True)
-
-
-def team_of_agent(fleet, name):
-    """The team an agent crew starts belongs to, from its name alone: its conductor, ops or a unit slot; else None."""
-    for t in fleet["teams"].values():
-        if name in (f"{t['name']}-conductor", f"{t['name']}-ops") or re.match(rf"^{re.escape(t['name'])}-unit-[1-9][0-9]*$", name):
-            return t
-    return None
 
 
 def place_of_agent(fleet, name):
@@ -1317,64 +1307,9 @@ def definition(role):
     return meta, m.group(2)
 
 
-def team_bolt(t, then=""):
-    """The bolt a team builds, the one given last when it holds two (plan.team_building, teams.16), from the plan; None
-    when it holds none. A plan that can't be read, or a pair of bolts crew can't tell the newer of, is reported, with
-    what crew does then, and taken as no bolt."""
-    import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
-    try:
-        return plan.bolt_of_team(this.load(), t)
-    except this.Refusal as e:
-        why = str(e).strip()
-        if "holds no bolt" not in why:
-            print(f"{t['name']}'s bolt could not be read ({why}){then}", file=sys.stderr)
-        return None
-
-
-def bolt_place(t, bolt):
-    """The worktree of the bolt a team holds, where its conductor and ops start while a bolt given before bolts were
-    branches alone keeps one (plan.9); None when it holds none or its bolt is a branch, and the role starts in the kit's
-    main checkout."""
-    path = f"{t['kit']['dir']}/bolts/{bolt}"
-    return path if bolt and pathlib.Path(path).is_dir() else None
-
-
-# The pane token sluice's plugins read for the branch an agent works for when its folder names none (sluice ADR 0038).
-HINT = "sluice_branch"
-
-
-def hint_branch(role, bolt):
-    """The branch sluice's plugins are told a team's agent works for (teams.20): its bolt's, bolt/<bolt>, for the
-    conductor and ops of a team that holds one, whose folder, the kit's main checkout or a bolt's detached worktree,
-    names no branch; None when the team holds none, and for a unit slot, which submits from a place on its own branch
-    and whose forecast of what it holds ahead a hint would hide."""
-    return f"bolt/{bolt}" if role in ("conductor", "ops") and bolt else None
-
-
-def hint_args(pane, branch):
-    """herdr's report of the branch on a pane, or of none: the token from crew's source with no time to live, so it
-    stands until crew replaces or clears it, and no sequence number, which herdr would hold a crew started afresh
-    below (read 2026-10-21 on herdr 0.9.5's `pane report-metadata`)."""
-    return ["pane", "report-metadata", pane, "--source", "crew"] + (["--token", f"{HINT}={branch}"] if branch else ["--clear-token", HINT])
-
-
-def hint_agent(fleet, name, pane):
-    """crew.py hint <agent> <pane>: a team's conductor's or ops's pane told again the branch it works for, as the plan
-    has it now (hint_branch), once herdr has resumed it bare: herdr keeps no token across its server's restart, and the
-    session's start is the first crew hears of it (hooks/session-start). Any other agent's pane is left alone."""
-    t = team_of_agent(fleet, name)
-    role = name[len(t["name"]) + 1:] if t else ""
-    if role not in ("conductor", "ops"):
-        return
-    r = subprocess.run([os.environ.get("HERDR_BIN_PATH") or "herdr", *hint_args(pane, hint_branch(role, team_bolt(t)))],
-                       capture_output=True, text=True)
-    r.returncode == 0 or fail(f"herdr did not take {name}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}")
-
-
 def launch(fleet, label, role):
     """How crew-role starts a partition's main-level role: its folder, agent name, partition, the definition it comes
-    from, the folders it may also reach, the model and effort after the teams file's override, and the branch sluice's
-    plugins are told it works for, none."""
+    from, the folders it may also reach, and the model and effort after the teams file's override."""
     p = partition_of(fleet, label)
     roles = p["roles"]
     main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"])])
@@ -1384,7 +1319,7 @@ def launch(fleet, label, role):
         fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer operator")
     meta, _ = definition(spec["defn"])
     o = roles.get(spec["defn"], {})
-    return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]), branch=spec.get("branch"))
+    return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]))
 
 
 def operator_session(fleet, label, host):
@@ -1941,8 +1876,8 @@ def agents_here(fleet, label=None):
 
 def starts():
     """What each agent's last start on this host recorded (hooks/session-start), by the agent's name: its session, the
-    commit and version of crew it loaded, the digest of the launch it was started with, and the branch it carries for
-    sluice (teams.20), each None when the start did not record it, as one before crew kept them."""
+    commit and version of crew it loaded and the digest of the launch it was started with, each None when the start did
+    not record it, as one before crew kept them."""
     found = {}
     for p in (SESSIONS.iterdir() if SESSIONS.is_dir() else []):
         try:
@@ -1953,8 +1888,7 @@ def starts():
         name = kv.get("CREW_AGENT")
         if name and (name not in found or (at, p.name) > found[name][0]):
             found[name] = ((at, p.name), {"session": p.name, "commit": kv.get("CREW_COMMIT") or None,
-                                          "version": kv.get("CREW_VERSION") or None, "launch": kv.get("CREW_LAUNCH") or None,
-                                          "branch": kv.get("CREW_BRANCH")})  # "" when it carries none
+                                          "version": kv.get("CREW_VERSION") or None, "launch": kv.get("CREW_LAUNCH") or None})
     return {name: s for name, (_, s) in found.items()}
 
 
@@ -1993,22 +1927,6 @@ def update_due(started, commit, launch, loaded):
     return (True, "crew's plugin changed") if loaded else (False, None)
 
 
-def branch_due(started, branch):
-    """Whether a team's conductor or ops is due a restart for the branch it carries for sluice (teams.20), and why, from
-    what its start recorded and the branch it would carry now: sluice's board reads SLUICE_BRANCH once, at the session's
-    start, so a running agent whose team's bolt landed, was dropped or changed shows the old one until it starts again.
-    Never due when it started before crew kept the branch, since it carries none."""
-    if started is None or started.get("branch") is None:
-        return False, None
-    was = started["branch"]
-    if (was or None) == (branch or None):
-        return False, None
-    return True, (f"its team's bolt is now {branch}, which sluice's board names" if branch else
-                  f"its team no longer holds {was}, which sluice's board still named")
-
-
-# What due_of compares a start's branch with when it is not given: nothing, since reading it reads the plan.
-UNREAD = object()
 # Why a main level's standing agent is due an end and never a restart once its partition runs its role as its kind
 # (end_due; design Decision 14 of roles-run-as-flume-kinds).
 KIND_SAID = "its role now runs as its kind, in Flume runs of its own"
@@ -2022,19 +1940,10 @@ def end_due(fleet, name):
     return KIND_SAID if kind and kind[1] in MAIN_STANDING else None
 
 
-def branch_now(fleet, name):
-    """The branch a standing agent would carry for sluice if it started now (hint_branch), read from the plan; UNREAD
-    for an agent outside a team, which carries none."""
-    t = team_of_agent(fleet, name)
-    role = name[len(t["name"]) + 1:] if t else ""
-    return hint_branch(role, team_bolt(t)) if role in ("conductor", "ops") else UNREAD
-
-
-def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
+def due_of(fleet, name, started=None, commit=None):
     """Whether a standing agent of this host is due a restart for crew's update, read: (due, why, what its start
     recorded). A name that is no standing agent's is never due. A main level's agent whose role now runs as its kind
-    is due an end, its why KIND_SAID (end_due). With the branch it would carry now (branch_now), one whose team's bolt
-    changed under it is due too (branch_due)."""
+    is due an end, its why KIND_SAID (end_due)."""
     started = started or start_of(name)
     role = standing_role(fleet, name)
     if started is None or role is None:
@@ -2042,10 +1951,6 @@ def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
     ends = end_due(fleet, name)
     if ends:
         return True, ends, started
-    if branch is not UNREAD:
-        due, why = branch_due(started, branch)
-        if due:
-            return True, why, started
     commit = commit or crew_version()[0]
     try:
         now = launch_now(fleet, *role)
@@ -2065,8 +1970,8 @@ def resolve(fleet, scope, role, extra):
 
 def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
-    (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
-    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
+    (what the start is made of besides crew's plugin, launch_digest) and the claude arguments in `args`. A resume with
+    no conversation to pick up starts the role fresh.
     A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said), and on
     every host when its partition runs it as its kind (kind_said)."""
     if role in MAIN_STANDING + ("reviewer",):
@@ -2083,7 +1988,7 @@ def launch_shell(fleet, scope, role, extra):
     text = brief(fleet, scope, l["defn"], l["name"])
     args += ["--append-system-prompt", text]
     return (f"CWD={shlex.quote(l['cwd'])}\nNAME={shlex.quote(l['name'])}\nLABEL={shlex.quote(l['label'])}\n"
-            f"ROLE={shlex.quote(l['defn'])}\nLAUNCH={launch_digest(l, text)}\nBRANCH={shlex.quote(l.get('branch') or '')}\n"
+            f"ROLE={shlex.quote(l['defn'])}\nLAUNCH={launch_digest(l, text)}\n"
             f"args=({' '.join(shlex.quote(a) for a in args)})")
 
 
@@ -2359,7 +2264,6 @@ class Agents:
                                             f"{self.scope} {role}" + (f" {stage}" if stage else ""))
         if not self.give_name(pane, name):
             return False
-        self.hint(pane, l.get("branch"))
         for _ in range(15):
             nap(2)
             r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
@@ -2382,13 +2286,6 @@ class Agents:
             nap(1)
         print(f"{name} did not come up in {pane}; look at that pane.", file=sys.stderr)
         return False
-
-    def hint(self, pane, branch):
-        """A pane told the branch its agent works for, or that it works for none (hint_args, teams.20), so a slot's pane
-        keeps no conductor's branch; a hint herdr does not take is said, and starts or stops nothing."""
-        r = self.herdr.run(*hint_args(pane, branch))
-        if r.returncode:
-            print(f"herdr did not take {pane}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}", file=sys.stderr)
 
     def start_standing(self):
         """Each standing role started that is not up, said when one is: the roles started. One that can't start stops
@@ -2477,8 +2374,6 @@ def main(a):
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:
         print(launch_shell(fleet, a[1], a[2], a[3] if len(a) > 3 else None))
-    elif a[:1] == ["hint"] and len(a) == 3:
-        hint_agent(fleet, a[1], a[2])
     elif a == ["tell", "--board"]:
         sys.exit(0 if board_tell(fleet, sys.stdin.read()) else 1)
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
