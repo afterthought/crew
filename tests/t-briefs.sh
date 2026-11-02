@@ -671,16 +671,24 @@ for want in "plugin/bin/crew rail --label wldn\` names it as one that can land" 
 done
 ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"
 
-# A decision record is accepted only on the user's yes (briefs.15): the design agent commits every record and amendment
-# as proposed, runs crew record at each turn of its status once it is on the kit's main, which raises, changes and closes
+# A decision record is settled by whose decision it is (briefs.15, amended 2026-11-02 on the user's words): the user's
+# own words are accepted on them at the commit with no card, the design agent's own choices are decided and said in the
+# pane, and only a choice that is the user's alone is committed as proposed and accepted on their yes; for that one the
+# design agent runs crew record at each turn of its status once it is on the kit's main, which raises, changes and closes
 # the record's one card in its name, adopts the card by the line crew record prints, names a rule-decided choice in an
 # alternatives file, never settled silently, and queues nothing before the yes; it posts and closes no record card, and
 # the planner and the conductors post none.
 expect_ok crewpy brief wldn design
-for want in "Every decision record you write, and every amendment you make to one, is committed as proposed" \
-  "put to the user on one Pending You card in the record's own words, which crew raises for it through \`crew record\`" \
-  "It is accepted only on the user's yes, given in this pane or on that card, and the record says so" \
-  "Your own reading never accepts a record" "\`status: proposed\`" "accepted only on their yes.)" \
+for want in "Every decision record you write, and every amendment you make to one, says which of its decisions is whose" \
+  "What the user settled in their own words, in this pane or relayed by the operator, is theirs: record it as accepted on those words at the record's commit, quoting them as its deciders, and raise no card for it" \
+  "What the rules already written decide, and every choice cheap to change later, is yours: decide it as a careful designer would" \
+  "a design handed back to the user to approve is no design" \
+  "Only a choice that is the user's alone, in their name, their money, their plans, public or hard to undo, or one that takes a rule of theirs loosened, is committed as proposed" \
+  "put to them on one Pending You card in the record's own words, which crew raises for it through \`crew record\`" \
+  "it is accepted only on the user's yes, given in this pane or on that card, and the record says so" \
+  "Your own reading never settles a choice that is the user's" "\`status: proposed\`" "accepted only on their yes.)" \
+  "For a record or amendment that holds a choice of the user's alone, commit it with \`status: proposed\`" \
+  "the record is accepted on them with no card; where the same record also holds a choice of the user's alone, the card asks that choice and says the rest is theirs already" \
   "Queue no unit from a proposed record or amendment" "Only then queue the units it calls for" \
   "the record's deciders line quotes those words as the user's decision" \
   "At each turn of a record's status, once the commit that holds it has landed on the kit's main, run \`$CREW/plugin/bin/crew record <kit> <number> --proposed|--accepted|--rejected\`" \
@@ -704,12 +712,14 @@ for want in "Every decision record you write, and every amendment you make to on
   "Run \`crew record … --proposed\` for each proposed record or amendment on your kits' main that has none open" \
   "At your start, once you have called \`whoami\` and \`list_pending\` as *Asking the user* says, read \`$CREW/plugin/bin/crew rail --label wldn\`" \
   "Never run \`npx pendingyou\` or \`pendingyou hold\`" "leave every other card alone" \
-  "A record you write or amend is proposed until the user accepts it" "quotes the user's words as their decision"; do
+  "a choice of the user's alone in it is proposed until they accept it" "quoted as their decision" \
+  "goes to them on a card only for a choice that is theirs alone"; do
   has "$out" "$want"
 done
 lacks "$out" "wt submit"; lacks "$out" "branch -d design/<topic>"
 for gone in "record/<kit>/<number>/<commit>" "The record's card is the one card you post" "post a new card for the new version" \
-  "Close the card with \`ack_answer\`" "Accept decision record <number>"; do
+  "Close the card with \`ack_answer\`" "Accept decision record <number>" "is committed as proposed and put to the user" \
+  "The card is still asked" "is proposed until the user accepts it"; do
   lacks "$out" "$gone"
 done
 for brief in "wldn planner" "swb-1 conductor"; do expect_ok crewpy brief $brief; lacks "$out" "record/<kit>"; done
