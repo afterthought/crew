@@ -1,0 +1,194 @@
+{
+  "at": "170c15570827bece53949fe8458c3d8597cf486c",
+  "branch": "bolt/crew-costs-an-idle-host-nothing",
+  "copy": null,
+  "depth": 0,
+  "held": null,
+  "held_checkouts": [],
+  "parallel": 4,
+  "stale": null,
+  "submissions": [
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "bolt/crew-costs-an-idle-host-nothing",
+      "from": {
+        "agent": "crw-6-unit-3",
+        "path": "/Users/chuck/Code/github_afterthought/crew/places/fix-crew-costs-an-idle-host-nothing--take-main-448c543",
+        "worktree": "fix/crew-costs-an-idle-host-nothing/take-main-448c543"
+      },
+      "head": "e79d32a4061c5a028dbd765d6c397458f249719b",
+      "id": 356,
+      "landed_as": "d2e955829488a7d7c4451bb28f14c7992e9649d5",
+      "priority": 0,
+      "result": "passed",
+      "schema": "sluice/submission@1",
+      "state": "landed",
+      "submitted": "2026-10-28T15:47:07Z",
+      "tested": {
+        "combination": "ceb5e6f8083b9de5757bf1134817ab765a2b16eb",
+        "on": "39ff59d02fba3c263f8870d0a60edb919e5a30e2",
+        "submissions": [
+          356
+        ]
+      },
+      "told": "2026-10-28T15:48:24Z"
+    },
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "bolt/crew-costs-an-idle-host-nothing",
+      "from": {
+        "agent": "crw-6-unit-4",
+        "path": "/Users/chuck/Code/github_afterthought/crew/places/chore-a-wait-ends-with-the-session-that-started-it",
+        "worktree": "chore/a-wait-ends-with-the-session-that-started-it"
+      },
+      "head": "b83c9a29c905f06ca23d90a8557e0048a4207590",
+      "id": 357,
+      "landed_as": "685848c8cf7062e6425aab260321b4408463fb6b",
+      "priority": 0,
+      "result": "passed",
+      "schema": "sluice/submission@1",
+      "state": "landed",
+      "submitted": "2026-10-28T16:10:48Z",
+      "tested": {
+        "combination": "8374894915974b7f137afa28f805cbc62efed1c8",
+        "on": "d2e955829488a7d7c4451bb28f14c7992e9649d5",
+        "submissions": [
+          357
+        ]
+      },
+      "told": "2026-10-28T16:21:02Z"
+    },
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "bolt/crew-costs-an-idle-host-nothing",
+      "conflict": {
+        "paths": [
+          "README.md"
+        ],
+        "with": []
+      },
+      "from": {
+        "agent": "crw-6-unit-2",
+        "path": "/Users/chuck/Code/github_afterthought/crew/places/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number",
+        "worktree": "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number"
+      },
+      "head": "cd332ae1a379c97b80aabce44d6d62577e9437a3",
+      "id": 358,
+      "priority": 0,
+      "schema": "sluice/submission@1",
+      "state": "withdrawn",
+      "submitted": "2026-10-28T17:47:07Z",
+      "told": "2026-10-28T17:47:13Z",
+      "withdrawn": {
+        "at": "2026-10-28T17:56:48Z",
+        "by": "resubmission"
+      }
+    },
+    {
+      "after": [],
+      "attempt": 2,
+      "branch": "bolt/crew-costs-an-idle-host-nothing",
+      "failed": [
+        {
+          "flaky": {
+            "at": "2026-10-28T18:23:55Z",
+            "here": "fail",
+            "host": "deneb",
+            "other": {
+              "at": "2026-10-28T18:08:33Z",
+              "branch": "bolt/crew-costs-an-idle-host-nothing",
+              "combination": "1916b7b9e723ef032e423889306b6c0511661f2b",
+              "host": "deneb",
+              "outcome": "pass"
+            }
+          },
+          "hash": "96ce03b88cbb969478e455dc4b64e86201d52ae28ec0da9a9bead51e65d32526",
+          "log": "/Users/chuck/Code/github_afterthought/crew/crew.git/sluice/.logs/bolt/crew-costs-an-idle-host-nothing/c3/tests:t-journey-prompts.log",
+          "task": "tests:t-journey-prompts"
+        }
+      ],
+      "from": {
+        "agent": "crw-6-unit-2",
+        "path": "/Users/chuck/Code/github_afterthought/crew/places/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number",
+        "worktree": "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number"
+      },
+      "head": "8b4d6c92eca8349c96434f63c1c27af472120183",
+      "id": 359,
+      "priority": 0,
+      "result": "failed",
+      "schema": "sluice/submission@1",
+      "state": "withdrawn",
+      "submitted": "2026-10-28T17:56:48Z",
+      "tested": {
+        "combination": "1916b7b9e723ef032e423889306b6c0511661f2b",
+        "on": "685848c8cf7062e6425aab260321b4408463fb6b",
+        "submissions": [
+          359
+        ]
+      },
+      "told": "2026-10-28T18:23:56Z",
+      "withdrawn": {
+        "at": "2026-10-28T18:36:05Z",
+        "by": "resubmission"
+      }
+    },
+    {
+      "after": [],
+      "attempt": 3,
+      "branch": "bolt/crew-costs-an-idle-host-nothing",
+      "from": {
+        "agent": "crw-6-unit-2",
+        "path": "/Users/chuck/Code/github_afterthought/crew/places/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number",
+        "worktree": "unit/crew-keeps-no-card-wait-and-a-row-carries-its-submission-number"
+      },
+      "head": "f07bc90175d65ec0a9e3daca2e779c57fb122d32",
+      "id": 361,
+      "landed_as": "5e2b043198261a0af565bd886651b0e4991e55b2",
+      "priority": 0,
+      "result": "passed",
+      "schema": "sluice/submission@1",
+      "state": "landed",
+      "submitted": "2026-10-28T18:36:05Z",
+      "tested": {
+        "combination": "441be67ffbe865e4ce7a341d83eb2c20fc1474bc",
+        "on": "685848c8cf7062e6425aab260321b4408463fb6b",
+        "submissions": [
+          361
+        ]
+      },
+      "told": "2026-10-28T18:55:42Z"
+    },
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "bolt/crew-costs-an-idle-host-nothing",
+      "from": {
+        "agent": "crw-6-unit-1",
+        "path": "/Users/chuck/Code/github_afterthought/crew/places/a-rail-refresh-after-no-change-reads-nothing",
+        "worktree": "unit/a-rail-refresh-after-no-change-reads-nothing"
+      },
+      "head": "706ea8cbae0f08b7e0de408731176f7621f8a1c6",
+      "id": 362,
+      "landed_as": "170c15570827bece53949fe8458c3d8597cf486c",
+      "priority": 0,
+      "result": "passed",
+      "schema": "sluice/submission@1",
+      "state": "landed",
+      "submitted": "2026-10-28T18:57:11Z",
+      "tested": {
+        "combination": "83f9956da793958bc6b030cf2dffd80c8fb66a88",
+        "on": "5e2b043198261a0af565bd886651b0e4991e55b2",
+        "submissions": [
+          362
+        ]
+      },
+      "told": "2026-10-28T19:09:03Z"
+    }
+  ],
+  "testing": 0,
+  "warnings": [],
+  "window": 4
+}

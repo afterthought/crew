@@ -1,0 +1,43 @@
+flume 0.3.6's status of one place, `flume status --json <place>`, as a host's runner carries it in places.rec and
+crew reads a crossed piece's stage from it (runner.flume_facts, runner.stage_of; tests/py/test_runner.py; Decision 8 of
+teams-cross-to-flume-as-their-bolts-land).
+
+Recorded on deneb on 2026-10-31, running flume 0.3.6 for real, and trimmed in the same way in every file: each readiness
+step's words emptied, each task's text cut to its first 60 characters, each place's ends emptied, the agent's last words
+set to null, and the host's pools, bases, addresses and terminal_kept emptied. Everything else is as flume printed it.
+
+construct.json      18:21:35Z  flume status --json --repository <flywheel-runner> change--the-runner-keeps-its-repositories
+                    a change at construct, begun, its code stage on hold for the proposal's card
+code.json           18:21:35Z  flume status --json --repository <crew> change--teams-cross-to-flume-as-their-bolts-land
+                    a change at code, begun, 6 of its 26 tasks ticked, repeating per task group
+on-hold.json        18:21:35Z  flume status --json --repository <crew> change--the-team-machinery-leaves
+                    a change whose construct delivered and whose code is on hold: waiting_on why on_hold, the hold's words
+stopped-short.json  18:15:32Z  flume status --json (every place), the entry of flume's change--agent-mode-is-a-layered-setting
+                    with the host's answer: a change whose code ended short needing an answer (end.needs needs_answer),
+                    waiting_on why answer with the agent's words, and stalled
+
+No place on the host stood waiting for room, sent back, submitted, lost, landed, dropped or held for its send that day,
+so these seven are made from the captures above by flume 0.3.6's own types, read at agentplot/flume v0.3.6
+(crates/flume-seams/src/held.rs Phase, Over, StageState, Waits and WaitingOn; crates/flume-seams/src/merge_queue.rs
+Verdict, SubmissionState, Submission and SubmissionRead; crates/flume-core/src/answer.rs SubmissionStatus;
+crates/flume-core/src/status.rs place_status; crates/flume-core/src/submit.rs fix_round), each field serialised as
+serde does it there, a unit variant as its name and any other as {variant: fields}, and by the guide's own printed
+answers (site/src/content/docs/guides/walkthrough.md: a submission found under_test, a place tidied landed):
+
+queued.json         construct.json with its construct waiting_for_room, never started, no agent
+sent-back.json      code.json after a failed submission: submission 412 read failed with sluice's words, verdict failed,
+                    send_backs 1, code begun again (its fourth start), verify not_reached, as fix_round leaves the stages
+submitted.json      code.json with every stage delivered and every task ticked, no agent: submission 413 under_test,
+                    submitted twice and sent back once, the last verdict the failure of 412
+stalled.json        code.json with code lost: waiting_on why lost, no words, and stalled
+landed.json         submitted.json tidied: phase tidied over landed with its commit, pending for madswan/planner, its
+                    place <path>@<when>, and head, delivered, tasks, submission and agent null, as status gives a tidied
+                    place's (read_facts is false for Tidied)
+dropped.json        code.json tidied over dropped, its code stopped, the same fields null
+held.json           submitted.json as a fix of crew's main launched with its submission held and no hold words (crew
+                    main fix; Decision 11): fix@1's one stage, code, delivered, no tasks (a fix is no change), no
+                    submission yet and held, waiting_on why on_hold with no stage and no words, and stalled, as a
+                    submission held with no words is once five minutes pass (crates/flume-seams/src/held.rs Hold,
+                    HoldOn::Submission, WaitingOn, Waits::OnHold; crates/flume-core/src/status.rs place_status, whose
+                    submission's held is whether a hold on the submission stands); its intent and stream the launch's
+                    (held.rs IntentKey::Launch, its digest the SHA-256 of name:<name>; host.rs StreamFrom::Launch)

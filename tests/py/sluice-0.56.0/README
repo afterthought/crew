@@ -1,0 +1,12 @@
+sluice 0.56.0's overview, as crew's gather and the host's follower read the submissions each branch's recent events
+name decided (gather.decided_in, board.kept_submissions; tests/py/test_bolt_submissions.py, tests/py/test_board.py).
+
+overview-recent.json	exit 0	sluice overview --json
+
+Recorded on deneb on 2026-10-29, running sluice 0.56.0 for real in crew's own main checkout, and trimmed to three of
+its 38 branches, its hosts, previews and sessions emptied. Each branch is verbatim.
+bolt/crew-reads-a-bolts-time-and-its-landing holds nothing standing and three merges landed, each event naming its
+submissions as a list, `ids`, and recent_from naming the place each came from. bolt/crews-chores-of-the-24th-night
+holds #317 testing and #318 queued, as sluice 0.51.3's recorded overview does, and three older events blamed, each
+naming its one submission as `id`, the form sluice 0.51.3 printed. main holds nothing standing and ten landings by
+pull request, recent_from naming each pull request alone.

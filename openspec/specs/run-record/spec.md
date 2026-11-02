@@ -91,15 +91,23 @@ Entries SHALL be recutils records in `~/.local/state/crew/<label>/runs/<host>/<d
 - **THEN** it prints that unit's entries, with no crew command involved
 
 ### Requirement: Entries can be followed as they are written
-`crew events --follow` SHALL print each entry of the partition as it reaches the partition's branch, one line per entry, reading the branch again every five seconds, until it is interrupted. It SHALL ask no host for entries.
+`crew events --follow` SHALL print each entry of the partition as it reaches the partition's branch, one line per entry, until it is interrupted. It SHALL read the branch as this host's cache holds it, read it again only when the cache's tip moves, and read again only the run-record files whose content changed. The branch SHALL be fetched once a minute, never faster: by the host's follower for a partition it follows, else by the follow itself. It SHALL ask no host for entries.
 
 #### Scenario: Following a bolt team
 - **WHEN** `crew events --follow --label wldn` is running and a conductor starts a stage on the box
-- **THEN** that entry's line appears once its commit is on `wldn/main`, without the command being run again
+- **THEN** that entry's line appears once its commit is on `wldn/main` and this host has fetched it, within a minute, without the command being run again
 
 #### Scenario: A host is asleep
 - **WHEN** `crew events --follow --label wldn` starts while macbook-pro does not answer
 - **THEN** it follows the branch as before, and starts nothing on macbook-pro
+
+#### Scenario: Nothing moves
+- **WHEN** `crew events --follow --label wldn` runs on a host where no follower follows wldn, and nothing reaches wldn's branch
+- **THEN** it fetches the branch once a minute and starts no other process
+
+#### Scenario: The host's follower fetches
+- **WHEN** `crew events --follow --label wldn` runs on mac-studio while mac-studio's follower follows wldn
+- **THEN** the follow fetches nothing itself, and prints each entry once the follower's fetch, or a write on mac-studio, has moved the cache
 
 ### Requirement: One object's history is read from the entries alone
 `crew trace <object>` SHALL print, in time order, every entry that names the object, and every entry of the objects it came from and the objects that came from it, each line giving the time, the act, who asked, the host, the commit, and the session to open. It SHALL read only the run record. An object no entry names SHALL be reported as such with a non-zero exit.
@@ -210,3 +218,36 @@ When an entry cannot be pushed, crew SHALL say so once on standard error, naming
 #### Scenario: The branch cannot be read
 - **WHEN** `crew events --label wldn` runs while the state repository cannot be fetched
 - **THEN** it names `wldn/main` as not read, and why
+
+### Requirement: A bolt's landing entry records its time by holder
+Every `bolt.land` entry crew writes for a bolt a team held SHALL record two things: the bolt's age, in whole minutes, from its newest give to its landing, as `Age`; and the minutes of that age each holder held, as `Split`, in the order team, kit, team-or-kit, user, hold, nobody, each named with its minutes, `team 130, kit 12, team-or-kit 0, user 40, hold 0, nobody 3`, team-or-kit being the minutes of a submission's stay in sluice that crew can't split between queued and under test. The split SHALL be made by the same rule the board's head line uses, and its minutes SHALL sum to `Age`. The landing SHALL be the moment sluice's record says the bolt's landing submission was decided, or the entry's own time when no submission of the bolt landed. sluice's record of the bolt's submissions SHALL be read once, on the team's host, when the entry is written. When the give or that record can't be read, the entry SHALL carry neither field, and the landing SHALL go on as it does today.
+
+#### Scenario: A bolt lands
+- **WHEN** main-level ops closes the landing of `b`, given 6h 10m before sluice landed it, with team 3h 20m, kit 25m, user 2h 05m, hold 0 and nobody 20m
+- **THEN** its `bolt.land` entry holds `Age: 370` and `Split: team 200, kit 25, team-or-kit 0, user 125, hold 0, nobody 20`
+
+#### Scenario: A merge whose checks' start sluice's record does not keep
+- **WHEN** `b`'s merge `#41` stood in sluice for seventeen minutes, and sluice's record read at the landing gives when it was submitted and decided but not when its checks began
+- **THEN** those seventeen minutes are in `Split`'s team-or-kit, not its team or its kit, and `Split` still sums to `Age`
+
+#### Scenario: sluice's record can't be read at the landing
+- **WHEN** `sluice status` fails on the team's host as `b`'s landing is recorded
+- **THEN** the `bolt.land` entry is written without `Age` and `Split`, and the landing is closed as it is today
+
+### Requirement: A team's crossing is an entry
+When a crossed team's conductor and ops have both been ended for its crossing, crew SHALL record one `team.cross` entry on `team/<team>`, naming the stream its work now runs in, so `crew trace team/<team>` reads when it crossed.
+
+#### Scenario: Traced
+- **WHEN** crw-4's conductor and ops are ended at their stops after its last bolt of today's path lands
+- **THEN** one `team.cross` entry on `team/crw-4` names stream `madswan`, and `crew trace team/crw-4` shows it after `x`'s landing
+
+### Requirement: An ask and a turn are entries
+Each ask crew writes SHALL be one `ask` entry in the asked partition's record, naming the role's run and the record the ask names, with the length of its words and never their text. A run's start SHALL be one `turn.begin` entry naming the run and how many it took, and its end one `turn.end` entry. `crew trace agent/<label>-<role>` SHALL list them with the rest of the role's entries.
+
+#### Scenario: A tell that is an ask
+- **WHEN** `crew tell madswan-planner "<forty characters>"` is written as an ask
+- **THEN** madswan's record holds an `ask` entry on `agent/madswan-planner` with `Chars: 40` and not the text
+
+#### Scenario: A turn traced
+- **WHEN** the planner's run took two asks and ended
+- **THEN** `crew trace agent/madswan-planner` lists the two asks, the `turn.begin` taking two and the `turn.end`

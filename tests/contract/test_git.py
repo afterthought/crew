@@ -657,8 +657,9 @@ def landing(repo, tmp_path):
     no `sluice wait` running; the outcome sluice's wait would give is handed to LANDED as crew hands it, with sluice's
     last line, or, with none, SUBMIT's exit and the last line SUBMIT says the submission said, as landing_ended hands
     them. A stand-in sluice beside it takes `sluice wait 7`, for SUBMIT run again with a submission and its tip (again):
-    the wait SUBMIT leaves running ends at once, and the one plan.WAIT runs, as landing_ended does, finds the landing's
-    place made again on bolt/b, lands from it as wt-submit does and exits 0, handed to LANDED with its last line; and
+    sluice lands submission 7 once, whichever wait on it asks first, the waiter SUBMIT leaves running or the one
+    plan.WAIT runs as landing_ended does, finding the landing's place made again on bolt/b and landing from it as
+    wt-submit does, and every wait on it ends with that landing's exit, plan.WAIT's handed to LANDED with its last line; and
     `sluice wait main`, which writes where it ran and what it was asked to the file followed, and ends once the file
     release is there. Each run reads the bolt's two copies and decides the head it submits first, as landing_submitted
     does (LAND_COPIES, kit.land_copies, landing_head), then runs between when given, then SUBMIT with that head and the
@@ -740,10 +741,16 @@ git status --porcelain > "{tmp_path}/status"
 [ "$1 $2" = "wait main" ] && {{ echo "$PWD $*" > "{tmp_path}/followed"; n=0
   while [ ! -e "{tmp_path}/release" ] && [ $n -lt 6000 ]; do sleep 0.1; n=$((n + 1)); done; exit 0; }}
 [ "$1 $2" = "wait 7" ] || exit 9
-[ "$3 $4" = "--timeout 9m" ] || exit 0
-cd "{land}" && [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
+once="{tmp_path}/sluice-7"
+if mkdir "$once" 2>/dev/null; then
+  (cd "{land}" && [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 {lands}{pushed if on_github else 'git update-ref refs/heads/main "$new"'}
+  ); rc=$?; echo "$rc" > "$once/rc.new" && mv "$once/rc.new" "$once/rc"; exit "$rc"
+fi
+n=0; while [ ! -e "$once/rc" ] && [ $n -lt 6000 ]; do sleep 0.1; n=$((n + 1)); done
+exit "$(cat "$once/rc")"
 ''')
+        shutil.rmtree(tmp_path / "sluice-7", ignore_errors=True)
         for tool in ("wt-submit", "sluice"):
             (bin_ / tool).chmod(0o755)
         return lambda *again, between=None: land_with(f"{bin_}:{os.environ['PATH']}", *again, between=between)
@@ -844,8 +851,9 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
     after sluice's outcome reads GitHub's main moved and holding the bolt's tip, so the bolt landed there, sluice's exit
     and its last line named as what came after the push, nothing said of levelling a main that did not move, and the
     branch is then marked landed. A stand-in that pushes nothing and exits 2 lands nothing, and main is where it was,
-    its refusal recorded in sluice's words, from its wait's or, when sluice refused the submission at once, from what
-    SUBMIT says it said (rail-cards "A refused landing is held on its row")."""
+    recorded in sluice's words, from its wait's or, when sluice refused the submission at once, from what SUBMIT says it
+    said: refused when sluice's record has it in conflict (rail-cards "A refused landing is held on its row"), and
+    stopped when sluice gave none (plan.landing_blame)."""
     import plan
     pushed = kit_with_github(repo, tmp_path)
     pushed("from-a-mac")
@@ -857,9 +865,11 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
     _, _, stand_in = landing(repo, tmp_path)
     r, before = stand_in(refused=True)()
     assert before == repo.git("rev-parse", "origin/main") and "RC=2 " in r.stdout, r.stdout + r.stderr
-    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
+    conflict = {"schema": plan.SUBMISSION, "id": 1, "state": "conflict", "conflict": {"paths": ["README.md"], "with": []}}
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before, doc=conflict)
     assert not landed and words.startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was."), words
-    assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True) == (False, "sluice: bolt/b conflicts with main")
+    assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True, doc=conflict) == (False, "sluice: bolt/b conflicts with main")
+    assert plan.landing_end("b", "kit", "h", r.stdout, before)[2:] == ("sluice: bolt/b conflicts with main", True)
     r, before = stand_in(at_once=True)()
     assert "RC=2 " in r.stdout and "sluice: main has no gate for bolt/b" in r.stderr, r.stdout + r.stderr
     assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True) == (False, "sluice: main has no gate for bolt/b")
@@ -1191,7 +1201,7 @@ def test_a_landing_sluice_queued_as_a_pull_request_is_followed_from_its_place_wh
     while not followed.exists() and time.monotonic() < end:
         time.sleep(0.1)
     ran_in, *asked = followed.read_text().split()
-    assert os.path.realpath(ran_in) == os.path.realpath(land) and asked == ["wait", "main", "--timeout", "24h", "--json"]
+    assert os.path.realpath(ran_in) == os.path.realpath(land) and asked == ["wait", "main", "--timeout", "9m", "--json"]
     assert plan.landing_now(t, "b") == (str(land), True, True)
     release.write_text("")
     while plan.landing_now(t, "b")[2] and time.monotonic() < end:
@@ -1365,3 +1375,148 @@ def test_a_dependent_rebases_onto_and_takes_beside_the_bolt_where_it_is_read_on_
     assert (took.returncode, took.stdout) == (0, ""), "read at the host's copy, GitHub's own commit counts as the place's"
     took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", github, "unit/d"], capture_output=True, text=True)
     assert (took.returncode, took.stdout.split()) == (0, ["d", repo.git("rev-parse", "--short=7", "unit/d")])
+
+
+def work_kit(repo, monkeypatch):
+    """A kit whose main checkout is repo, built by one team on this host, and bolt/z cut from main holding its own
+    commit; bolt_work reads the bolt there, a kit with no origin reading its own main (plan.bolt_work)."""
+    import crew
+    monkeypatch.setattr(crew, "this_host", lambda: "here")
+    kit = {"name": "k", "repo": "o/k", "main": str(repo.path), "dir": str(repo.path.parent)}
+    fleet = {"partitions": {"p": {"label": "p", "machine": "here", "teams": ["k-1"]}},
+             "teams": {"k-1": {"name": "k-1", "label": "p", "machine": "here", "kit": kit}}, "hosts": {}}
+    repo.commit("chore: start", {"a.txt": "one\n"})
+    repo.git("switch", "-q", "-c", "bolt/z")
+    repo.commit("feat: the bolt's own", {"a.txt": "one, as the bolt has it\n"})
+    repo.git("switch", "-q", "main")
+    return fleet
+
+
+def own_work(fleet, sent):
+    import plan
+    got = plan.bolt_work(fleet, "p", "k", {"z": (sent[:7], None)})["z"]
+    assert got["why"] is None, got["why"]
+    return [s for _, s in got["gained"]], [s for _, s in got["lost"]]
+
+
+def merged_in(repo, branch, message, resolved=None):
+    """branch merged into the branch checked out with --no-ff, a conflict resolved in the merge commit as resolved
+    says, {path: text}."""
+    r = subprocess.run(["git", "-C", str(repo.path), "merge", "-q", "--no-ff", branch, "-m", message], capture_output=True, text=True)
+    if r.returncode:
+        assert resolved, r.stdout + r.stderr
+        for name, text in resolved.items():
+            (repo.path / name).write_text(text)
+            repo.git("add", "--", name)
+        repo.git("commit", "-q", "--no-edit")
+    return repo.git("rev-parse", "HEAD")
+
+
+def test_a_bolt_that_took_main_in_with_a_conflict_resolved_holds_the_same_work_of_its_own(repo, monkeypatch):
+    """plan.bolt_work (rail-cards, Decision 1): a take-main fix merges main, resolving a conflict in its merge commit,
+    and sluice merges the fix into the bolt with --no-ff: git log --no-merges both ways, main excluded, lists nothing,
+    so the user's send at the bolt's old head stands."""
+    fleet = work_kit(repo, monkeypatch)
+    sent = repo.git("rev-parse", "bolt/z")
+    repo.commit("feat: main's own", {"a.txt": "one, as main has it\n"})
+    repo.git("switch", "-q", "-c", "fix/z/take-main", "bolt/z")
+    merged_in(repo, "main", "Merge main", {"a.txt": "one, as both have it\n"})
+    repo.git("switch", "-q", "bolt/z")
+    merged_in(repo, "fix/z/take-main", "Merge fix/z/take-main")
+    assert repo.git("rev-parse", "bolt/z") != sent
+    assert own_work(fleet, sent) == ([], [])
+
+
+def test_a_fix_that_commits_a_change_is_work_the_bolt_gained(repo, monkeypatch):
+    """plan.bolt_work (rail-cards "A fix adds a commit"): the fix's own commit is listed as gained, by its subject."""
+    fleet = work_kit(repo, monkeypatch)
+    sent = repo.git("rev-parse", "bolt/z")
+    repo.git("switch", "-q", "-c", "fix/z/lease", "bolt/z")
+    repo.commit("fix: keep the lease", {"lease.txt": "kept\n"})
+    repo.git("switch", "-q", "bolt/z")
+    merged_in(repo, "fix/z/lease", "Merge fix/z/lease")
+    assert own_work(fleet, sent) == (["fix: keep the lease"], [])
+
+
+def test_two_take_main_merges_from_one_tip_neither_an_ancestor_of_the_other_hold_the_same_work(repo, monkeypatch):
+    """plan.bolt_work (rail-cards "The host's copy is brought level", plan.19's e104bcf and d64278b): the host's copy
+    took main in at one commit and GitHub's at a later one, from the same tip, so neither head is an ancestor of the
+    other; neither holds a non-merge commit of its own the other and main lack."""
+    fleet = work_kit(repo, monkeypatch)
+    tip = repo.git("rev-parse", "bolt/z")
+    repo.commit("feat: main's first", {"b.txt": "b\n"})
+    repo.git("switch", "-q", "--detach", tip)
+    host = merged_in(repo, "main", "Merge main into the host's copy")
+    repo.git("switch", "-q", "main")
+    repo.commit("feat: main's second", {"c.txt": "c\n"})
+    repo.git("switch", "-q", "bolt/z")
+    github = merged_in(repo, "main", "Merge main into GitHub's copy")
+    for one, other in ((host, github), (github, host)):
+        assert subprocess.run(["git", "-C", str(repo.path), "merge-base", "--is-ancestor", one, other]).returncode == 1
+    assert own_work(fleet, host) == ([], [])
+
+
+def runner_files(host, answers="", places=""):
+    """A runner's branch as a host's runner writes it (runner.RUNNER, ANSWERS, PLACES)."""
+    import runner
+    return {"runner.rec": runner.RUNNER + f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n",
+            "answers.rec": runner.ANSWERS + answers, "places.rec": runner.PLACES + places}
+
+
+def test_the_runners_branches_come_with_the_flywheels_branch_in_one_fetch_and_each_hosts_is_read_at_its_tip(state, monkeypatch):
+    """plan.tip_of's fetch of <label>/main brings <label>/runner/* with it (plan.beside, plan.12), and plan.runners reads
+    each host's three files at its tip in crew's cache with no fetch of its own, checked by recfix (Decision 4 of
+    teams-cross-to-flume-as-their-bolts-land): deneb's answer and place for request 3 are read; alpha, which has no
+    branch, is named; a host whose file recfix refuses hides only its own work; and a host's branch gone from the
+    repository is gone from the cache at the next fetch."""
+    import json
+    import plan
+    import runner
+    status = json.dumps({"status": {"places": [{"place": "/crew/places/change--a", "phase": "live"}], "host": {}}})
+    deneb = state.push("madswan/runner/deneb", runner_files(
+        "deneb", "\nRequest: 3\nOutcome: launched\nPlace: /crew/places/change--a\nAt: 2026-10-31T12:01:00Z\n",
+        f"\nRequest: 3\nPlace: /crew/places/change--a\nAt: 2026-10-31T12:02:00Z\nStatus: {status}\n"))
+    state.push("madswan/runner/gamma", dict(runner_files("gamma"), **{"answers.rec": runner.ANSWERS + "\nRequest: 1\nOutcome: queued\nAt: 2026-10-31T12:01:00Z\n"}))
+    state.push("swancloud/runner/deneb", runner_files("deneb"))  # another partition's runner on the same repository
+    fetches = []
+    git = plan.git
+    monkeypatch.setattr(plan, "git", lambda repo, *args, **k: (fetches.append(args) if args[0] == "fetch" else None, git(repo, *args, **k))[1])
+
+    reads = plan.runners(state.REPO, state.LABEL)
+    assert len(fetches) == 1 and "+refs/heads/madswan/runner/*:refs/crew/madswan/runner/*" in fetches[0] and "--prune" in fetches[0]
+    assert sorted(reads) == ["deneb", "gamma"]
+    d = reads["deneb"]
+    assert (d["why"], d["tip"], d["runner"].get("Version")) == (None, deneb, "0.1.0")
+    assert d["answers"][3].get("Outcome") == "launched" and d["places"][3]["status"] == json.loads(status)
+    assert reads["gamma"]["why"].startswith("gamma's runner can't be read: madswan/runner/gamma at ")
+    assert "answers.rec fails recfix --check" in reads["gamma"]["why"]
+    assert runner.of_host(reads, state.LABEL, "alpha")["why"] == "no runner answers on alpha: madswan/runner/alpha does not exist"
+    assert plan.runners(state.REPO, state.LABEL) is reads and len(fetches) == 1
+
+    state.drop("madswan/runner/gamma")
+    plan.tip_of(state.REPO, "madswan/main", fresh=True)
+    plan.READ.memory.clear()
+    assert sorted(plan.runners(state.REPO, state.LABEL)) == ["deneb"]
+    subprocess.run(["git", "-C", str(plan.cache(state.REPO)), "pack-refs", "--all"], check=True)
+    plan.READ.memory.clear()
+    assert plan.runner_tips(state.REPO, state.LABEL) == {"deneb": deneb}
+
+
+def test_main_holds_reads_gits_exit_for_each_commit_a_crossed_bolts_places_landed_at(repo):
+    """plan.MAIN_HOLDS, which a crossed bolt's close reads (plan.main_holds, runner.unlanded; Decision 12 of
+    teams-cross-to-flume-as-their-bolts-land): git merge-base --is-ancestor exits 0 for a commit main holds, the bolt's
+    merge landed there, 1 for one on a bolt that has not landed, and neither for a commit the checkout lacks, which crew
+    reads as untold (read.1)."""
+    import plan
+    repo.commit("chore: start", {"README.md": "r\n"})
+    repo.git("checkout", "-q", "-b", "bolt/x")
+    landed = repo.commit("feat: a", {"a": "a\n"})
+    repo.git("checkout", "-q", "-b", "bolt/y", "main")
+    waiting = repo.commit("feat: b", {"b": "b\n"})
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "--no-ff", "-m", "chore(land): x", "bolt/x")
+    gone = "0" * 40
+    r = subprocess.run(["bash", "-c", plan.MAIN_HOLDS, "crew", str(repo.path), "main", landed, waiting, gone], capture_output=True, text=True)
+    assert r.returncode == 0
+    said = dict(l.split() for l in r.stdout.splitlines())
+    assert (said[landed], said[waiting]) == ("0", "1") and said[gone] not in ("0", "1")

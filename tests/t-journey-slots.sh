@@ -1,11 +1,12 @@
 # Four units in swb-1's four slots, through the crew command on the stubs (tests.11, record 0022), a part of the units
 # journey (t-journey-units): a construct fetches and gathers once on each host; its wait forecasts a conflict with an
 # unmerged unit ahead of it and tells only it, ordering neither; an agent's stop-short ends its stage, tells its
-# conductor and ends the agent, though it works on, so the slot's next start needs no --force; and with --force a
-# working agent is ended and a prompt left typed is sent again.
+# conductor and ends the agent, though it works on, so the slot's next start needs no --force; with --force a
+# working agent is ended and a prompt left typed is sent again; and a fix that finds every slot in flight takes one lent
+# from work that waits, which is given its slot back once the fix has merged (record 0045).
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/): a unit run refused with every slot in flight, on a working agent without --force, or for a prompt
-# never taken is tests/py/test_slots.py's (tests.12). How git and worktrunk behave for them, contract cases
+# never taken, and which slot a fix is lent, never one whose agent runs, is tests/py/test_slots.py's (tests.12). How git and worktrunk behave for them, contract cases
 # (tests/contract/). Each step checks the command's wiring once.
 # Reads: plugin/hooks/ tests/units.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -57,3 +58,27 @@ eq "$(field $box stage.start Refused stage/d/construct)" ""
 has "$(cat "$stages")" "unit-4 d construct "
 unset CREW_TAKEN_WITHIN
 ok "the units workspace holds a pane for each slot in flight, and with --force a working agent is ended and a prompt left typed is sent again"
+
+# Every slot in flight, c's construct delivered and its agent not running while a's, b's and d's stages are under way,
+# as crw-5's four verified chores waited on one fix on 2026-10-28: the fix takes c's slot lent, c keeping its place,
+# branch and stage there, and once the fix has merged the slot is given back to c, whose next stage starts in it
+# (teams.1, teams.3, record 0045).
+fb=fix/tenant-environments/tidy fp=$kd/places/fix-tenant-environments--tidy
+expect_ok crew fix swb-1 tidy "The banner flickers."
+has "$out" "c waits in swb-1-unit-3, lent to $fb: it goes on there once that fix has merged or been dropped"
+has "$out" "swb-1-unit-3 has $fb: code, in $fp"
+eq "$(field $box fix.start On "$fb")" "$fb bolt/tenant-environments agent/swb-1-unit-3 unit/c"
+expect_fail "c waits in swb-1-unit-3, lent to $fb" crew unit run c code
+expect_ok crew status swb-1
+has "$out" "c waits in swb-1-unit-3, lent to $fb"
+[[ -d $kd/places/c ]] || fail "c's place went while its slot was lent"
+echo steady > "$fp/banner"; commit_all "$fp" "fix: the banner holds still"
+crew fix swb-1 tidy --wait >/dev/null
+crew fix swb-1 tidy --merge >/dev/null
+merge_as swb-1-unit-3 "$fp" bolt/tenant-environments || fail "the fix's submission failed"
+expect_ok crew fix swb-1 tidy --wait
+has "$out" "swb-1-unit-3 is given back to c: $fb has merged into its bolt"
+has "$(cat "$slots")" "unit-3 unit c $kd/places/c"
+expect_ok crew unit run c code
+has "$out" "swb-1-unit-3 has c: code, in $kd/places/c"
+ok "a fix that finds every slot in flight takes the slot of work that waits, its agent not running, the work keeping its place, and once the fix has merged the slot is given back to it and its next stage starts there"

@@ -75,7 +75,7 @@ On request, the operator agent SHALL make the partition's lineage page with `cre
 - **THEN** it runs `crew page wldn`, opens the file beside its pane, and says as of when it is
 
 ### Requirement: The operator is a main-level role
-The partition's operator, `<label>-operator`, SHALL be a standing role of its main level: `crew main up <label>` SHALL start it in an `operator` tab of the `<label>` workspace, beside the design agent, the planner and ops, and greet it once it is up as it greets them; `crew main down <label>` SHALL end it; `crew revive` SHALL bring it back as it brings them back. Every brief SHALL name it as the partition's operator, and crew SHALL start no other operator agent for the partition.
+The partition's operator, `<label>-operator`, SHALL be a role of its main level: while it stands, `crew main up <label>` SHALL start it in an `operator` tab of the `<label>` workspace, beside the design agent, the planner and ops, and greet it once it is up as it greets them; `crew main down <label>` SHALL end it; `crew revive` SHALL bring it back as it brings them back. While its partition runs it as its kind, it SHALL run as a role's run does, on an ask, and none of these SHALL start it. Every brief SHALL name it as the partition's operator, and crew SHALL start no other operator agent for the partition.
 
 #### Scenario: The main level comes up with its operator
 - **WHEN** `crew main up wldn` runs
@@ -85,22 +85,34 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 - **WHEN** a conductor of wldn stops on a question asked only in its pane
 - **THEN** its brief has it tell `wldn-operator`, the partition's one operator
 
+#### Scenario: The operator runs as its kind
+- **WHEN** madswan's `flume` names a stream for its operator and `crew main up madswan` runs
+- **THEN** no `operator` tab is opened and no operator is started, and a tell to `madswan-operator` is an ask of its role
+
 ### Requirement: The console follows the run record
-`crew console up <label>` SHALL open a `flow` tab in the `console` workspace of the host's `<label>` session that runs `crew events --follow` for the partition, and SHALL start no agent. When the tab is already there it SHALL do nothing. `crew console down <label>` SHALL close the console's tabs.
+`crew console up <label> flow` SHALL open a `flow` tab in the `console` workspace of the host's `<label>` session that runs `crew events --follow` for the partition, and SHALL start no agent. When the tab is already there it SHALL do nothing. `crew console down <label>` SHALL close the console's tabs. The tab SHALL show an entry written on this host within a few seconds, and one from another host within a minute.
 
 #### Scenario: The tab is opened with no agent
-- **WHEN** `crew console up wldn` runs on mac-studio
+- **WHEN** `crew console up wldn flow` runs on mac-studio
 - **THEN** the `console` workspace of mac-studio's `wldn` session has a `flow` tab printing wldn's entries as they are written, and no agent is started or greeted
 
 #### Scenario: Run twice
-- **WHEN** `crew console up wldn` runs again
+- **WHEN** `crew console up wldn flow` runs again
 - **THEN** no second `flow` tab is opened
 
+#### Scenario: Not asked for
+- **WHEN** `crew console up wldn` runs on a host with no `flow` tab open
+- **THEN** no `flow` tab is opened
+
+#### Scenario: An entry from another host
+- **WHEN** the `flow` tab runs on mac-studio and a conductor on the box starts a stage
+- **THEN** its line appears within a minute, and the tab fetched wldn's branch no more than once a minute meanwhile
+
 ### Requirement: The console has a rail tab
-`crew console up <label>` SHALL also open a `rail` tab in the `console` workspace, split in two. The upper pane SHALL show `crew rail --label <label>`, printed again every 30 seconds and whenever the partition's run record gains an entry. The lower pane SHALL be a shell with crew on its path. When the tab is already there, it SHALL open nothing.
+`crew console up <label> rail` SHALL open a `rail` tab in the `console` workspace, split in two, as `crew console up <label>` SHALL while no host job runs the follower. The upper pane SHALL show the rail frame the host's follower writes, `crew rail --label <label>` as of its last read, drawn again whenever the frame changes, and SHALL follow itself while no one does. The lower pane SHALL be a shell with crew on its path. When the tab is already there, it SHALL open nothing.
 
 #### Scenario: The tab is opened
-- **WHEN** `crew console up wldn` runs
+- **WHEN** `crew console up wldn rail` runs
 - **THEN** the `console` workspace has a `rail` tab with wldn's rail above and a shell below in which `crew` runs
 
 #### Scenario: A new entry refreshes the list
@@ -108,18 +120,22 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 - **THEN** the list above is printed again within a few seconds, without that unit's review row
 
 #### Scenario: Run twice
-- **WHEN** `crew console up wldn` runs again
+- **WHEN** `crew console up wldn rail` runs again
 - **THEN** no second `rail` tab is opened
 
+#### Scenario: The host's job stops
+- **WHEN** the rail tab draws the frames of swancloud's follower job, and that job ends
+- **THEN** within one period the rail tab follows itself, and the rail, the board's frame and the agents' views are written again
+
 ### Requirement: The console has a board tab
-`crew console up <label>` SHALL also open a `board` tab in the `console` workspace, after the `rail` tab, showing the partition's board, drawn again each time the rail tab refreshes. When the tab is already there, it SHALL open nothing.
+`crew console up <label> board` SHALL open a `board` tab in the `console` workspace, after the `rail` tab when it is there, showing the partition's board, drawn again each time the host's follower writes the board's frame. When the tab is already there, it SHALL open nothing.
 
 #### Scenario: The tab is opened
-- **WHEN** `crew console up wldn` runs
-- **THEN** the `console` workspace has a `board` tab after `rail`, showing wldn's board
+- **WHEN** `crew console up wldn board` runs
+- **THEN** the `console` workspace has a `board` tab showing wldn's board
 
 #### Scenario: Run twice
-- **WHEN** `crew console up wldn` runs again
+- **WHEN** `crew console up wldn board` runs again
 - **THEN** no second `board` tab is opened
 
 #### Scenario: A new entry redraws it
@@ -134,7 +150,7 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 - **THEN** the console opens, the command says `crew operator up` is `crew console up` now, and no agent is started
 
 ### Requirement: Anything sent to another team or partition reaches its operator
-`crew send <team or partition> "<text>"` SHALL deliver the text to the operator of the partition it names, `<label>-operator`, wherever that agent runs: a partition is named by its label, and a team resolves to the partition it belongs to. The text SHALL arrive marked as every tell is, `[crew tell from <sender>]`, the sender being the agent that ran the command or `<user>@<host>`, followed by `(sent to <team or partition>)` as it was named, then the text. A name that is no team and no partition SHALL be refused, naming the teams and partitions there are. A send by the operator to its own partition, or to one of its own partition's teams, SHALL be refused, saying it carries with `crew tell`. An operator that is not up, or waits on a question in its pane, SHALL get nothing typed, and the send SHALL fail saying so, as a tell does.
+`crew send <team or partition> "<text>"` SHALL deliver the text to the operator of the partition it names, `<label>-operator`, wherever that agent runs: a partition is named by its label, and a team resolves to the partition it belongs to. The text SHALL arrive marked as every tell is, `[crew tell from <sender>]`, the sender being the agent that ran the command or `<user>@<host>`, followed by `(sent to <team or partition>)` as it was named, then the text. A name that is no team and no partition SHALL be refused, naming the teams and partitions there are. A send by the operator to its own partition, or to one of its own partition's teams, SHALL be refused, saying it carries with `crew tell`. An operator that is not up, or waits on a question in its pane, SHALL get nothing typed, and the send SHALL fail saying so, as a tell does. To a partition that runs its operator as its kind, with no standing operator up, the send SHALL be written as an ask of the operator from the sender, carrying whom it was sent to and the text, and SHALL not fail for the operator not being up.
 
 #### Scenario: A team's agent sends to another partition's team
 - **WHEN** `crw-5-unit-1` runs `crew send swb-1 "The zone check fails on tenants with no region"`
@@ -155,6 +171,10 @@ The partition's operator, `<label>-operator`, SHALL be a standing role of its ma
 #### Scenario: The operator waits on a question
 - **WHEN** an agent sends to wldn while `wldn-operator` waits on a question in its pane
 - **THEN** nothing is typed, and the send fails saying the operator waits on a question and to send again once it is answered
+
+#### Scenario: An operator that runs as its kind
+- **WHEN** madswan runs its operator as its kind, no standing operator of it is up, and swancloud-planner runs `crew send madswan "<text>"`
+- **THEN** an ask of madswan's operator from swancloud-planner holds `(sent to madswan)` and the text, and nothing is typed
 
 ### Requirement: The operator carries what is sent to it
 The operator SHALL carry what reaches it by `crew send` on to the agent whose job it is, in the sender's words and naming the sender: a finding becomes a signal it records, quoting the words as sent; a design question goes to the design agent; work to build to the planner; a message for a team to that team's conductor. It SHALL NOT answer it in the sender's place or reason it out itself. A request to change the teams, from an operator whose main level runs on a box, SHALL be sent with `crew send` to a partition whose main level runs on a Mac that keeps swancloud's checkout.
@@ -177,3 +197,37 @@ Every brief SHALL say in one line, beside its roster, that anything for another 
 #### Scenario: The operator's brief on a box
 - **WHEN** the operator's brief prints for a partition whose main level runs on a box
 - **THEN** its request to change the teams goes with `crew send` to a partition named by its label, not with `crew tell` to another operator
+
+### Requirement: The console opens with its shell alone
+`crew console up <label> [flow] [rail] [board]` SHALL open the `console` workspace of the host's `<label>` session with a `shell` tab, a shell with crew on its path, and SHALL start no agent. It SHALL open the `flow`, `rail` or `board` tab only when named, or the rail tab while no host job runs the host's follower. A name that is no tab SHALL be refused, naming the three.
+
+#### Scenario: Opened while the host's job follows
+- **WHEN** swancloud's job runs `crew _follow` on mac-studio and `crew console up wldn` runs there
+- **THEN** wldn's `console` workspace holds the `shell` tab alone, no agent is started or greeted, and the board's frame and wldn's agents' views are still written on every refresh
+
+#### Scenario: Opened while no job follows
+- **WHEN** no host job runs the follower on mac-studio and `crew console up wldn` runs there
+- **THEN** wldn's `console` workspace holds the `shell` tab and the `rail` tab, whose loop is the host's follower, and no `flow` or `board` tab
+
+#### Scenario: A tab asked for by name
+- **WHEN** `crew console up wldn rail` runs while the host's job follows
+- **THEN** the `console` workspace has the `rail` tab beside its `shell` tab, as the rail tab requirement says, and no `flow` or `board` tab
+
+#### Scenario: A name that is no tab
+- **WHEN** `crew console up wldn page` runs
+- **THEN** it is refused, saying the tabs are flow, rail and board, and nothing is opened
+
+### Requirement: The console keeps the tabs it has open
+Every later `crew console up <label>`, a tab named or not, SHALL keep each console tab already open, running its command again where a restart left its pane its shell alone, and SHALL not open again a tab the user closed unless it is named, or is the rail tab while no host job runs the follower.
+
+#### Scenario: Run again
+- **WHEN** `crew console up wldn` runs again after `crew console up wldn rail`
+- **THEN** nothing is opened, run or greeted, and the `rail` tab stays open
+
+#### Scenario: A tab the user closed
+- **WHEN** the user closed the `board` tab, and swancloud's timer runs `crew console up wldn`
+- **THEN** no `board` tab is opened
+
+#### Scenario: After a restart
+- **WHEN** herdr brings the console's `flow` and `rail` tabs back as their shells alone, and `crew console up wldn` runs
+- **THEN** each runs its command there again, and no tab is opened

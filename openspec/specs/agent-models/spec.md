@@ -10,7 +10,7 @@ Each role crew starts SHALL be an agent definition, `plugin/roles/<role>.md` in 
 
 #### Scenario: The design agent
 - **WHEN** `crew main up wldn` starts the design agent
-- **THEN** it runs with the model and effort in `roles/design.md`, Fable 5.1 at xhigh
+- **THEN** it runs with the model and effort in `roles/design.md`, Opus 5.5 at xhigh
 
 #### Scenario: A role changes for everyone
 - **WHEN** a role's `effort` is edited in its definition and crew's checkout is pulled
@@ -21,8 +21,8 @@ Every definition SHALL set this model, each with its 1M-token context, and this 
 
 | role | model | effort |
 |---|---|---|
-| design agent | Fable 5.1 | xhigh |
-| planner | Fable 5.1 | xhigh |
+| design agent | Opus 5.5 | xhigh |
+| planner | Opus 5.5 | xhigh |
 | conductor | Opus 5.5 | high |
 | ops (team and main level) | Opus 5.5 | high |
 | unit: construct | Opus 5.5 | high |

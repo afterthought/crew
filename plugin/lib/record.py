@@ -14,6 +14,10 @@ cards it raises itself, with why a card's reading could not be opened in Unread,
 try of a batch's or a long proposal's reading made after its card was raised, by crew card session, the batch's wait or
 the rail's read: done when it started the reading, refused with crew's own message when it could not.
 
+A team's crossing to Flume (record 0050 part 3) ends its conductor and ops at their stops: each end is agent.end, on
+team/<team> and the agent, and once both are down the act that ended the last appends team.cross, on team/<team>, its
+State the Flume stream the team's work now runs in, so crew trace team/<team> reads when it crossed.
+
 Each entry reaches the flywheel's branch of its state repository as it is written: the command that appended it
 pushes it there, to the same path under runs/<host>/, as a commit of its own from this host, before it goes on. The
 branch's file becomes the union by Id of what it had and what the host has, so a host only ever adds to its own files
@@ -25,14 +29,20 @@ crew trace, the batches, the rail, the board and the page, reads the branch alon
                 [--id I]                  append one entry, with the id a commit already names if given; prints its id
   record.py session                       the caller's Claude session as <host>:<id>, what a forwarded command carries
   record.py events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-                                          the entries on the partition's branch, in time order; --follow reads it again
-                                          every five seconds
+                                          the entries on the partition's branch, in time order; --follow reads the
+                                          branch as this host's cache holds it each time its tip moves, which this
+                                          host's writes move at once, and fetches it once a minute where the host's
+                                          follower does not, so another host's entries show within the minute
   record.py events --push [--label L]     push what of this host's entries a refused push left, each a commit of its own
   record.py trace <object> [--label L]    one bolt's, unit's, chore's or signal's history, read from the entries alone
 
+A main-level role that runs as its kind has an `ask` entry for each ask of it, naming the record the ask names and the
+length of its words, a `turn.begin` for each start of its run, how many things pending it took, and a `turn.end` for
+each end, all on agent/<label>-<role>, so crew trace agent/<label>-<role> lists them; none holds an ask's words.
+
 An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>,
-agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of
-the partition), and
+agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, fix/main/<kit>/<name> (a fix of a kit's red main, a Flume
+place on main), plan/<label>, proposal/<n>, batch/<n> (a review batch of the partition), and
 what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>. A signal is
 named by its full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>, which is the one signal of that capture
 numbered NN."""
@@ -46,6 +56,9 @@ import crew  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 ROOT = pathlib.Path.home() / ".local/state/crew"
+# The clock the host's follower (board.py) and crew events --follow fetch a partition's branch on, never faster
+# (plan.12's reading of 2026-10-28); crew's tests set CREW_TEST_PERIOD, so no tick of it falls inside a step (tests.8).
+PERIOD = 60
 DESCRIPTOR = """\
 # crew's run record: one entry per act of crew's that moved work, appended by crew on this host and never
 # rewritten. Read it with recsel, or with crew events and crew trace.
@@ -53,7 +66,7 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Unread Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle Form Answer Age Split Submission
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
@@ -61,34 +74,42 @@ DESCRIPTOR = """\
 # its unit amended, the After units' heads a construct's place Took and a dependent's rebase left out (a forecast's Took), a
 # forecast's Heads (the later unit's and the other's, <name>@<sha>; a bolt's against main, bolt/<bolt>@<sha> main@<sha>
 # and #<id> for each submission queued on main it meets, or bolt/<bolt>@<sha> alone when sluice gave none), its
-# conflicting Paths and how it Reached the later unit (told, prompt or settle) or the conductor (wait), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
+# conflicting Paths and how it Reached the later unit (told, prompt or settle) or the conductor (wait), a slot.free's Paths (the
+# place of its slot's work the tidy in its command removed, plan.9), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
 # Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's Count, a
 # card act's Card (the Pending You card's id), Key (the rail row's card key) and Unread (why its reading could not open,
-# crew's own message, on a card's post or change raised without it), a landing's Repo (the kit it landed on)
-# and Head (the commit that kit's main holds afterwards, plan.14), a branch.kept's Head (the commit a unit's, chore's or
+# crew's own message, on a card's post or change raised without it), a card's close's Answer (what the user answered
+# on it, in crew's words made from names alone, cards.answer_said), a landing's Repo (the kit it landed on),
+# Head (the commit that kit's main holds afterwards, plan.14), and, for a bolt a team held, its Age (whole minutes from
+# its newest give to its landing) and Split (those minutes by holder, `team 200, kit 12, team-or-kit 13, user 125,
+# hold 0, nobody 20`, team-or-kit a submission's stay in sluice crew can't split between queued and under test,
+# plan.20), a landing's submission's Submission (sluice's number for it, on its bolt.submit from the moment sluice queued
+# it, plan.21), a branch.kept's Head (the commit a unit's, chore's or
 # fix's branch the tidy kept is at) and Count (its commits whose patch its bolt, or main, lacks, plan.10), crew's own
-# order of two units a forecast found in conflict, the unit.after that puts one After the other or the one that Lifted
-# it, with the Settle whose end decided it (plan.13), a record.proposed's State (settled in the pane) and Form
+# order of two units a forecast found in conflict, a turn.begin's Took (how many asks and waiting places a role's run
+# took at its start), the unit.after that puts one After the other or the one that Lifted
+# it, with the Settle whose end decided it (plan.13), a team.cross's State (the Flume stream its team's work now runs in), a record.proposed's State (settled in the pane) and Form
 # (alternatives, when its card offered them, none of the file's words), and an operation's (ops.py): a deploy's commit
 # as Head and the one it comes from as Base, its Phase (start, step or end), a step's Step and Outcome, its Log and the
 # suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
          "Forecast", "Batch", "Units", "Count", "Card", "Key", "Unread", "Base", "Phase", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
-         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form")
+         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle", "Form", "Answer", "Age", "Split", "Submission")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
 KINDS = ("unit/", "chore/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/",
-         "proof/", "batch/", "env/", "host/")
+         "proof/", "batch/", "env/", "host/", "role/")
 
 _ids = itertools.count(1)  # each entry's count in this process, safe from threads
 _session = ...  # resolved once per process
 
 
 def who():
-    """Who asked: the agent crew started, else the user at this host."""
+    """Who asked: the agent crew started, or the role's run the command's place is (crew.caller), else the user at
+    this host."""
     import getpass
-    return os.environ.get("CREW_AGENT") or f"{getpass.getuser()}@{crew.this_host()}"
+    return crew.caller() or f"{getpass.getuser()}@{crew.this_host()}"
 
 
 def session():
@@ -146,6 +167,25 @@ def new_id():
     """A new entry's id, made now (entry_id). A write makes its entry's id before its commit, so the commit can name
     the entry its message describes."""
     return entry_id(datetime.datetime.now(datetime.timezone.utc), crew.this_host(), os.getpid(), next(_ids))
+
+
+def ask_entry(run, what, names=None, words=None):
+    """An ask's entry, as emit takes it (the run-record spec, An ask and a turn are entries): an `ask` on the asked
+    role's run, agent/<run>, and the record the ask names, its Why made from names, and the length of its words, never
+    their text (record.3)."""
+    return dict(act="ask", on=[f"agent/{run}"] + ([names] if names else []), why=f"ask {run}: {what}", Chars=len(words) if words else None)
+
+
+def turn_begin_entry(run, n, took):
+    """A run's start's entry, as emit takes it: a `turn.begin` on the run, agent/<run>, of turn n, with how many asks
+    and waiting places it took (Took)."""
+    return dict(act="turn.begin", on=[f"agent/{run}"], why=f"turn {n} of {run}", Took=str(took))
+
+
+def turn_end_entry(run, n):
+    """A run's end's entry, as emit takes it: a `turn.end` on the run, agent/<run>, of turn n; what the run said it did
+    stays in asks.rec (record.3)."""
+    return dict(act="turn.end", on=[f"agent/{run}"], why=f"turn {n} of {run} ended")
 
 
 def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, by=None, **extra):
@@ -272,7 +312,7 @@ def reach(label, eid=None):
     try:
         repo, ref = plan.state_of(crew.load(), label)
         where = f"{ref} of {repo}"
-        tip = plan.fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+        tip = plan.tip_of(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
 
         def make(tip):
             chain, seen["newest"] = unpushed(label, lambda path: plan.show(repo, tip, path))
@@ -340,7 +380,7 @@ def on_branch(fleet, label, since_day, tips=None):
     if not tip:
         return []
     out = []
-    for path in plan.git(repo, "ls-tree", "-r", "--name-only", tip, "--", "runs/").splitlines():
+    for path in plan.paths_at(repo, tip, "runs/"):
         if path.endswith(".rec") and pathlib.PurePath(path).stem >= since_day:
             out += parse(plan.show(repo, tip, path) or "")
     return out
@@ -394,14 +434,20 @@ def line(e, zoe=False):
         s += ("," if e.get("Result") else " →") + f" {e['Ended']}" + (f" {e['Delivered']}" if e.get("Delivered") else "")
     if e.get("Repo") and e.get("Head"):
         s += f" → {e['Repo']} main at {e['Head'][:7]}"
+    if e.get("Act") == "team.cross" and e.get("State"):
+        s += f" → Flume stream {e['State']}"
     if e.get("Observed"):
         s += f" (observed {e['Observed']})"
     if e.get("Chars"):
         s += f" ({e['Chars']} characters)"
+    if e.get("Act") == "turn.begin" and e.get("Took"):
+        s += f" (took {e['Took']})"
     if e.get("Amended"):
         s += " (amended)"
-    if e.get("Paths"):
+    if e.get("Paths") and e.get("Act") == "forecast":
         s += f" (conflict on {e['Paths']}" + (f", {e['Reached']}" if e.get("Reached") else "") + ")"
+    elif e.get("Paths"):
+        s += f" (removed {e['Paths']})"
     if e.get("Forecast"):
         s += f" (carrying {e['Forecast']})"
     if e.get("Count"):
@@ -421,7 +467,7 @@ def labels_for(fleet, label):
     if label:
         crew.partition_of(fleet, label)
         return [label]
-    own = os.environ.get("CREW_LABEL")
+    own = crew.caller_label(fleet)
     return [own] if own in fleet["partitions"] else list(fleet["partitions"])
 
 
@@ -474,27 +520,63 @@ def fresh(seen, entries):
     return sorted((e for e in entries if e["Id"] not in seen), key=lambda e: (e["At"], e["Id"]))
 
 
+def follow_fetches(label, followed_here, follower, last, now, period=PERIOD):
+    """Whether crew events --follow fetches a partition's branch now (plan.12's reading of 2026-10-28): never while the
+    host's follower fetches it, the partition being one it follows (followed_here, board.labels_here) while someone
+    holds the host's follower lock (follower, board.follower_here: job, tab, or unknown, a holder whose line is not
+    written yet), at its start too; else once its own clock is due, period seconds after its last fetch (last, None
+    when it has made none, at its start or since a SIGUSR1). A decision on plain facts (code.7)."""
+    if label in followed_here and follower != "none":
+        return False
+    return last is None or now - last >= period
+
+
+def changed_files(was, now, day):
+    """The run-record files a follow reads again at a moved tip: each of the day the follow began or later whose blob is
+    not the one it last read ({path: blob} then and now), in order."""
+    return sorted(p for p, b in now.items() if p.endswith(".rec") and pathlib.PurePath(p).stem >= day and was.get(p) != b)
+
+
 def follow(fleet, labels, about):
-    """Each entry of the labels as it reaches their branches, one line each, until interrupted: every five seconds
-    each branch is fetched afresh and read from the day the follow began, and what it has not printed is printed
-    (fresh). A branch's first read prints nothing, being what was there before. A branch that cannot be read is said
-    once, until it reads again. It asks no host for anything (read.5)."""
+    """Each entry of the labels as it reaches their branches, one line each, until interrupted. Each second it reads
+    each branch's tip as this host's cache holds it, with no process (plan.tip_here), and when the tip moved, reads
+    again only the run-record files of the day the follow began or later whose blob changed (changed_files), printing
+    what it has not printed (fresh). It fetches a branch only for a partition the host's follower does not fetch, which
+    moves the cache itself, as a write on this host does: at its start and then once a minute (follow_fetches); SIGUSR1
+    makes its next fetch now. A branch's first read prints nothing, being what was there before. A branch that
+    cannot be read is said once, until it reads again. It asks no host for anything (read.5)."""
     import time
+    import board  # board.py imports this module; the host's follower's lock and partitions are its
     import plan  # plan.py imports this module; its git layer is only needed here
 
     def stop(*_):
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGHUP, stop)
+    tick = {"now": False}
+    signal.signal(signal.SIGUSR1, lambda *_: tick.update(now=True))
+    period, here = int(os.environ.get("CREW_TEST_PERIOD") or PERIOD), crew.this_host()
     day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-    seen, said = {}, {}
+    seen, said, tips, files, last = {}, {}, {}, {}, {}
     try:
         while True:
-            new = []
+            again, tick["now"] = tick["now"], False
+            followed, follower, new = set(board.labels_here(fleet, here)), None, []
             for l in labels:
+                repo, ref = plan.state_of(fleet, l)
                 try:
-                    with plan.READ.fresh():
-                        got = on_branch(fleet, l, day)
+                    if l in followed:
+                        follower = follower or board.follower_here()
+                    if follow_fetches(l, followed, follower, None if again else last.get(l), time.monotonic(), period):
+                        last[l] = time.monotonic()
+                        plan.tip_of(repo, ref, fresh=True)
+                    tip = plan.tip_here(repo, ref)
+                    tip is not None or fail(f"its tip in crew's cache of {repo} can't be read")
+                    if l in seen and tip == tips.get(l):
+                        continue
+                    listing = plan.blobs_at(repo, tip, "runs/") if tip else {}
+                    changed = changed_files(files.get(l, {}), listing, day)
+                    got = [e for t in plan.cat_file(repo, [listing[p] for p in changed]) for e in parse(t or "")]
                 except Refusal as e:
                     why = " ".join(str(e).split())
                     if said.get(l) != why:
@@ -504,11 +586,11 @@ def follow(fleet, labels, about):
                 said.pop(l, None)
                 if l in seen:
                     new += fresh(seen[l], got)
-                seen[l] = seen.get(l, set()) | {e["Id"] for e in got}
+                seen[l], tips[l], files[l] = seen.get(l, set()) | {e["Id"] for e in got}, tip, listing
             for e in fresh((), new):
                 if not about or names(e, about):
                     print(line(e), flush=True)
-            time.sleep(5)
+            time.sleep(1)
     except KeyboardInterrupt:
         pass
 

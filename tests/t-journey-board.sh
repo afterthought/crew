@@ -2,8 +2,15 @@
 # bolt and unit with each unit's stage read from its kit, one ssh per host holding a bolt and none for planned work;
 # crew sites gives each dev server's URL as it opens from where it is asked; crew board draws the four lanes, an
 # environment's deploy among the Operation lane's, and the attention line from one read, writes nothing and ends no
-# card session; the rail tab's refresh, in one fetch and one read of each host's kits, prints the rail, sweeps a dead
-# card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards; crew page writes the page whole, with the
+# card session; the host's follower, crew _follow --once with no tab open, in one fetch and one read of each host's kits
+# for both partitions on the host, writes the rail's frame, which the rail tab draws as crew rail prints it, sweeps a
+# dead card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards;
+# running, a tick of its clock with nothing moved reads nothing but the box's stamps, a plan write on its host is
+# shown at its next look, with nothing fetched or gathered, a reading sent back on its host has that host's card
+# sessions swept at its next look, with nothing gathered, a write to sluice's folder in the box's kit moves nothing, a
+# merge queued in sluice is on its unit's row at the next look from the kit's overview watch, with nothing gathered,
+# and a dev server started on the box shows after the next tick, with nothing gathered; crew page writes the page
+# whole, with the
 # deploys, a dock for each item with its history as crew trace walks it, and its partition links in the layout of its
 # file, saying so when that names no partition, and nothing when the branch can't be read; crew page --fleet writes
 # every partition on one page beside the partitions' folders, its links in the layout of its file, and a partition's
@@ -108,10 +115,10 @@ eq "$(j '.partitions[0].plan')" "$before"
 eq "$(tip) $(records)" "$before $n"; eq "$(git -C "$k" status --porcelain)" ""
 ok "crew board draws the lanes from the plan, the signals, the kits, their servers and the cards, one board per partition outside any agent, and writes nothing"
 
-# The board tab and the rail tab's refresh: the card session of a proposal of more than fifteen new units, started
-# ten minutes ago, whose row went when the proposal was dropped. crew board leaves it; the refresh, one fetch of the
-# state branch and one read of each host's kits, prints the rail as crew rail does, ends the session and writes the
-# frame the board tab draws.
+# The host's follower and the rail and board tabs: the card session of a proposal of more than fifteen new units,
+# started ten minutes ago, whose row went when the proposal was dropped. crew board leaves it; the follower's round,
+# with no tab open, one fetch of the state branch and one read of each host's kits, writes the rail as crew rail prints
+# it, which the rail tab draws, ends the session and writes the frame the board tab draws.
 { printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-two "The console, again." --repo switchboard-kit'
   for i in $(seq 1 16); do echo "Do: unit add page-$i \"Page $i.\" --bolt console-two"; done; } > "$T/p.rec"
 crew plan propose "$T/p.rec" >/dev/null 2>&1
@@ -122,18 +129,29 @@ crew plan drop 1 "Not now." >/dev/null
 expect_ok crew board --label wldn
 kill -0 "$pid" 2>/dev/null || fail "crew board ended a card session"
 frame=$(home_of mac-studio)/.cache/crew/board/wldn.json
-expect_ok crew _board wldn --once; has "$out" "No board for wldn yet: the rail tab's loop writes it each time it refreshes"
+expect_ok crew _board wldn --once; has "$out" "No board for wldn yet: the host's follower writes it each time it refreshes"
+expect_ok crew _rail wldn --once; has "$out" "No rail for wldn yet: the host's follower writes it each time it refreshes"
+# The follower's reads, counted by shims on git (a fetch, or any other git), on python3 piped a request (a host's
+# kits gathered, or only stamped) or running a host's card sweep, and in this process for this host's kits
+# (CREW_TEST_READS).
 mkdir -p "$T/shim"
-shim() {  # shim <command> <bash test of "$@" that logs <what>> <what>
-  printf '#!/usr/bin/env bash\nif %s; then echo "${CREW_TEST_HOST:-?} %s" >> %q; fi\nexec %q "$@"\n' "$2" "$3" "$T/reads.log" "$(command -v "$1")" > "$T/shim/$1"
-  chmod +x "$T/shim/$1"
+shim() {  # shim <command> <bash test of "$@"> <what it logs> [<test> <what>]...: the first test that holds is logged
+  local cmd=$1 cond=if body=""; shift
+  while (( $# )); do body+="$cond $1; then echo \"\${CREW_TEST_HOST:-?} $2\" >> $(printf %q "$T/reads.log"); "; cond=elif; shift 2; done
+  printf '#!/usr/bin/env bash\n%sfi\nexec %q "$@"\n' "$body" "$(command -v "$cmd")" > "$T/shim/$cmd"
+  chmod +x "$T/shim/$cmd"
 }
-shim git '[[ " $* " == *" fetch "*refs/crew/wldn/main* ]]' fetch
-shim python3 '[[ ${1:-} == - ]]' gather
+shim git '[[ " $* " == *" fetch "*refs/crew/wldn/main* ]]' fetch '[[ " $* " != *" fetch "* ]]' git
+shim python3 '[[ ${1:-} == - && ${2:-} == *\"stamp\":\ true* ]]' stamp '[[ ${1:-} == - ]]' gather '[[ " $* " == *" card sweep "* ]]' sweep
 reads() { grep -c "^$1 $2\$" "$T/reads.log" || true; }
 : > "$T/reads.log"
-CREW_TEST_READS=$T/reads.log PATH="$T/shim:$PATH" expect_ok crew _views wldn; views=$out
+CREW_TEST_READS=$T/reads.log PATH="$T/shim:$PATH" expect_ok crew _follow --once
 eq "$(reads mac-studio fetch) $(reads mac-studio gather) $(reads $box gather) $(reads $box fetch)" "1 1 1 0"
+has "$out" "wldn's rail, board and agents' views written on mac-studio"
+has "$out" "swancloud's rail, board and agents' views written on mac-studio"
+[[ -s $(home_of mac-studio)/.cache/crew/board/swancloud.rail.json && -s $(home_of mac-studio)/.cache/crew/board/swancloud.agents.json ]] ||
+  fail "the follower did not write swancloud's frames beside wldn's"
+views=$(jq -r .text "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json")
 has "$views" $'card sessions ended:\n  proposal/1 (wldn) on mac-studio: its row is gone; ended proposal/1\'s session, plannotator pid '"$pid"
 python3 -c 'import os, sys, time
 pid, give_up = int(sys.argv[1]), time.monotonic() + 600
@@ -144,19 +162,103 @@ while True:
         break
     if time.monotonic() > give_up:
         sys.exit(f"pid {pid} is still running")
-    time.sleep(0.05)' "$pid" || fail "the refresh did not end the dead card session"
+    time.sleep(0.05)' "$pid" || fail "the follower's round did not end the dead card session"
 # mask: a rail's lines with each row's age left out, since a minute can turn between two reads
 mask() { sed -E 's/^(  [0-9]{4}-.{11}  ).{7}/\1AGE    /'; }
 expect_ok crew rail --label wldn; rail=$out
 eq "$(head -n "$(wc -l <<<"$rail")" <<<"$views" | tail -n +2 | mask)" "$(tail -n +2 <<<"$rail" | mask)"
-eq "$(jq -S 'del(.read_at)' "$frame")" "$(crew board --label wldn --json | jq -S 'del(.read_at)')"
+expect_ok crew _rail wldn --once
+eq "$(head -n "$(wc -l <<<"$rail")" <<<"$out" | tail -n +2 | mask)" "$(tail -n +2 <<<"$rail" | mask)"
+# aged: the board's JSON with each held bolt's age, shares and words left out, and unaged, its text with each head
+# line's age and shares left out, since a minute can turn between two reads, as mask leaves out a rail row's age
+aged() { jq -S 'del(.read_at, (.partitions[].construction[].time | .age, .shares, .said))'; }
+unaged() { sed -E 's/  (<1m|[0-9]+m|[0-9]+h [0-9]{2}m|[0-9]+d [0-9]{2}h)(: [^;]*)?; /  AGE; /'; }
+eq "$(aged < "$frame")" "$(crew board --label wldn --json | aged)"
 agents=$(home_of mac-studio)/.cache/crew/board/wldn.agents.json
 eq "$(jq -r '.read_at' "$agents") $(jq -r '.views | has("swb-1-conductor") and has("wldn-planner")' "$agents")" "$(jq -r '.read_at' "$frame") true"
 has "$(jq -r '.cards["swb-1-conductor"][0] | map(.[0]) | join("")' "$agents")" "  your card  verify/c/$stamp  req_ver-1  open "
 has "$rail" "verify/c/$stamp (wldn), asked by swb-1-conductor on $box"$'\n'"    left:   a rail read on $box closes it, under that host's sign-in"
 expect_ok crew _board wldn --once
-eq "$(tail -n +2 <<<"$out")" "$(crew board --label wldn | tail -n +2)"
-ok "the rail tab's refresh fetches once and reads each host's kits once, prints the rail, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view and open cards beside it from the same read"
+eq "$(tail -n +2 <<<"$out" | unaged)" "$(crew board --label wldn | tail -n +2 | unaged)"
+ok "the host's follower, with no tab open, writes each partition's frames there from one read, one fetch of the state branch and one read of each host's kits, the rail the rail tab draws as crew rail prints it, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view and open cards beside it"
+
+# The follower running: its clock set past the test's length, so only a signal ticks it (tests.8), and each kit's queue
+# followed through the stub sluice's overview watch. Its first refresh reads and opens a watch on each kit holding a
+# bolt, the box's over ssh, its gathers running no sluice status; a tick with nothing moved fetches and then starts no git and no gather on mac-studio and
+# asks the box for its stamps alone; a plan write on mac-studio is shown at the next look, with nothing fetched and no
+# kit gathered; a reading's result written on mac-studio, as plannotator writes the one the user sends back, has
+# mac-studio's card sessions swept at the next look, the box's not, and nothing gathered; a write to sluice's folder in
+# the box's kit moves nothing at the next tick; a merge of unit a queued in sluice, its watch printing a new line, puts
+# the submission's number on a's row at the next look, with nothing gathered and no sluice run but the watches; and a
+# dev server started on the box shows on b's line after the next tick, with nothing gathered.
+# written: each partition's rail, board and agents' frames by their files, and rewritten, a round whose every frame is
+# new, so its reads are over before the next are counted: a round goes on past wldn's rail, to swancloud's frames and,
+# at its first write of each partition, a read of crew's version (board.here_read)
+written() { python3 -c 'import os, sys; print(" ".join(str(os.stat(p).st_ino) for p in sys.argv[1:]))' "$(home_of mac-studio)"/.cache/crew/board/{wldn,swancloud}{.rail,,.agents}.json; }
+rewritten() {
+  local was=($1) now=($(written)) i
+  (( ${#was[@]} == 6 && ${#now[@]} == 6 )) || return 1
+  for i in "${!was[@]}"; do [[ ${now[i]} != "${was[i]}" ]] || return 1; done
+  grep -q "^$box \(stamp\|gather\)\$" "$T/reads.log"
+}
+railtext() { jq -r .text "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json"; }
+unit_of() { jq -c --arg u "$1" '.partitions[0].construction[] | select(.bolt == "tenant-environments") | .units[] | select(.unit == $u)' "$frame"; }
+only_stamps() { eq "$(grep -c "^$box " "$T/reads.log") $(grep -v ' overview --json --watch' "$CREW_TEST_LOG" | grep -c " ssh $box ")" "$(reads $box stamp) $(reads $box stamp)"; }
+at=$(jq -r .read_at "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json"); was=$(written); : > "$T/reads.log"; : > "$CREW_TEST_LOG"
+( export CREW_TEST_HOST=mac-studio HOME=$(home_of mac-studio) CREW_TEST_PERIOD=3600 CREW_TEST_READS=$T/reads.log PATH="$T/shim:$PATH"
+  cd "$HOME" && exec "$CREW/plugin/bin/crew" _follow ) > "$T/follower" 2>&1 &
+fol=$!
+until_ok rewritten "$was" || fail "the running follower never refreshed: $(cat "$T/follower")"
+eq "$(reads $box gather)" "1"
+watching() { grep -q "^$box sluice overview --json --watch in " "$CREW_TEST_LOG" && grep -q "^mac-studio sluice overview --json --watch in " "$CREW_TEST_LOG"; }
+until_ok watching || fail "the follower opened no overview watch on each kit: $(cat "$CREW_TEST_LOG")"
+! grep -q " sluice status " "$CREW_TEST_LOG" || fail "the follower's read of the kits ran sluice status: $(grep ' sluice status ' "$CREW_TEST_LOG")"
+was=$(written); : > "$T/reads.log"; : > "$CREW_TEST_LOG"
+kill -USR1 "$fol"
+until_ok rewritten "$was" || fail "the follower's tick wrote no frame: $(cat "$T/follower")"
+eq "$(reads mac-studio fetch) $(reads mac-studio git) $(reads mac-studio gather) $(reads $box gather) $(reads $box stamp)" "1 0 0 0 1"
+only_stamps
+[[ ! $(jq -r .read_at "$(home_of mac-studio)/.cache/crew/board/wldn.rail.json") < $at ]] || fail "the tick's frame is older than the last"
+printf '%s\n' 'Case: The zones get a second unit.' 'Do: unit add zone-two "Zone two." --bolt apex-zones' > "$T/p2.rec"
+: > "$T/reads.log"
+crew plan propose "$T/p2.rec" >/dev/null 2>&1
+proposed() { railtext | grep -q "The zones get a second unit."; }
+until_ok proposed || fail "the follower did not show the proposal: $(cat "$T/follower")"
+eq "$(reads mac-studio fetch) $(reads mac-studio gather) $(reads $box gather)" "0 0 0"
+sent=$(home_of mac-studio)/.local/state/crew/cards/wldn/batch/9; mkdir -p "$sent"
+was=$(written); : > "$T/reads.log"
+echo '{"decision": "approved", "feedback": ""}' > "$sent/result.json"
+until_ok rewritten "$was" || fail "the follower did not refresh at the reading sent back: $(cat "$T/follower")"
+(( $(reads mac-studio sweep) > 0 )) || fail "the reading sent back on mac-studio did not sweep its card sessions: $(cat "$T/reads.log")"
+eq "$(reads $box sweep) $(reads mac-studio gather) $(reads $box gather) $(reads mac-studio fetch)" "0 0 0 0"
+proposed || fail "the rail lost its words at the sweep: $(railtext)"
+records=$(git -C "$k" rev-parse --path-format=absolute --git-common-dir)/sluice; mkdir -p "$records/main/submissions" "$records/bolt/tenant-environments/submissions"
+echo 2 > "$records/main/version"; echo '{}' > "$records/bolt/tenant-environments/submissions/41.json"
+was=$(written); : > "$T/reads.log"
+kill -USR1 "$fol"
+until_ok rewritten "$was" || fail "the follower's tick after sluice's write wrote no frame: $(cat "$T/follower")"
+eq "$(reads $box gather) $(reads mac-studio gather) $(reads mac-studio git)" "0 0 0"
+proposed || fail "the rail lost its words at sluice's write: $(railtext)"
+eq "$(unit_of a | jq -c .submission)" "null"
+: > "$T/reads.log"; : > "$CREW_TEST_LOG"
+jq -n '{schema: "sluice/overview@1", at: "2026-10-28T16:24:41Z", branches: [{branch: "bolt/tenant-environments",
+  submissions: [{id: 41, branch: "bolt/tenant-environments", state: "testing", from: {worktree: "unit/a"}}]}]}' > "$T/sluice-overview.json"
+queued() { [[ $(unit_of a | jq -c .submission) == '{"id":41,"state":"testing"}' ]]; }
+until_ok queued || fail "the watch's new line did not put the submission on a's row: $(unit_of a)"
+eq "$(reads mac-studio gather) $(reads $box gather) $(reads mac-studio fetch)" "0 0 0"
+eq "$(grep ' sluice ' "$CREW_TEST_LOG" | grep -vc ' overview --json --watch' || true)" "0"
+expect_ok crew _board wldn --once; has "$(line_of "$out" "  a  ")" "#41 under test"
+was=$(written); : > "$T/reads.log"
+eq "$(unit_of b | jq -r .url)" "null"
+echo unit-b--switchboard-kit >> "$(home_of $box)/.portless-routes"
+kill -USR1 "$fol"
+until_ok rewritten "$was" || fail "the follower's tick after the dev server started wrote no frame: $(cat "$T/follower")"
+served() { [[ $(unit_of b | jq -r .url) == "https://unit-b--switchboard-kit--$box.dev.swancloud.net" ]]; }
+until_ok served || fail "the dev server started on the box is not on b's line: $(unit_of b)"
+eq "$(reads mac-studio gather) $(reads $box gather)" "0 0"
+proposed || fail "the rail lost its words at the tick: $(railtext)"
+kill "$fol"; wait "$fol" 2>/dev/null || true
+ok "the running follower's first read runs no sluice status, its tick with nothing moved starts no git and no gather on mac-studio and asks the box for its stamps alone, a plan write on mac-studio is shown at its next look with nothing fetched and no kit gathered, a reading sent back there has mac-studio's card sessions swept and nothing gathered, a write to sluice's folder moves nothing, a merge queued in sluice is on its row from the kit's overview watch with nothing gathered, and a dev server started on the box shows after the next tick with nothing gathered"
 
 # crew page: the page written whole under the partition's state folder, its path and header printed, nothing
 # appended; a node's history on it, and its dock's, is what crew trace prints.
