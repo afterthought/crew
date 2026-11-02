@@ -117,7 +117,7 @@ A place `crew role land` launched for a role SHALL be pending for that role once
 
 #### Scenario: The planner's record
 - **WHEN** madswan runs its planner as its kind and its record is written
-- **THEN** it names `madswan/planner`, `madswan-planner`, deneb, `afterthought/blueprints`, `crew-planner`, `madswan`, the intent `madswan-planner` and Fable 5.1
+- **THEN** it names `madswan/planner`, `madswan-planner`, deneb, `afterthought/blueprints`, `crew-planner`, `madswan`, the intent `madswan-planner` and Opus 5.5
 
 ### Requirement: Role records follow the teams file
 crew SHALL write `roles.rec` to match the teams file at `crew main up` and in the commit of an ask whose role's record is missing or differs, and SHALL remove the record of a role the teams file no longer runs as its kind.

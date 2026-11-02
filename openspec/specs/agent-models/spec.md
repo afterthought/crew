@@ -10,7 +10,7 @@ Each role crew starts SHALL be an agent definition, `plugin/roles/<role>.md` in 
 
 #### Scenario: The design agent
 - **WHEN** `crew main up wldn` starts the design agent
-- **THEN** it runs with the model and effort in `roles/design.md`, Fable 5.1 at xhigh
+- **THEN** it runs with the model and effort in `roles/design.md`, Opus 5.5 at xhigh
 
 #### Scenario: A role changes for everyone
 - **WHEN** a role's `effort` is edited in its definition and crew's checkout is pulled
@@ -28,11 +28,11 @@ A partition's main level in `teams.json` MAY set `roles.<role>.model` or `roles.
 - **THEN** crew refuses to load the teams file, naming the role it has no definition for
 
 ### Requirement: Each standing role starts on its model at its effort level
-Every definition SHALL set this model, each with its 1M-token context where it runs on Opus, and this effort: the design agent and the planner Fable 5.1 at xhigh; main-level ops and the reviewer Opus 5.5 at high; the operator agent Opus 5.5 at medium. No definition SHALL exist for a conductor, a team's ops, a dispatcher or a unit's stage.
+Every definition SHALL set this model, each with its 1M-token context, and this effort: the design agent and the planner Opus 5.5 at xhigh; main-level ops and the reviewer Opus 5.5 at high; the operator agent Opus 5.5 at medium. No definition SHALL exist for a conductor, a team's ops, a dispatcher or a unit's stage.
 
 #### Scenario: The planner comes up
 - **WHEN** `crew main up wldn` starts `wldn-planner`
-- **THEN** it runs on Fable 5.1 at xhigh, as `roles/planner.md` sets
+- **THEN** it runs on Opus 5.5 at xhigh, as `roles/planner.md` sets
 
 #### Scenario: A role crew no longer has
 - **WHEN** anything asks crew for the brief of `conductor`, `ops`, `dispatcher`, `construct`, `coder` or `verify`

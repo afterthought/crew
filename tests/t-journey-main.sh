@@ -37,7 +37,7 @@ has "$out" "wldn-planner is waiting on a question in its pane; answer it there a
 eq "$(herdr_state $box wldn-3 '[.workspaces[].label] | join(",")')" "wldn"
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator"
 eq "$(herdr_state mac-studio wldn-5 '[.agents[].name] | map(select(startswith("wldn-"))) | join(",")' 2>/dev/null)" ""
-eq "$(jq -r 'select(.agent == "wldn-design") | "\(.host) \(.argv[1]) \(.argv[3])"' "$CREW_TEST_CLAUDE_LOG")" "$box claude-fable-5-1 xhigh"
+eq "$(jq -r 'select(.agent == "wldn-design") | "\(.host) \(.argv[1]) \(.argv[3])"' "$CREW_TEST_CLAUDE_LOG")" "$box claude-opus-5-5[1m] xhigh"
 grep -q " ssh mac-studio " "$CREW_TEST_LOG" && fail "crew main up reached another host"
 at() { grep -n "$1" "$CREW_TEST_LOG" | head -1 | cut -d: -f1; }
 answered=$(at "stub status wldn-planner idle")

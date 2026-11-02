@@ -34,20 +34,20 @@ compacted() {
 }
 brief() { python3 -c 'import json, sys; a = json.loads(open(sys.argv[1]).read())["argv"]; sys.stdout.write(a[a.index("--append-system-prompt") + 1])' "$CREW_TEST_CLAUDE_LOG"; }
 
-opus='--model claude-opus-5-5[1m]'; fable='--model claude-fable-5-1'
-role chuck-herdr-alpha wldn design;         has "$launch" "$fable --effort xhigh"; has "$launch" "--name wldn-design"
+opus='--model claude-opus-5-5[1m]'
+role chuck-herdr-alpha wldn design;         has "$launch" "$opus --effort xhigh"; has "$launch" "--name wldn-design"
 first=$(jq -r .session "$CREW_TEST_CLAUDE_LOG")
 has "$launch" "cwd $box/willdan-blueprints/main"; has "$launch" "--add-dir $box/atlas-kit/main --add-dir $box/breadboard-kit/main --add-dir $box/switchboard-kit/main"
 lacks "$launch" "rocs-kit"
 has "$launch" "agent wldn-design | sluice wldn-design | label wldn"
-role chuck-herdr-alpha wldn planner;        has "$launch" "$fable --effort xhigh"; has "$launch" "--name wldn-planner"
+role chuck-herdr-alpha wldn planner;        has "$launch" "$opus --effort xhigh"; has "$launch" "--name wldn-planner"
 role chuck-herdr-alpha wldn ops;            has "$launch" "$opus --effort high"; has "$launch" "--name wldn-ops"
 role chuck-herdr-alpha wldn reviewer;       has "$launch" "$opus --effort high"; has "$launch" "--name wldn-reviewer"
 has "$launch" "cwd $box/willdan-blueprints/main"
 expect_fail "no role 'dispatcher' at wldn's main level. roles: design planner ops reviewer operator" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" wldn dispatcher
 role chuck-herdr-alpha wldn operator;       has "$launch" "$opus --effort medium"; has "$launch" "--name wldn-operator"
 has "$launch" "cwd $box/willdan-blueprints/main"
-role mac-studio madswan planner;            has "$launch" "$fable --effort xhigh"; has "$launch" "cwd $mac/blueprints/main"
+role mac-studio madswan planner;            has "$launch" "$opus --effort xhigh"; has "$launch" "cwd $mac/blueprints/main"
 ok "every role starts on its definition's model and effort"
 
 role chuck-herdr-alpha wldn ops;            has "$launch" "role main-ops"
@@ -57,8 +57,8 @@ eq "${ctx#*$'\n\n'}" "$(brief)"
 ok "a session herdr resumed is given back at a compaction the brief its role was started with"
 
 edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'max'}, 'operator': {'model': 'claude-opus-5-5'}}"
-role chuck-herdr-alpha wldn planner;        has "$launch" "$fable --effort max"
-role mac-studio madswan planner;            has "$launch" "$fable --effort xhigh"
+role chuck-herdr-alpha wldn planner;        has "$launch" "$opus --effort max"
+role mac-studio madswan planner;            has "$launch" "$opus --effort xhigh"
 role chuck-herdr-alpha wldn operator;       has "$launch" "--model claude-opus-5-5 --effort medium"
 role chuck-herdr-alpha wldn ops;            has "$launch" "$opus --effort high"
 ok "an override changes its role for that partition only"
