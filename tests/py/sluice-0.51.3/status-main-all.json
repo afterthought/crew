@@ -1,0 +1,89 @@
+{
+  "at": "16f84c540c0c29536ccd7203e9bbcd94ad58ac4b",
+  "branch": "main",
+  "copy": null,
+  "depth": 0,
+  "held": null,
+  "held_checkouts": [],
+  "parallel": 4,
+  "stale": null,
+  "submissions": [
+    {
+      "after": [],
+      "attempt": 2,
+      "branch": "main",
+      "from": {
+        "agent": "swancloud-design",
+        "head": "design/bolt-cycle-time",
+        "worktree": "pull/171"
+      },
+      "head": "88d57d52583e758334d509693f28b263aceaef0a",
+      "id": 305,
+      "priority": 0,
+      "schema": "sluice/submission@1",
+      "state": "withdrawn",
+      "submitted": "2026-10-27T18:33:08Z",
+      "withdrawn": {
+        "at": "2026-10-27T18:34:17Z",
+        "by": "swancloud-design"
+      }
+    },
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "main",
+      "from": {
+        "agent": "swancloud-ops",
+        "head": "bolt/crew-costs-an-idle-host-nothing",
+        "worktree": "pull/200"
+      },
+      "head": "170c15570827bece53949fe8458c3d8597cf486c",
+      "id": 363,
+      "landed_as": "e20636fd308e2da4ad3f05110fdd5df281df12e6",
+      "priority": 0,
+      "result": "passed",
+      "schema": "sluice/submission@1",
+      "state": "landed",
+      "subject": "bolt/crew-costs-an-idle-host-nothing",
+      "submitted": "2026-10-28T19:12:44Z",
+      "tested": {
+        "combination": "a4708a84e9e82ca02b1d36df6dc3ef013d742615",
+        "on": "c5b086ab8af2f0e8203918bc9685ce30291f25ad",
+        "submissions": [
+          363
+        ]
+      },
+      "told": "2026-10-28T19:13:46Z"
+    },
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "main",
+      "from": {
+        "agent": "design/the-words",
+        "head": "design/the-words",
+        "worktree": "pull/201"
+      },
+      "head": "b13c3cf1d9c15b9b77bd83207d6b50f7a18e9cdf",
+      "id": 364,
+      "landed_as": "16f84c540c0c29536ccd7203e9bbcd94ad58ac4b",
+      "priority": 0,
+      "result": "passed",
+      "schema": "sluice/submission@1",
+      "state": "landed",
+      "subject": "design/the-words",
+      "submitted": "2026-10-28T19:23:15Z",
+      "tested": {
+        "combination": "903e0981bb6d3c7f7f3cf9152424e47d4c7e6338",
+        "on": "e20636fd308e2da4ad3f05110fdd5df281df12e6",
+        "submissions": [
+          364
+        ]
+      },
+      "told": "2026-10-28T19:23:54Z"
+    }
+  ],
+  "testing": 0,
+  "warnings": [],
+  "window": 4
+}

@@ -341,20 +341,54 @@ def split_remote(said, bolt):
 
 def bolt_split(said, bolt):
     """What BOLT_SPLIT printed of a bolt's branch on its remote (plan.19), as {"local", "there", "held", "merges",
-    "read"}: read, git's words when the remote could not be asked or fetched, the rest None; there "-" when the remote
-    has no bolt/<bolt>; else both commits, held "yes" or "no", whether the remote's holds the host's, and merges, how
-    many the host holds beyond it. Refused, naming what was printed, on anything else (read.2)."""
+    "carried", "read"}: read, git's words when the remote could not be asked or fetched, the rest None; there "-" when
+    the remote has no bolt/<bolt>; else both commits, held "yes" or "no", whether the remote's holds the host's, merges,
+    how many the host holds beyond it, and carried "yes" or "no", whether the work to merge holds the host's tip, None
+    when no work was named. Refused, naming what was printed, on anything else (read.2)."""
     f = said_of(said)
-    none = dict(local=None, there=None, held=None, merges=None, read=None)
+    none = dict(local=None, there=None, held=None, merges=None, carried=None, read=None)
     if "READ" in f:
         return {**none, "read": f["READ"].strip() or "git said nothing"}
     if f.get("THERE") == "-":
         return {**none, "there": "-"}
     sha = re.compile(r"[0-9a-f]{40,64}")
     if not (all(sha.fullmatch(f.get(k) or "") for k in ("LOCAL", "THERE")) and f.get("HELD") in ("yes", "no")
-            and (f.get("MERGES") or "").isdigit()):
+            and (f.get("MERGES") or "").isdigit() and f.get("CARRIED", "no") in ("yes", "no")):
         crew.fail(f"crew can't read whether bolt/{bolt} is split from: {(said or '').strip()[:200] or 'nothing'}")
-    return {**none, "local": f["LOCAL"], "there": f["THERE"], "held": f["HELD"], "merges": int(f["MERGES"])}
+    return {**none, "local": f["LOCAL"], "there": f["THERE"], "held": f["HELD"], "merges": int(f["MERGES"]),
+            "carried": f.get("CARRIED")}
+
+
+def land_copies(said, bolt):
+    """What LAND_COPIES printed of a bolt's two copies for its landing (plan.19), as {"own", "there", "remote", "held",
+    "ahead", "lacks", "beyond", "read"}: read, git's words when origin could not be asked or fetched, the rest None;
+    there "-" when the kit has no origin or origin has no bolt/<bolt>; else there, origin's commit, and remote, what the
+    policy at it names for the bolt's branch (bolt_remote), or None; own, the host's commit, or "-" when it has none;
+    held "yes" or "no", whether origin's holds the host's, "yes" when the host has none; ahead "yes" or "no", whether
+    the host's holds origin's; and lacks and beyond, how many merges the host's holds beyond origin's and origin's
+    beyond the host's; ahead, lacks and beyond None when the host has no copy. Refused, naming what was printed, on
+    anything else (read.2), and when the policy at origin's copy is not TOML."""
+    f = said_of(said)
+    none = dict(own=None, there=None, remote=None, held=None, ahead=None, lacks=None, beyond=None, read=None)
+    if "READ" in f:
+        return {**none, "read": f["READ"].strip() or "git said nothing"}
+    if f.get("THERE") == "-":
+        return {**none, "there": "-"}
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    own, at = f.get("OWN") or "", f.get("AT_THERE") or ""
+    mine = own != "-"
+    count = (lambda v: (v or "").isdigit()) if mine else (lambda v: v == "-")
+    if not (sha.fullmatch(f.get("THERE") or "") and (sha.fullmatch(own) or not mine) and at
+            and f.get("HELD") in (("yes", "no") if mine else ("yes",))
+            and f.get("AHEAD") in (("yes", "no") if mine else ("-",)) and count(f.get("LACKS")) and count(f.get("BEYOND"))):
+        crew.fail(f"crew can't read bolt/{bolt}'s copies for its landing from: {(said or '').strip()[:200] or 'nothing'}")
+    try:
+        text = None if at == "-" else base64.b64decode(at, validate=True).decode()
+    except (binascii.Error, UnicodeDecodeError) as e:
+        crew.fail(f"crew can't read origin/bolt/{bolt}'s {DECLARATION} as it was sent: {e}")
+    return dict(own=own, there=f["THERE"], remote=bolt_remote(text, f"bolt/{bolt}", f"{DECLARATION} at origin/bolt/{bolt}"),
+                held=f["HELD"], ahead=f["AHEAD"] if mine else None, lacks=int(f["LACKS"]) if mine else None,
+                beyond=int(f["BEYOND"]) if mine else None, read=None)
 
 
 def bolt_found(said, bolt):

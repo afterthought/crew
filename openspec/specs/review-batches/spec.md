@@ -28,11 +28,19 @@ A batch SHALL hold the changes due across every team of a partition. A partition
 - **THEN** no batch is due
 
 ### Requirement: The planner starts the partition's reviewer
-When a batch is due, crew SHALL tell the partition's planner once, and the planner SHALL start the reviewer: a main-level role, run fresh for each batch in its own tab of the main level's workspace, beside the planner, on the main level's host.
+When a batch is due, crew SHALL tell the partition's planner once, and the planner SHALL start the reviewer: a main-level role, run fresh for each batch in its own tab of the main level's workspace, beside the planner, on the main level's host. Where the partition runs its reviewer as its kind, `crew review <label>` SHALL instead write an ask of the reviewer carrying the batch, as the reviewer's first message carries it today, open no tab and start no agent, and `crew review <label> --wait` SHALL refuse, saying the batch's delivery reaches the planner as an ask.
 
 #### Scenario: A batch is due
 - **WHEN** a conductor's wait finds a batch due in the wldn partition
 - **THEN** wldn-planner is told once, and starts `wldn-reviewer` in the `wldn` workspace
+
+#### Scenario: A reviewer that runs as its kind
+- **WHEN** madswan runs its reviewer as its kind and the planner's run runs `crew review madswan`
+- **THEN** an ask of the reviewer holds the batch's changes, how to read each and the file to write, no tab is opened, and no reviewer is started by crew
+
+#### Scenario: Waiting on a reviewer that runs as its kind
+- **WHEN** madswan runs its reviewer as its kind and `crew review madswan --wait` runs
+- **THEN** it refuses, saying the batch's delivery reaches the planner as an ask, and waits on nothing
 
 ### Requirement: The reviewer summarizes a batch
 The reviewer SHALL read each due change whole and write one summary file holding, for each unit, its team, a short opening paragraph saying what the change does and what the user would most care about, then the decisions it took, its risks, what it touches named in words, and anything the user would likely care about, as paragraphs and plain lists with no code block, no table and no path. The batch SHALL end at that file, its deliverable, and the reviewer SHALL write nothing else. The run record SHALL name the batch, each unit it holds and the commit each unit's change was read at.
@@ -46,19 +54,19 @@ The reviewer SHALL read each due change whole and write one summary file holding
 - **THEN** its section names them in words, with no code block and no path
 
 ### Requirement: A batch card is read and answered in Pending You
-A batch card SHALL be a notice that asks nothing, which the user sends back with one tap. Its title SHALL say what the batch is about, from its units' subjects, with the batch's number after. Its summary SHALL open "N changes to read, nothing to approve", and its words SHALL say that notes go in the reading session or in the card's own note naming the change. It SHALL carry each unit's name, team and opening paragraph as inline Markdown on its face, and one link to one plannotator session holding the summary whole and every change. The batch's notes SHALL be the session's annotations, the card's own note, and the user's own words when they answer the batch in a main-level pane. The card SHALL close on the tap, on the session's send or on the user's answer in a main-level pane, whichever is first, and the session SHALL end with it.
+A batch card SHALL be a notice that asks nothing, which the user sends back with one tap. Its title SHALL say what the batch is about, from its units' subjects, with the batch's number after. Its summary SHALL open "N changes to read, nothing to approve", and its words SHALL say that notes go in the reading session or in the card's own note naming the change. It SHALL carry each unit's name, team and opening paragraph as inline Markdown on its face, and one link to one plannotator session holding the summary whole and every change. The batch's notes SHALL be the session's annotations, the card's own note, and the user's own words when they answer the batch in a main-level pane. The card SHALL close on the planner's read of the tap or the session's send, on the rail's refresh of a send with no words, or on the user's answer in a main-level pane, whichever is first, and the session SHALL end with it.
 
 #### Scenario: The user drills in
 - **WHEN** the user opens a batch card holding three units
 - **THEN** the card says what it is, that there is nothing to answer and where notes go, shows each unit's paragraph as prose, and has one link, which opens the summary and the three changes as one review
 
 #### Scenario: Every unit fine
-- **WHEN** the user sends a batch card of six units back with one tap and no note, having sent nothing from the session
+- **WHEN** the user sends a batch card of six units back with one tap and no note, having sent nothing from the session, and the planner, woken, runs `crew card read batch/<n>`
 - **THEN** the card is closed, no unit is constructed again, and the user picked and typed nothing
 
 #### Scenario: Notes written in a session
-- **WHEN** the user annotates `x1`'s design and `z1`'s tasks in the batch's session and sends the annotations
-- **THEN** the planner's wait returns them, sends each unit's annotations to its conductor at once, and the card is closed
+- **WHEN** the user annotates `x1`'s design and `z1`'s tasks in the batch's session and sends the annotations, and the planner, told by the rail's refresh, runs `crew card read batch/<n>`
+- **THEN** the read prints them, the planner sends each unit's annotations to its conductor at once, and the card is closed
 
 #### Scenario: Two fine, one with notes
 - **WHEN** the user writes notes for one unit of three in the card's note, naming it, and sends the card back
@@ -66,7 +74,7 @@ A batch card SHALL be a notice that asks nothing, which the user sends back with
 
 #### Scenario: The session approved
 - **WHEN** the user approves the batch's session without annotations
-- **THEN** nothing is sent for any unit, and the card is closed "Read; no notes"
+- **THEN** nothing is sent for any unit, and the card is closed "Read; no notes", by the planner's read or the next refresh, whichever is first
 
 #### Scenario: Answered in a pane
 - **WHEN** the user writes in the planner's pane "Batch 9: x1's design should name the host" and the planner runs `crew card answer batch/9` with those words
@@ -130,7 +138,7 @@ A bolt SHALL be offered for landing only once every unit's latest change, the co
 - **THEN** `y`'s landing row names that unit as due a batch, and no landing card is raised until the batch that holds its new change has been answered
 
 ### Requirement: crew raises a batch's one card
-When the reviewer delivers a batch's summary and the planner's `crew review --wait` returns, crew SHALL start the batch's one reading session and raise its one card in the planner's name, keyed `batch/<n>`, as `rail-cards` says a batch's card is; the planner SHALL write nothing of it and post nothing. `crew card wait batch/<n>` SHALL give the planner the notes and close the card.
+When the reviewer delivers a batch's summary and the planner's `crew review --wait` returns, crew SHALL start the batch's one reading session and raise its one card in the planner's name, keyed `batch/<n>`, as `rail-cards` says a batch's card is; the planner SHALL write nothing of it and post nothing. The planner's `crew card read batch/<n>` SHALL give it the notes and close the card.
 
 #### Scenario: A summary delivered
 - **WHEN** the reviewer delivers batch 7's summary of four changes and the planner's wait returns
@@ -184,8 +192,31 @@ A batch SHALL wait on nothing once each of its units has landed, has been droppe
 - **THEN** `x1`'s bolt's landing row says it lands once you have answered batch 7, as before
 
 #### Scenario: The record did not answer whole
-- **WHEN** the partition's run record did not answer on the main-level host
-- **THEN** the sweep records no close for any batch, says the partition was not swept, and a batch is closed only as far as the entries read show it
+- **WHEN** the partition's branch cannot be read, so its run record cannot be
+- **THEN** the sweep records no close for any batch, says the partition was not swept, and names the branch
+
+#### Scenario: A host does not answer
+- **WHEN** macbook-pro, which holds a wldn operator session, does not answer a rail read
+- **THEN** each batch is closed as far as the entries on `wldn/main` show it, as when every host answers
+
+### Requirement: A batch is reckoned from the partition's branch alone
+Whether a batch is due, what a review holds, and whether every unit's latest change of a bolt has been in a batch, SHALL be read from the run record on the partition's branch alone, asking no host for it. A host that does not answer SHALL hold none of them. When the branch cannot be read, each SHALL be refused naming the branch, as crew can't tell then which changes have been in a batch.
+
+#### Scenario: The laptop asleep at a conductor's wait
+- **WHEN** a wldn conductor's wait on chuck-herdr-alpha runs while macbook-pro, which holds a wldn operator session, does not answer, and five changes are due
+- **THEN** the wait finds the batch due and the planner is told, and macbook-pro is not asked
+
+#### Scenario: A review while the laptop is asleep
+- **WHEN** the planner runs `crew review wldn` while macbook-pro does not answer and a batch is due
+- **THEN** the reviewer is started on the batch's due changes, and no earlier batch's summary is returned in its place
+
+#### Scenario: A landing while the laptop is off
+- **WHEN** `crew bolt land` runs on mac-studio for a bolt whose every unit's latest change has been in a batch the user answered, while macbook-pro is off the tailnet
+- **THEN** the bolt is closed as landed, and nothing names macbook-pro
+
+#### Scenario: The branch cannot be read
+- **WHEN** a conductor's wait runs while `wldn/main` cannot be fetched
+- **THEN** whether a batch is due is not reckoned, and the wait says crew can't tell which changes have been in a batch, naming `wldn/main` and why
 
 ### Requirement: A batch is answered by the user's own words in a main-level pane
 A batch SHALL also be answered by the user's own words in the planner's pane or the operator's pane of its partition. The agent in that pane SHALL run `crew card answer batch/<n> --excerpt "<the user's words>"`. crew SHALL record the batch answered only when it finds the words in that agent's own live session transcript, on the host where the command runs, in a record the session received and that crew reads as the user's under `signals.5`. That is typing in the pane, or a `crew tell` from `<user>@<host>`. A later echo of the same words, in a tool's output or a tell, SHALL NOT hide the user's record. crew SHALL refuse the command, recording no answer, in each of these cases:
@@ -224,7 +255,7 @@ The answer SHALL be one run-record entry, `batch.answer`, on `batch/<n>`. It nam
 - **THEN** the planner runs the command once for each batch with that sentence, and each batch is recorded answered on its own
 
 ### Requirement: A pane answer closes the batch's card and offers its bolts for landing
-Once a batch is answered in a pane, crew SHALL treat it exactly as a batch whose card the user tapped. The command SHALL close the batch's card as answered, naming the user's words, when the planner holds the card open on the host where the command runs. When no card is held there, because it was posted from a host the main level has left, the batch SHALL be answered all the same. Its card SHALL be closed as answered, saying in whose pane and when, by the rail's sweep on the host that holds it, when it is found or raised again. The planner's wait on the batch, `crew card wait batch/<n>`, SHALL end on the answer, saying in whose pane it was given, closing the card it holds and ending the batch's reading session. A bolt waiting on the batch SHALL be offered for landing as after a tap: the next rail read on its team's host raises its landing card once every unit's latest change has been in an answered batch.
+Once a batch is answered in a pane, crew SHALL treat it exactly as a batch whose card the user tapped. The command SHALL close the batch's card as answered, naming the user's words, when the planner holds the card open on the host where the command runs. When no card is held there, because it was posted from a host the main level has left, the batch SHALL be answered all the same. Its card SHALL be closed as answered, saying in whose pane and when, by the rail's sweep on the host that holds it, when it is found or raised again. The planner's `crew card read batch/<n>` after the answer SHALL say in whose pane it was given, closing the card it holds and ending the batch's reading session. A bolt waiting on the batch SHALL be offered for landing as after a tap: the next rail read on its team's host raises its landing card once every unit's latest change has been in an answered batch.
 
 #### Scenario: The card held on this host
 - **WHEN** the planner, on deneb, holds batch 16's card open, and answers batch 16 in its pane
@@ -239,20 +270,46 @@ Once a batch is answered in a pane, crew SHALL treat it exactly as a batch whose
 - **THEN** the next rail read on `y`'s team's host raises `y`'s landing card, and its row carries the word to land
 
 #### Scenario: The planner's wait was running
-- **WHEN** the planner's `crew card wait batch/16` is running, and the operator answers batch 16 in its pane
-- **THEN** the wait ends, saying batch 16 was answered in swancloud-operator's pane, and the card it holds is closed
+- **WHEN** the operator answers batch 16 in its pane, and the planner then runs `crew card read batch/16`
+- **THEN** the read says batch 16 was answered in swancloud-operator's pane, without the words, and the card it holds is closed
 
 ### Requirement: A batch whose reading session is sent is read, with or without its card
-When the user sends a batch's reading session, approved or annotated, `crew card wait batch/<n>` SHALL record the batch read whether or not the planner holds a card of it on the main level's host: when it closes no card there, because none is held, the card is lost, or Pending You refused its close, crew SHALL record its own close of the batch in the planner's name, saying what was read ("Read; no notes", "Read; 2 notes sent to their teams"), and the wait SHALL print the notes as it does when it closes the card. A batch recorded read so SHALL be closed for every read of batches: no row on the rail, no batch named on a landing row, no card raised for it, until a newer card is posted under its key.
+When the user sends a batch's reading session, approved or annotated, crew SHALL record the batch read whether or not the planner holds a card of it on the main level's host: at the planner's `crew card read batch/<n>`, which prints the notes as it does when it closes the card, and, for a send with no annotations, at the rail's refresh on that host. When it closes no card there, because none is held, the card is lost, or Pending You refused its close, crew SHALL record its own close of the batch in the planner's name, saying what was read ("Read; no notes", "Read; 2 notes sent to their teams"). A batch recorded read so SHALL be closed for every read of batches: no row on the rail, no batch named on a landing row, no card raised for it, until a newer card is posted under its key. A send with annotations SHALL be recorded read only by the planner's read, so no bolt lands before its notes are given.
 
 #### Scenario: Sent with no card on the main level's host
-- **WHEN** batch 13's card was posted from mac-studio, the planner's wait runs on deneb with batch 13's session, and the user approves the session with no annotations
-- **THEN** the wait prints "batch/13: approved", records crew's close of `batch/13` in the planner's name "Read; no notes", ends the session, and the rail no longer shows batch 13
+- **WHEN** batch 13's card was posted from mac-studio, the planner's session runs on deneb with batch 13's reading, and the user approves the session with no annotations
+- **THEN** the next refresh on deneb, or the planner's `crew card read batch/13` if it comes first, records crew's close of `batch/13` in the planner's name "Read; no notes", ends the session, and the rail no longer shows batch 13
 
 #### Scenario: Sent while the card is lost
-- **WHEN** the planner's wait finds batch 13's card lost, records it so, and the user then sends the session with two annotations
-- **THEN** the wait prints both annotations as written and records crew's close of `batch/13` "Read; 2 notes sent to their teams"
+- **WHEN** batch 13's card is recorded lost, and the user then sends the session with two annotations, and the planner runs `crew card read batch/13`
+- **THEN** the read prints both annotations as written and records crew's close of `batch/13` "Read; 2 notes sent to their teams"
 
 #### Scenario: Sent while the card's close is refused
-- **WHEN** the user sends batch 13's session and Pending You refuses the close of its card
+- **WHEN** the user sends batch 13's session, the planner runs `crew card read batch/13`, and Pending You refuses the close of its card
 - **THEN** crew records its close of `batch/13` with what was read, and the card, its row gone, is withdrawn by a later rail read
+
+#### Scenario: Notes sent while the planner is down
+- **WHEN** the user sends batch 13's session with two annotations while the planner is not up, and the refresh runs
+- **THEN** batch 13 is not recorded read, its row stays, no bolt it holds is offered for landing, and once up the planner is told to run `crew card read batch/13`
+
+### Requirement: A crossed team's unit is batched once its change has landed on its bolt
+A unit of a crossed team's bolt SHALL become due for review when the runner's records read it merged, its change read archived on GitHub's bolt after a fetch, and SHALL be named in its batch at the commit of the bolt that holds it, its reading opening its archived folder. A note the user marks fix on such a unit SHALL reach its bolt as a fix place, by the planner's `crew fix`.
+
+#### Scenario: Merged, then batched
+- **WHEN** crossed crw-4's `a` lands on `bolt/x` at `9f1c2ab`, its change archived there
+- **THEN** `a` counts toward the partition's next batch, named `a:crw-4@9f1c2ab`
+
+#### Scenario: Constructed but not landed
+- **WHEN** `b`'s construct has delivered and its place is in code
+- **THEN** `b` is not yet due for review
+
+### Requirement: A reviewer's run hands its batch back
+`crew review delivered [--label L]`, run in the reviewer's run once each batch its turn took has its summary written, SHALL do for each what the planner's wait did once the summary was written: record the batch, start its one reading session, and raise its one card in the planner's name; and SHALL write an ask of the planner naming `batch/<n>` with the line that adopts its card. A batch whose summary file is not written SHALL be refused by name, and the others delivered.
+
+#### Scenario: A batch delivered
+- **WHEN** madswan's reviewer run has written batch 21's summary and runs `crew review delivered`
+- **THEN** batch 21 is recorded, its reading session started and its card raised in madswan-planner's name, and an ask of the planner names `batch/21` and the `get_request` line that adopts it
+
+#### Scenario: A summary not written
+- **WHEN** the reviewer's turn took batches 21 and 22, only 21's summary is written, and it runs `crew review delivered`
+- **THEN** batch 21 is delivered, and batch 22 is refused, naming its file

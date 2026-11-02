@@ -1,8 +1,13 @@
 """What crew assumes of git when gather.py reads a kit, each case naming what assumes it: Stages reads a unit's
 stage from the changes main and its bolt's branch hold, its place, and its fix (state.2, plan.12; crew bolts, crew
 board and crew sites read every host's kits through gather.kit, once per host)."""
+import json
 import os
+import re
 import subprocess
+from pathlib import Path
+
+import pytest
 
 import gather
 
@@ -41,6 +46,68 @@ class Kit:
 
     def read(self):
         return gather.kit({"main": str(self.repo.path), "dir": str(self.dir), "bolts": ["te"]})
+
+
+def test_a_kits_queue_handed_in_is_its_submissions_and_sluice_is_not_run(repo, tmp_path, monkeypatch):
+    """The host's follower hands a kit's gather its queue as its overview watch read it, and what it kept of each
+    submission it saw decided (the crew-board spec, One watch for each kit), so the gather runs no sluice and gives
+    both back; with none handed it reads the overview itself."""
+    k = Kit(repo, tmp_path)
+    doc = {"schema": "sluice/overview@1", "branches": []}
+    ran = []
+    monkeypatch.setattr(gather, "overview", lambda main: ran.append(main) or (doc, None))
+    req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"]}
+    kept = {"id": 40, "branch": "bolt/te", "worktree": "unit/b", "submitted": "2026-10-28T14:00:00Z", "started": "2026-10-28T14:05:00Z",
+            "decided": "2026-10-28T14:17:00Z", "event": "landed"}
+    got = gather.kit(dict(req, queued=[[{"id": 41, "branch": "bolt/te"}], None], decided=[[kept], None]), stamped=True)
+    assert got["submissions"] == [{"id": 41, "branch": "bolt/te"}] and "submissions_error" not in got and "overview" not in got
+    assert got["decided"] == [kept] and "decided_error" not in got
+    gone = gather.kit(dict(req, queued=[None, "its overview watch ended"], decided=[[kept], None]))
+    assert gone["submissions_error"] == "its overview watch ended" and gone["decided"] == [kept], "a gather threw away what was kept"
+    assert gather.kit(dict(req, queued=[[], None]))["decided_error"] == "the host's follower handed in its queue and nothing it kept of the decided"
+    assert ran == []
+    got = gather.kit(req)
+    assert got["submissions"] == [] and "overview" not in got and ran == [str(repo.path)]
+    assert gather.kit(req, stamped=True)["overview"] == doc, "the follower's gather did not give back the overview its watch starts from"
+
+
+def test_a_kits_gather_reads_sluice_only_through_one_overview_and_with_its_queue_handed_in_starts_no_sluice(repo, tmp_path, monkeypatch):
+    """The crew-board spec, A held bolt's decided merges: a gather of a kit asked two held bolts runs one `sluice
+    overview --json` in the kit's main checkout and no `sluice status`, for either bolt's branch or main, its decided
+    read from the overview's recent events; with the follower's queue handed in it starts no sluice process at all
+    (plan.20, read.1). sluice here is a script on the path that logs every call and answers the overview in the shape
+    sluice 0.56.0 prints it (tests/py/sluice-0.56.0/), an event naming its submissions as ids."""
+    k = Kit(repo, tmp_path)
+    repo.git("branch", "bolt/new")
+    bin_, log, recorded = tmp_path / "bin", tmp_path / "sluice.log", tmp_path / "overview.json"
+    bin_.mkdir()
+    recorded.write_text(json.dumps({"schema": "sluice/overview@1", "at": "2026-10-28T14:20:00Z", "branches": [
+        {"branch": "bolt/te", "submissions": [{"id": 42, "branch": "bolt/te", "state": "queued", "submitted": "2026-10-28T14:18:00Z",
+                                               "from": {"worktree": "unit/b"}}], "candidates": [],
+         "recent": [{"at": "2026-10-28T14:17:00Z", "event": "landed", "ids": [41]}], "recent_from": {"41": "unit/a"}},
+        {"branch": "main", "submissions": [], "candidates": [], "recent": [], "recent_from": {}}]}))
+    (bin_ / "sluice").write_text(f"""#!/bin/sh
+echo "$(pwd -P) $*" >> {log}
+case "$*" in
+  "overview --json") cat {recorded} ;;
+  *) echo "sluice: $* is not stubbed" >&2; exit 2 ;;
+esac
+""")
+    (bin_ / "sluice").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
+    req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te", "new"]}
+    got = gather.kit(dict(req, queued=[[], None], decided=[[], None]))
+    assert not log.exists(), f"a gather with its queue handed in ran sluice: {log.read_text()}"
+    assert (got["submissions"], got["decided"]) == ([], [])
+    got = gather.kit(req)
+    main = os.path.realpath(repo.path)
+    assert log.read_text().splitlines() == [f"{main} overview --json"]
+    assert "decided_error" not in got and [s["id"] for s in got["submissions"]] == [42]
+    assert [(s["id"], s["branch"], s["worktree"], s["decided"]) for s in got["decided"]] == [(41, "bolt/te", "unit/a", "2026-10-28T14:17:00Z")]
+    (bin_ / "sluice").write_text(f"#!/bin/sh\necho \"$(pwd -P) $*\" >> {log}\necho 'error: unexpected argument' >&2\nexit 2\n")
+    got = gather.kit(req)
+    assert got["decided_error"] == got["submissions_error"] == "sluice overview exited 2: error: unexpected argument"
+    assert [l.split(" ", 1)[1] for l in log.read_text().splitlines()] == ["overview --json", "overview --json"]
 
 
 def test_main_holds_its_open_and_archived_changes_an_archived_one_without_its_date(repo, tmp_path):
@@ -401,6 +468,22 @@ def test_a_kit_whose_main_now_is_missing_is_not_read(repo, tmp_path):
     assert got["ok"] is False and "has no origin/main to read" in got["error"]
 
 
+def test_a_kit_names_the_revision_of_main_it_was_read_at(repo, tmp_path):
+    """The rail's sweep through gather.kit's main_at (plan.landings_moved, rail-cards "Main moves under an open card"): a
+    kit with an origin names origin/main's commit as the host last fetched it, not the host's own main; one with none
+    names its own main's."""
+    k = Kit(repo, tmp_path)
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    repo.git("fetch", "-q", "origin")
+    fetched = repo.git("rev-parse", "refs/remotes/origin/main")
+    repo.commit("feat: only on the host's own main", {"here.txt": "h\n"})
+    assert k.read()["main_at"] == fetched
+    repo.git("remote", "remove", "origin")
+    assert k.read()["main_at"] == repo.git("rev-parse", "refs/heads/main") != fetched
+
+
 def on_github(repo, tmp_path, policy=ON_GITHUB):
     """A kit whose main and bolt/te carry policy, and its GitHub: a bare clone as origin, fetched; and a clone of
     GitHub on bolt/te, where sluice lands the bolt's merges from another host."""
@@ -495,12 +578,15 @@ def test_a_bolt_whose_policy_on_github_is_not_toml_is_read_nowhere(repo, tmp_pat
 def test_a_read_that_asks_a_fetch_reads_what_github_holds_now_and_every_other_as_last_fetched(repo, tmp_path):
     """crew bolts, a give's proven check (plan.survey with fetch) and every other read (plan.18, plan.19): a request
     with fetch runs `git fetch -q origin` in the kit's main checkout first and reads a merge pushed to GitHub's bolt
-    since; one without reads the bolt as the host last fetched it; a fetch that fails reads the kit unread, naming
-    GitHub and git's words, and nothing from the host's copy."""
+    since; one without reads the bolt as the host last fetched it, before the sluice status it then asks for the bolt's
+    record, which sluice 0.51.3 answers for a branch on a remote by fetching it there (read in a scratch repository on
+    2026-10-28); a fetch that fails reads the kit unread, naming GitHub and git's words, and nothing from the host's
+    copy."""
     k, other = on_github(repo, tmp_path)
     head = landed_on_github(other, {"one": "1\n"}, "Merge unit/u into bolt/te\n\nSluice-Result: passed (9 run, 0 replayed)")
     req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"]}
-    assert gather.kit(req)["bolts"]["te"]["head"] == repo.git("rev-parse", "origin/bolt/te") != head
+    last = repo.git("rev-parse", "origin/bolt/te")
+    assert gather.kit(req)["bolts"]["te"]["head"] == last != head
     got = gather.kit(req, fetch=True)["bolts"]["te"]
     assert (got["head"], got["verdict"]) == (head, "passed (9 run, 0 replayed)")
     repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))
@@ -510,3 +596,169 @@ def test_a_read_that_asks_a_fetch_reads_what_github_holds_now_and_every_other_as
     assert gather.fetched(str(repo.path)).startswith("fatal:")
     repo.git("remote", "remove", "origin")
     assert gather.fetched(str(repo.path)) is None
+
+
+class TestStamp:
+    """What crew assumes of git and the file system when the host's follower checks that nothing moved (plan.12, read.1):
+    a kit's stamp (gather.stamp), read with no process, moves on everything kit() reads of it moving, and on nothing
+    else, the gather's own reads among them."""
+
+    def kit(self, repo, tmp_path):
+        k = Kit(repo, tmp_path)
+        self.slots = tmp_path / "slots"
+        self.slots.write_text("")
+        self.req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"], "slots": {"t": str(self.slots)}}
+        return k
+
+    def test_it_stays_while_nothing_changes_and_a_read_of_the_kit_moves_it_not(self, repo, tmp_path):
+        """The follower's no-change refresh: a gather of the kit between two checks leaves its stamp where it was."""
+        k = self.kit(repo, tmp_path)
+        p = k.place("a")
+        change(p, "a", 1, 2)
+        k.commit(p, "feat(a)")
+        s = gather.stamp(self.req)
+        assert s and gather.stamp(self.req) == s
+        gather.kit(self.req, board=True)
+        assert gather.stamp(self.req) == s
+
+    def test_a_commit_in_a_place_moves_it(self, repo, tmp_path):
+        k = self.kit(repo, tmp_path)
+        p = k.place("a")
+        s = gather.stamp(self.req)
+        (p / "x").write_text("x\n")
+        k.commit(p, "feat(a): x")
+        assert gather.stamp(self.req) != s
+
+    def test_a_fetch_that_moves_a_remote_ref_moves_it(self, repo, tmp_path):
+        """Stages read GitHub's bolt and main as this host last fetched them (plan.18, plan.19)."""
+        k = self.kit(repo, tmp_path)
+        origin = tmp_path / "origin.git"
+        subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+        repo.git("remote", "add", "origin", str(origin))
+        repo.git("fetch", "-q", "origin")
+        s = gather.stamp(self.req)
+        other = tmp_path / "other"
+        subprocess.run(["git", "clone", "-q", str(origin), str(other)], check=True)
+        subprocess.run(["git", "-C", str(other), "commit", "-q", "--allow-empty", "-m", "feat: landed"], check=True)
+        subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "HEAD:main"], check=True)
+        repo.git("fetch", "-q", "origin")
+        assert gather.stamp(self.req) != s
+
+    def test_a_task_ticked_with_nothing_committed_moves_it(self, repo, tmp_path):
+        """The bolt-plan spec's A wait sees what changes while it waits: tasks.md is read from the place's files."""
+        k = self.kit(repo, tmp_path)
+        p = k.place("a")
+        change(p, "a", 0, 2)
+        k.commit(p, "docs(a): the change")
+        s = gather.stamp(self.req)
+        tasks = p / "openspec/changes/a/tasks.md"
+        tasks.write_text(tasks.read_text().replace("- [ ] 1.1", "- [x] 1.1"))
+        assert gather.stamp(self.req) != s
+
+    def test_a_place_made_and_one_removed_each_move_it(self, repo, tmp_path):
+        k = self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
+        p = k.place("b")
+        made = gather.stamp(self.req)
+        assert made != s
+        repo.git("worktree", "remove", str(p))
+        assert gather.stamp(self.req) not in (made, None)
+
+    def test_a_line_written_to_a_slots_file_moves_it(self, repo, tmp_path):
+        self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
+        self.slots.write_text("unit-1 unit a /kit/places/a\n")
+        assert gather.stamp(self.req) != s
+
+    def test_a_fix_branchs_config_changed_moves_it(self, repo, tmp_path):
+        """A dropped fix is marked in the kit's git config (record 0028), which fixes_dropped reads."""
+        k = self.kit(repo, tmp_path)
+        k.place("te/edge", prefix="fix")
+        s = gather.stamp(self.req)
+        repo.git("config", "branch.fix/te/edge.crew", "dropped")
+        assert gather.stamp(self.req) != s
+
+    def test_a_write_under_sluices_folder_leaves_it(self, repo, tmp_path):
+        """The crew-board spec, sluice's folder moves: a kit's queue is its overview's to say (sluice ADR 0023), so a
+        branch's version written and a submission queued in the git folder's sluice/ leave the stamp as it was."""
+        self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
+        r = repo.path / ".git" / "sluice"
+        (r / "main").mkdir(parents=True)
+        (r / "main" / "version").write_text("2\n")
+        (r / "bolt" / "te" / "submissions").mkdir(parents=True)
+        (r / "bolt" / "te" / "submissions" / "13.json").write_text("{}")
+        assert gather.stamp(self.req) == s
+
+    def test_nothing_of_crews_names_a_path_in_sluices_folder(self):
+        """crew reads and names no folder of sluice's (the crew-board spec, The follower follows each kit's queue through
+        sluice's overview): no file of crew's joins a git folder to sluice/ or names a path under it."""
+        plugin = Path(__file__).resolve().parents[2] / "plugin"
+        named = re.compile(r"""(common|git[_-]?dir|\.git)\S*\s*,\s*["']sluice["']|\.git/sluice\b|sluice/(main|bolt)/|\.next-id""")
+        found = [f"{p.relative_to(plugin)}:{n}" for p in sorted(plugin.rglob("*")) if p.is_file() and p.suffix in ("", ".py", ".sh", ".js", ".ts", ".md")
+                 for n, line in enumerate(p.read_text(errors="replace").splitlines(), 1) if named.search(line)]
+        assert found == []
+
+    def test_it_starts_no_process(self, repo, tmp_path, monkeypatch):
+        k = self.kit(repo, tmp_path)
+        change(k.place("a"), "a", 1, 2)
+
+        def refuse(*args, **kwargs):
+            raise AssertionError(f"a stamp starts no process, and this one ran {args[0] if args else kwargs!r}")
+        for name in ("run", "Popen", "call", "check_call", "check_output"):
+            monkeypatch.setattr(subprocess, name, refuse)
+        assert gather.stamp(self.req)
+
+    def test_a_stamp_request_answers_each_kits_stamp_and_a_stamped_read_carries_the_same(self, repo, tmp_path):
+        """plan.stamped's request, piped to another host as a gather is, and the follower's gather, whose answers carry
+        the stamp their read was made at."""
+        self.kit(repo, tmp_path)
+        s = gather.stamp(self.req)
+        assert gather.read({"kits": [self.req], "stamp": True, "labels": ["wldn"]}) == {"kits": {str(repo.path): s}, "readings": gather.readings_stamp(["wldn"])}
+        got = gather.read({"kits": [self.req], "stamped": True, "board": True})[str(repo.path)]
+        assert got["ok"] and got["stamp"] == s and "stamp" not in gather.read({"kits": [self.req]})[str(repo.path)]
+
+
+class TestReadingsStamp:
+    """What crew assumes of the file system when the host's follower checks whether a reading was sent back (the
+    card-sessions spec, A reading sent on one host): a host's card readings folders' stamp (gather.readings_stamp),
+    read with no process, moves when plannotator writes a reading's result or crew tells its owner, and on nothing
+    else."""
+
+    @pytest.fixture
+    def cards(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        folder = tmp_path / ".local/state/crew/cards/wldn/batch/3"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text('{"pid": 1}')
+        return folder
+
+    def test_a_result_written_moves_it_and_nothing_written_leaves_it(self, cards):
+        s = gather.readings_stamp(["wldn"])
+        assert s and gather.readings_stamp(["wldn"]) == s
+        (cards / "result.json").write_text('{"decision": "approved"}')
+        assert gather.readings_stamp(["wldn"]) not in (s, None)
+
+    def test_its_owner_told_moves_it(self, cards):
+        s = gather.readings_stamp(["wldn"])
+        (cards / "told.json").write_text("{}")
+        assert gather.readings_stamp(["wldn"]) != s
+
+    def test_another_partitions_folder_moves_it_not(self, cards):
+        s = gather.readings_stamp(["wldn"])
+        other = cards.parents[2] / "swancloud" / "proposal" / "4"
+        other.mkdir(parents=True)
+        (other / "result.json").write_text("{}")
+        assert gather.readings_stamp(["wldn"]) == s and gather.readings_stamp(["wldn", "swancloud"]) != s
+
+    def test_a_missing_folder_stamps_alike_twice(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        s = gather.readings_stamp(["wldn"])
+        assert s and gather.readings_stamp(["wldn"]) == s
+
+    def test_it_starts_no_process(self, cards, monkeypatch):
+        def refuse(*args, **kwargs):
+            raise AssertionError("a readings stamp starts no process")
+        for name in ("run", "Popen", "call", "check_call", "check_output"):
+            monkeypatch.setattr(subprocess, name, refuse)
+        assert gather.readings_stamp(["wldn"])

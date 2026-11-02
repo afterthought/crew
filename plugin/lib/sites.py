@@ -110,7 +110,7 @@ def main(argv):
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     fleet = crew.load()
-    label = a.label or os.environ.get("CREW_LABEL")
+    label = a.label or crew.caller_label(fleet)
     labels = [crew.partition_of(fleet, label)["label"]] if label else list(fleet["partitions"])
     data = sites(fleet, labels)
     print(json.dumps(data, indent=1) if a.json else text(data))

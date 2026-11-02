@@ -444,7 +444,7 @@ class TestRaise:
 
     def swept(self, monkeypatch, pl, key):
         """The sweep's raise of the row keyed so, the branch's tip holding the plan and proposals.rec (pl)."""
-        monkeypatch.setattr(plan, "fetch", lambda repo, ref: "tip")
+        monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "tip")
         monkeypatch.setattr(plan, "read", lambda repo, ref, tip: write().plan)
         monkeypatch.setattr(plan, "show", lambda repo, tip, path: pl.text() if path == "proposals.rec" else None)
         return plan.raise_proposal(CARDED, {"label": "wldn", "key": key, "group": "proposals"}, self.Acts())
@@ -510,9 +510,57 @@ def test_a_rewrite_after_the_users_note_acks_the_card_they_answered_and_its_new_
     ack, = [a for t, a in acts.calls if t == "ack_answer"]
     post, = [a for t, a in acts.calls if t == "post_request"]
     assert (ack["requestId"], ack["outcome"]) == ("req_p1", "Rewritten as proposal 2 after your note")
-    assert (post["idempotencyKey"], post["follows"], [o["id"] for o in post["options"]]) == ("proposal/1:2", "req_p1", ["add:b-new", "unticked"])
+    assert (post["idempotencyKey"], post["follows"], [o["id"] for o in post["options"]]) == ("proposal/1@wldn:2", "req_p1", ["add:b-new", "unticked"])
     assert [(e["Act"], e["Key"], e.get("Card")) for e in acts.emitted] == [("card.close", "proposal/1", "req_p1"), ("card.post", "proposal/1", "req_p2")]
     assert "update_request" not in [t for t, _ in acts.calls]
+
+
+def rewritten_after_a_note(monkeypatch, *rewrites):
+    """Proposal 1 (TestRaise.DOS, "Console first.") answered with a note on its card req_p1, then each rewrite, (case,
+    dos), opened in turn and raised as a replace through the act on its stand-in for Pending You
+    (test_card_commands.Acts), the run record growing with what each raise recorded: the acts of the last raise."""
+    from test_card_commands import Acts
+    monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+    pl = proposals_with(("Console first.", TestRaise.DOS))
+    held = [{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": "req_p1", "At": "2026-10-23T13:10:00Z"}]
+    note = {"status": "answered", "turn": "agent", "version": 3, "answer": {"approved": False, "note": "console last, and b-new"}}
+    for n, (case, rewrite) in enumerate(rewrites, 2):
+        plan.open_proposal(pl, n, case, rewrite, "wldn-planner", TODAY, n - 1, "wldn")
+        w = write()
+        w.files["proposals.rec"] = pl.text()
+        acts = Acts({"get_request": (note, None), "ack_answer": ({"version": 4}, None),
+                     "match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                     "post_request": ({"requestId": f"req_p{n}", "version": 1}, None)}, held, caller="wldn-planner")
+        plan.raise_proposal_at(CARDED, "wldn", w, n, "replace", acts)
+        held = held + [dict(e, By=e["by"], At=f"2026-10-23T14:0{n}:00Z") for e in acts.emitted]
+    return acts, held
+
+
+def test_a_rewrite_after_the_users_note_opens_saying_what_they_answered_and_what_the_rewrite_changed(monkeypatch):
+    """rail-cards "A proposal rewritten after the user's note": the card that follows says first what the user answered
+    and what proposal 2 changed against proposal 1."""
+    acts, _ = rewritten_after_a_note(monkeypatch, ("Console last.", ['unit add b-new "B." --bolt console-pages']))
+    post, = [a for t, a in acts.calls if t == "post_request"]
+    assert post["follows"] == "req_p1" and post["summary"].startswith(
+        "You answered the card before this one, posted 2026-10-23 13:10 UTC, by ")
+    assert ": declined, with a note. Since then: the planner rewrote it as proposal 2. It adds b-new. It no longer adds a-new. Its case is " \
+           "rewritten." in post["summary"] and "console last, and b-new" not in repr(acts.emitted)
+    assert acts.emitted[0]["Answer"] == "declined, with a note"
+
+
+def test_a_rewrite_changing_neither_its_commands_nor_its_case_is_withheld_and_the_next_that_does_follows_the_answered_card(monkeypatch):
+    """rail-cards "A proposal rewritten with nothing changed" and "Something changes after a withheld card"."""
+    acts, held = rewritten_after_a_note(monkeypatch, ("Console first.", TestRaise.DOS))
+    assert "post_request" not in [t for t, _ in acts.calls]
+    assert [(e["Act"], e.get("Card"), e.get("State"), e["Key"]) for e in acts.emitted] == [
+        ("card.close", "req_p1", "closed", "proposal/1"), ("card.post", "req_p1", "stands", "proposal/1")]
+    assert acts.emitted[1]["refused"].startswith("Not posted: nothing has changed since the user answered req_p1 by ")
+    # proposal 3, rewriting 2, adds unit w: posted following req_p1, whose answer stood
+    acts, _ = rewritten_after_a_note(monkeypatch, ("Console first.", TestRaise.DOS),
+                                     ("Console first.", TestRaise.DOS + ['unit add w "W." --bolt console-pages']))
+    post, = [a for t, a in acts.calls if t == "post_request"]
+    assert post["follows"] == "req_p1" and "Since then: the planner rewrote it as proposal 3. It adds w." in post["summary"]
+    assert post["idempotencyKey"] == "proposal/1@wldn:2"
 
 
 ASKS = "Why is this a unit at all? Isn't it the chore we already have?"
@@ -587,7 +635,7 @@ def test_a_rewrite_of_a_card_with_questions_while_it_waits_withdraws_it_and_its_
     assert "update_request" not in calls
     assert calls["cancel_request"] == [{"requestId": "req_p1", "name": "wldn-planner", "reason": "Rewritten as proposal 2 after your note"}]
     post, = calls["post_request"]
-    assert (post["idempotencyKey"], post["follows"]) == ("proposal/1:2", "req_p1")
+    assert (post["idempotencyKey"], post["follows"]) == ("proposal/1@wldn:2", "req_p1")
     assert [(q["id"], [o["id"] for o in q["options"]]) for q in post["questions"]] == [
         ("rows-1", ["add:a-1", "add:a-2", "add:a-3"]), ("rows-2", ["add:a-4", "add:a-5", "add:b-6"])]
     assert emitted == [("card.close", "proposal/1", "req_p1", "withdrawn", plan.REASKED), ("card.post", "proposal/1", "req_p2", None, None)]
@@ -618,7 +666,7 @@ def test_a_rewrite_that_moves_its_card_to_another_form_withdraws_it_while_it_wai
     assert "update_request" not in calls
     assert calls["cancel_request"] == [{"requestId": "req_p1", "name": "wldn-planner", "reason": "Rewritten as proposal 2 after your note"}]
     post, = calls["post_request"]
-    assert (post["idempotencyKey"], post["follows"], asked in post) == ("proposal/1:2", "req_p1", True)
+    assert (post["idempotencyKey"], post["follows"], asked in post) == ("proposal/1@wldn:2", "req_p1", True)
     assert emitted == [("card.close", "proposal/1", "req_p1", "withdrawn", plan.RENEWED), ("card.post", "proposal/1", "req_p2", None, None)]
     assert capsys.readouterr().out.startswith("card proposal/1: req_p1 withdrawn, its kind having changed, and its new version follows it\n")
 

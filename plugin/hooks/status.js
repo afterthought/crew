@@ -1,6 +1,7 @@
 // crew's mod: each crew agent's view of its partition's board, drawn in the band above its prompt. The views are
-// crew's (board.py agent_views): the console's rail tab writes them beside the board's frame each time it
-// refreshes (crew _views), and this module finds its own agent's and draws it, deciding nothing itself (code.7). It
+// crew's (board.py agent_views): the host's follower, swancloud's job running crew _follow or else the console's rail
+// tab, writes them beside the board's frame each time it refreshes (board.py Follower), and this module finds its own
+// agent's and draws it, deciding nothing itself (code.7). It
 // starts no process and costs no tokens: every few seconds it looks at the file's time, and reads the file only when
 // that has moved (state.4: a frame is one redraw, not state).
 //
@@ -8,17 +9,26 @@
 // changes this module and board.agent_views together, each with its cases: tests/py/test_board.py pins every key this
 // reads from the views file, and plugin/tests/status.test.ts what it draws (code.8).
 
-// How often the file's time is looked at; the rail tab writes it every 30 seconds and on each run-record entry.
+// How often the file's time is looked at; the host's follower writes it once a minute on its clock, and within seconds
+// of a write on this host or a kit's queue moving in sluice's overview watch; a frame is stale after three minutes
+// (its stale_after_ms).
 const EVERY_MS = 5000
 
 // Who this session is, where its partition's views are, and what was last read from them.
 const live = { agent: undefined, label: undefined, path: undefined, mtime: undefined, frame: undefined, stale: false }
 
-// The session's agent and partition: CREW_AGENT and CREW_LABEL, as crew-role starts every role, or, for a session
-// herdr resumed bare without them, the record crew's SessionStart hook keeps of the session (hooks/session-start).
+// The place a role's run is, its folder crew-<role>--<label>, as crew.py RUN_PLACE reads it.
+const RUN_PLACE = /^crew-([a-z]+)--([a-z0-9][a-z0-9-]*)$/
+
+// The session's agent and partition: CREW_AGENT and CREW_LABEL, as crew-role starts every role; for a role's run Flume
+// started, which carries no environment of crew's, its run's name, <label>-<role>, from FLUME_PLACE, the place the
+// role's record named (crew.py run_here; Decision 8 of roles-run-as-flume-kinds); or, for a session herdr resumed bare
+// without them, the record crew's SessionStart hook keeps of the session (hooks/session-start).
 async function identity($, home) {
   const agent = await $.env.get('CREW_AGENT')
   if (agent) return { agent, label: await $.env.get('CREW_LABEL') }
+  const run = RUN_PLACE.exec(((await $.env.get('FLUME_PLACE')) || '').split('/').filter(Boolean).pop() || '')
+  if (run) return { agent: run[2] + '-' + run[1], label: run[2] }
   try {
     const record = await $.fs.read(home + '/.local/state/crew/sessions/' + (await $.session.id()))
     const kv = Object.fromEntries(record.split('\n').filter((l) => l.includes('=')).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]))
@@ -54,13 +64,13 @@ async function look($) {
 }
 
 // The lines the band shows: the agent's open cards, its questions among them, then its view; once the views are old,
-// the stale line alone, since views the rail tab has stopped refreshing name the bolt and cards as they stood then, a
+// the stale line alone, since views the host's follower has stopped refreshing name the bolt and cards as they stood then, a
 // bolt landed since among them (read.1); one line while no views are written on this host; nothing for an agent crew
 // gives no view, or a session that is no crew agent.
 function lines() {
   if (!live.path) return undefined
   if (!live.frame) {
-    return [[['crew: no board for ' + live.label + ' on this host yet; its console writes it (crew console up ' + live.label + ')', 'dim']]]
+    return [[['crew: no board for ' + live.label + " on this host yet; the host's follower writes it (crew console up " + live.label + ' while no job runs)', 'dim']]]
   }
   const view = live.frame.views[live.agent]
   if (!view) return undefined

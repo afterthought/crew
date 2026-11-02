@@ -314,7 +314,7 @@ class TestSlotsAndPlaces:
         on = {"main": {"landed-one"}, f"bolt/{TE}": {"merged-one"}}
         over = lambda name, chores=("live",), bolt=TE: plan.tidy_over(
             f"/kit/places/chore-{name}", f"chore/{name}", "/kit", f"bolt/{TE}", {TE}, {}, set(), lambda b: [], lambda f, b: False,
-            {c: bolt for c in chores}, lambda ref: on.get(ref, set()))
+            {c: bolt for c in chores}, lambda ref: on.get(ref, set()), made={f"chore/{name}"})  # this host's record started it
         assert over("landed-one") == ("landed-one", "chore landed-one has landed on main")
         assert over("merged-one") == ("merged-one", f"chore merged-one has merged into bolt/{TE}")
         assert over("live") == ("live", None)

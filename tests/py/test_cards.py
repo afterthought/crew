@@ -289,13 +289,13 @@ class TestNames:
         ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a kit's landings card is crew's"),
         ("wldn-ops", "op/a/1", "a step's card is crew's")])
     def test_the_hook_refuses_an_agents_post_under_crews_key_as_crew_sends_it(self, monkeypatch, agent, row, said):
-        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key shorter
-        than Pending You's eight characters filled out (cards.post_key, batch/7 as batch/7_), and its revision."""
+        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key qualified
+        by its partition's label (cards.post_key, batch/7 as batch/7@wldn), and its revision."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
         monkeypatch.setenv("CREW_AGENT", agent)
         monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
         closed = [dict(Act="card.post", Key=row, By=agent, Card="req_1"), dict(Act="card.close", Card="req_1")]
-        for sent in (plan.cards.post_key([], row, agent), plan.cards.post_key(closed, row, agent)):
+        for sent in (plan.cards.post_key([], row, agent, "wldn"), plan.cards.post_key(closed, row, agent, "wldn")):
             assert len(sent) >= plan.cards.KEY_LEAST
             assert cards.refusal(hooked("post_request", {"idempotencyKey": sent, "name": agent})).startswith(
                 f"crew refuses {agent}'s post of the card under {sent}: {said}")
@@ -548,7 +548,8 @@ class TestSessions:
         plan.row_card_close(None, "wldn", "wldn-planner", "batch/3", outcome="Read; no notes", acts=acts)
         assert acts.releases == []
 
-    def test_a_batch_wait_returns_the_cards_note_and_the_sessions_annotations_as_the_user_wrote_them(self):
+    def test_a_batchs_read_gives_the_cards_note_and_the_readings_annotations_as_the_user_wrote_them(self):
+        """review-batches "Notes written in a session" and "Two fine, one with notes", read by crew card read."""
         tapped = {"status": "answered", "turn": "agent", "answer": {"note": {"text": "x1: say what a zone is."}}}
         assert plan.batch_waited("batch/3", None, tapped) == (
             "read", "batch/3: sent back on its card, with a note:\nx1: say what a zone is.", "Read; 1 note sent to its team")
@@ -560,6 +561,15 @@ class TestSessions:
         assert plan.batch_waited("batch/3", ("approved", None, 0), None) == ("read", "batch/3: approved", "Read; no notes")
         assert plan.batch_waited("batch/3", ("annotated", notes, 2), tapped)[2] == "Read; 3 notes sent to their teams"
         assert plan.batch_waited("batch/3", ("annotated", notes, None), None)[2] == "Read; its notes sent to their teams"
+        r = plan.reading_read("batch/3", tapped, ("annotated", notes, 2), held=True)
+        assert r["lines"] == ["batch/3: sent back on its card, with a note:", "x1: say what a zone is.", "batch/3: annotated",
+                              "# Annotations", "", "1. Say what z means.", "2. Why one zone?"]
+        assert (r["close"], r["record"], r["end"], r["aside"]) == ("Read; 3 notes sent to their teams", True, False, False)
+
+    def test_a_batch_sent_with_no_card_held_ends_its_reading_at_the_read(self):
+        """review-batches "Sent with no card on the main level's host": the card's close would end it, and none is held."""
+        r = plan.reading_read("batch/13", None, ("approved", None, 0), held=False)
+        assert (r["lines"], r["close"], r["record"], r["end"]) == (["batch/13: approved"], "Read; no notes", True, True)
 
     def test_a_batch_whose_session_was_sent_is_recorded_read_by_crew_whenever_no_card_of_it_closed(self):
         """review-batches, "A batch whose reading session is sent is read, with or without its card": a card closed is
@@ -567,72 +577,36 @@ class TestSessions:
         assert plan.batch_read_close("req_b13") is False
         assert plan.batch_read_close(None) is True
 
-    def test_a_batch_wait_goes_on_while_neither_has_the_users_word_and_ends_on_a_card_closed_outside_crew(self):
+    def test_a_batch_nothing_sent_of_waits_on_the_user_and_one_closed_outside_crew_is_recorded_so(self):
         for decided in (None, ("dismissed", None, None)):
             assert plan.batch_waited("batch/3", decided, {"status": "pending", "turn": "you"}) is None
             assert plan.batch_waited("batch/3", decided, None) is None
+        assert plan.reading_read("batch/3", {"status": "pending", "turn": "you"}, None, held=True) == dict(
+            lines=["batch/3: nothing sent yet: the batch waits on the user, on its card or its reading"], close=None,
+            record=False, closed=None, aside=False, end=False)
+        r = plan.reading_read("batch/3", None, ("dismissed", None, None))
+        assert r["lines"] == ["batch/3: closed in plannotator with no decision; the batch waits on the user's word on its card, "
+                              "and crew card session batch/3 opens its reading again"] and not (r["close"] or r["end"])
         assert plan.batch_waited("batch/3", None, {"status": "cancelled"}) == (
             "closed", "batch/3: its card was closed outside crew; Pending You shows it cancelled", "cancelled")
+        r = plan.reading_read("batch/3", {"status": "cancelled"}, None, held=True)
+        assert (r["closed"], r["close"], r["end"]) == ("cancelled", None, True)
 
-    # A batch's wait starts its reading when none runs (card-sessions).
-    @pytest.mark.parametrize("recorded, held, refused, step", [
-        ({"pid": 42}, "req_b3", None, ("wait", None)), (None, None, None, ("wait", None)), ({"pid": 42}, None, None, ("wait", None)),
-        (None, "req_b3", None, ("start", None)),
-        (None, "req_b3", "plannotator is not on this host's path", ("card", "batch/3's reading could not be opened: plannotator is not "
-                                                                    "on this host's path; crew card session batch/3 starts it once that "
-                                                                    "is mended, and the wait goes on for its card"))])
-    def test_a_batch_wait_with_its_card_held_and_no_session_starts_its_reading_and_says_once_when_it_cannot(self, recorded, held, refused, step):
-        assert plan.batch_unstarted("batch/3", recorded, held, refused) == step
+    def test_a_batch_answered_in_a_pane_is_said_without_its_words_and_its_card_closed_answered(self):
+        """review-batches "The planner's wait was running", now its read."""
+        r = plan.reading_read("batch/16", {"status": "pending"}, ("annotated", "x", 1), ("swancloud-operator", "2026-10-22T20:17:03Z"), True)
+        assert r == dict(lines=["batch/16: answered in swancloud-operator's pane at 20:17Z"], close="Answered in swancloud-operator's "
+                         "pane at 20:17Z", record=False, closed=None, aside=False, end=True)
 
-    def test_a_batch_wait_starts_no_reading_for_a_batch_answered_in_a_pane(self):
-        """review-batches "A batch answered in a main-level pane": it waits on the user no more, and the wait ends on its
-        answer."""
-        assert plan.batch_unstarted("batch/3", None, "req_b3", answered=True) == ("wait", None)
-
-    def waited_on(self, monkeypatch, tmp_path, acts):
-        """crew card wait batch/3 on mac-studio, the main level's host, its card and its reading read as acts gives them."""
-        monkeypatch.setattr(plan, "batch_read", lambda fleet, label, n, acts: dict(n=3, previous=2, units=BATCH_UNITS, link=None))
-        monkeypatch.setattr(plan, "raise_batch", lambda fleet, row, acts=None, note=None: acts.emit("wldn", "card.update", ["batch/3"],
-                                                                                                   Card="req_b3", Key=row["key"], note=note))
-        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
-        plan.batch_wait(fleet, "wldn", "batch/3", tmp_path, acts)
-
-    def test_a_batch_wait_starts_the_missing_reading_and_changes_its_card_to_carry_it(self, monkeypatch, tmp_path, capsys):
-        """card-sessions "A card raised without its reading", for a batch's wait: the start is recorded and the card
-        changed before the wait reads it."""
-        reads = []
-
-        class Acts(ReadingActs):
-            def bridge(self, name, later, held=None):
-                py = super().bridge(name, later, held)
-                answer = py.answer
-
-                def answered(tool, args):
-                    if tool == "get_request":
-                        reads.append(args["requestId"])
-                        return ({"status": "pending", "turn": "you", "version": 3} if len(reads) == 1 else
-                                {"status": "answered", "turn": "agent", "answer": {}}), None
-                    return answer(tool, args)
-                py.answer = answered
-                return py
-        acts = Acts(entries=[{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}])
-        self.waited_on(monkeypatch, tmp_path, acts)
-        assert acts.sessions == [("wldn", "batch/3")]
-        assert [(e["Act"], e.get("note")) for e in acts.emitted][:2] == [("card.reading", None), ("card.update", plan.RELINKED)]
-        out = capsys.readouterr().out.splitlines()
-        assert out[:2] == ["http://mac-studio.ts.swancloud.net:19432", "batch/3: sent back on its card, with no note"]
-
-    def test_a_batch_wait_whose_reading_will_not_open_says_so_once_and_waits_on_its_card(self, monkeypatch, tmp_path, capsys):
-        """card-sessions "The reading still will not open": the card is left as it is and returns the user's word."""
-        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
-        acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "version": 3, "answer": {"note": {"text": "Read."}}}, None)},
-                           [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}], refused=why)
-        self.waited_on(monkeypatch, tmp_path, acts)
-        assert not [t for t, _ in acts.calls if t == "update_request"]
-        assert (acts.emitted[0]["Act"], acts.emitted[0]["refused"]) == ("card.reading", why)
-        assert capsys.readouterr().err.splitlines() == [
-            f"batch/3's reading could not be opened: {why}; crew card session batch/3 starts it once that is mended, and the wait "
-            "goes on for its card"]
+    def test_a_long_proposals_read_gives_its_readings_decision_after_the_cards_answer(self):
+        """card-sessions "Approved in the session", "Annotated in the session" and "Closed with no decision"."""
+        assert plan.reading_read("proposal/4", None, ("approved", None, 0))["lines"] == ["proposal/4's reading: approved"]
+        r = plan.reading_read("proposal/4", None, ("annotated", "1. Why two?\n2. Name the host.", 2))
+        assert (r["lines"], r["aside"]) == (["proposal/4's reading: annotated", "1. Why two?", "2. Name the host."], True)
+        r = plan.reading_read("proposal/4", None, ("dismissed", None, None))
+        assert r["lines"] == ["proposal/4's reading: closed in plannotator with no decision, and its card is still the "
+                              "user's to answer; crew card session proposal/4 opens its reading again"] and not r["aside"]
+        assert plan.reading_read("proposal/4", {"status": "pending"}, None)["lines"] == []
 
     def test_a_sessions_result_gives_its_count_of_annotations(self, tmp_path):
         (tmp_path / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "a", "annotationCount": 2}))
@@ -707,21 +681,36 @@ class ReadingActs:
     """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends, and a landing's
     preview is asked for and released: a session's link given, or its start refused with why, always (refused) or for
     each start in turn (refusals, None for a start that opens); the preview given (preview), and its release said
-    (released); Pending You's tools answered from answers, a (got, words) pair."""
+    (released); what each unit made, by host (made, {host: {"made": …, "previews": …}}, a host missing from it not
+    answering); Pending You's tools answered from answers, a (got, words) pair."""
 
-    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None, refusals=()):
+    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None, refusals=(),
+                 made=None):
         self.answers, self.held, self.refused, self.started = dict(answers or {}), list(entries), refused, started
         self.refusals = list(refusals)
-        self.given, self.said = preview, released
+        self.given, self.said, self.made_on = preview, released, made
         self.sessions, self.ended, self.emitted, self.calls, self.previews, self.releases = [], [], [], [], [], []
+        self.batch_releases, self.read = [], []
 
     def preview(self, label, key, facts):
-        self.previews.append((label, key, facts["head"], facts["previewed"]))
+        self.previews.append((label, key, facts["head"], facts["previewed"], facts.get("policy")))
         return self.given
 
     def release_preview(self, label, key):
         self.releases.append((label, key))
         return self.said
+
+    def release_previews(self, label, key):
+        self.batch_releases.append((label, key))
+        return None
+
+    def made(self, label, host, units, key):
+        self.read.append((host, list(units), key))
+        if self.made_on is None:
+            return {"made": {}, "previews": {}}
+        if host not in self.made_on:
+            raise crew.Refusal("ssh: connect to host chuck-herdr-alpha port 22: Operation timed out")
+        return self.made_on[host]
 
     def tell(self, name, text):
         self.calls.append(("tell", {"to": name, "text": text}))
@@ -779,6 +768,96 @@ class ReadingActs:
 
     def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
         return ("switchboard-kit",)
+
+
+class TestBatchRead:
+    """crew card read batch/<n>, the planner's on the main level's host (review-batches, card-sessions): the card and
+    its one reading read together, the card closed with what was read, and the batch recorded read when no card
+    closed."""
+    HELD = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
+
+    def read(self, monkeypatch, tmp_path, acts, result=None, session=True, who="wldn-planner"):
+        d = tmp_path / "wldn" / "batch/3"
+        d.mkdir(parents=True)
+        if session:
+            (d / "session.json").write_text(json.dumps({"pid": 42, "document": "/c/00-summary.md", "url": "http://x:19432",
+                                                        "started": "2026-10-23T10:00:00Z"}))
+        if result:
+            (d / "result.json").write_text(json.dumps(result))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        plan.batch_card_read(FLEET, "wldn", "batch/3", who, acts=acts)
+        return d
+
+    def test_a_tap_closes_the_card_with_its_note_whose_close_ends_the_reading(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A batch card tapped on the phone"."""
+        tapped = {"status": "answered", "turn": "agent", "version": 2, "answer": {"note": {"text": "x1: name the host."}}}
+        acts = ReadingActs({"get_request": (tapped, None)}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts)
+        assert [(e["Act"], e.get("Outcome")) for e in acts.emitted] == [("card.close", "Read; 1 note sent to its team")]
+        assert acts.ended == [("wldn", "batch/3")]
+        assert capsys.readouterr().out.splitlines() == [
+            "batch/3: sent back on its card, with a note:", "x1: name the host.", "card batch/3: req_b3 closed",
+            "ended batch/3's session, plannotator pid 42"]
+
+    def test_annotations_sent_print_word_for_word_and_close_the_card(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "Annotated in a batch's session"."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, self.HELD)
+        notes = "# Annotations\n\n1. x1: say what a zone is.\n2. z1: why one?"
+        self.read(monkeypatch, tmp_path, acts, {"decision": "annotated", "feedback": notes, "annotationCount": 2})
+        assert [(e["Act"], e.get("Outcome")) for e in acts.emitted] == [("card.close", "Read; 2 notes sent to their teams")]
+        out = capsys.readouterr().out
+        assert out.startswith(f"batch/3: annotated\n{notes}\ncard batch/3: req_b3 withdrawn\n")
+
+    def test_a_send_with_no_card_held_is_recorded_read_by_crews_own_close_and_its_reading_ended(self, monkeypatch, tmp_path, capsys):
+        """review-batches "Sent with no card on the main level's host"."""
+        acts = ReadingActs()
+        self.read(monkeypatch, tmp_path, acts, {"decision": "approved", "annotationCount": 0})
+        assert [(e["Act"], e.get("Outcome"), e.get("by")) for e in acts.emitted] == [("batch.close", "Read; no notes", "wldn-planner")]
+        assert acts.ended == [("wldn", "batch/3")] and acts.calls == []
+        assert capsys.readouterr().out.splitlines()[-2:] == ["batch/3: recorded read, Read; no notes", "ended batch/3's session, plannotator pid 42"]
+
+    def test_a_lost_card_is_recorded_lost_and_the_reading_still_read(self, monkeypatch, tmp_path, capsys):
+        """review-batches "Sent while the card is lost"."""
+        acts = ReadingActs({"get_request": (None, "Not found: req_b3")}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts, {"decision": "annotated", "feedback": "1. a\n2. b", "annotationCount": 2})
+        assert [(e["Act"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+            ("card.close", "lost", "lost to its owner: Not found: req_b3"), ("batch.close", "read", "Read; 2 notes sent to their teams")]
+        assert acts.ended == [("wldn", "batch/3")]
+
+    def test_a_refused_close_records_the_batch_read_and_leaves_the_reading_to_the_cards_withdrawal(self, monkeypatch, tmp_path):
+        """review-batches "Sent while the card's close is refused"."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None),
+                            "cancel_request": (None, "Too many requests.")}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts, {"decision": "approved", "annotationCount": 0})
+        assert [e["Act"] for e in acts.emitted] == ["card.close", "batch.close"] and acts.emitted[0]["refused"]
+        assert acts.ended == []
+
+    def test_a_batch_answered_in_a_pane_closes_the_card_it_holds_and_ends_the_reading(self, monkeypatch, tmp_path, capsys):
+        """review-batches "The planner's wait was running", now the planner's read."""
+        answered = {"Act": "batch.answer", "Batch": "3", "Key": "batch/3", "By": "wldn-operator", "At": "2026-10-22T20:17:03Z"}
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, self.HELD + [answered])
+        self.read(monkeypatch, tmp_path, acts)
+        assert [(e["Act"], e.get("Outcome")) for e in acts.emitted] == [("card.close", "Answered in wldn-operator's pane at 20:17Z")]
+        assert acts.ended == [("wldn", "batch/3")]
+        assert capsys.readouterr().out.splitlines()[0] == "batch/3: answered in wldn-operator's pane at 20:17Z"
+
+    def test_nothing_sent_closes_nothing_and_ends_nothing(self, monkeypatch, tmp_path, capsys):
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 1}, None)}, self.HELD)
+        self.read(monkeypatch, tmp_path, acts)
+        assert acts.emitted == [] and acts.ended == []
+        assert capsys.readouterr().out == "batch/3: nothing sent yet: the batch waits on the user, on its card or its reading\n"
+
+    def test_another_agent_and_a_batch_with_neither_card_nor_reading_are_refused(self, monkeypatch, tmp_path):
+        with pytest.raises(plan.Refusal, match="^batch/3's card and reading are wldn-planner's to read, not swb-1-conductor's$"):
+            self.read(monkeypatch, tmp_path, ReadingActs(), who="swb-1-conductor")
+        with pytest.raises(plan.Refusal, match="^no card and no reading of batch/3 is open on mac-studio"):
+            self.read(monkeypatch, tmp_path / "none", ReadingActs(), session=False)
+
+    def test_off_the_main_levels_host_it_is_refused_naming_it(self, monkeypatch, tmp_path):
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="chuck-herdr-alpha")))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        with pytest.raises(plan.Refusal, match="^batch/3's reading session runs on chuck-herdr-alpha"):
+            plan.batch_card_read(fleet, "wldn", "batch/3", "wldn-planner", acts=ReadingActs())
 
 
 BOLT = plan.Rec("Bolt", [("Bolt", "b1"), ("Repo", "switchboard-kit")])
@@ -874,42 +953,6 @@ class TestLandingSession:
                                                "no reading of its own"):
             self.run(monkeypatch, acts, key="land/switchboard-kit")
         assert acts.sessions == []
-
-    def started(self, monkeypatch, acts, team=TEAM, row=ROW):
-        handed = []
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, team))
-        monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (row, None) if row else (None, "it waits on a batch"))
-        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((label, kit, note)))
-        plan.land_start(FLEET, "wldn", "land/b1", acts)
-        return handed
-
-    def test_a_wait_with_no_session_starts_the_reading_and_hands_the_kits_card_its_link(self, monkeypatch, capsys):
-        """card-sessions "A card raised without its reading" and "Waiting again after a decision"."""
-        acts = ReadingActs()
-        assert self.started(monkeypatch, acts) == [("wldn", "switchboard-kit", "b1: Its reading is open again at a new link")]
-        assert acts.sessions == [("wldn", "land/b1")]
-        assert capsys.readouterr().out.splitlines() == [self.LINK]
-
-    def test_a_wait_whose_reading_still_will_not_open_is_refused_naming_crew_card_session(self, monkeypatch):
-        """card-sessions "The reading still will not open": the card is not changed."""
-        acts = ReadingActs(refused="plannotator is not on this host's path, and a card's session is a plannotator session")
-        with pytest.raises(plan.Refusal, match=r"^land/b1's reading could not be opened: plannotator is not on this host's path, "
-                                               r"and a card's session is a plannotator session; crew card session land/b1 starts "
-                                               r"it once that is mended$"):
-            self.started(monkeypatch, acts)
-        assert acts.calls == [] and acts.emitted == [dict(self.DONE, refused="plannotator is not on this host's path, and a "
-                                                                               "card's session is a plannotator session")]
-
-    def test_a_wait_on_a_bolt_that_is_no_row_is_refused_and_starts_nothing(self, monkeypatch):
-        """card-sessions "No landing card held"."""
-        acts = ReadingActs()
-        with pytest.raises(plan.Refusal, match="^no session was started for card land/b1, and b1 is no row of its kit's landings card$"):
-            self.started(monkeypatch, acts, row=None)
-        assert acts.sessions == []
-        with pytest.raises(plan.Refusal, match="b1 is no row of its kit's landings card"):
-            self.started(monkeypatch, ReadingActs(), team=None)
-        with pytest.raises(plan.Refusal, match="b1 is no row of its kit's landings card"):
-            self.started(monkeypatch, ReadingActs(), row=dict(self.ROW, box=False, why="held"))
 
     def opened(self, monkeypatch, tmp_path, on):
         """reading_open of land/b1 at head def5678, its recorded session serving the bolt as it stood at on: what it
@@ -1022,9 +1065,10 @@ class TestReadingAgain:
 
 
 class TestLandingPreview:
-    """A bolt's row on its kit's landings card is read with its preview asked for first when the kit's policy at the
-    head declares one (rail-cards, record 0031 §3), through the act's reach, and with none and no word of one when it
-    does not; a held row and a bolt that is no row end the reading and release the preview (land_row)."""
+    """A bolt's row on its kit's landings card is read with what its preview is, through the act's reach, once the
+    kit's policy at the head is read (rail-cards "A landing row carries what brings its bolt's preview up", record
+    0043), sluice asked for nothing there; a held row and a bolt that is no row end the reading and release the
+    preview (land_row)."""
     TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
     PREVIEW = dict(head=LANDING["head"], name="preview/0123456789ab", state="starting", addresses={"web": "http://web.example"})
 
@@ -1035,42 +1079,40 @@ class TestLandingPreview:
         monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: previewed)
         return plan.land_row(FLEET, "wldn", "b1", acts)
 
-    def test_a_kit_declaring_a_preview_has_it_asked_first_and_listed_on_the_card(self, monkeypatch):
-        """rail-cards "A kit that declares a preview"."""
+    def test_the_kits_declaration_at_the_head_is_handed_to_the_act_and_the_row_carries_what_it_gives(self, monkeypatch):
+        """rail-cards "A kit that declares a preview": a preview brought up from the card listed on it."""
         acts = ReadingActs(preview=self.PREVIEW)
         row = self.row(monkeypatch, acts, (True, None))
         assert row["box"] and row["facts"]["preview"] == self.PREVIEW
-        assert acts.previews == [("wldn", "land/b1", LANDING["head"], True)]
+        assert acts.previews == [("wldn", "land/b1", LANDING["head"], True, None)]
         card = built.landings_card(dict(kit="k", rows=[dict(row["facts"], conductor="swb-1-conductor")]))["card"]
         assert {"label": "Preview: web", "url": "http://web.example"} in card["context"]["links"]
 
-    def test_a_kit_declaring_none_is_asked_nothing_and_its_row_says_nothing_of_one(self, monkeypatch):
+    def test_a_kit_declaring_none_is_handed_to_the_act_as_none(self, monkeypatch):
         """rail-cards "A kit that declares none"."""
-        acts = ReadingActs(preview=self.PREVIEW)
-        assert self.row(monkeypatch, acts, (False, None))["facts"]["preview"] is None and acts.previews == []
+        acts = ReadingActs(preview={"head": LANDING["head"], "none": True})
+        assert self.row(monkeypatch, acts, (False, None))["facts"]["preview"] == {"head": LANDING["head"], "none": True}
+        assert acts.previews == [("wldn", "land/b1", LANDING["head"], False, None)]
 
-    def test_a_preview_recorded_where_the_policy_now_declares_none_is_handed_to_the_act_to_release(self, monkeypatch, previews):
-        (previews / "wldn").mkdir(parents=True)
-        (previews / "wldn" / "b1.json").write_text(json.dumps({"head": "0" * 40, "main": "/kit/main"}))
-        acts = ReadingActs()
-        self.row(monkeypatch, acts, (False, None))
-        assert acts.previews == [("wldn", "land/b1", LANDING["head"], False)]
-
-    def test_a_policy_crew_cannot_read_is_said_as_a_preview_not_asked_and_the_row_raised(self, monkeypatch):
+    def test_a_policy_crew_cannot_read_is_handed_to_the_act_with_why_and_the_row_raised(self, monkeypatch):
+        """rail-cards "The policy can't be read": the row keeps its box."""
         why = "git show in /kit/main on mac-studio failed: fatal: bad object abc1234"
-        acts = ReadingActs(preview=self.PREVIEW)
+        acts = ReadingActs(preview={"head": LANDING["head"], "why": why, "policy": True})
         row = self.row(monkeypatch, acts, (None, why))
-        assert row["box"] and acts.previews == []
+        assert row["box"] and acts.previews == [("wldn", "land/b1", LANDING["head"], None, why)]
         card = built.landings_card(dict(kit="k", rows=[row["facts"]]))["card"]
-        assert f"A preview of abc1234 was asked for and is not there: {why}. Nothing waits on it." in card["context"]["background"]
+        assert f"Whether abc1234 has a preview to try can't be told: {why}." in card["context"]["background"]
 
-    def test_a_previews_end_hands_the_kits_card_its_own_note(self, monkeypatch):
-        """rail-cards "The host is busy when the card is raised": the kit's card raised with the preview's note."""
+    def test_a_previews_change_hands_the_card_it_was_asked_from_its_note(self, monkeypatch):
+        """rail-cards "The host is busy when the card is raised" and "A line naming a branch sluice does not land": a
+        kit's landings card raised with the note, a batch's card with its own."""
         handed = []
-        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, self.TEAM))
-        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((label, kit, note)))
-        plan.preview_changed(FLEET, "wldn", "b1", "Its preview of abc1234 is up")
-        assert handed == [("wldn", "switchboard-kit", "b1: Its preview of abc1234 is up")]
+        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append(("land", label, kit, note)))
+        monkeypatch.setattr(plan, "batch_hand", lambda fleet, label, n, note: handed.append(("batch", label, n, note)))
+        plan.preview_changed(FLEET, "wldn", "land/switchboard-kit", "b1: Its preview of abc1234 is up")
+        plan.preview_changed(FLEET, "wldn", "batch/7", "a/demo: Its preview of abc1234 could not be brought up")
+        assert handed == [("land", "wldn", "switchboard-kit", "b1: Its preview of abc1234 is up"),
+                          ("batch", "wldn", 7, "a/demo: Its preview of abc1234 could not be brought up")]
 
     def test_a_held_row_ends_its_reading_and_releases_its_preview(self, monkeypatch):
         """rail-cards "A fix holds the landing": the preview is released."""
@@ -1239,17 +1281,6 @@ class TestSessionWords:
         assert plan.land_waited("land/y", None, False) == (
             "land/y: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run")
 
-    @pytest.mark.parametrize("recorded, held, refused, step, words", [
-        (True, False, None, "wait", None),
-        (False, True, None, "start", None),
-        (False, True, "plannotator is not on this host's path, and a card's session is a plannotator session", "refuse",
-         "land/y's reading could not be opened: plannotator is not on this host's path, and a card's session is a plannotator "
-         "session; crew card session land/y starts it once that is mended"),
-        (False, False, None, "refuse", "no session was started for card land/y, and y is no row of its kit's landings card")])
-    def test_a_wait_on_a_landing_with_no_session_starts_its_reading_while_its_card_is_held(self, recorded, held, refused, step, words):
-        """card-sessions "A wait on a landing card starts its reading when none runs"."""
-        assert plan.land_unstarted("land/y", recorded, held, refused) == (step, words)
-
     def test_a_decided_landing_reading_is_set_aside_and_forgotten_and_an_undecided_one_kept(self, tmp_path):
         s = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio.ts.swancloud.net:19432", "started": "2026-10-19T10:00:00Z"}
         (tmp_path / "session.json").write_text(json.dumps(s))
@@ -1406,7 +1437,8 @@ class TestLanding:
         reading = (f"Read the bolt in one session: {self.READ}\n\nIt lands nothing: approving this card is the word to land.\n\n")
         assert c["context"]["background"] == (
             reading + "Try it running: a preview of 4581216 sluice brings up, at these addresses once it is up. It lands "
-            f"nothing; approving this card is the word to land.\nweb: {self.WEB}\napi: {self.API}\n\n"
+            "nothing; approving this card is the word to land. Write on this card that you are done with it to put it "
+            f"away.\nweb: {self.WEB}\napi: {self.API}\n\n"
             + bare["context"]["background"].removeprefix(reading))
         assert c["context"]["links"] == [{"label": "Read bolt a-deploy-holds-at-a-failure", "url": self.READ},
                                          {"label": "Preview: web", "url": self.WEB}, {"label": "Preview: api", "url": self.API},
@@ -1418,7 +1450,8 @@ class TestLanding:
     def test_a_preview_up_is_listed_as_up(self):
         c = landing(link=self.READ, preview=dict(self.PREVIEW, state="up"))["card"]
         assert ("Try it running: a preview of 4581216, up at these addresses. It lands nothing; approving this card is the "
-                f"word to land.\nweb: {self.WEB}\napi: {self.API}\n\n") in c["context"]["background"]
+                "word to land. Write on this card that you are done with it to put it away.\n"
+                f"web: {self.WEB}\napi: {self.API}\n\n") in c["context"]["background"]
         assert [a["title"] for a in c["artifacts"][2:4]] == ["Preview: web", "Preview: api"]
 
     def test_a_preview_that_failed_says_so_with_the_end_of_its_output_and_lists_no_address(self):
@@ -1452,9 +1485,38 @@ class TestLanding:
         assert all(f"site{i}: {u}" in c["context"]["background"] for i, u in enumerate(many.values()))
 
     def test_a_card_built_with_no_preview_is_as_before(self):
-        """rail-cards "A kit that declares none": no preview and no word of one."""
         c = landing(link=self.READ, preview=None)["card"]
         assert c == landing(link=self.READ)["card"] and "preview" not in json.dumps(c).lower()
+
+    def test_a_row_whose_kit_declares_a_preview_names_what_brings_it_up_and_lists_no_address(self):
+        """rail-cards "A kit that declares a preview" (record 0043): the bolt branch and head, to bring it up by
+        writing on the card, not held while the card waits."""
+        bare = landing(link=self.READ)["card"]
+        c = landing(link=self.READ, preview={"branch": "bolt/a-deploy-holds-at-a-failure", "head": "4581216abcdef", "state": "ask"})["card"]
+        assert c["context"]["background"].split("\n\n")[2] == (
+            "Try it running from bolt/a-deploy-holds-at-a-failure at 4581216: write on this card to bring it up, and that "
+            "you are done to put it away. It is not held while the card waits.")
+        assert c["artifacts"] == bare["artifacts"] and c["context"]["links"] == bare["context"]["links"]
+        self.same_but_details(c, bare)
+
+    def test_a_row_whose_kit_declares_none_says_no_preview(self):
+        """rail-cards "A kit that declares none"."""
+        c = landing(preview={"head": "4581216abcdef", "none": True})["card"]
+        assert c["context"]["background"].startswith("No preview.\n\n")
+
+    def test_a_policy_crew_cannot_read_says_its_preview_cant_be_told_and_why(self):
+        """rail-cards "The policy can't be read"."""
+        why = "git show in /kit/main on mac-studio failed: fatal: bad object 4581216"
+        c = landing(preview={"head": "4581216abcdef", "why": why, "policy": True})["card"]
+        assert c["context"]["background"].startswith(f"Whether 4581216 has a preview to try can't be told: {why}.\n\n")
+
+    def test_a_moved_head_says_the_old_ones_preview_was_released(self):
+        """rail-cards "The head moves with a preview up"."""
+        c = landing(preview={"branch": "bolt/y", "head": "4581216abcdef", "state": "ask", "released": "abc1234000"})["card"]
+        assert ("Try it running from bolt/y at 4581216: write on this card to bring it up, and that you are done to put it "
+                "away. It is not held while the card waits. Its preview of abc1234 was released as the head moved.") in c["context"]["background"]
+        c = landing(preview={"head": "4581216abcdef", "none": True, "released": "4581216abcdef"})["card"]
+        assert c["context"]["background"].startswith("No preview. Its preview of 4581216 was put away.\n\n")
 
 
 def landings_row(bolt, team="swc-1", head="abc1234def", **more):
@@ -1502,6 +1564,23 @@ class TestLandings:
         assert c["options"][1]["consequence"] == said
         assert said in "\n".join(c["artifacts"][0]["lines"])
 
+    def test_a_left_row_that_would_take_main_first_says_so_first_on_its_consequence_and_paragraph(self):
+        """rail-cards "Left, and main conflicts with it": the row keeps its box and says it would take main first."""
+        would = ("It would take main first if you tick it: forecast to conflict with main on README.md at e4f5a6b. Ticked, "
+                 "its team takes main in by a fix, your send standing through it.")
+        rows = [landings_row("y"), landings_row("z", forecast=[("main", ["README.md"])], would_main=("e4f5a6b", ["README.md"]))]
+        b = built.landings_card(dict(kit="crew", rows=rows, left=["z"]))
+        c = b["card"]
+        assert c["recommendedIds"] == ["land:y"] and c["options"][1]["consequence"] == would
+        assert would in "\n".join(c["artifacts"][0]["lines"])
+        one = built.landings_card(dict(kit="crew", rows=rows[1:], left=["z"]))["card"]
+        assert would in one["summary"] and "It is forecast to conflict" not in one["summary"]
+
+    def test_a_left_rows_forecast_against_main_not_made_is_not_said_beside_the_conflict_the_record_holds(self):
+        assert built.forecast_said([("main", None)], "git could not tell", ("2222222", ["a.md", "b.md"])) == (
+            "It would take main first if you tick it: forecast to conflict with main on a.md and b.md at 2222222. Ticked, "
+            "its team takes main in by a fix, your send standing through it.")
+
     def test_a_forecast_not_made_is_said_with_why(self):
         assert built.forecast_said([("main", None)], "bolt/y is on no branch crew can read") == (
             "Its forecast against main could not be made: bolt/y is on no branch crew can read.")
@@ -1530,6 +1609,30 @@ class TestLandings:
         one = landings(1, held=[{"bolt": "w", "why": "held"}])["card"]
         assert [a["title"] for a in one["artifacts"]][1] == "Held on crew's main, with no box"
 
+    STOP = ("abc1234def", "sluice itself failed (could not release try/1a2b3c4, whose worktree no longer exists)")
+    STOPPED = ("Its last landing at abc1234 was stopped, nothing of the bolt's: sluice itself failed (could not release "
+               "try/1a2b3c4, whose worktree no longer exists). wldn-ops submits it again once that is cleared.")
+
+    def test_one_row_stopped_says_so_on_its_face_and_keeps_its_approval(self):
+        """rail-cards "A landing sluice or its host stopped keeps its box": the one row's card is today's approve, its
+        summary saying what stopped its last landing at its head and who submits it again."""
+        b = built.landings_card(dict(kit="crew", rows=[landings_row("b1", stopped=self.STOP)], ops="wldn-ops"))
+        c = b["card"]
+        assert c["kind"] == "approve" and self.STOPPED in c["summary"] and b["heads"] == ["b1@abc1234"]
+        assert landings(1)["card"]["summary"] == built.landings_card(dict(kit="crew", rows=[landings_row("b1")], ops="wldn-ops"))["card"]["summary"]
+        assert "stopped" not in landings(1)["card"]["summary"]
+
+    def test_a_stopped_row_of_three_says_so_on_its_paragraph_and_in_its_boxs_detail(self):
+        rows = [landings_row("b1"), landings_row("b2", stopped=self.STOP), landings_row("b3")]
+        c = built.landings_card(dict(kit="crew", rows=rows, ops="wldn-ops"))["card"]
+        assert c["recommendedIds"] == ["land:b1", "land:b2", "land:b3"]
+        face = "\n".join(c["artifacts"][0]["lines"])
+        assert face.count(self.STOPPED) == 1 and face.index(self.STOPPED) > face.index("**2. b2**")
+        assert c["options"][1]["detail"].startswith("Its last landing at abc1234 was stopped, nothing of the bolt's: sluice itself failed")
+        assert len(c["options"][1]["detail"]) <= built.DETAIL
+        assert c["options"][0]["detail"] == "2 units and 1 chore; read in batch 7; green at abc1234 since 10:02; swc-1-conductor"
+        assert f"2. b2 (swc-1-conductor): {self.STOPPED} 2 units and 1 chore" in c["context"]["background"]
+
     def test_a_bolt_cleared_on_the_last_send_is_unticked_and_said_so(self):
         c = landings(3, left=["b2"])["card"]
         assert c["recommendedIds"] == ["land:b1", "land:b3"]
@@ -1548,6 +1651,17 @@ class TestLandings:
         assert "- a\n- b\n- c (chore)" in face
         assert [l["label"] for l in b["card"]["context"]["links"]][:2] == ["Read y", "Preview y: web"]
 
+    def test_each_rows_paragraph_names_what_brings_its_preview_up_or_says_it_has_none(self):
+        """rail-cards "A landing row carries what brings its bolt's preview up": on a list of rows, each row's own."""
+        rows = [landings_row("y", preview={"branch": "bolt/y", "head": "abc1234def", "state": "ask"}),
+                landings_row("z", preview={"head": "abc1234def", "none": True})]
+        b = built.landings_card(dict(kit="crew", rows=rows))
+        face = "\n".join(b["card"]["artifacts"][0]["lines"])
+        assert ("Try it running from bolt/y at abc1234: write on this card to bring it up, and that you are done to put it "
+                "away. It is not held while the card waits.") in face.split("**2. z**")[0]
+        assert "No preview." in face.split("**2. z**")[1]
+        assert not any(l["label"].startswith("Preview") for l in b["card"]["context"]["links"])
+
     def test_a_card_holds_at_most_pending_yous_artifacts(self):
         c = landings(5)["card"]
         assert len(c["artifacts"]) == built.ARTIFACTS
@@ -1562,6 +1676,15 @@ class TestLandings:
 
 
 class TestDeploy:
+    def test_a_deploys_card_names_its_commit_and_carries_no_preview(self):
+        """rail-cards "A deploy's card" (record 0043): a card about a landed revision names the commit it landed as, and
+        carries no preview, no branch to bring one up and no word of one."""
+        c = deploy(head="9f8e7d60123")["card"]
+        assert c["title"] == "Deploy main 9f8e7d6 to srv" and c["approve"]["action"] == "Deploy 9f8e7d6 to srv"
+        said = json.dumps(c).lower()
+        assert "preview" not in said and "bring it up" not in said and "bolt/" not in said and "try it running" not in said
+        assert not any(a["kind"] == "url" for a in c.get("artifacts") or [])
+
     def test_three_landings_since_srvs_last_deploy(self):
         b = deploy()
         c = b["card"]
@@ -1678,6 +1801,105 @@ class TestFollows:
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
 
 
+def replied(answer, turn="agent", status="answered"):
+    return {"status": status, "turn": turn, "version": 3, "answer": answer}
+
+
+class TestAnswerSaid:
+    """rail-cards "The close of an answered card records the answer": what the user answered, in crew's words made from
+    names alone (cards.answer_said), which the close of the card keeps as Answer for the card that follows it, and none
+    of the words they typed (record.3)."""
+
+    @pytest.mark.parametrize("answer, offered, said", [
+        ({"approved": True}, (), "approved"),
+        ({"approved": False, "note": {"text": "not tonight"}}, (), "declined, with a note"),
+        ({"approved": False, "text": "not tonight"}, (), "declined, with a note"),
+        ({"choiceIds": ["land:y"], "note": "y first, z after the fix"}, ("land:y", "land:z"), "ticked y, left z, with a note"),
+        ({"choiceIds": ["land:y", "land:z"]}, ("land:y", "land:z", "land:w"), "ticked y and z, left w"),
+        ({"answers": {"rows-1": {"choiceIds": ["land:y"]}, "rows-2": {"choiceIds": []}}}, ("land:y", "land:z"), "ticked y, left z"),
+        ({"choiceIds": []}, ("land:y", "land:z"), "ticked none, left y and z"),
+        ({"choiceIds": ["add:a-1", "add:a-2"]}, (), "ticked a-1 and a-2"),
+        ({"choiceIds": ["quiet"]}, (), "picked quiet"),
+        ({"choiceIds": ["unticked"]}, (), "left it out"),
+        ({"done": True}, (), "done"),
+        ({"failedStep": 2, "note": "the key was refused"}, (), "said step 2 did not work, with a note"),
+        ({"handled": True}, (), "said you will handle it yourself"),
+        ({"note": "why this one?"}, (), "answered with a note")])
+    def test_the_answer_is_said_in_crews_words_from_names_alone(self, answer, offered, said):
+        got = built.answer_said(replied(answer), offered)
+        assert got == said
+        assert not any(w in got for w in ("tonight", "first", "refused", "why"))
+
+    @pytest.mark.parametrize("got", [replied({}), replied({"choiceIds": ["land:y"]}, turn="you", status="pending"),
+                                     {"status": "pending", "turn": "you"}, {}, None])
+    def test_a_reply_holding_no_answer_says_none(self, got):
+        assert built.answer_said(got, ("land:y",)) is None
+
+    def test_a_card_picked_up_in_pending_you_still_says_the_answer_its_reply_carries(self):
+        assert built.answer_said({"status": "resolved", "answer": {"approved": True}}) == "approved"
+
+
+class TestAnsweredBefore:
+    """rail-cards "A card that follows one the user answered says so first": the card the user answered that a post
+    comes after (cards.answered_before), from the run record alone, and the paragraph the post opens with
+    (cards.answered_opening), or none when nothing changed, so the post is withheld."""
+    DESIGN, KEY = "swancloud-design", "record/crew/0019"
+    POST = dict(Act="card.post", Key=KEY, By=DESIGN, Card="req_1", At="2026-10-23T13:10:04Z")
+    CLOSE = dict(Act="card.close", Key=KEY, By=DESIGN, Card="req_1", State="closed", At="2026-10-23T14:02:41Z",
+                 Answer="declined, with a note")
+    EARLIER = {"card": "req_1", "posted": "2026-10-23T13:10:04Z", "answered": "2026-10-23T14:02:41Z", "answer": "declined, with a note"}
+
+    def test_a_post_following_a_card_the_user_answered_finds_it_with_its_times_and_answer(self):
+        assert built.answered_before([self.POST, self.CLOSE], "req_1", self.KEY, self.DESIGN) == self.EARLIER
+        declined = dict(self.CLOSE, State="declined")
+        assert built.answered_before([self.POST, declined], "req_1", self.KEY, self.DESIGN)["card"] == "req_1"
+
+    @pytest.mark.parametrize("state", ["withdrawn", "lost"])
+    def test_a_post_following_a_card_withdrawn_or_lost_or_still_open_follows_no_answered_card(self, state):
+        assert built.answered_before([self.POST, dict(self.CLOSE, State=state)], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST, dict(self.CLOSE, Refused="x")], "req_1", self.KEY, self.DESIGN) is None
+        assert built.answered_before([self.POST, self.CLOSE], None, self.KEY, self.DESIGN) is None
+
+    def test_a_key_whose_newest_post_was_withheld_comes_after_the_card_whose_answer_stands(self):
+        stood = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Card="req_1", State="stands", Refused="Not posted: …")
+        entries = [self.POST, self.CLOSE, stood]
+        assert built.standing(entries, self.KEY, self.DESIGN) == "req_1"
+        assert built.answered_before(entries, None, self.KEY, self.DESIGN) == self.EARLIER
+        refused = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Refused="Pending You refused post_request: x")
+        assert built.answered_before(entries + [refused], None, self.KEY, self.DESIGN) == self.EARLIER
+        posted = dict(Act="card.post", Key=self.KEY, By=self.DESIGN, Card="req_2")
+        assert built.answered_before(entries + [posted], None, self.KEY, self.DESIGN) is None
+        assert built.standing(entries, self.KEY, "crw-1-conductor") is None and built.standing(entries, "record/crew/0020", self.DESIGN) is None
+
+    def test_the_opening_says_when_the_card_was_answered_with_what_and_what_changed_since(self):
+        said = built.answered_opening(self.EARLIER, ["Revised at 4be21c0: docs(adr): 0019 takes the user's note"])
+        assert said == ("You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: declined, with a note. "
+                        "Since then: revised at 4be21c0: docs(adr): 0019 takes the user's note.")
+        later = dict(self.EARLIER, answered="2026-10-24T09:00:00Z")
+        assert ", by 2026-10-24 09:00 UTC: " in built.answered_opening(later, ["x"])
+        assert built.answered_opening(self.EARLIER, ["GitHub's main moved", "y waits"]).endswith("Since then: GitHub's main moved. y waits.")
+
+    def test_an_answer_crew_holds_no_record_of_is_said_so(self):
+        said = built.answered_opening(dict(self.EARLIER, answer=None), ["The offer is now e104bcf, where you answered on ddcf2cb."])
+        assert said == ("You answered the card before this one, posted 2026-10-23 13:10 UTC, by 14:02 UTC: crew holds no record of "
+                        "what you answered. Since then: the offer is now e104bcf, where you answered on ddcf2cb.")
+
+    @pytest.mark.parametrize("since", [None, [], ["", "  "]])
+    def test_nothing_changed_since_makes_no_opening_and_the_withheld_post_says_the_answer_stands(self, since):
+        assert built.answered_opening(self.EARLIER, since) is None
+        assert built.stands_said(self.EARLIER) == ("Not posted: nothing has changed since the user answered req_1 by "
+                                                   "2026-10-23 14:02 UTC, so their answer stands")
+
+    def test_a_card_opened_so_says_it_first_in_its_summary_and_details_and_follows_the_answered_card(self):
+        card = built.record_card(dict(kit="crew", number=19, title="T", opening="The record's own opening.", quoted=[],
+                                      text="# 19. T\n\nBody.", alternatives=None))["card"]
+        out = built.opened(card, "You answered the card before this one: approved. Since then: x.", "req_1")
+        assert out["summary"].startswith("You answered the card before this one: approved. Since then: x.\n\nThe record's own opening.")
+        assert out["context"]["background"].startswith("You answered the card before this one") and out["follows"] == "req_1"
+        assert built.opened(dict(card, follows="req_0"), "o.", "req_1")["follows"] == "req_0"
+
+
 class TestStranded:
     """rail-cards, "A batch's card the main level's host can't reach is raised again there": which of the planner's
     cards under a batch's key the main level's host, deneb, can't reach (cards.stranded), from the run record alone."""
@@ -1755,7 +1977,7 @@ class TestTheRefusedDeployCards:
         follows = built.follows_of("deploy", {"env": "deneb", "head": self.HEAD}, self.ENTRIES, self.OPS)
         assert plan.row_card_post(None, "swancloud", self.OPS, built.deploy_card, self.facts(follows), self.WHERE, acts) == "req_deneb2"
         sent = next(a for t, a in acts.calls if t == "post_request")
-        assert sent["idempotencyKey"] == "deploy/deneb:2" and "follows" not in sent
+        assert sent["idempotencyKey"] == "deploy/deneb@swancloud:2" and "follows" not in sent
         assert sent["artifacts"][0]["lines"] == ["the-box-works-in-wldn-prod"]
         assert [(e["Act"], e["Card"], e["Key"], e["by"]) for e in acts.emitted] == [("card.post", "req_deneb2", "deploy/deneb", self.OPS)]
 
@@ -1837,6 +2059,20 @@ class TestRecord:
         assert [o["id"] for o in c["options"]] == ["loosen", "accept", "back"] and c["options"][0]["label"] == "Loosen ops.3 and ops.7 as drafted"
         assert [a["title"] for a in c["artifacts"]] == ["Where your rules decided, and the rules loosened", "Record 0032"]
 
+    def test_an_amendments_card_is_titled_by_its_own_first_words_cut_at_whole_words_and_not_the_records_title(self):
+        """Record 0031 as amended 2026-10-24: record/swancloud/0019 was asked three times on 2026-10-22 and 23 under its
+        one title, so three amendments read as one question asked again."""
+        f = dict(kit="crew", number=31, title="crew raises six cards at fixed points of its process", opening="Amended 2026-10-24: x.",
+                 text=RECORD, amendment="a card asked again says what changed, a landing's approval stands through taking main in, "
+                                        "and an amendment's card is titled by the amendment")
+        c = built.record_card(f)["card"]
+        assert c["title"] == ("Accept an amendment to record 0031 in crew: a card asked again says what changed, a landing's approval "
+                              "stands through taking main in, and…")
+        assert len(c["title"]) <= built.TITLE and c["approve"]["action"] == "Accept record 0031"
+        c = built.record_card(dict(f, amendment="the deployer's host is deneb", alternatives={
+            "rules": ["deploy.9"], "other": "mac-studio", "text": "## Where\n\ndeploy.9", "recommended": "accept"}))["card"]
+        assert c["title"] == "An amendment to record 0031 in crew: the deployer's host is deneb"
+
 
 # crew record (briefs.15, record 0031 §1): the record's facts read from its Markdown at a commit, whether the file holds
 # the status recorded, the alternatives a rule decided between, the refusals made before anything is read, and the raise
@@ -1900,6 +2136,7 @@ class TestRecordCommand:
         assert (f["title"], f["opening"], f["quoted"]) == ("switchboard runs GitHub's workflows itself", "The runners cost. A fleet costs more.",
                                                            ["I don't want a fleet"])
         assert f["text"].startswith("# switchboard runs GitHub's workflows itself") and "status: proposed" not in f["text"]
+        assert f["amendment"] is None
         b = built.record_card(f)
         assert b["key"] == "record/switchboard-kit/0032" and re.fullmatch(plan.RECORD_KEY, b["key"])
         assert (b["card"]["kind"], b["card"]["approve"]["risk"], b["card"]["approve"]["reversible"]) == ("approve", "low", True)
@@ -1926,13 +2163,32 @@ class TestRecordCommand:
 
     def test_an_amendment_is_proposed_while_marked_and_accepted_or_rejected_once_its_mark_is_gone(self):
         f = recorded(AMENDED, "proposed", before=ACCEPTED)
-        assert f["opening"] == "- **Rented.** The runners are rented by the hour."
+        assert (f["opening"], f["amendment"]) == ("- **Rented.** The runners are rented by the hour.", "Rented")
         with pytest.raises(crew.Refusal, match="its file on main says accepted, with an amendment still marked proposed"):
             recorded(AMENDED, "accepted", before=ACCEPTED)
         taken = AMENDED.replace(" Status: proposed to the user on 2026-10-18, as `briefs.15` has it; accepted only on their yes.", "")
         assert recorded(taken, "accepted", before=AMENDED) and recorded(ACCEPTED, "rejected", before=AMENDED)
         with pytest.raises(crew.Refusal, match="as rejected: its file on main says accepted"):
             recorded(ACCEPTED, "rejected", before=MADR)
+
+    @pytest.mark.parametrize("words, said", [
+        ("Amended 2026-10-22: what “no row worse than before” and “every row added ok” read. Eight deploys failed their suite.",
+         "what no row worse than before and every row added ok read"),
+        ("Amended 2026-10-23: the deployer's host is deneb. The user chose it on the design agent's card.", "the deployer's host is deneb"),
+        ("Amended 2026-10-23: a break-glass deploy is known to the deployer as a deploy is. On 2026-10-23 ops deployed the box.",
+         "a break-glass deploy is known to the deployer as a deploy is")])
+    def test_each_amendment_of_one_record_titles_its_card_by_its_own_first_words(self, words, said):
+        """record/swancloud/0019's three amendments of 2026-10-22 and 23, each a paragraph that opens with its proposed
+        mark as the design agent writes them, asked under the record's one title until record 0031 as amended 2026-10-24."""
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        f = recorded(ACCEPTED + f"\n{mark} {words.replace('“', '').replace('”', '')}\n", "proposed", before=ACCEPTED)
+        assert f["amendment"] == said
+        assert built.record_card(f)["card"]["title"] == f"Accept an amendment to record 0032 in switchboard-kit: {said}"
+
+    def test_an_amendment_with_no_words_of_its_own_is_refused_and_nothing_raised(self):
+        mark = "Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes."
+        with pytest.raises(crew.Refusal, match="it has no words of its amendment. Nothing is raised."):
+            recorded(ACCEPTED + f"\n{mark} Amended 2026-10-23:\n", "proposed", before=ACCEPTED)
 
     @pytest.mark.parametrize("alternatives, said", [
         ("## Where\n\nops.3", "their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>"),
@@ -1995,7 +2251,7 @@ class TestRecordCommand:
         acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
         assert plan.raise_record(None, "wldn", f, where, "Revised at abc1234: x", acts) == "req_c1"
         sent = acts.calls[1][1]
-        assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032", "wldn-design")
+        assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032@wldn", "wldn-design")
         assert acts.emitted[0]["On"] == ["record/switchboard-kit/0032"] and acts.told == []
         held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
         acts = Acts({"get_request": ({"status": "pending", "version": 2}, None), "update_request": ({"version": 3}, None)}, entries=held,
@@ -2008,7 +2264,10 @@ class TestRecordCommand:
         assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
-        assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
+        assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032@wldn:2", "req_c1")
+        # rail-cards "A record revised after the user's note": the card that follows says first what they answered
+        assert re.match(r"You answered the card before this one, by [0-9-]+ [0-9:]+ UTC: crew holds no record of what you answered\. "
+                        r"Since then: revised at 9ab0123: ops\.7 loosened\.\n\n", acts.calls[3][1]["summary"])
 
     def test_the_sweeps_raise_of_a_record_posts_it_again_from_its_record_saying_an_older_copy_was_lost(self, monkeypatch):
         """rail-cards, "A record's card left on the host the main level left": the record read with status proposed on
@@ -2026,7 +2285,7 @@ class TestRecordCommand:
         assert plan.raise_record_again(None, row, acts) == "req_c1"
         assert reads == [("wldn", "switchboard-kit", 32, "proposed", None)]
         sent = next(a for t, a in acts.calls if t == "post_request")
-        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032")
+        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032@wldn")
         assert sent["summary"] == f"{built.DEAD}\n\n" + built.record_card(recorded(MADR, "proposed"))["card"]["summary"]
         acts = Acts({}, caller="wldn-design")
         with pytest.raises(crew.Refusal) as e:
@@ -2046,7 +2305,7 @@ class TestRecordCommand:
             assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
             assert [c[0] for c in acts.calls] == ["get_request", "match_area", "post_request"]
             assert (acts.emitted[0]["Act"], acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("card.close", state, plan.ENDED_ELSEWHERE)
-            assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032:2"
+            assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032@wldn:2"
             assert acts.calls[2][1].get("follows") == follows
         for status in ("resolved", "closed"):
             acts = Acts({"get_request": ({"status": status, "version": 4}, None)}, entries=held, caller="wldn-design")
@@ -2120,7 +2379,7 @@ class TestPickedUp:
         assert plan.row_card_change(None, "swancloud", self.OWNER, built.deploy_card, dict(self.OFFER, follows=follows),
                                     "Now d35fbf2", self.WHERE, acts) == "req_d2"
         assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
-        assert acts.calls[1][1]["idempotencyKey"] == "deploy/mac-studio:2" and "follows" not in acts.calls[1][1]
+        assert acts.calls[1][1]["idempotencyKey"] == "deploy/mac-studio@swancloud:2" and "follows" not in acts.calls[1][1]
         entries = self.held(entries, acts)
         assert built.card_under(entries, "deploy/mac-studio", self.OWNER) == "req_d2"
 
@@ -2158,6 +2417,54 @@ class TestBatch:
     def test_a_review_card_carries_the_reviewers_paragraph_in_its_words(self):
         c = built.batch_card(dict(n=3, previous=2, units=BATCH_UNITS[:1], link=None))["card"]
         assert BATCH_UNITS[0]["paragraph"] in c["summary"]
+
+    PAGE = '{"name": "spike", "kind": "page", "address": "https://example.test/spike"}'
+    DEMO = '{"name": "demo", "kind": "preview", "branch": "bolt/y", "revision": "abc1234"}'
+
+    def test_each_units_made_lines_are_under_its_paragraph_on_the_face_and_in_the_details(self):
+        """rail-cards "A spike recorded by a code stage", "A thing that must run" and "Nothing recorded" (record 0043):
+        the lines as written, under their unit, and how to bring a thing that must run up, in the user's words."""
+        units = [dict(BATCH_UNITS[0], made=[["code", [self.PAGE, self.DEMO]]]), BATCH_UNITS[1]]
+        c = built.batch_card(dict(n=7, previous=6, units=units, link=None))["card"]
+        face, back = c["artifacts"][0]["lines"], c["context"]["background"]
+        spike = "- `code`: spike, page, at https://example.test/spike"
+        demo = "- `code`: demo, preview, brought up from bolt/y at abc1234; write on this card naming u1/demo to bring it up"
+        assert face[face.index("**swb-1 · u1**"):face.index("**swb-1 · u2**")] == [
+            "**swb-1 · u1**", "", BATCH_UNITS[0]["paragraph"], "", spike, demo, ""]
+        assert f"u1 (swb-1)\n{BATCH_UNITS[0]['paragraph']}\n{spike}\n{demo}\n\nu2 (swb-1)" in back
+        assert back.endswith(built.TRY) and face[-1] == built.TRY
+        assert built.TRY == ("To try it running, write on this card naming it; it is put away when you write that you are "
+                             "done, or when this card closes.")
+        assert not any(a["kind"] == "url" and "example.test" in a["ref"] for a in c["artifacts"])
+
+    def test_a_batch_whose_units_made_nothing_says_nothing_of_made_things(self):
+        c = built.batch_card(dict(n=7, previous=6, units=[dict(u, made=[]) for u in BATCH_UNITS[:2]], link=None))["card"]
+        assert built.batch_card(dict(n=7, previous=6, units=BATCH_UNITS[:2], link=None))["card"] == c
+        assert "write on this card" not in c["context"]["background"] and "`code`" not in "\n".join(c["artifacts"][0]["lines"])
+
+    def test_a_durable_thing_alone_says_nothing_of_bringing_one_up(self):
+        c = built.batch_card(dict(n=7, units=[dict(BATCH_UNITS[0], made=[["code", [self.PAGE]]])], link=None))["card"]
+        assert built.TRY not in c["context"]["background"]
+
+    def test_the_raise_reads_each_units_lines_from_its_teams_host_and_a_silent_host_is_named(self, capsys):
+        """rail-cards "A batch's card carries what each unit's stages recorded as made" with a host that does not
+        answer (read.3): one read a host, a silent one said on standard error, its units carrying none, nothing
+        refused."""
+        up = {"head": "abc1234", "name": "preview/0", "state": "up", "addresses": {"web": "http://w"}}
+        acts = ReadingActs(made={"mac-studio": {"made": {"z1": [["code", [self.DEMO]]]}, "previews": {"z1/demo": up}}})
+        facts = dict(n=7, previous=None, link=None, units=[
+            dict(unit="x1", team="swb-1", subject="x", paragraph="X."), dict(unit="z1", team="atl-1", subject="z", paragraph="Z."),
+            dict(unit="y1", team="swb-2", subject="y", paragraph="Y."), dict(unit="w1", team="gone-9", subject="w", paragraph="W.")])
+        plan.batch_made(FLEET, "wldn", facts, acts)
+        assert acts.read == [("chuck-herdr-alpha", ["x1", "y1"], "batch/7"), ("mac-studio", ["z1"], "batch/7")]
+        assert [u.get("made") for u in facts["units"]] == [None, [["code", [self.DEMO]]], None, None]
+        assert facts["units"][1]["up"] == {"demo": up}
+        err = capsys.readouterr().err
+        assert "batch 7's card carries nothing w1 made: its team gone-9 is not in the teams file" in err
+        assert ("batch 7's card carries nothing x1 and y1 made this raise: chuck-herdr-alpha did not answer (ssh: connect "
+                "to host chuck-herdr-alpha port 22: Operation timed out)") in err
+        lines = built.batch_card(facts)["card"]["artifacts"][0]["lines"]
+        assert "- `code`: demo, preview, brought up from bolt/y at abc1234; up at web http://w; it lands nothing" in lines
 
 
 class TestWords:

@@ -1,15 +1,17 @@
 """The run record (record.1 to record.4, the run-record spec): record.emit appending an entry to the host's file of the
-day, record.carry making the branch's copy the union by Id, record.parse and line reading and printing entries, the
-events crew events shows, the history crew trace walks, the hosts a partition runs on, and the act and objects each
-plan command's entry names. That a write's commit names its entry and carries the host's record, that crew events
-reads the branch then each host, that a carried file failing recfix refuses its write, and that --follow tails every
-host are the state journey's (t-journey-state). A file written is no process, so these are logic cases."""
+day and asking for its push, record.reach saying a push that is refused, record.unpushed giving the entries the branch
+lacks with each day's file as the union by Id and record.entry_message each one's commit, record.parse and line reading
+and printing entries, the events crew events shows, read from the branch alone, the history crew trace walks, and
+the act and objects each plan command's entry names. That a write's entry follows its commit, that a refused push goes
+with the host's next, that crew events and crew trace read the branch and ask no host, and that --follow follows the
+branch are the state journey's (t-journey-state). A file written is no process, so these are logic cases."""
 import json
 
 import pytest
 
 from facts import FLEET, FactsWrite, known, plan_text
 
+import board
 import crew
 import plan
 import record
@@ -17,6 +19,7 @@ import record
 KIT = "switchboard-kit"
 TE = "tenant-environments"
 BOX = "chuck-herdr-alpha"
+REACH = record.reach  # the push itself, which conftest stands in for in every case
 
 
 @pytest.fixture
@@ -47,6 +50,24 @@ class TestEmit:
             "wldn-planner", "chuck-herdr-alpha:sid-1", "mac-studio", "unit.add", ["unit/a", "queue/switchboard-kit"], ["signals/x/01-y"], ["r@abc"],
             "plan(queue): add a")
 
+    def test_a_landings_submission_number_is_kept_on_its_entry_and_read_back(self, here):
+        record.emit("wldn", "bolt.submit", ["bolt/z"], Outcome="queued", Submission="412", Head="a" * 40, Base="b" * 40)
+        text = next(here.glob("*.rec")).read_text()
+        e, = record.parse(text)
+        assert (e["Outcome"], e["Submission"], e["Head"], e["Base"]) == ("queued", "412", "a" * 40, "b" * 40)
+        assert "Submission" in text.split("%allowed:", 1)[1].splitlines()[0].split()
+
+    def test_a_teams_crossing_names_its_stream_and_its_trace_reads_it_after_the_landing_that_crossed_it(self, here):
+        """team.cross, once crw-4's conductor and ops are ended for its crossing (the change
+        teams-cross-to-flume-as-their-bolts-land, Decision 3): on team/crw-4, its State the stream."""
+        record.emit("madswan", "team.cross", ["team/crw-4"], why="team(crw-4): cross to flume", State="madswan")
+        text = next(here.parent.parent.parent.glob("madswan/runs/mac-studio/*.rec")).read_text()
+        cross, = record.parse(text)
+        assert (cross["Act"], cross["On"], cross["State"]) == ("team.cross", ["team/crw-4"], "madswan")
+        assert record.line(cross).endswith("team/crw-4 → Flume stream madswan")
+        given = entry("20260101T100000Z-deneb-1-1", "2026-01-01T10:00:00Z", "bolt.give", ["bolt/x", "team/crw-4"])
+        assert [e["Act"] for e in record.lineage([cross, given], "team/crw-4")] == ["bolt.give", "team.cross"]
+
     def test_the_users_entry_names_them_at_this_host_with_no_session(self, here):
         import getpass
         record.emit("wldn", "test.user")
@@ -63,6 +84,75 @@ class TestEmit:
         err = capsys.readouterr().err.strip().splitlines()
         assert len(err) == 1 and err[0].startswith(f"crew: the run record at {tmp_path}/crew/wldn/runs/mac-studio/") and "could not be written" in err[0]
 
+    def test_an_entry_is_pushed_to_its_branch_before_emit_returns(self, here, pushed):
+        assert record.emit("wldn", "tell", ["agent/wldn-planner"], Chars="5") and pushed == ["wldn"]
+        assert record.emit(None, "tell") is None and pushed == ["wldn"]
+
+    def test_a_push_that_is_refused_is_said_once_and_emit_still_returns_its_id(self, here, monkeypatch, capsys):
+        monkeypatch.setattr(record, "reach", REACH)
+        monkeypatch.setattr(crew, "load", lambda: FLEET)
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("WilldanGroup/crew-state", f"{label}/main"))
+
+        def unreachable(repo, ref, fresh=False):
+            raise crew.Refusal(f"could not fetch {ref} of {repo} over https: fatal: unable to access\n'https://github.com/': timed out")
+        monkeypatch.setattr(plan, "tip_of", unreachable)
+        eid = record.emit("wldn", "stage.start", ["stage/a/construct"])
+        assert eid and [e["Id"] for e in record.parse(next(here.glob("*.rec")).read_text())] == [eid]
+        assert capsys.readouterr().err.splitlines() == [
+            f"crew: entry {eid} did not reach wldn/main of WilldanGroup/crew-state: could not fetch wldn/main of WilldanGroup/crew-state "
+            "over https: fatal: unable to access 'https://github.com/': timed out; mac-studio keeps it and pushes it with its next entry"]
+
+    def test_a_push_by_hand_that_is_refused_is_the_commands_refusal(self, here, monkeypatch):
+        monkeypatch.setattr(record, "reach", REACH)
+
+        def missing():
+            raise crew.Refusal("/x/teams.json is missing; the machine's configuration writes it")
+        monkeypatch.setattr(crew, "load", missing)
+        with pytest.raises(crew.Refusal, match="^nothing reached wldn/main: /x/teams.json is missing"):
+            record.reach("wldn")
+
+    def test_a_fetchs_tip_is_read_from_the_caches_files_with_no_git_after_the_fetch(self, monkeypatch, tmp_path):
+        """The host's follower fetches on its clock, and the tip a fetch moved is read from the cache's files
+        (plan.tip_here), so the clock's fetch starts nothing beside git's fetch (plan.12's reading of 2026-10-28)."""
+        import types
+        calls = []
+        (tmp_path / "WilldanGroup/crew-state.git/refs/crew/wldn").mkdir(parents=True)
+        (tmp_path / "WilldanGroup/crew-state.git/HEAD").write_text("ref: refs/heads/main\n")
+        (tmp_path / "WilldanGroup/crew-state.git/refs/crew/wldn/main").write_text("d" * 40 + "\n")
+        monkeypatch.setattr(plan, "CACHE", tmp_path)
+        monkeypatch.setattr(plan, "git", lambda repo, *args, input=None, env=None, check=True: calls.append(args[0]) or types.SimpleNamespace(
+            returncode=0, stdout="", stderr=""))
+        monkeypatch.setattr(plan, "READ", plan.Reading())
+        assert plan.tip_of("WilldanGroup/crew-state", "wldn/main") == "d" * 40 and calls == ["fetch"]
+
+    def test_a_fetch_that_lost_the_caches_ref_to_another_command_on_this_host_is_made_again(self, monkeypatch, tmp_path):
+        """Every act pushes its entry, so two commands on one host fetch the branch into crew's cache side by side, and
+        git refuses the one whose ref the other moved meanwhile: it fetches again, and refuses only what is no race."""
+        import types
+        calls = []
+        monkeypatch.setattr(plan, "CACHE", tmp_path)  # no cache's files hold the ref, so its tip is asked of git
+
+        def git(repo, *args, input=None, env=None, check=True):
+            calls.append(args[0])
+            if args[0] == "rev-parse":
+                return "c" * 40
+            lost = calls.count("fetch") < 3
+            return types.SimpleNamespace(returncode=1 if lost else 0, stdout="", stderr=(
+                "error: cannot lock ref 'refs/crew/wldn/main': is at aaaa but expected bbbb" if lost else ""))
+        monkeypatch.setattr(plan, "git", git)
+        monkeypatch.setattr(plan, "READ", plan.Reading())
+        monkeypatch.setattr(plan.time, "sleep", lambda s: None)
+        assert plan.tip_of("WilldanGroup/crew-state", "wldn/main") == "c" * 40 and calls == ["fetch", "fetch", "fetch", "rev-parse"]
+
+        def refused(repo, *args, input=None, env=None, check=True):
+            calls.append(args[0])
+            return types.SimpleNamespace(returncode=128, stdout="", stderr="fatal: unable to access 'https://github.com/': timed out")
+        calls.clear()
+        monkeypatch.setattr(plan, "git", refused)
+        with pytest.raises(crew.Refusal, match="^could not fetch wldn/main of WilldanGroup/crew-state over https: fatal: unable"):
+            plan.tip_of("WilldanGroup/crew-state", "wldn/main", fresh=True)
+        assert calls == ["fetch"]
+
     def test_the_entries_of_one_second_sort_as_they_were_made_whichever_process_made_each(self):
         import datetime
         t = datetime.datetime(2026, 10, 19, 1, 49, 46, 120000, tzinfo=datetime.timezone.utc)
@@ -76,34 +166,48 @@ class TestEmit:
         assert record.subject("plan(b): add x (chuck@mac-studio)\n\nbody") == "plan(b): add x"
 
 
-class TestCarry:
+class TestUnpushed:
+    A, B, C = "20261012T100000Z-mac-studio-1-1", "20261012T100000Z-mac-studio-1-2", "20261012T100000Z-mac-studio-1-3"
+
     def write(self, here, day, *ids):
         here.mkdir(parents=True, exist_ok=True)
         (here / f"{day}.rec").write_text(record.DESCRIPTOR + "".join(f"\nId: {i}\nAt: {day}T10:00:00Z\nAct: x\n" for i in ids))
 
-    def test_the_branchs_copy_of_a_day_is_the_union_by_id_in_id_order(self, here):
-        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-1-2", "20261012T100000Z-mac-studio-1-3")
-        branch = record.DESCRIPTOR + "\nId: 20261012T100000Z-mac-studio-1-1\nAt: 2026-10-12T10:00:00Z\nAct: x\n"
-        out, newest = record.carry("wldn", lambda path: branch)
-        text, = out.values()
-        assert list(out) == ["runs/mac-studio/2026-10-12.rec"] and newest == "20261012T100000Z-mac-studio-1-3"
-        assert [e["Id"][-1] for e in record.parse(text)] == ["1", "2", "3"]
+    def test_the_entries_the_branch_lacks_come_oldest_first_each_file_holding_those_before_it(self, here):
+        self.write(here, "2026-10-12", self.C, self.A, self.B)
+        branch = record.DESCRIPTOR + f"\nId: {self.A}\nAt: 2026-10-12T10:00:00Z\nAct: x\n"
+        chain, newest = record.unpushed("wldn", lambda path: branch if path == "runs/mac-studio/2026-10-12.rec" else None)
+        assert [(eid, path) for eid, _, path, _ in chain] == [(self.B, "runs/mac-studio/2026-10-12.rec"), (self.C, "runs/mac-studio/2026-10-12.rec")]
+        assert newest == self.C and chain[0][1].startswith(f"Id: {self.B}\n")
+        assert [[e["Id"] for e in record.parse(text)] for *_, text in chain] == [[self.A, self.B], [self.A, self.B, self.C]]
+        assert all(text.startswith(record.DESCRIPTOR) for *_, text in chain)
 
-    def test_a_day_the_branch_already_holds_whole_is_left_out(self, here):
-        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-1-1")
-        assert record.carry("wldn", lambda path: (here / "2026-10-12.rec").read_text())[0] == {}
+    def test_nothing_is_left_when_the_branch_holds_every_entry(self, here):
+        self.write(here, "2026-10-12", self.A, self.B)
+        assert record.unpushed("wldn", lambda path: (here / "2026-10-12.rec").read_text())[0] == []
 
-    def test_days_before_the_newest_carried_are_not_looked_at(self, here):
+    def test_days_before_the_newest_pushed_are_not_looked_at(self, here):
         self.write(here, "2026-10-10", "20261010T100000Z-mac-studio-1-1")
-        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-1-1")
+        self.write(here, "2026-10-12", self.A)
         record.mark_carried("wldn", "20261011T000000Z-mac-studio-9-9")
-        assert list(record.carry("wldn", lambda path: None)[0]) == ["runs/mac-studio/2026-10-12.rec"]
+        assert [eid for eid, *_ in record.unpushed("wldn", lambda path: None)[0]] == [self.A]
 
     def test_a_host_that_lost_its_record_keeps_the_branchs_entries_beside_its_new_ones(self, here):
         branch = record.DESCRIPTOR + "".join(f"\nId: 20261012T09000{i}Z-mac-studio-1-1\nAt: 2026-10-12T09:00:00Z\nAct: x\n" for i in range(3))
         self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-2-1")
-        text, = record.carry("wldn", lambda path: branch)[0].values()
+        (_, _, _, text), = record.unpushed("wldn", lambda path: branch)[0]
         assert len(record.parse(text)) == 4
+
+    def test_an_entrys_own_commit_names_it_its_act_and_what_it_acted_on(self):
+        text = f"Id: {self.A}\nAt: 2026-10-12T10:00:00Z\nHost: mac-studio\nBy: wldn-planner\nAct: tell\nOn: agent/wldn-planner\nOn: unit/a\nChars: 5\n"
+        assert record.entry_message(text, "wldn-planner") == f"runs(mac-studio): tell agent/wldn-planner (wldn-planner)\n\nCrew-Entry: {self.A}\n"
+        assert plan.message("runs(mac-studio): tell agent/wldn-planner (wldn-planner)", "", self.A) == record.entry_message(text, "wldn-planner")
+
+    def test_an_entry_with_no_object_and_a_refusal_say_so_in_their_subject(self):
+        bare = f"Id: {self.A}\nAt: 2026-10-12T10:00:00Z\nHost: mac-studio\nBy: chuck@mac-studio\nAct: state.init\n"
+        assert record.entry_message(bare, "chuck@mac-studio").split("\n")[0] == "runs(mac-studio): state.init (chuck@mac-studio)"
+        refused = bare.replace("Act: state.init\n", "Act: unit.drop\nOn: unit/a\nRefused: no unit a in the plans of wldn\n")
+        assert record.entry_message(refused, "x").split("\n")[0] == "runs(mac-studio): unit.drop unit/a refused (x)"
 
 
 E = [entry("20261005T100000Z-box-1-1", "2026-10-05T10:00:00Z", "capture", ["signals/s/01-c"], Session="chuck-herdr-alpha:sid-c2",
@@ -164,20 +268,105 @@ class TestTrace:
             "bolt/b unit/a → switchboard-kit main at ccccccc")
 
 
+class TestRoleRuns:
+    """The run-record spec, An ask and a turn are entries: a role that runs as its kind has an ask entry for each ask
+    of it and a turn.begin and turn.end for each turn, all on its run, none holding an ask's words (record.3)."""
+
+    def test_a_tell_that_is_an_ask_records_its_length_and_never_its_text(self, here):
+        """run-record, A tell that is an ask."""
+        words = "the forty characters of a tell, as typed"
+        record.emit("wldn", **record.ask_entry("wldn-planner", "tell", None, words))
+        text = next(here.glob("*.rec")).read_text()
+        e, = record.parse(text)
+        assert (e["Act"], e["On"], e["Chars"], e["Why"]) == ("ask", ["agent/wldn-planner"], "40", "ask wldn-planner: tell")
+        assert words not in text and "Words" not in e
+
+    def test_a_turn_traced_lists_its_asks_its_begin_taking_them_and_its_end(self, here):
+        """run-record, A turn traced: the planner's run took two asks and ended. The record an ask names keeps the ask
+        in its own trace, and brings nothing of its history into the run's."""
+        for e in (record.ask_entry("wldn-planner", "tell", None, "Go."), record.ask_entry("wldn-planner", "card", "proposal/12"),
+                  record.turn_begin_entry("wldn-planner", 1, 2), record.turn_end_entry("wldn-planner", 1)):
+            record.emit("wldn", **e)
+        found = record.parse(next(here.glob("*.rec")).read_text()) + [
+            entry("20261005T090000Z-mac-9-1", "2026-10-05T09:00:00Z", "plan.propose", ["proposal/12"])]
+        start, _ = record.trace_start(found, "agent/wldn-planner")
+        traced = record.lineage(found, start)
+        assert [(e["Act"], e.get("Took"), e["Why"]) for e in traced] == [
+            ("ask", None, "ask wldn-planner: tell"), ("ask", None, "ask wldn-planner: card"), ("turn.begin", "2", "turn 1 of wldn-planner"),
+            ("turn.end", None, "turn 1 of wldn-planner ended")]
+        assert record.line(traced[2]).endswith(" agent/wldn-planner (took 2)") and record.line(traced[0]).endswith("(3 characters)")
+        assert [e["Act"] for e in record.lineage(found, "proposal/12")] == ["plan.propose", "ask"]
+
+
 class TestEvents:
-    def test_events_are_shown_from_a_time_narrowed_to_one_object_and_each_silent_host_named(self):
-        out = record.events_text(E, {BOX: "ssh: timed out"}, "2026-10-05T10:40:00Z", "unit/u").splitlines()
+    def test_events_are_shown_from_a_time_narrowed_to_one_object_and_a_branch_not_read_named(self):
+        out = record.events_text(E, {"wldn/main": "could not fetch wldn/main"}, "2026-10-05T10:40:00Z", "unit/u").splitlines()
         assert [l.split()[2] for l in out[:-1]] == ["unit.move", "stage.start", "stage.end"]
-        assert out[-1] == f"{BOX} did not answer: ssh: timed out"
+        assert out[-1] == "wldn/main did not answer: could not fetch wldn/main"
+
+    def test_a_follow_prints_what_it_has_not_printed_in_time_order(self):
+        assert [e["Id"] for e in record.fresh({E[0]["Id"], E[2]["Id"]}, [E[3], E[2], E[1], E[0]])] == [E[1]["Id"], E[3]["Id"]]
+        assert record.fresh({e["Id"] for e in E}, E) == []
+
+    @pytest.mark.parametrize("label, follower, last, now, fetches", [
+        ("wldn", "job", None, 0.0, False), ("wldn", "tab", 0.0, 600.0, False), ("wldn", "unknown", 0.0, 600.0, False),
+        ("wldn", "none", 0.0, 59.0, False), ("wldn", "none", 0.0, 60.0, True), ("wldn", "none", None, 1.0, True),
+        ("madswan", "job", 0.0, 60.0, True), ("madswan", "job", 0.0, 30.0, False), ("madswan", "job", None, 30.0, True)])
+    def test_a_follow_fetches_once_a_minute_only_where_the_hosts_follower_does_not_and_at_once_when_told(self, label, follower, last, now, fetches):
+        """The run-record spec, Entries can be followed as they are written: the host's follower follows wldn here; last
+        None is a follow told to tick (SIGUSR1)."""
+        assert record.follow_fetches(label, {"wldn", "swancloud"}, follower, last, now) is fetches
+
+    @pytest.mark.parametrize("follower, fetched", [("job", []), ("tab", []), ("unknown", []), ("none", ["wldn/main"])])
+    def test_a_follows_start_fetches_nothing_the_hosts_follower_fetches(self, monkeypatch, follower, fetched):
+        """The run-record spec, The host's follower fetches: the follow's first round, the host's follower following wldn
+        and not madswan, reads wldn from the cache as it stands and fetches madswan, as it does wldn when none follows."""
+        got = []
+        monkeypatch.setattr(record.signal, "signal", lambda *a: None)
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(board, "labels_here", lambda fleet, host: ["wldn"])
+        monkeypatch.setattr(board, "follower_here", lambda: follower)
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("madswan/swancloud-state", f"{label}/main"))
+        monkeypatch.setattr(plan, "tip_of", lambda repo, ref, fresh=False: got.append(ref))
+        monkeypatch.setattr(plan, "tip_here", lambda repo, ref: "")
+
+        def stop(_):
+            raise KeyboardInterrupt
+        monkeypatch.setattr("time.sleep", stop)
+        record.follow(FLEET, ["wldn", "madswan"], None)
+        assert got == fetched + ["madswan/main"]
+
+    def test_a_follow_reads_again_only_the_days_files_whose_blob_changed_since_it_began(self):
+        was = {"runs/mac-studio/2026-10-27.rec": "a", "runs/mac-studio/2026-10-28.rec": "b", "runs/box/2026-10-28.rec": "c"}
+        now = dict(was, **{"runs/mac-studio/2026-10-28.rec": "b2", "runs/box/2026-10-27.rec": "d", "runs/box/2026-10-29.rec": "e",
+                           "runs/box/2026-10-28.rec": "c", "runs/README": "f"})
+        assert record.changed_files(was, now, "2026-10-28") == ["runs/box/2026-10-29.rec", "runs/mac-studio/2026-10-28.rec"]
+        assert record.changed_files(now, now, "2026-10-28") == []
+        assert record.changed_files({}, now, "2026-10-28") == ["runs/box/2026-10-28.rec", "runs/box/2026-10-29.rec", "runs/mac-studio/2026-10-28.rec"]
 
     def test_as_json_the_entries_and_what_did_not_answer(self):
         got = json.loads(record.events_text(E, {}, "0000", None, as_json=True))
         assert [e["Act"] for e in got["entries"]][:2] == ["capture", "capture"] and got["unreachable"] == {}
 
-    def test_a_partition_runs_on_its_teams_hosts_and_its_main_levels(self):
-        fleet = {"partitions": {"wldn": dict(FLEET["partitions"]["wldn"], teams=["swb-1", "swb-2"], partition="willdan")},
-                 "teams": FLEET["teams"], "hosts": {"laptop": {"sessions": {"wldn": {"partition": "willdan"}}}}}
-        assert record.hosts_of(fleet, "wldn") == [BOX, "laptop", "mac-studio"]
+    def test_the_record_is_read_from_the_branch_alone_and_no_host_is_asked(self, monkeypatch):
+        def asked(*a, **k):
+            raise AssertionError(f"a host was asked for the run record: {a}")
+        monkeypatch.setattr(crew, "on_machine", asked)
+        tips = {}
+
+        def branch(fleet, label, since_day, tips=None):
+            tips[label] = "c" * 40
+            return [E[3], E[0], dict(E[0])]
+        monkeypatch.setattr(record, "on_branch", branch)
+        found, missing = record.gather(FLEET, ["wldn"], "2026-10-05", tips)
+        assert [e["Id"] for e in found] == [E[0]["Id"], E[3]["Id"]] and missing == {} and tips == {"wldn": "c" * 40}
+
+    def test_a_branch_that_cannot_be_fetched_is_the_one_thing_named(self, monkeypatch):
+        def refused(fleet, label, since_day, tips=None):
+            raise crew.Refusal(f"could not fetch {label}/main of WilldanGroup/crew-state over https: timed out")
+        monkeypatch.setattr(record, "on_branch", refused)
+        assert record.gather(FLEET, ["wldn"], "2026-10-05") == (
+            [], {"wldn/main": "could not fetch wldn/main of WilldanGroup/crew-state over https: timed out"})
 
 
 class TestPlanEntries:

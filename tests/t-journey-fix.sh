@@ -31,11 +31,11 @@ eq "$(prompt_to swb-1-unit-1)" "'Fix: The banner flickers ZQXS.'"
 eq "$(field $box fix.start On)" "$fb bolt/tenant-environments agent/swb-1-unit-1"
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$fb")" "origin/bolt/tenant-environments"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $fp"
-plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
+plan_tip=$(act_tip)
 expect_ok crew fix swb-1 tidy "It flickers still."
 has "$out" "swb-1-unit-1 has $fb: code, in $fp"
 has "$(cat "$slots")" "unit-1 fix $fb $fp"
-eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$plan_tip"
+eq "$(act_tip)" "$plan_tip"
 echo steady > "$fp/banner"; commit_all "$fp" "fix: the banner holds still"
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered fix $fb: its branch is at $(short $fb)"
@@ -114,6 +114,8 @@ eq "$(field $box fix.drop On "$xf")" "$xf bolt/tenant-environments agent/swb-1-$
 lacks "$(cat "$slots")" "$xf"
 of=fix/tenant-environments/old op=$kd/places/fix-tenant-environments--old
 git -C "$k" worktree add -q --track -b "$of" "$op" bolt/tenant-environments || fail "the standing fix's place was not made"
+# crew started it on this host, so its place is crew's to remove (plan.9)
+as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act fix.start --on "$of" --on bolt/tenant-environments >/dev/null
 echo kept > "$op/kept"; commit_all "$op" "fix: a commit of its own"
 at=$(short "$of")
 echo stray > "$op/note"

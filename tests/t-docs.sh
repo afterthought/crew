@@ -45,11 +45,19 @@ for doc in usage readme skill; do
   done
   has "${!doc}" "crew record"
 done
-for doc in usage readme; do has "${!doc}" "session|wait|end <key>"; has "${!doc}" "read <key>"; done
-for want in "crew card session <key>" "crew card wait <key>" "crew card end <key>" "crew card read <key>"; do has "$skill" "$want"; done
+for doc in usage readme; do has "${!doc}" "session|end <key>"; has "${!doc}" "read <key>"; lacks "${!doc}" "session|wait|end"; done
+for want in "crew card session <key>" "crew card end <key>" "crew card read <key>"; do has "$skill" "$want"; done
+lacks "$skill" "crew card wait <key>"
+for doc in usage readme skill; do
+  has "${!doc}" "crew card wait"; has "${!doc}" "refused at once, naming"
+  has "${!doc}" "standing in sluice"
+done
+for doc in usage readme skill; do has "${!doc}" "what an earlier send still lands, with or without a card open"; done
+for doc in usage readme skill; do has "${!doc}" "preview <key> <thing> [--done]"; done
+has "$skill" "crew card preview <key> <thing> [--done]"
 expect_fail "invalid choice: 'post'" crew card post land/x
 expect_fail "invalid choice: 'card'" crew plan card 1
-ok "the README, the skill and the usage give crew ops offer's notes and steps, crew record and crew card read, wait, session and end, and no crew plan card or crew card post, change or close, which crew no longer has"
+ok "the README, the skill and the usage give crew ops offer's notes and steps, crew record and crew card read, session, end and preview, crew card wait refused naming the read, crew card read land/<kit> with no card open, each submission standing in sluice on its row, and no crew plan card or crew card post, change or close, which crew no longer has"
 
 for doc in usage readme skill; do
   has "${!doc}" "pushes nothing and levels no host"; has "${!doc}" "origin/main"; lacks "${!doc}" "behind GitHub's"
@@ -68,6 +76,21 @@ ok "the README, the skill and the usage say a give has sluice make the bolt's br
 
 for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "one more"; has "${!doc}" "waits to land"; done
 ok "the README, the skill and the usage say a team may hold one more bolt that waits to land, and crew fix names its bolt with --bolt"
+
+for doc in usage readme skill; do
+  for want in "version 2, 3 or 4" "due to cross once <bolt> lands" "in Flume stream" "Path: flume" "team.cross" "still closes" \
+    "however they went down" "closes what the hold left" \
+    "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
+done
+ok "the README, the skill and the usage say a team's setting and path, its crossing however its roles went down and after a hold, what a crossed team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix"
+
+for doc in usage readme skill; do
+  for want in "runs as its kind" "every role stands" "asks.rec" "roles.rec" "crew-<role>--<label>" "end --report <path>" \
+    "open <role>" "land <repo> <name> --brief-file <file>" "delivered [--label L]" "pendingyou watch -- crew _answered" \
+    "ended at its next stop" "never restarted"; do has "${!doc}" "$want"; done
+done
+for doc in usage readme; do has "${!doc}" "turns/<role>.md"; done
+ok "the README, the skill and the usage say a partition's flume, a role that runs as its kind, its asks in asks.rec and its record in roles.rec, crew role start, end, open and land, crew review delivered, the follower's notice of a card's change, and a standing agent of such a role ended at its stop"
 
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)

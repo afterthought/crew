@@ -20,19 +20,21 @@
 # the sweep's entry under its key, saying its older copy is dead, on the same session; crew card session giving that
 # link again and refusing a unit, a bolt's key while it is no row of its kit's landings card, the kit's card, which
 # has no reading of its own, and a short proposal's, and, started from a shell naming no port while another session
-# holds 19432, a link on the next port of crew's range; crew card wait refusing a bolt that is no row, and closing the card on the tap,
-# with its note, and on the session's send, with every annotation, each ending the session; a session whose link only
-# the host could open ended, and the card raised all the same, saying so; a wait with neither card nor session
-# refused; and a session sent with no card held, or with its card's close refused, recording crew's close of the
-# batch, read, in the planner's name. Then the rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when
+# holds 19432, a link on the next port of crew's range; crew card wait refused, naming crew card read; the planner's
+# crew card read closing the card on the tap, with its note, and on the session's send, with every annotation, each
+# ending the session; a session whose link only the host could open ended, and the card raised all the same, saying
+# so; a read with neither card nor session refused; and a session sent with no card held, or with its card's close
+# refused, recording crew's close of the batch, read, in the planner's name. Then the rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when
 # Pending You no longer finds it, and a question whose asker ended withdrawn, a question whose asker runs listed with
 # its asker and age, crew board acting on none; a deploy's card, raised by crew ops offer, read not found, recorded
 # lost and raised again through its kind's raise; a row whose post was refused showing the refusal, left while the
 # refusal is under ten minutes old and raised through its kind's raise after, a proposal's and a step's that crew ops
-# step raised. Which card a key names, what crew sets on a card, the area, how a reply, a refusal and an answer read,
+# step raised. Then Pending You's notice of a change on a card, crew _answered as `pendingyou watch` runs it: one ask of
+# a role that runs as its kind, keyed by the card's request and version, and none for a card of a role that stands.
+# Which card a key names, what crew sets on a card, the area, how a reply, a refusal and an answer read,
 # and what the act sends and records for each are logic cases (tests/py/test_card_commands.py); who may post under
 # which key, what the hook records, each card's builder, a record's facts, and the session's start and end in the act
-# and what a batch's wait returns, test_cards.py; a batch card's facts, test_batches.py; what the sweep judges and
+# and what a batch's read returns, test_cards.py; a batch card's facts, test_batches.py; what the sweep judges and
 # does, test_rail.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -69,7 +71,7 @@ p.insert(plan.Rec("Bolt", [("Bolt", "b2"), ("Repo", "switchboard-kit"), ("Goal",
 p.insert(plan.Rec("Unit", [("Unit", "w1"), ("Repo", "switchboard-kit"), ("Bolt", "b2"), ("Intent", "Unit w1.")]))
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: by hand"; push_state "$w"
 crew bolt give swb-1 b1 >/dev/null 2>&1
 crew bolt give swb-2 b2 >/dev/null 2>&1
 
@@ -173,7 +175,7 @@ eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 eq "$(py_calls | sed -n 1p)" 'whoami {"name": "swb-1-conductor"}'
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .approve.risk, .approve.reversible, (.highStakes // "none"), .artifacts[0].lines]' <<<"$posted")" \
-  '["land/b1_","swb-1-conductor","approve","high",false,"none",["v1"]]'
+  '["land/b1@wldn","swb-1-conductor","approve","high",false,"none",["v1"]]'
 has "$(grep "agent prompt swb-1-conductor" "$CREW_TEST_LOG")" \
   "[crew] Your card land/b1 is up for the user: call get_request (requestId req_stub-5, name swb-1-conductor), to hear their answer."
 eq "$(entries card.post | jq -r 'select(.Key == "land/b1") | [(.On | join(" ")), .Card, .By] | join(" ")')" "bolt/b1 req_stub-5 swb-1-conductor"
@@ -189,8 +191,8 @@ card land/b1: req_stub-5 closed, as the user declined it"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.name, .outcome]')" '["swb-1-conductor","Declined: Not before the box pulls."]'
 eq "$(entries card.close | jq -r 'select(.Key == "land/b1") | [.Card, .State, .Outcome] | join(" ")')" "req_stub-5 declined Declined: Not before the box pulls."
-expect_fail "swb-1-conductor holds no open card under land/b1 on $box" card read land/b1
-ok "the owner's crew card read finds the approval the user declined and closes it with their words"
+eq "$(card read land/b1)" "land/b1: no reading of it runs on this host: crew card session land/b1 starts it"
+ok "the owner's crew card read finds the approval the user declined and closes it with their words, and with no card of the bolt's own held reads the bolt's reading in its place"
 
 # crew record (briefs.15, record 0031 §1): the design agent's record at each turn of its status, read on switchboard-kit's
 # main as this host's checkout of it holds it, raising, changing and closing the record's one card in its name.
@@ -215,7 +217,7 @@ call get_request (requestId req_stub-6, name wldn-design)"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .session.cwd, .kind, .approve.risk, .approve.reversible, .artifacts[0].lines[0]]' <<<"$posted")" \
-  "[\"record/switchboard-kit/0032\",\"wldn-design\",\"$k\",\"approve\",\"low\",true,\"# switchboard runs the workflows\"]"
+  "[\"record/switchboard-kit/0032@wldn\",\"wldn-design\",\"$k\",\"approve\",\"low\",true,\"# switchboard runs the workflows\"]"
 has "$(jq -r .summary <<<"$posted")" "Your own words, recorded as your decision: “no fleet”"
 eq "$(entries record.proposed | jq -r '[(.On | join(" ")), (.Commit | join(" ")), .By] | join(" ")')" \
   "record/switchboard-kit/0032 WilldanGroup/switchboard-kit@$(git -C "$k" rev-parse HEAD) wldn-design"
@@ -256,7 +258,7 @@ adr proposed "docs(adr): 0033 a fleet runs the workflows" 33
 : > "$CREW_TEST_LOG"
 design switchboard-kit 33 --proposed --alternatives "$T/alternatives.md" >/dev/null
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .kind, .recommendedIds, [.options[].id], .artifacts[0].lines[0]]')" \
-  '["record/switchboard-kit/0033","choice",["accept"],["loosen","accept","back"],"## Where your rules decided"]'
+  '["record/switchboard-kit/0033@wldn","choice",["accept"],["loosen","accept","back"],"## Where your rules decided"]'
 eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0033") | .Form')" "alternatives"
 eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0032") | .Form // "none"' | sort -u)" "none"
 ok "a record a rule decided is raised as one choice, loosen the rules as drafted, accept as ruled or send back, its alternatives on its face, its status recording that its card offered them"
@@ -294,7 +296,7 @@ HOST=mac-studio expect_ok crew events --push
 design switchboard-kit 34 --proposed >/dev/null
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
-eq "$(jq -r .idempotencyKey <<<"$posted")" "record/switchboard-kit/0034"
+eq "$(jq -r .idempotencyKey <<<"$posted")" "record/switchboard-kit/0034@wldn"
 [[ $(jq -r .summary <<<"$posted") == "An older copy of this card was lost: dismiss it in the app."* ]] ||
   fail "the summary does not open saying the older copy was lost: $posted"
 ok "crew record --proposed, run where its record's card is held on a host this one's sign-in can't reach, posts it saying the older copy was lost"
@@ -324,7 +326,7 @@ PY
 }
 : > "$CREW_TEST_LOG"
 eq "$(land post abc1500 | head -1)" "card land/b1: req_stub-9 https://www.pendingyou.com/app/r/req_stub-9"
-eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .idempotencyKey)" "land/b1:2"
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .idempotencyKey)" "land/b1@wldn:2"
 ok "a row's card raised again after its last card closed is posted under the key with its revision, a new card rather than the closed one given back"
 
 : > "$CREW_TEST_LOG"
@@ -337,7 +339,7 @@ eq "$(head -2 <<<"$raised")" "card land/b1: req_stub-9 closed, the user having a
 card land/b1: req_stub-10 https://www.pendingyou.com/app/r/req_stub-10"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Head is now abc1700"
-eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows]')" '["land/b1:3","req_stub-9"]'
+eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows]')" '["land/b1@wldn:3","req_stub-9"]'
 has "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -r .summary)" "Its head moved since your approval, from abc1600 to abc1700"
 eq "$(jq -r '.["req_stub-9"].status' "$stub/cards.json")" "resolved"
 eq "$(entries card.close | jq -r 'select(.Card == "req_stub-9") | [.Key, .State] | join(" ")')" "land/b1 closed"
@@ -380,7 +382,7 @@ posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 s1=$cards_dir/batch/1/session.json; u1=$(jq -r .url "$s1"); p1=$(jq -r .pid "$s1")
 [[ $u1 =~ ^http://chuck-herdr-alpha\.ts\.swancloud\.net:194[3-5][0-9]$ ]] || fail "not a link on the box's tailnet name: $u1"
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .title, .context.links[0].url]' <<<"$posted")" \
-  "[\"batch/1_\",\"wldn-planner\",\"fyi\",\"Goal of b1 (batch 1)\",\"$u1\"]"
+  "[\"batch/1@wldn\",\"wldn-planner\",\"fyi\",\"Goal of b1 (batch 1)\",\"$u1\"]"
 has "$(jq -r .summary <<<"$posted")" "1 change to read, nothing to approve."
 has "$(jq -r '.artifacts[0].lines | join("\n")' <<<"$posted")" "**swb-1 · v1**"$'\n\n'"v1 gives each tenant its own zone."
 folder=$(cd "$reports" && pwd -P)/batch-wldn-1
@@ -399,7 +401,7 @@ has "$out" "card batch/1: req_stub-12 https://www.pendingyou.com/app/r/req_stub-
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request whoami match_area post_request "
 posted=$(py_calls | sed -n 5p | cut -d' ' -f2-)
 has "$(jq -r .summary <<<"$posted")" "An older copy of this card was lost: dismiss it in the app."
-eq "$(jq -r .idempotencyKey <<<"$posted")" "batch/1:2"
+eq "$(jq -r .idempotencyKey <<<"$posted")" "batch/1@wldn:2"
 eq "$(jq -r '.context.links[0].url' <<<"$posted")" "$u1"; eq "$(listed)" "$p1"
 eq "$(entries card.close | jq -r 'select(.Key == "batch/1") | [.Card, .State] | join(" ")')" "req_stub-11 lost"
 ok "a batch's card lost to the planner is raised again by the sweep's entry under its key, saying its older copy is dead, its link the session's that still runs"
@@ -408,16 +410,15 @@ expect_ok planner session batch/1; eq "$out" "$u1"; eq "$(listed)" "$p1"
 expect_fail "a batch has one reading session, on the whole batch: crew card session batch/1" planner session batch/1 v1
 expect_fail "b1 is no row of switchboard-kit's landings card, so it has no reading: every unit and chore of it has landed" \
   planner session land/b1
-expect_fail "no session was started for card land/b1, and b1 is no row of its kit's landings card" planner wait land/b1
+expect_fail "crew card wait is gone: crew keeps no process waiting on a card or its reading. Run crew card read land/b1 when" \
+  planner wait land/b1
 expect_fail "land/switchboard-kit is switchboard-kit's landings card, wldn-ops's, which has no reading of its own" \
   planner session land/switchboard-kit
-expect_fail "land/switchboard-kit is switchboard-kit's landings card, wldn-ops's, which has no reading of its own" \
-  planner wait land/switchboard-kit
 eq "$(listed)" "$p1"
 printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-pages "The console lists them." --repo switchboard-kit' > "$T/p.rec"
 crew plan propose "$T/p.rec" >/dev/null
 expect_fail "proposal/1's card has nothing to read: it holds the proposal whole" crew card session proposal/1
-ok "crew card session gives a running session's link again, and refuses a unit with a batch's key, a bolt's key while it is no row of its kit's landings card, saying why, the kit's card, which has no reading of its own, and a short proposal's; crew card wait refuses a bolt that is no row"
+ok "crew card session gives a running session's link again, and refuses a unit with a batch's key, a bolt's key while it is no row of its kit's landings card, saying why, the kit's card, which has no reading of its own, and a short proposal's; crew card wait is refused, naming crew card read"
 
 # A batch's session started from a shell naming no PLANNOTATOR_PORT, as on a Mac outside any agent, while batch 1's
 # holds 19432, plannotator's one fixed port in remote mode: crew gives it its own range, so it takes the next port.
@@ -431,7 +432,7 @@ ok "a card's session started from a shell naming no port, while another holds 19
 
 echo '{"answer": {"note": {"text": "v1: say what the zone is."}}}' > "$stub/answered/req_stub-12.json"
 : > "$CREW_TEST_LOG"
-expect_ok planner wait batch/1
+expect_ok planner read batch/1
 eq "$out" "batch/1: sent back on its card, with a note:
 v1: say what the zone is.
 card batch/1: req_stub-12 closed
@@ -441,19 +442,19 @@ eq "$(py_calls | sed -n 5p | cut -d' ' -f2- | jq -r .outcome)" "Read; 1 note sen
 gone "$p1"
 [[ ! -e $cards_dir/batch/1 ]] || fail "batch/1's session folder outlived its card"
 eq "$(entries card.close | jq -r 'select(.Key == "batch/1" and .State == "closed") | [.Card, .Outcome] | join(" ")')" "req_stub-12 Read; 1 note sent to its team"
-ok "the card sent back while nobody waited ends the planner's wait at once with its note, and crew closes it and ends its session"
+ok "the card sent back is read by the planner's crew card read with its note, and crew closes it and ends its session"
 
 raise 2 >/dev/null; p2=$(jq -r .pid "$cards_dir/batch/2/session.json")
 notes=$'# Annotations\n\n1. 01-v1-design.md: say why one zone.\n2. 01-v1-tasks.md: a task for the console.'
 decide "$p2" "$(jq -nc --arg f "$notes" '{decision: "annotated", feedback: $f, annotationCount: 2}')"
 : > "$CREW_TEST_LOG"
-expect_ok planner wait batch/2
+expect_ok planner read batch/2
 eq "$out" "batch/2: annotated
 $notes
 card batch/2: req_stub-13 withdrawn
 batch/2's session had ended as the user sent it, and batch/2 is forgotten"
 eq "$(py_calls | tail -1 | cut -d' ' -f2- | jq -r .reason)" "Read; 2 notes sent to their teams"
-ok "the session sent with its annotations ends the wait with every one as the user wrote it, and crew closes the card and forgets the session"
+ok "the session sent with its annotations is read with every one as the user wrote it, and crew closes the card and forgets the session"
 
 batch 3
 : > "$CREW_TEST_LOG"
@@ -466,22 +467,21 @@ has "$(jq -r .summary <<<"$posted")" "Its reading could not be opened on the tai
 eq "$(jq -c '.context.links' <<<"$posted")" "[]"
 eq "$(listed)" ""
 echo '{"answer": {}}' > "$stub/answered/req_stub-14.json"
-out=$(unset PLANNOTATOR_URL_HOST; planner wait batch/3 2>&1) || fail "the planner's wait on batch 3 failed: $out"
-has "$out" "batch/3's reading could not be opened: plannotator gave batch/3's session the link http://localhost:"
-has "$out" "; crew card session batch/3 starts it once that is mended, and the wait goes on for its card"
-eq "$(grep -v "^batch/3's reading could not be opened" <<<"$out")" "batch/3: sent back on its card, with no note
+out=$(unset PLANNOTATOR_URL_HOST; planner read batch/3 2>&1) || fail "the planner's read of batch 3 failed: $out"
+eq "$out" "batch/3: sent back on its card, with no note
 card batch/3: req_stub-14 closed"
 eq "$(listed)" ""
-expect_fail "no card and no session of batch/5 is open on $box" planner wait batch/5
-ok "a session whose link only the host could open is ended and the card raised all the same, saying so; its wait tries the reading, says once why it could not open and waits on the card alone; a wait with neither is refused"
+expect_fail "no card and no reading of batch/5 is open on $box" planner read batch/5
+ok "a session whose link only the host could open is ended and the card raised all the same, saying so; the planner's read of its card starts no reading and closes it on the tap; a read with neither card nor reading is refused"
 
 # A batch's session sent with no card of it held on the main level's host, as when its card was posted from a host the
-# main level has left: the wait records crew's close of the batch, read, in the planner's name, and ends the session.
+# main level has left: the planner's read records crew's close of the batch, read, in the planner's name, and ends the
+# session.
 batch 4
 expect_ok planner session batch/4; p4=$(jq -r .pid "$cards_dir/batch/4/session.json")
 decide "$p4" '{"decision": "approved"}'
 : > "$CREW_TEST_LOG"
-expect_ok planner wait batch/4
+expect_ok planner read batch/4
 eq "$out" "batch/4: approved
 batch/4: recorded read, Read; no notes
 batch/4's session had ended as the user sent it, and batch/4 is forgotten"
@@ -492,7 +492,7 @@ batch 6
 raise 6 >/dev/null; c6=$(entries card.post | jq -r 'select(.Key == "batch/6") | .Card'); p6=$(jq -r .pid "$cards_dir/batch/6/session.json")
 decide "$p6" '{"decision": "approved"}'
 echo "cancel_request Too many requests." > "$stub/refuse"
-expect_ok planner wait batch/6
+expect_ok planner read batch/6
 : > "$stub/refuse"
 has "$out" "card batch/6 not closed: Pending You refused the close: Too many requests."
 has "$out" "batch/6: recorded read, Read; no notes"
@@ -520,7 +520,7 @@ eq "$(tail -1 <<<"$out")" "call get_request (requestId $c, name wldn-planner)"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .title, .kind, [.options[].id], .recommendedIds]' <<<"$posted")" \
-  "[\"proposal/$n\",\"wldn-planner\",\"Plan change to p1: 2 new\",\"multi\",[\"add:p-a\",\"add:p-b\"],[\"add:p-a\",\"add:p-b\"]]"
+  "[\"proposal/$n@wldn\",\"wldn-planner\",\"Plan change to p1: 2 new\",\"multi\",[\"add:p-a\",\"add:p-b\"],[\"add:p-a\",\"add:p-b\"]]"
 grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was told of the card its own command raised"
 ok "crew plan propose raises the proposal's card in the planner's name under proposal/<n>, one checkbox list every row set as proposed, and prints the line that adopts it"
 
@@ -538,7 +538,7 @@ has "$out" "card proposal/$n: $c withdrawn, its kind having changed, and its new
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request cancel_request whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.requestId, .reason]')" "[\"$c\",\"Rewritten as proposal $m after your note\"]"
 eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows, .title, [.questions[] | [.id, [.options[].id]]]]')" \
-  "[\"proposal/$n:2\",\"$c\",\"Plan change to p2: 6 new\",[[\"rows-1\",[\"add:p-a\",\"add:p-c\",\"add:p-d\"]],[\"rows-2\",[\"add:p-e\",\"add:p-f\",\"add:p-g\"]]]]"
+  "[\"proposal/$n@wldn:2\",\"$c\",\"Plan change to p2: 6 new\",[[\"rows-1\",[\"add:p-a\",\"add:p-c\",\"add:p-d\"]],[\"rows-2\",[\"add:p-e\",\"add:p-f\",\"add:p-g\"]]]]"
 eq "$(entries card.close | jq -r "select(.Card == \"$c\") | [.State, .Outcome] | join(\": \")")" "withdrawn: changed in kind: a new card follows it"
 eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $m (wldn)" | grep 'card:' | sed 's/^ *//')" \
   "card:   proposal/$n, open, asked by wldn-planner ($c1)"
@@ -555,7 +555,7 @@ has "$out" "card proposal/$n: $c1 closed, the user having answered it, and its n
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Rewritten as proposal $r after your note"
 eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows, .title, [.options[].id]]')" \
-  "[\"proposal/$n:3\",\"$c1\",\"Plan change to p3: 2 new\",[\"add:p-c\",\"add:p-a\"]]"
+  "[\"proposal/$n@wldn:3\",\"$c1\",\"Plan change to p3: 2 new\",[\"add:p-c\",\"add:p-a\"]]"
 eq "$(entries card.post | jq -r "select(.Card == \"$c2\") | [(.On | join(\" \")), .Key, .By] | join(\" \")")" "proposal/$n proposal/$n wldn-planner"
 eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $r (wldn)" | grep 'card:' | sed 's/^ *//')" \
   "card:   proposal/$n, open, asked by wldn-planner ($c2)"
@@ -635,6 +635,15 @@ eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempote
   "An older copy of this card was lost: dismiss it in the app."
 ok "a row's card Pending You no longer finds is recorded lost by the rail read and raised again through its kind's raise, saying its older copy is dead"
 
+# aged <id> <time>: the box's entry set back to the time, in its own file and on wldn/main, where the rail reads it (read.5)
+aged() {
+  local f w=$T/aged
+  for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $1\$/,/^\$/s/^At: .*/At: $2/"; done
+  rm -rf "$w"; git clone -q -b wldn/main "$ws" "$w"
+  for f in "$w/runs/$box"/*.rec; do rewrite "$f" "/^Id: $1\$/,/^\$/s/^At: .*/At: $2/"; done
+  commit_all "$w" "runs($box): an entry set back by hand"; push_state "$w"
+}
+
 # A proposal whose card Pending You refused at its raise: the row shows the refusal, and the rail read leaves it while
 # the refusal is under ten minutes old (CARD_RETRY), so a refusal that stands is not tried at the rail tab's pace; once
 # it is older, the read raises the card through the proposal's raise, in the planner's name.
@@ -649,12 +658,12 @@ has "$out" "    card:   $k, none open; its last post was refused: Pending You re
 lacks "$(py_calls)" "post_request"
 id=$(entries card.post | jq -r "select(.Key == \"$k\" and .Refused) | .Id" | tail -1)
 old=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=11)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
-for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $id\$/,/^\$/s/^At: .*/At: $old/"; done
+aged "$id" "$old"
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew rail --label wldn; r=$out
 pc=$(sed -n "s|^card $k: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
 [[ -n $pc ]] || fail "the read raised no card for $k:"$'\n'"$r"
-eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r '[.idempotencyKey, .session.label] | join(" ")')" "$k wldn-planner"
+eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r '[.idempotencyKey, .session.label] | join(" ")')" "$k@wldn wldn-planner"
 has "$r" "  $k (wldn), wldn-planner's $pc: posted: its row had none open"
 has "$r" "    card:   $k, open, asked by wldn-planner ($pc)"
 ok "a row whose card's post was refused shows the refusal, is left by a read while the refusal is under ten minutes old, and is raised through its kind's raise by the first read after"
@@ -667,12 +676,42 @@ op=$(grep -o 'op/mac-studio/[0-9]*' <<<"$out" | head -1); [[ -n $op ]] || fail "
 has "$out" "card $op not posted: Pending You refused post_request: Too many requests."
 : > "$stub/refuse"
 id=$(entries card.post | jq -r "select(.Key == \"$op\" and .Refused) | .Id" | tail -1)
-for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $id\$/,/^\$/s/^At: .*/At: $old/"; done
+aged "$id" "$old"
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew rail --label wldn; r=$out
 sc=$(sed -n "s|^card $op: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
 [[ -n $sc ]] || fail "the read raised no card for $op:"$'\n'"$r"
-eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempotencyKey == \"$op\") | [.session.label, .kind, .intent] | join(\" \")")" "wldn-ops action do"
+eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempotencyKey == \"$op@wldn\") | [.session.label, .kind, .intent] | join(\" \")")" "wldn-ops action do"
 has "$r" "  $op (wldn), wldn-ops's $sc: posted: its row had none open"
 has "$r" "    card:   $op, open, asked by wldn-ops ($sc)"
 ok "a step waiting on the user has its card raised by crew ops step, and one whose post was refused raised through the step's raise by the first read after ten minutes"
+
+# Pending You's notice of a change on a card (design Decision 5 of roles-run-as-flume-kinds): with wldn's planner run as
+# its kind, crew _answered, as `pendingyou watch` runs it on the box for each change on a card there, writes one card
+# ask of the planner keyed by the card's request and version, from the notice's ids and asker alone, calling no Pending
+# You tool; the same change handed again asks nothing more, and a later change on the card is asked again; a card of
+# wldn-ops, which stands, asks nothing.
+role_stream wldn planner wldn-main
+# notice <asker> <request> <version>: crew _answered on the box as Pending You's watch runs it, the card on its input
+notice() {
+  jq -cn --arg n "$1" --arg r "$2" --argjson v "$3" '{requestId: $r, sessionLabel: $n, status: "answered", version: $v, title: "Approve 12?"}' |
+    (export CREW_TEST_HOST=$box HOME PENDINGYOU_REQUEST_ID=$2 PENDINGYOU_VERSION=$3 PENDINGYOU_EVENT=answer_ready; HOME=$(home_of $box)
+     unset CREW_AGENT CREW_LABEL; cd "$HOME" && "$CREW/plugin/bin/crew" _answered)
+}
+cask() { git --git-dir "$ws" show wldn/main:asks.rec | recsel -t Ask "$@"; }
+: > "$CREW_TEST_LOG"
+t0=$(act_tip)
+expect_ok notice wldn-planner req_stub-77 3
+eq "$(cask -p Role,From,What,Names,Key,Words | tr '\n' ' ')" \
+  "Role: planner From: crew What: card Names: card/req_stub-77 Key: card/req_stub-77/3 Words: the user answered it "
+eq "$(acts_since "$t0")" "1"
+eq "$(py_calls)" ""
+expect_ok notice wldn-planner req_stub-77 3
+has "$out" "wldn-planner is already asked by card/req_stub-77/3; nothing written"
+eq "$(cask -c)" "1"
+expect_ok notice wldn-planner req_stub-77 4
+eq "$(cask -P Key | grep . | tr '\n' ' ')" "card/req_stub-77/3 card/req_stub-77/4 "
+expect_ok notice wldn-ops req_stub-78 2
+eq "$(cask -c)" "2"
+eq "$(py_calls)" ""
+ok "a change on a card of a role that runs as its kind is one ask of the role, keyed by the card's request and version and read from the notice alone, and a card of a role that stands asks nothing"

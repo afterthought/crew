@@ -9,5 +9,7 @@ if [[ -f ${CREW_TEST_ROOT:?}/down ]] && grep -qx "$target" "$CREW_TEST_ROOT/down
   echo "ssh: connect to host $target port 22: Operation timed out" >&2; exit 255
 fi
 [[ -d $CREW_TEST_ROOT/hosts/$target/home ]] || { echo "ssh: Could not resolve hostname $target" >&2; exit 255; }
+# ssh carries no Claude session's process id to the host it reaches, so a command crew forwards ends with no session there.
+unset CLAUDE_PID
 export CREW_TEST_HOST=$target HOME=$CREW_TEST_ROOT/hosts/$target/home
 cd "$HOME" && exec bash -c "$*"

@@ -32,11 +32,15 @@ Every write to a flywheel's branch SHALL be made by a crew command. It SHALL fet
 - **THEN** nothing is pushed, and the command says which file and why
 
 ### Requirement: A commit names its run-record entry
-Each commit crew makes on a flywheel's branch SHALL carry, in its message, the id of the run-record entry that describes it, as a `Crew-Entry:` trailer, and that entry SHALL name the commit.
+Each commit crew makes on a flywheel's branch SHALL carry, in its message, the id of a run-record entry as a `Crew-Entry:` trailer. A commit that is an act's, such as a plan write, SHALL name the entry that describes it, and that entry SHALL name the commit. A commit that adds an entry to the run record SHALL name the entry it adds, and SHALL change nothing but that entry's day file.
 
 #### Scenario: From a commit to its entry
-- **WHEN** a commit on `wldn/main` is read
+- **WHEN** a plan write's commit on `wldn/main` is read
 - **THEN** its `Crew-Entry` id is the `Id` of one run-record entry, whose `Commit` is that commit
+
+#### Scenario: An entry's own commit
+- **WHEN** the commit that follows a plan write on `wldn/main` is read
+- **THEN** its `Crew-Entry` id is the `Id` of the entry it adds to `runs/<host>/<day>.rec`, its subject ends with ` (<agent>)`, and it changes no other file
 
 ### Requirement: Flywheels in one repository never meet
 crew SHALL fetch and push only the branch of the flywheel a command acts for. A write to one flywheel SHALL never be refused, delayed or replayed because another flywheel wrote.
@@ -74,3 +78,35 @@ A clone of a flywheel's branch SHALL be recutils files that `recsel` and `recfix
 #### Scenario: Reading with recutils
 - **WHEN** the user clones the branch `wldn/main` and runs `recsel -t Unit plan.rec`
 - **THEN** the plan's units are printed
+
+### Requirement: crew asks a host's runner for work by requests on the flywheel's branch
+crew SHALL write every request for a host's runner as a record of `requests.rec` on the flywheel's branch: a launch of a place, or a retry, drop or priority of one it launched. Each SHALL be numbered once, appended by a crew command in the commit of the plan write that occasions it, checked by `recfix --check` and crew's own rules, and never changed or removed.
+
+#### Scenario: Never renumbered
+- **WHEN** `requests.rec` holds requests 1 to 7 and a drop is written
+- **THEN** it is request 8, and requests 1 to 7 are as they were
+
+### Requirement: A launch names everything the runner passes to Flume
+A launch SHALL name its host, the work it serves, the kit's forge address, its kind, name and base, its stream, priority, intent and recipient, and its brief; it MAY name launches that must land first and a held submission. A retry, drop or priority SHALL name the launch it acts on. crew's rules SHALL refuse a request that lacks what its act needs.
+
+#### Scenario: A launch with no stream
+- **WHEN** a give would append a launch with no `Stream`
+- **THEN** the write is refused by crew's rules and the branch is unchanged
+
+#### Scenario: A retry of nothing
+- **WHEN** a retry would name request 9, which is no launch
+- **THEN** the write is refused naming request 9
+
+### Requirement: crew reads each host's runner from that runner's own branch
+crew SHALL read a host's runner from `<label>/runner/<host>` of the partition's state repository, fetched with `<label>/main` in one fetch, and SHALL never write it: its `runner.rec` saying a runner serves the partition there, its `answers.rec` where each request stands, and its `places.rec` Flume's status of each place as Flume gave it.
+
+#### Scenario: One fetch
+- **WHEN** a command reads the plan and the runners
+- **THEN** it fetches the state repository once, `<label>/main` and `<label>/runner/*` together
+
+### Requirement: A runner's branch that can't be read hides only its host's work
+A host whose runner branch is missing, or whose files recfix refuses, SHALL hide only that host's work, which reads unknown and is named; every other host's SHALL read as it stands.
+
+#### Scenario: Two hosts, one silent
+- **WHEN** `madswan/runner/deneb` holds an answer and a place for request 3, and `madswan/runner/alpha` does not exist
+- **THEN** request 3's work reads its stage from deneb's place, and alpha's work reads unknown, naming that no runner branch exists for alpha

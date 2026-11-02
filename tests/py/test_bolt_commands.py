@@ -150,6 +150,25 @@ class TestGiveRefusal:
         assert plan.give_refusal("swc-1", held) == "swc-1 holds doctor-rows and ssh-fix; doctor-rows waits to land, and its landing frees swc-1"
 
 
+class TestGiveDue:
+    """A team due to cross to Flume or back is given no bolt until those of its old path have landed or been dropped
+    (plan.give_due; Decision 2 of teams-cross-to-flume-as-their-bolts-land)."""
+
+    def test_a_team_whose_setting_names_a_stream_while_it_holds_a_bolt_of_todays_path_is_refused(self):
+        assert plan.give_due(fresh().plan, {"name": "swb-1", "flume": "wldn"}) == (
+            "swb-1 is due to cross to Flume, so it is given no bolt now: it holds tenant-environments, given on today's path, "
+            "and is given its next bolt once tenant-environments has landed or been dropped")
+
+    def test_a_team_on_todays_path_or_crossed_holding_nothing_is_not(self):
+        assert plan.give_due(fresh().plan, {"name": "swb-1", "flume": False}) is None
+        assert plan.give_due(fresh().plan, {"name": "swb-2", "flume": "wldn"}) is None
+
+    def test_a_bolt_given_through_flume_to_a_team_turned_back_holds_it_due_back(self):
+        text = plan_text(bolts=[("tenant-environments", KIT, "swb-1")]).replace("Team: swb-1\n", "Team: swb-1\nPath: flume\n")
+        assert plan.give_due(plan.Plan(text), {"name": "swb-1", "flume": "wldn"}) is None
+        assert plan.give_due(plan.Plan(text), {"name": "swb-1", "flume": False}).startswith("swb-1 is due back to today's path")
+
+
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
 WHERE = "/kit/main/.config/sluice.toml"
 POLICY = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
@@ -485,9 +504,10 @@ class TestSplitBolt:
     while that remote's bolt/<bolt> lacks the tip, is refused naming both commits, what is lacked and the landing."""
     LOCAL, THERE = "1" * 40, "2" * 40
 
-    def facts(self, there=THERE, held="no", merges=2, read=None):
+    def facts(self, there=THERE, held="no", merges=2, carried=None, read=None):
         return dict(local=None if read or there == "-" else self.LOCAL, there=None if read else there,
-                    held=None if read or there == "-" else held, merges=None if read or there == "-" else merges, read=read)
+                    held=None if read or there == "-" else held, merges=None if read or there == "-" else merges,
+                    carried=None if read or there == "-" else carried, read=read)
 
     def refusal(self, kind="unit", name="u", **f):
         return plan.split_refusal(kind, name, "b", "mac-studio", "origin", self.facts(**f))
@@ -509,6 +529,17 @@ class TestSplitBolt:
     def test_a_chores_or_a_fixs_merge_is_refused_naming_it(self, kind, name):
         assert self.refusal(kind, name).startswith(
             f"bolt/b is split: its tip on mac-studio, 1111111, names origin for it, so sluice would form {kind} {name}'s merge on")
+
+    def test_a_fix_that_took_the_hosts_merges_in_lets_its_merge_through(self):
+        """plan.19 as read for batch 34's reviewer: a diverged bolt's way on is a fix cut from GitHub's head that takes
+        the host copy's merges in; its head holds the host's tip, so sluice's merge on GitHub's copy drops none."""
+        assert self.refusal("fix", "carry-the-hosts-merges", carried="yes") is None
+
+    def test_a_fix_that_did_not_take_them_in_is_refused_naming_the_carry(self):
+        assert self.refusal("fix", "f", carried="no").endswith(
+            "makes the two one; a fix that takes mac-studio's merges in first (git merge bolt/b in its place) carries "
+            "them, and merges")
+        assert "git merge" not in self.refusal() and "git merge" not in self.refusal("chore", "c")
 
     def test_a_copy_that_holds_the_hosts_tip_lets_the_merge_through(self):
         # Equal, or ahead with merges sluice landed there from another host: held either way, nothing dropped.
@@ -577,7 +608,7 @@ class TestWhenABoltIsFetched:
     """bolt-plan "A bolt on GitHub is fetched where a decision rests on it" (plan.18, plan.19, design Decision 3): crew
     bolts and a give's proven check ask each kit's GitHub fetched first; every other read fetches nothing."""
     FLEET = {"partitions": {"wldn": {"teams": ["swb-1"]}},
-             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box",
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "flume": False,
                                  "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
     KIT_READ = {"ok": True, "main": [], "chores": [], "places": {}, "chore_places": {}, "fixes": [],
                 "bolts": {"b": {"exists": True, "at": "origin/bolt/b", "changes": [], "archived": [], "open": {}, "chores": [],
@@ -631,3 +662,63 @@ class TestWhenABoltIsFetched:
         st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
         assert (st.of("a")["stage"], st.of("a")["why"]) == ("unknown", f"box: {why}")
         assert st.bolt_state(self.plan().bolt("b")) == "unknown"
+
+
+class TestCrewBoltsCrossed:
+    """crew bolts, text and JSON, reads a crossed piece's stage from the runner's records and says each team's path
+    (Decisions 8 and 14 of teams-cross-to-flume-as-their-bolts-land; bolt-plan "A crossed team's work reads its stage
+    from the runner's records"): crossed crw-4 holds x, given through Flume, its a in code and b after a held; crw-5,
+    its setting madswan, holds y, given on today's path, and is due to cross."""
+
+    @pytest.fixture(autouse=True)
+    def writer(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
+
+    def data(self, runners, bolt=None):
+        from facts import crew_read, crossed_fleet_read, launched
+        fleet = crossed_fleet_read(**{"crw-5": "madswan"})
+        p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("y1", "y", [], "unit", [])],
+                               fleet=fleet, held=[("y", "crw-5")])
+        return plan.bolts_data(fleet, ["madswan"], [("madswan", "afterthought/crew-state", "abcdef1" + "0" * 33, p)],
+                               crew_read(bolts={"x": {}, "y": {}}), {}, bolt, runs={"madswan": (requests, runners)})
+
+    def bolts(self, d):
+        return {b["bolt"]: b for b in d["partitions"][0]["plans"][0]["bolts"]}
+
+    def test_a_crossed_bolts_json_gives_its_teams_path_and_each_pieces_runner_stage(self):
+        from facts import ran
+        x = self.bolts(self.data(ran({1: "code"}, held=[2])))["x"]
+        assert (x["given"], x["path"]) == ("flume", {"path": "crossed", "due": None, "stream": "madswan", "first": []})
+        assert [(u["unit"], u["stage"], u["tasks"], u["worktree"]) for u in x["units"]] == [("a", "code", (6, 26), None),
+                                                                                           ("b", "waiting", None, None)]
+        assert x["units"][1]["flume"] == {"stage": "waiting", "after": ["unit/a"]}
+
+    def test_the_text_names_a_crossed_teams_stream_and_each_pieces_stage_and_place(self):
+        """bolt-plan "A unit in code" and "A dependent waits"."""
+        from facts import ran
+        out = plan.bolts_text(self.data(ran({1: "code"}, held=[2]))).splitlines()
+        assert "x  crew  crw-4 @ deneb, in Flume stream madswan  active" in out
+        assert f"  {'a':<40} {'code 6/26':<12} flume/change--teams-cross-to-flume-as-their-bolts-land" in out
+        assert f"  {'b':<40} {'waiting':<12}   on a" in out
+
+    def test_a_due_teams_head_line_says_what_it_finishes_first(self):
+        from facts import ran
+        d = self.data(ran())
+        assert self.bolts(d)["y"]["path"] == {"path": "due", "due": "cross", "stream": "madswan", "first": ["y"]}
+        assert "y  crew  crw-5 @ deneb, due to cross once y lands  active" in plan.bolts_text(d).splitlines()
+
+    def test_a_runner_crew_cant_read_is_named_and_its_work_reads_unknown(self):
+        """bolt-plan "The runner's host is silent"."""
+        d = self.data({})
+        assert {u["stage"] for u in self.bolts(d)["x"]["units"]} == {"unknown"}
+        assert d["runners_unread"] == {"deneb's runner": "no runner answers on deneb: madswan/runner/deneb does not exist"}
+        assert plan.bolts_text(d).splitlines()[-1] == (
+            "deneb's runner can't be read (no runner answers on deneb: madswan/runner/deneb does not exist): the stages of the "
+            "work crossed to Flume there are unknown")
+
+    def test_a_question_and_sluices_words_are_on_the_pieces_line(self):
+        """bolt-plan "A construct that asked" and "Sent back by sluice"."""
+        from facts import ran
+        out = plan.bolts_text(self.data(ran({1: "stopped-short", 2: "sent-back"})))
+        assert f"  {'a':<40} {'needs':<12} flume/change--agent-mode-is-a-layered-setting  asks at code: Head 118ec46 is ready" in out
+        assert "code 26/26   flume/change--teams-cross-to-flume-as-their-bolts-land  sent back by sluice: check-full failed" in out

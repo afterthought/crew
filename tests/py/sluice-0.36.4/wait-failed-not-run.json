@@ -1,0 +1,35 @@
+{
+  "after": [],
+  "attempt": 1,
+  "branch": "main",
+  "failed": [
+    {
+      "not_run": "the Dagger engine did not answer: dial unix /run/dagger/engine.sock: connect: connection refused",
+      "task": "check:dagger"
+    },
+    {
+      "not_run": "the Dagger engine did not answer: dial unix /run/dagger/engine.sock: connect: connection refused",
+      "task": "check:image"
+    }
+  ],
+  "from": {
+    "agent": "wldn-ops",
+    "head": "bolt/an-image-is-built-once-per-digest",
+    "worktree": "pull/215"
+  },
+  "head": "5f2e8b1c4a7d0e3b6c9f2a5d8e1b4c7a0d3f6e90",
+  "id": 216,
+  "priority": 0,
+  "result": "failed",
+  "schema": "sluice/submission@1",
+  "state": "failed",
+  "submitted": "2026-10-23T22:40:02Z",
+  "tested": {
+    "combination": "7a0d3f6e9c2b5e8a1d4f7c0b3e6a9d2c5f8b1e40",
+    "on": "db8bc25f0e3a6d9c2b5e8a1d4f7c0b3e6a9d2c50",
+    "submissions": [
+      216
+    ]
+  },
+  "told": "2026-10-23T22:58:19Z"
+}

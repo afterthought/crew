@@ -90,27 +90,24 @@ Entries SHALL be recutils records in `~/.local/state/crew/<label>/runs/<host>/<d
 - **WHEN** `recsel -e "On = 'unit/<unit>'"` is run over a host's run-record files
 - **THEN** it prints that unit's entries, with no crew command involved
 
-### Requirement: Entries are gathered from every host
-`crew events [--label <label>] [--about <object>] [--since <time>] [--json]` SHALL read the run record on the flywheel's branch of its state repository, then ask every host where the partition's teams, main level and operator sessions run, one call per host, for the entries it has not yet carried, and print them all in time order. A host that does not answer SHALL be named, and its entries shown as far as it had carried them.
-
-#### Scenario: Two hosts
-- **WHEN** `crew events --label wldn` runs on mac-studio while wldn's teams run on the box
-- **THEN** the box's entries and mac-studio's are printed together in time order
-
-#### Scenario: A host is asleep
-- **WHEN** a Mac holding entries does not answer
-- **THEN** the entries it had carried are printed with the other hosts', and the Mac is named as not answering
-
-#### Scenario: One object
-- **WHEN** `crew events --about unit/<unit>` runs
-- **THEN** only entries naming that unit in `On` or `From` are printed
-
 ### Requirement: Entries can be followed as they are written
-`crew events --follow` SHALL print each entry of the partition, from every host it can reach, as it is appended, one line per entry, until it is interrupted.
+`crew events --follow` SHALL print each entry of the partition as it reaches the partition's branch, one line per entry, until it is interrupted. It SHALL read the branch as this host's cache holds it, read it again only when the cache's tip moves, and read again only the run-record files whose content changed. The branch SHALL be fetched once a minute, never faster: by the host's follower for a partition it follows, else by the follow itself. It SHALL ask no host for entries.
 
 #### Scenario: Following a bolt team
 - **WHEN** `crew events --follow --label wldn` is running and a conductor starts a stage on the box
-- **THEN** that entry's line appears without the command being run again
+- **THEN** that entry's line appears once its commit is on `wldn/main` and this host has fetched it, within a minute, without the command being run again
+
+#### Scenario: A host is asleep
+- **WHEN** `crew events --follow --label wldn` starts while macbook-pro does not answer
+- **THEN** it follows the branch as before, and starts nothing on macbook-pro
+
+#### Scenario: Nothing moves
+- **WHEN** `crew events --follow --label wldn` runs on a host where no follower follows wldn, and nothing reaches wldn's branch
+- **THEN** it fetches the branch once a minute and starts no other process
+
+#### Scenario: The host's follower fetches
+- **WHEN** `crew events --follow --label wldn` runs on mac-studio while mac-studio's follower follows wldn
+- **THEN** the follow fetches nothing itself, and prints each entry once the follower's fetch, or a write on mac-studio, has moved the cache
 
 ### Requirement: One object's history is read from the entries alone
 `crew trace <object>` SHALL print, in time order, every entry that names the object, and every entry of the objects it came from and the objects that came from it, each line giving the time, the act, who asked, the host, the commit, and the session to open. It SHALL read only the run record. An object no entry names SHALL be reported as such with a non-zero exit.
@@ -154,21 +151,6 @@ Each `stage.start` entry SHALL be followed by exactly one `stage.end` entry, car
 - **WHEN** the conductor runs a unit's code stage again while the previous code stage has neither delivered nor stopped short
 - **THEN** the previous stage's `stage.end` is written with `Ended: stopped` before the new stage's start
 
-### Requirement: The run record is carried to the state repository
-Every write crew makes to a flywheel's branch SHALL, in the same commit, bring `runs/<host>/` on the branch up to the entries that host has recorded for the flywheel. `crew events --push` SHALL do the same on request with no other change. Only a host SHALL write its own files there, entries SHALL be added and never removed, and carrying the same entries twice SHALL change nothing.
-
-#### Scenario: A tell, then a plan write
-- **WHEN** an agent on the box tells another agent and later writes the plan
-- **THEN** the plan write's commit also adds the tell's entry to `runs/chuck-herdr-alpha/` on the branch
-
-#### Scenario: The newest entry
-- **WHEN** a plan write has just landed
-- **THEN** its own entry, which names that commit, is on the host and reaches the branch with the host's next write or `crew events --push`
-
-#### Scenario: A host is rebuilt
-- **WHEN** a host loses its local run record after carrying it
-- **THEN** the entries it had carried are still on the branch, and its next carry adds its new entries beside them
-
 ### Requirement: A send is one entry in the receiving partition's record
 Each `crew send` that reaches its operator SHALL append one entry, act `send`, to the run record of the partition it was sent to, on the host the command ran on. Its `By` SHALL be the sender, its `On` the operator, `agent/<label>-operator`, and the team, `team/<team>`, when a team was named; its `Why` SHALL be `send <team or partition>`; and its `Chars` the length of the text. It SHALL hold no part of the text, and no separate tell entry SHALL be written for it. A send that types nothing SHALL write no entry, as a tell that types nothing writes none.
 
@@ -179,3 +161,93 @@ Each `crew send` that reaches its operator SHALL append one entry, act `send`, t
 #### Scenario: A send that is refused
 - **WHEN** a send fails because `wldn-operator` is not up
 - **THEN** no entry is written
+
+### Requirement: Every entry reaches the branch as it is written
+Once crew appends an entry to the host's run record, the same command SHALL push it to `runs/<host>/<day>.rec` on the partition's branch of its state repository, as its own commit from that host, by the procedure every write to the branch takes. The commit SHALL change that day's file alone, adding the entry to what the branch holds. Only a host SHALL write its own files, entries SHALL be added and never removed, and pushing an entry the branch holds SHALL change nothing.
+
+#### Scenario: A tell
+- **WHEN** an agent on the box tells another agent
+- **THEN** before the command returns, `wldn/main` has a commit from the box adding the tell's entry to `runs/chuck-herdr-alpha/<day>.rec`, and no other file
+
+#### Scenario: A plan write
+- **WHEN** the planner adds a unit to the queue on mac-studio
+- **THEN** the write's commit changes the plan alone, and the next commit on the branch adds its `unit.add` entry, which names the write's commit
+
+#### Scenario: Two hosts at once
+- **WHEN** mac-studio and the box each push an entry of wldn at the same moment
+- **THEN** both entries are on `wldn/main`, each in its host's file, the one whose push was refused replayed on the new tip
+
+#### Scenario: A host is rebuilt
+- **WHEN** a host loses its local run record
+- **THEN** every entry it wrote before is still on the branch, and its next entry is added beside them
+
+### Requirement: An entry that did not reach the branch goes with the host's next
+When an entry cannot be pushed, crew SHALL say so once on standard error, naming the entry, the branch and why, and the command SHALL do its work and exit as it would have. The entry SHALL stay in the host's file. The host's next push of the partition's record, by its next entry or by `crew events --push`, SHALL first push each of the host's entries the branch lacks, each as its own commit, oldest first. `crew events --push` SHALL say when the branch already holds every entry the host has.
+
+#### Scenario: GitHub out of reach
+- **WHEN** a conductor on the box starts a stage while github.com cannot be reached
+- **THEN** the stage starts, the command says once that its entry did not reach `wldn/main` and why, and the entry is in the box's file
+
+#### Scenario: The next entry
+- **WHEN** the box's next entry of wldn is pushed once github.com answers again
+- **THEN** `wldn/main` gains the missed entry's commit, then the new entry's, and nothing is pushed twice
+
+#### Scenario: By hand
+- **WHEN** `crew events --push --label wldn` runs on the box after a missed push
+- **THEN** each entry the branch lacks is pushed as its own commit, and run again it says there is nothing left to push
+
+#### Scenario: An entry that fails its check
+- **WHEN** an entry in the host's file is cut short, so the day's file would fail `recfix --check`
+- **THEN** nothing of the record is pushed, the command names the file and why on standard error, and the act it recorded stands
+
+### Requirement: Entries are read from the flywheel's branch alone
+`crew events [--label <label>] [--about <object>] [--since <time>] [--json]` and `crew trace <object>` SHALL read the run record from the partition's branch of its state repository, and SHALL ask no host for it. When the branch cannot be read they SHALL say so, naming the branch.
+
+#### Scenario: A host is asleep
+- **WHEN** macbook-pro, which wrote entries of wldn and pushed them, does not answer
+- **THEN** `crew events --label wldn` prints its entries with the other hosts' in time order, and names no host
+
+#### Scenario: Two hosts
+- **WHEN** `crew events --label wldn` runs on mac-studio while wldn's teams run on the box
+- **THEN** the box's entries and mac-studio's are printed together in time order, and no ssh is made for them
+
+#### Scenario: One object
+- **WHEN** `crew events --about unit/<unit>` runs
+- **THEN** only entries naming that unit in `On` or `From` are printed
+
+#### Scenario: The branch cannot be read
+- **WHEN** `crew events --label wldn` runs while the state repository cannot be fetched
+- **THEN** it names `wldn/main` as not read, and why
+
+### Requirement: A bolt's landing entry records its time by holder
+Every `bolt.land` entry crew writes for a bolt a team held SHALL record two things: the bolt's age, in whole minutes, from its newest give to its landing, as `Age`; and the minutes of that age each holder held, as `Split`, in the order team, kit, team-or-kit, user, hold, nobody, each named with its minutes, `team 130, kit 12, team-or-kit 0, user 40, hold 0, nobody 3`, team-or-kit being the minutes of a submission's stay in sluice that crew can't split between queued and under test. The split SHALL be made by the same rule the board's head line uses, and its minutes SHALL sum to `Age`. The landing SHALL be the moment sluice's record says the bolt's landing submission was decided, or the entry's own time when no submission of the bolt landed. sluice's record of the bolt's submissions SHALL be read once, on the team's host, when the entry is written. When the give or that record can't be read, the entry SHALL carry neither field, and the landing SHALL go on as it does today.
+
+#### Scenario: A bolt lands
+- **WHEN** main-level ops closes the landing of `b`, given 6h 10m before sluice landed it, with team 3h 20m, kit 25m, user 2h 05m, hold 0 and nobody 20m
+- **THEN** its `bolt.land` entry holds `Age: 370` and `Split: team 200, kit 25, team-or-kit 0, user 125, hold 0, nobody 20`
+
+#### Scenario: A merge whose checks' start sluice's record does not keep
+- **WHEN** `b`'s merge `#41` stood in sluice for seventeen minutes, and sluice's record read at the landing gives when it was submitted and decided but not when its checks began
+- **THEN** those seventeen minutes are in `Split`'s team-or-kit, not its team or its kit, and `Split` still sums to `Age`
+
+#### Scenario: sluice's record can't be read at the landing
+- **WHEN** `sluice status` fails on the team's host as `b`'s landing is recorded
+- **THEN** the `bolt.land` entry is written without `Age` and `Split`, and the landing is closed as it is today
+
+### Requirement: A team's crossing is an entry
+When a crossed team's conductor and ops have both been ended for its crossing, crew SHALL record one `team.cross` entry on `team/<team>`, naming the stream its work now runs in, so `crew trace team/<team>` reads when it crossed.
+
+#### Scenario: Traced
+- **WHEN** crw-4's conductor and ops are ended at their stops after its last bolt of today's path lands
+- **THEN** one `team.cross` entry on `team/crw-4` names stream `madswan`, and `crew trace team/crw-4` shows it after `x`'s landing
+
+### Requirement: An ask and a turn are entries
+Each ask crew writes SHALL be one `ask` entry in the asked partition's record, naming the role's run and the record the ask names, with the length of its words and never their text. A run's start SHALL be one `turn.begin` entry naming the run and how many it took, and its end one `turn.end` entry. `crew trace agent/<label>-<role>` SHALL list them with the rest of the role's entries.
+
+#### Scenario: A tell that is an ask
+- **WHEN** `crew tell madswan-planner "<forty characters>"` is written as an ask
+- **THEN** madswan's record holds an `ask` entry on `agent/madswan-planner` with `Chars: 40` and not the text
+
+#### Scenario: A turn traced
+- **WHEN** the planner's run took two asks and ended
+- **THEN** `crew trace agent/madswan-planner` lists the two asks, the `turn.begin` taking two and the `turn.end`

@@ -1,0 +1,151 @@
+{
+  "status": {
+    "places": [
+      {
+        "place": "/Users/chuck/Code/github_afterthought/crew/places/change--teams-cross-to-flume-as-their-bolts-land@1793474400",
+        "repository": "/Users/chuck/Code/github_afterthought/crew",
+        "kind": "change",
+        "version": 2,
+        "declared": "flume",
+        "name": "teams-cross-to-flume-as-their-bolts-land",
+        "branch": "change/teams-cross-to-flume-as-their-bolts-land",
+        "base": "bolt/crew-runs-its-work-through-flume",
+        "mark": null,
+        "lands": true,
+        "phase": {
+          "tidied": {
+            "over": "dropped",
+            "at": 1793474400,
+            "pending_for": []
+          }
+        },
+        "readiness": {
+          "steps": [
+            {
+              "step": "toolchain",
+              "passed": true,
+              "words": ""
+            },
+            {
+              "step": "moon setup",
+              "passed": true,
+              "words": ""
+            }
+          ]
+        },
+        "stages": [
+          {
+            "name": "construct",
+            "state": "delivered",
+            "starts": 1,
+            "end": {
+              "head": "1157cfbbf55259781285520cb71d65e7b162a0cc",
+              "report": null,
+              "words": null,
+              "needs": null,
+              "last_words": null,
+              "commits": [],
+              "screen": null,
+              "made": []
+            },
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          },
+          {
+            "name": "code",
+            "state": "stopped",
+            "starts": 3,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false,
+            "group": {
+              "place": 3,
+              "of": 9,
+              "number": "3",
+              "title": "The exchange with the runner"
+            }
+          },
+          {
+            "name": "verify",
+            "state": "not_reached",
+            "starts": 0,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          }
+        ],
+        "current": "code",
+        "agent": null,
+        "head": null,
+        "delivered": null,
+        "tasks": null,
+        "submission": null,
+        "refused_acts": [],
+        "cannot_read": [],
+        "failures": [],
+        "recipients": [
+          "herdr:w1:p0@/Users/chuck/.config/herdr/sessions/madswan/herdr.sock"
+        ],
+        "hold_words": {
+          "code": "Wait for the user's approval of the proposal on its Pending You card."
+        },
+        "waiting_on": null,
+        "stalled": false,
+        "holds": [],
+        "priority": 0,
+        "stream": {
+          "name": "default",
+          "from": "intent"
+        },
+        "intent": {
+          "from": "base",
+          "repository": "/Users/chuck/Code/github_afterthought/crew",
+          "base": "bolt/crew-runs-its-work-through-flume",
+          "digest": "1a2b55a1d0ae0ac658e22bdf1e9c35b6bb00d2a600f8a47a5ef8f18c5194c4ed"
+        },
+        "moves": [],
+        "unsettled": [],
+        "ends": [],
+        "clues": {
+          "stage": "code 3/9",
+          "state": "working",
+          "title": "code 3/9 · working",
+          "display_agent": "change--teams-cross-to-flume-as-their-bolts-land",
+          "shown_at": {
+            "place": "herdr:w2:tB@/Users/chuck/.config/herdr/sessions/flume/herdr.sock",
+            "agent": "herdr:w2:pC@/Users/chuck/.config/herdr/sessions/flume/herdr.sock",
+            "base": null
+          }
+        }
+      }
+    ],
+    "host": {
+      "running": 9,
+      "bound": null,
+      "room": null,
+      "queue": [],
+      "streams": [
+        {
+          "name": "default",
+          "priority": 0,
+          "running": 9,
+          "bound": null,
+          "room": null,
+          "queue": []
+        }
+      ],
+      "pools": [],
+      "terminal_kept": [],
+      "addresses": [],
+      "watch": {
+        "bound": {
+          "seconds": 30
+        }
+      },
+      "bases": []
+    }
+  }
+}
