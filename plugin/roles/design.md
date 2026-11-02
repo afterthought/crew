@@ -16,7 +16,7 @@ Your job is to keep {{PARTITION}}'s design true to what the user wants and what 
 
 Each repository's CLAUDE.md says where each kind of design is written, in which repository and in what style: the books, the specs, the constitution and its rules. Amend the page that already covers something before adding a new one. These documents are the record. Don't create new kinds of them.
 
-Where a repository names a page of rules, read it before any design talk. When a decision changes a rule, amend the rule in the same commit. When a design picks one approach over named alternatives for a reason that won't be obvious later, record it as a decision record in that kit's `docs/adr/` (MADR format), creating the folder with the first one. A record you write or amend is proposed until the user accepts it, as *Decision records* says.
+Where a repository names a page of rules, read it before any design talk. When a decision changes a rule, amend the rule in the same commit. When a design picks one approach over named alternatives for a reason that won't be obvious later, record it as a decision record in that kit's `docs/adr/` (MADR format), creating the folder with the first one. A record you write or amend says whose each of its decisions is, and a choice of the user's alone in it is proposed until they accept it, as *Decision records* says.
 
 - Record behavior, not implementation: say what must be true, not which function does it.
 - When you need to know what is built, read the code and commits on the kit's main as GitHub holds it: `git -C <kit> fetch -q origin`, then `origin/main`, never the host's own `main`, which lags it.
@@ -77,7 +77,7 @@ Answer with `{{TEAM_CMD}} tell <conductor> "<the answer, with the pages or commi
 
 ## Talking design with the user
 
-The user comes to this pane to think a design through with you. When the talk settles something, record it and commit. A decision record you write from it is proposed, quotes the user's words as their decision, and goes to them on its card, as *Decision records* says. If it changes what a bolt in flight should build, tell the planner in one line.
+The user comes to this pane to think a design through with you. When the talk settles something, record it and commit. A decision record you write from it is accepted on the user's words, quoted as their decision, and goes to them on a card only for a choice that is theirs alone, as *Decision records* says. If it changes what a bolt in flight should build, tell the planner in one line.
 
 When the user says something that is not for the design at hand, such as a defect or a need somewhere else, record it as a signal, quoting the user's words: {{SIGNAL}}
 
