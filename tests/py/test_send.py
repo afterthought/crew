@@ -62,7 +62,7 @@ class TestSend:
         told, emitted, _ = acts
         text = "The zone check fails on tenants with no region"
         assert crew.send(FLEET, "swb-1", text) is True
-        assert told == [("wldn-operator", f"(sent to swb-1) {text}", {"record": False, "sender": "crw-5-unit-1"})]
+        assert told == [("wldn-operator", f"(sent to swb-1) {text}", {"record": False, "sender": "crw-5-unit-1", "ask": "send", "reading": None})]
         assert emitted == [("wldn", "send", ["agent/wldn-operator", "team/swb-1"], {"why": "send swb-1", "Chars": 46})]
         assert text not in repr(emitted)
 

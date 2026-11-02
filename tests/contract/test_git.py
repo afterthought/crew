@@ -1454,3 +1454,69 @@ def test_two_take_main_merges_from_one_tip_neither_an_ancestor_of_the_other_hold
     for one, other in ((host, github), (github, host)):
         assert subprocess.run(["git", "-C", str(repo.path), "merge-base", "--is-ancestor", one, other]).returncode == 1
     assert own_work(fleet, host) == ([], [])
+
+
+def runner_files(host, answers="", places=""):
+    """A runner's branch as a host's runner writes it (runner.RUNNER, ANSWERS, PLACES)."""
+    import runner
+    return {"runner.rec": runner.RUNNER + f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n",
+            "answers.rec": runner.ANSWERS + answers, "places.rec": runner.PLACES + places}
+
+
+def test_the_runners_branches_come_with_the_flywheels_branch_in_one_fetch_and_each_hosts_is_read_at_its_tip(state, monkeypatch):
+    """plan.tip_of's fetch of <label>/main brings <label>/runner/* with it (plan.beside, plan.12), and plan.runners reads
+    each host's three files at its tip in crew's cache with no fetch of its own, checked by recfix (Decision 4 of
+    teams-cross-to-flume-as-their-bolts-land): deneb's answer and place for request 3 are read; alpha, which has no
+    branch, is named; a host whose file recfix refuses hides only its own work; and a host's branch gone from the
+    repository is gone from the cache at the next fetch."""
+    import json
+    import plan
+    import runner
+    status = json.dumps({"status": {"places": [{"place": "/crew/places/change--a", "phase": "live"}], "host": {}}})
+    deneb = state.push("madswan/runner/deneb", runner_files(
+        "deneb", "\nRequest: 3\nOutcome: launched\nPlace: /crew/places/change--a\nAt: 2026-10-31T12:01:00Z\n",
+        f"\nRequest: 3\nPlace: /crew/places/change--a\nAt: 2026-10-31T12:02:00Z\nStatus: {status}\n"))
+    state.push("madswan/runner/gamma", dict(runner_files("gamma"), **{"answers.rec": runner.ANSWERS + "\nRequest: 1\nOutcome: queued\nAt: 2026-10-31T12:01:00Z\n"}))
+    state.push("swancloud/runner/deneb", runner_files("deneb"))  # another partition's runner on the same repository
+    fetches = []
+    git = plan.git
+    monkeypatch.setattr(plan, "git", lambda repo, *args, **k: (fetches.append(args) if args[0] == "fetch" else None, git(repo, *args, **k))[1])
+
+    reads = plan.runners(state.REPO, state.LABEL)
+    assert len(fetches) == 1 and "+refs/heads/madswan/runner/*:refs/crew/madswan/runner/*" in fetches[0] and "--prune" in fetches[0]
+    assert sorted(reads) == ["deneb", "gamma"]
+    d = reads["deneb"]
+    assert (d["why"], d["tip"], d["runner"].get("Version")) == (None, deneb, "0.1.0")
+    assert d["answers"][3].get("Outcome") == "launched" and d["places"][3]["status"] == json.loads(status)
+    assert reads["gamma"]["why"].startswith("gamma's runner can't be read: madswan/runner/gamma at ")
+    assert "answers.rec fails recfix --check" in reads["gamma"]["why"]
+    assert runner.of_host(reads, state.LABEL, "alpha")["why"] == "no runner answers on alpha: madswan/runner/alpha does not exist"
+    assert plan.runners(state.REPO, state.LABEL) is reads and len(fetches) == 1
+
+    state.drop("madswan/runner/gamma")
+    plan.tip_of(state.REPO, "madswan/main", fresh=True)
+    plan.READ.memory.clear()
+    assert sorted(plan.runners(state.REPO, state.LABEL)) == ["deneb"]
+    subprocess.run(["git", "-C", str(plan.cache(state.REPO)), "pack-refs", "--all"], check=True)
+    plan.READ.memory.clear()
+    assert plan.runner_tips(state.REPO, state.LABEL) == {"deneb": deneb}
+
+
+def test_main_holds_reads_gits_exit_for_each_commit_a_crossed_bolts_places_landed_at(repo):
+    """plan.MAIN_HOLDS, which a crossed bolt's close reads (plan.main_holds, runner.unlanded; Decision 12 of
+    teams-cross-to-flume-as-their-bolts-land): git merge-base --is-ancestor exits 0 for a commit main holds, the bolt's
+    merge landed there, 1 for one on a bolt that has not landed, and neither for a commit the checkout lacks, which crew
+    reads as untold (read.1)."""
+    import plan
+    repo.commit("chore: start", {"README.md": "r\n"})
+    repo.git("checkout", "-q", "-b", "bolt/x")
+    landed = repo.commit("feat: a", {"a": "a\n"})
+    repo.git("checkout", "-q", "-b", "bolt/y", "main")
+    waiting = repo.commit("feat: b", {"b": "b\n"})
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "--no-ff", "-m", "chore(land): x", "bolt/x")
+    gone = "0" * 40
+    r = subprocess.run(["bash", "-c", plan.MAIN_HOLDS, "crew", str(repo.path), "main", landed, waiting, gone], capture_output=True, text=True)
+    assert r.returncode == 0
+    said = dict(l.split() for l in r.stdout.splitlines())
+    assert (said[landed], said[waiting]) == ("0", "1") and said[gone] not in ("0", "1")
