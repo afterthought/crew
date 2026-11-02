@@ -30,7 +30,7 @@ compacted() {
 }
 brief() { python3 -c 'import json, sys; a = json.loads(open(sys.argv[1]).read())["argv"]; sys.stdout.write(a[a.index("--append-system-prompt") + 1])' "$CREW_TEST_CLAUDE_LOG"; }
 
-opus='--model claude-opus-5-5[1m]'; fable='--model claude-fable-5-1'
+opus='--model claude-opus-5-5[1m]'
 role chuck-herdr-alpha swb-1 conductor;     has "$launch" "$opus --effort high"; has "$launch" "--name swb-1-conductor"
 first=$(jq -r .session "$CREW_TEST_CLAUDE_LOG")
 has "$launch" "cwd $box/switchboard-kit/main"; has "$launch" "--add-dir $box/switchboard-kit --add-dir $box/willdan-blueprints/main"
@@ -42,16 +42,16 @@ role chuck-herdr-alpha swb-1 unit-2 verify; has "$launch" "$opus --effort high"
 role chuck-herdr-alpha swb-1 unit-2 settle; has "$launch" "$opus --effort xhigh"
 role chuck-herdr-alpha swb-1 unit-2 merge;  has "$launch" "$opus --effort xhigh"
 role chuck-herdr-alpha swb-1 unit-2 fix;    has "$launch" "$opus --effort xhigh"
-role chuck-herdr-alpha wldn design;         has "$launch" "$fable --effort xhigh"; has "$launch" "--name wldn-design"
+role chuck-herdr-alpha wldn design;         has "$launch" "$opus --effort xhigh"; has "$launch" "--name wldn-design"
 has "$launch" "cwd $box/willdan-blueprints/main"; has "$launch" "--add-dir $box/atlas-kit/main --add-dir $box/breadboard-kit/main --add-dir $box/switchboard-kit/main"
-role chuck-herdr-alpha wldn planner;        has "$launch" "$fable --effort xhigh"; has "$launch" "--name wldn-planner"
+role chuck-herdr-alpha wldn planner;        has "$launch" "$opus --effort xhigh"; has "$launch" "--name wldn-planner"
 role chuck-herdr-alpha wldn ops;            has "$launch" "$opus --effort high"; has "$launch" "--name wldn-ops"
 role chuck-herdr-alpha wldn reviewer;       has "$launch" "$opus --effort high"; has "$launch" "--name wldn-reviewer"
 has "$launch" "cwd $box/willdan-blueprints/main"
 role chuck-herdr-alpha wldn dispatcher;     has "$launch" "$opus --effort medium"; has "$launch" "--name wldn-dispatch-chuck-herdr-alpha"
 role chuck-herdr-alpha wldn operator;       has "$launch" "$opus --effort medium"; has "$launch" "--name wldn-operator"
 has "$launch" "cwd $box/willdan-blueprints/main"
-role mac-studio madswan planner;            has "$launch" "$fable --effort xhigh"; has "$launch" "cwd $mac/blueprints/main"
+role mac-studio madswan planner;            has "$launch" "$opus --effort xhigh"; has "$launch" "cwd $mac/blueprints/main"
 ok "every role starts on its definition's model and effort"
 
 role chuck-herdr-alpha swb-1 unit-2 verify; has "$launch" "role verify"
@@ -65,8 +65,8 @@ eq "${ctx#*$'\n\n'}" "$(brief)"
 ok "a session herdr resumed is given back at a compaction the brief its role was started with, a unit slot's its stage's"
 
 edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'max'}, 'operator': {'model': 'claude-opus-5-5'}}; $(team swb-1)['roles'] = {'coder': {'effort': 'max', 'model': 'claude-sonnet-5-5'}}"
-role chuck-herdr-alpha wldn planner;        has "$launch" "$fable --effort max"
-role mac-studio madswan planner;            has "$launch" "$fable --effort xhigh"
+role chuck-herdr-alpha wldn planner;        has "$launch" "$opus --effort max"
+role mac-studio madswan planner;            has "$launch" "$opus --effort xhigh"
 role chuck-herdr-alpha wldn operator;       has "$launch" "--model claude-opus-5-5 --effort medium"
 role chuck-herdr-alpha swb-1 unit-2 merge;  has "$launch" "--model claude-sonnet-5-5 --effort max"
 role chuck-herdr-alpha swb-1 unit-2 construct; has "$launch" "$opus --effort high"
