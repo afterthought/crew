@@ -7,8 +7,8 @@ Every definition SHALL set this model, each with its 1M-token context, and this 
 
 | role | model | effort |
 |---|---|---|
-| design agent | Opus 5.5 | xhigh |
-| planner | Opus 5.5 | xhigh |
+| design agent | Fable 5.1 | xhigh |
+| planner | Fable 5.1 | xhigh |
 | curator | Fable 5.1 | high |
 | conductor | Opus 5.5 | high |
 | ops (team and main level) | Opus 5.5 | high |
