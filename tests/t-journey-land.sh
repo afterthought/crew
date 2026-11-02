@@ -37,7 +37,9 @@
 # landing outlives the crew bolt submit that queued it (plan.21): killed once sluice has queued the landing, its waiter
 # on the team's host calls sluice wait again while sluice is undecided, then reads the landing from sluice's record,
 # recording it landed and closing the bolt, and with the waiter stopped too, the conductor's next command reads and
-# closes it; a bolt no team holds lands once
+# closes it; with wldn's ops, planner and design agent running as their kinds, a bolt submitted from ops's run
+# returns once it is queued, and the landing's read asks the planner and the design agent, or ops with sluice's words
+# for one refused; a bolt no team holds lands once
 # its unit's change is on main; a delete sluice refuses is named in its words, the branch kept on GitHub; a bolt made
 # before gives went through sluice is deleted there once its landing's pull request put it there, no create run for
 # it; and dropping a held bolt removes its places and has sluice delete its branch, which holding a merge main lacks
@@ -59,7 +61,7 @@
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
-# Reads: plugin/hooks/ plugin/lib/board.py tests/units.sh
+# Reads: plugin/hooks/ plugin/lib/board.py plugin/roles/ tests/units.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/units.sh"
 units_world '[unit(u, "tenant-environments") for u in "abe"]; unit("c", "console-pages")
@@ -89,6 +91,8 @@ unset CREW_AGENT
 git -C "$k" worktree remove "$land"
 ok "no unit starts on a bolt while its landing is in flight, and one starts once the outcome is in though the landing's worktree stands"
 crew bolt give swb-2 console-pages >/dev/null 2>&1; place "$k" console-pages c >/dev/null
+# its construct started on this host, so its place is crew's to remove (plan.9)
+as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act stage.start --on stage/c/construct --on unit/c >/dev/null
 echo "# switchboard-kit, main's" > "$k/README.md"
 # From here main takes pull requests, as crew's own does: a landing opens one from the bolt's branch (bolt-teams).
 rewrite "$k/.config/sluice.toml" '/^\[branches.main\]$/,/^remote/ s/^remote = "origin"$/&\n\n[branches.main.pull_requests]\nreviews = 0/'
@@ -486,13 +490,42 @@ queued() { [[ $(field mac-studio bolt.submit Outcome "bolt/$1") == queued ]] &&
   grep -q "^runs(mac-studio): bolt.submit bolt/$1 " <<<"$(git --git-dir "$ws" log --format=%s wldn/main)"; }
 # closed <bolt>: the plan holds the bolt no more
 closed() { [[ $(plan -t Bolt -e "Bolt = '$1'" -c) == 0 ]]; }
+# submitters <pid> <bolts>: the python of each crew bolt submit <bolts> among the processes <pid> started, this run's
+# alone: a pattern matched across the host ends another run's of this test, as sluice runs it side by side (tests.9)
+submitters() {
+  local c re="lib/plan\.py bolt submit $2\$"
+  for c in $(pgrep -P "$1"); do
+    [[ $(ps -ww -o command= -p "$c") =~ $re ]] && echo "$c"
+    submitters "$c" "$2"
+  done
+}
 # killed <bolt> <pid>: crew bolt submit of the bolt, run in the background as <pid>, killed with the python it runs
 killed() {
-  pkill -f "lib/plan.py bolt submit $1\$" || true; wait "$2" 2>/dev/null || true
-  until_ok bash -c '! pgrep -f "lib/plan.py bolt submit $1\$" >/dev/null' _ "$1" || fail "crew bolt submit $1 was not stopped"
+  local p; p=$(submitters "$2" "$1"); [[ -n $p ]] || fail "crew bolt submit $1 was not running under $2"
+  kill $p 2>/dev/null || true; wait "$2" 2>/dev/null || true
+  until_ok bash -c 'for p; do ! kill -0 "$p" 2>/dev/null || exit 1; done' _ $p || fail "crew bolt submit $1 was not stopped"
 }
-# A test that stops before it lets sluice decide leaves no waiter of its own calling sluice wait.
-trap 'rm -f "$T/sluice-wait-holds"; pkill -f "lib/plan.py bolt submit ((far|near)-reach|north south east)\$" || true' EXIT
+# decoy: another run's landing on the host, started outside this run's processes, its command line crew bolt submit
+# far-reach's, its pid in $decoy; it ends with this run's scratch folder, or in thirty minutes. spared <what>: the decoy
+# outlived what this run just ended, and is ended. Each lives only around one of this run's ends, since a copy of this
+# test from before its kills were its own ends it from anywhere on the host.
+mkdir -p "$T/decoy/lib"
+printf '%s\n' 'import pathlib, time' 'end = time.time() + 1800' \
+  'while pathlib.Path(__file__).exists() and time.time() < end:' '    time.sleep(1)' > "$T/decoy/lib/plan.py"
+decoy=
+decoy() {
+  (python3 "$T/decoy/lib/plan.py" bolt submit far-reach </dev/null >/dev/null 2>&1 & echo $! > "$T/decoy.pid")
+  decoy=$(cat "$T/decoy.pid")
+  until_ok bash -c '[[ $(ps -ww -o command= -p "$1") == *"/decoy/lib/plan.py bolt submit far-reach" ]]' _ "$decoy" ||
+    fail "the decoy did not start"
+}
+spared() {
+  kill -0 "$decoy" 2>/dev/null || fail "$1 ended another run's crew bolt submit far-reach on the host"
+  kill "$decoy" 2>/dev/null || true; decoy=
+}
+# A test that stops before it lets sluice decide leaves no waiter of its own calling sluice wait, nor a submitter.
+leave() { rm -f "$T/sluice-wait-holds"; kill $(submitters $$ "((far|near)-reach|north south east)") 2>/dev/null || true; }
+trap 'leave; [[ -z $decoy ]] || kill "$decoy" 2>/dev/null || true' EXIT
 crew bolt new far-reach "The zones reach far." --repo switchboard-kit >/dev/null
 crew bolt give swb-1 far-reach >/dev/null 2>&1
 crew unit add far-one "Unit far-one." --bolt far-reach >/dev/null
@@ -501,7 +534,9 @@ touch "$T/sluice-wait-holds"  # sluice has not decided
 (export CREW_AGENT=wldn-ops; crew bolt submit far-reach > "$T/far-reach.out" 2>&1) &
 submitter=$!
 until_ok queued far-reach || fail "the landing was not recorded queued:"$'\n'"$(cat "$T/far-reach.out")"
+decoy
 killed far-reach "$submitter"
+spared "ending this run's crew bolt submit far-reach"
 n=$(field mac-studio bolt.submit Submission bolt/far-reach)
 far=$kd/places/land-far-reach
 waiter=$(cat "$(git -C "$far" rev-parse --absolute-git-dir)/crew-landing")
@@ -552,6 +587,40 @@ eq "$(plan -t Bolt -e "Bolt = 'near-reach'" -c)" "0"
 eq "$(field $box bolt.submit Outcome bolt/near-reach) $(field $box bolt.land By bolt/near-reach)" "landed wldn-ops"
 has "$(field $box bolt.land Why bolt/near-reach)" "read from sluice's record by swb-1-conductor"
 ok "a landing whose submitter and waiter were both stopped before sluice decided is read by the conductor's next command, which records it landed and closes the bolt"
+
+# wldn's ops, planner and design agent run as their kinds: a bolt submitted from ops's run returns once sluice has
+# queued it, waiting on nothing, and its waiter's read of the landing asks the planner and the design agent in the
+# landing's commit; a second, which conflicts with what main took since it was cut, is read refused and asks ops with
+# sluice's words, keyed by its submission (design Decision 12).
+role_stream wldn ops wldn-main; role_stream wldn planner wldn-main; role_stream wldn design wldn-main
+run_ops() { HOST=$box FLUME_PLACE=$T/flume/places/crew-ops--wldn "$@"; }
+asks() { git --git-dir "$ws" show wldn/main:asks.rec | recsel -t Ask "$@"; }
+crew bolt new run-lands "The run's zones." --repo switchboard-kit >/dev/null
+crew bolt give swb-1 run-lands >/dev/null 2>&1 || fail "swb-1 was not given run-lands"
+on_bolt run-lands "run lands" "feat: the run's zones" || fail "the bolt took no commit"
+touch "$T/sluice-wait-holds"
+run_ops expect_ok crew bolt submit run-lands
+has "$out" "bolt/run-lands is queued on switchboard-kit's main as #"
+has "$out" "this run waits on nothing"
+lacks "$out" "landed on switchboard-kit's main at"
+eq "$(field $box bolt.submit Outcome bolt/run-lands) $(field $box bolt.submit By bolt/run-lands)" "queued wldn-ops"
+rm "$T/sluice-wait-holds"
+until_ok closed run-lands || fail "the waiter's read did not close run-lands:"$'\n'"$(calls)"
+eq "$(asks -e "Names = 'bolt/run-lands'" -P Role,What,Key | tr -s '\n' ' ')" "planner landed landed/run-lands design landed landed/run-lands "
+eq "$(git --git-dir "$ws" log -1 --format=%s "$(act_tip)" -- asks.rec)" "plan(run-lands): land the bolt (wldn-ops)"
+crew bolt new run-held "The run's other zones." --repo switchboard-kit >/dev/null
+crew bolt give swb-1 run-held >/dev/null 2>&1 || fail "swb-1 was not given run-held"
+on_bolt run-held "run held" "feat: the run's other zones" || fail "the bolt took no commit"
+git -C "$k" pull -q origin main; echo "main's own" >> "$k/zones.txt"; commit_all "$k" "feat: main's zones"; push "$k"
+run_ops crew bolt submit run-held >/dev/null 2>&1 || fail "a landing queued from ops's run failed its command"
+until_ok bash -c '[[ $(git --git-dir "$1" show wldn/main:asks.rec 2>/dev/null | recsel -t Ask -e "Role = '"'ops'"'" -c) == 1 ]]' _ "$ws" ||
+  fail "the refused landing asked ops nothing:"$'\n'"$(calls)"
+n=$(field $box bolt.submit Submission bolt/run-held)
+eq "$(asks -e "Role = 'ops'" -P From,What,Names,Key | tr '\n' ' ')" "crew landed bolt/run-held submission/switchboard-kit/$n "
+has "$(asks -e "Role = 'ops'" -P Words)" "conflict: zones.txt"
+ok "a bolt submitted from ops's run returns once it is queued, its landing asking the planner and the design agent in its commit, and one that conflicts asking ops with sluice's words"
+crew bolt drop run-held "its zones conflict with main's" >/dev/null 2>&1 || fail "run-held could not be dropped"
+role_stream wldn ops false; role_stream wldn planner false; role_stream wldn design false
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null
@@ -837,3 +906,9 @@ has "$(told swb-1-conductor)" "take-main-$(short origin/main)"
 eq "$(field $box forecast Reached bolt/west)" "told"
 eq "$(field $box landing.left Heads kit/switchboard-kit)" "near@$(short bolt/near)"
 ok "a bolt the user left keeps its box when main moves under it, the card saying it would take main first and its conductor told nothing; a send ticking it, read by ops, tells the take-main fix and submits nothing of it"
+
+# This run's end stops its own landings' submitters and nothing of another run's on the host.
+decoy
+leave
+spared "this run's end"
+ok "the test's end stops its own landings' submitters and none of another run's beside it on the host"

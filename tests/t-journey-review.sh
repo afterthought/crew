@@ -8,11 +8,13 @@
 # level's, an old batch card's on its unit's team's host, and none for a verify report, which no row has; the rail's
 # refresh tells the planner once that the user sent the reading, its crew card read returns the user's words and
 # closes the batch's card, ending its session, and a reading approved with no words is recorded read at the refresh;
-# crew card end ends an old card's, and a rail read sweeps what is dead; and writes and tells reach the agents they should, never one waiting on a question. Which changes are due,
+# crew card end ends an old card's, and a rail read sweeps what is dead; writes and tells reach the agents they should,
+# never one waiting on a question; and a reviewer that runs as its kind is asked its batch and hands it back, asking the
+# planner. Which changes are due,
 # what each row and card says, whose key a card may take and in what form, and what a session does are logic cases
 # (tests/py/test_batches.py, test_rail.py, test_cards.py, test_review.py); each step here checks a command's wiring
 # once.
-# Reads: plugin/hooks/
+# Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -270,3 +272,35 @@ echo '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","
 expect_ok crew tell swb-1-conductor "Hold the zone work."
 eq "$(grep "^$box wldn-1 agent prompt swb-1-conductor " "$CREW_TEST_LOG")" "$box wldn-1 agent prompt swb-1-conductor '[crew tell from $me@mac-studio] Hold the zone work.'"
 ok "a write to a held bolt tells its conductor and a bolt added the dispatcher; crew tell marks its sender, types nothing to an agent herdr reads blocked or crew's hook saw open a question, and is delivered once the question is answered"
+
+# wldn's reviewer and planner run as their kinds: crew review asks the reviewer the batch, opening no tab; the
+# reviewer's run takes it with crew role start and hands it back with crew review delivered once its summary is
+# written, which records the batch, raises its card in the planner's name and asks the planner, typing into no pane.
+role_stream wldn reviewer wldn-main; role_stream wldn planner wldn-main
+build swb-1 y1 "$kd"
+: > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
+CREW_AGENT=wldn-planner expect_ok crew review wldn
+summary4=$(dirname "$summary")/batch-wldn-4.md
+has "$out" "wldn-reviewer is asked batch 4 of wldn, into $summary4"
+asks() { git --git-dir "$ws" show wldn/main:asks.rec | recsel -t Ask "$@"; }
+eq "$(asks -e "Role = 'reviewer'" -P What,Names,Key | tr '\n' ' ')" "batch batch/4 batch/4 "
+has "$(asks -e "Role = 'reviewer'" -P Words)" "Review batch 4 of wldn, 1 change, and write its summary to $summary4. y1 (swb-1, switchboard-kit on $box"
+[[ -s $CREW_TEST_CLAUDE_LOG ]] && fail "crew review started a reviewer that runs as its kind"
+eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator"
+CREW_AGENT=wldn-planner expect_fail "wldn runs its reviewer as its kind, so crew review --wait waits on nothing" crew review wldn --wait
+reviewer() { HOST=$box FLUME_PLACE=$T/flume/places/crew-reviewer--wldn "$@"; }
+reviewer expect_fail "wldn-reviewer has no open turn: crew role start takes the batches asked of it first" crew review delivered
+reviewer expect_ok crew role start
+has "$out" "ask $(asks -e "Role = 'reviewer'" -P Id): batch from wldn-planner on batch/4"
+reviewer expect_fail "batch 4's summary $summary4 is not written since its start, so it is not delivered" crew review delivered
+printf '# Batch 4\n\n## y1 (swb-1)\n\ny1 does its part.\n' > "$summary4"
+reviewer expect_ok crew review delivered
+has "$out" "batch 4 of wldn is delivered: $summary4"
+eq "$(entries $box review.batch | jq -r 'select(.Batch == "4") | [(.On | join(" ")), .By] | join(" ")')" "batch/4 unit/y1 wldn-reviewer"
+c4=$(entries $box card.post | jq -r 'select(.Key == "batch/4") | .Card')
+[[ -n $c4 ]] || fail "no card of batch 4 was raised"
+eq "$(entries $box card.post | jq -r 'select(.Key == "batch/4") | .By')" "wldn-planner"
+eq "$(asks -e "Role = 'planner' && What = 'delivered'" -P From,Names,Key | tr '\n' ' ')" "wldn-reviewer batch/4 delivered/4 "
+has "$(asks -e "Role = 'planner' && What = 'delivered'" -P Words)" "call get_request (requestId $c4, name wldn-planner)"
+grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the delivery typed into the planner's pane"
+ok "a reviewer that runs as its kind is asked its batch with no tab, crew review --wait refuses for it, and its run hands the batch its turn took back once its summary is written, recorded, its card raised in the planner's name and the planner asked with the line that adopts it"

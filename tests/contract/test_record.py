@@ -3,7 +3,9 @@ under an older descriptor, before a card's Card and Key were allowed, takes an e
 record.unpushed writes that day to the branch under the descriptor that allows them, which recfix --check passes
 (record.emit, record.unpushed, the card hook's entries); and a chain of entries plan.land pushes to a bare repository
 standing for GitHub lands as one commit per entry, each changing its day's file alone, made again on top of another
-clone's push that moved the branch between its fetch and its push (plan.land, record.reach, state.1)."""
+clone's push that moved the branch between its fetch and its push (plan.land, record.reach, state.1); and a first-parent
+log's parents and Crew-Entry trailers, root commit and all, read a branch below a plan write whose entry is still in
+flight though another host's entry landed after it, and at its tip once the entry arrives (plan.read_point, read.5)."""
 import datetime
 import re
 import subprocess
@@ -137,3 +139,25 @@ def test_a_push_refused_because_another_clone_pushed_first_makes_the_chain_again
     assert git(github, "rev-parse", "wldn/main") == sha and git(github, "rev-list", "--count", "--first-parent", f"{sha}~2..{sha}") == "2"
     assert git(github, "rev-parse", f"{sha}~2") == theirs
     assert git(github, "show", f"wldn/main:runs/mac-studio/{DAY}.rec").count("Id: ") == 2
+
+
+def test_a_branch_is_read_below_a_write_whose_entry_is_in_flight_and_at_its_tip_once_it_arrives(github, tmp_path):
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", "--branch", "wldn/main", str(github), str(other))
+    seed = git(other, "rev-parse", "HEAD")
+    land, theirs = "20261030T140103Z-263678-deneb-74395-2", "20261030T140104Z-101010-mac-studio-512-1"
+
+    def entry(eid, host):
+        f = other / "runs" / host / "2026-10-30.rec"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text((f.read_text() if f.exists() else record.DESCRIPTOR) + f"\nId: {eid}\nAct: bolt.land\n")
+        git(other, "add", "runs")
+        git(other, "commit", "-q", "-m", f"runs({host}): bolt.land\n\nCrew-Entry: {eid}")
+        git(other, "push", "-q", "origin", "wldn/main")
+    (other / "plan.rec").write_text(plan.HEADER + "\n")
+    git(other, "commit", "-q", "-am", f"plan: bolt land y\n\nCrew-Entry: {land}")
+    git(other, "push", "-q", "origin", "wldn/main")
+    entry(theirs, "mac-studio")  # another host's entry lands between the write and its own
+    assert plan.fetch("WilldanGroup/crew-state", "wldn/main", fresh=True) == seed
+    entry(land, "deneb")
+    assert plan.fetch("WilldanGroup/crew-state", "wldn/main", fresh=True) == git(github, "rev-parse", "wldn/main")

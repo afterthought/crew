@@ -5,6 +5,8 @@ and each row above it; and the one decision of what the raise does with the kit'
 the raise's act on a stand-in for what it reaches beyond them. Its wiring is t-journey-land's and t-cards'."""
 import argparse
 import base64
+import contextlib
+import fcntl
 import json
 
 import pytest
@@ -191,6 +193,53 @@ def test_a_take_main_fix_in_flight_holds_its_row_as_taking_main_first_in_its_wor
     assert (y["box"], y["why"], y["takes_main"]) == (False, f'takes main first: take-main-e4f5a6b taking main in: "{words}"', True)
     assert (z["box"], z.get("takes_main")) == (False, None)
     assert z["why"] == f'held for a fix: A zone is missing. (fix/z/gap); takes main first: take-main-e4f5a6b taking main in: "{words}"'
+
+
+class TestCrossedTakesMain:
+    """A crossed team's landing refused for a conflict with main launches its take-main fix with sluice's words, once,
+    and its row says it takes main first (Decision 10 of teams-cross-to-flume-as-their-bolts-land, plan.8)."""
+    MAIN, WORDS = "4d3d9be" + "0" * 33, "#137 conflict: README.md, plugin/lib/plan.py"
+
+    @pytest.fixture(autouse=True)
+    def ops(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-ops")
+
+    def launched(self):
+        """crossed crw-4's x, its unit a launched as a give launches it."""
+        from facts import FactsWrite, crossed_fleet, flume_plan
+        fleet = crossed_fleet()
+        w = FactsWrite(flume_plan([("x", "crw-4", "flume")], [("a", "x", [], "unit", [])]), label="madswan")
+        plan.reach_places(fleet, w, "x", fleet["teams"]["crw-4"])
+        return w, fleet["teams"]["crw-4"]
+
+    def test_a_landing_refused_for_a_conflict_launches_one_take_main_fix_with_sluices_words(self):
+        """main-level ops's crew bolt submit x reads sluice refusing x for a conflict with main at 4d3d9be."""
+        import runner
+        w, t = self.launched()
+        act, host, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
+        assert (act, host, work, given["Kind"], given["Name"], given["Base"], given["Recipient"]) == (
+            "launch", "deneb", "fix/x/take-main-4d3d9be", "fix", "x--take-main-4d3d9be", "bolt/x", "madswan/planner")
+        assert given["Brief"] == (
+            "Take main into the bolt: merge origin/main, at 4d3d9be, into this place, cut from bolt/x, resolving each conflicting "
+            "path keeping both intents, main's and the bolt's; sluice refused the bolt's landing for its conflict with main: "
+            "#137 conflict: README.md, plugin/lib/plan.py")
+        assert given["Brief"].startswith(plan.TAKE_MAIN)
+
+    def test_read_twice_it_launches_nothing_more(self):
+        """A later read of the same refusal finds x--take-main-4d3d9be standing."""
+        import runner
+        w, t = self.launched()
+        act, host, work, given = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)
+        plan.request(w, act, host, work, **given)
+        assert runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS) is None
+
+    def test_its_row_says_it_takes_main_first(self):
+        import runner
+        w, t = self.launched()
+        brief = runner.take_main(w.plan, plan.requests_of(w).recs("Request"), "x", t, self.MAIN, self.WORDS)[3]["Brief"]
+        held = plan.refusals([submitted("x", "a" * 40, "#137 conflict: README.md, plugin/lib/plan.py")])
+        x, = plan.landing_rows(["x"], {"x": facts("x", fixes={"fix/x/take-main-4d3d9be": brief})}, held)
+        assert (x["box"], x["takes_main"], x["why"]) == (False, True, f'takes main first: take-main-4d3d9be taking main in: "{brief}"')
 
 
 def test_a_bolt_the_user_left_forecast_to_conflict_with_main_keeps_its_box_marked_that_it_would_take_main_first():
@@ -554,6 +603,38 @@ def test_once_every_ticked_bolt_landed_it_is_closed_naming_where_and_nothing_fol
 def test_one_left_out_is_closed_saying_so_and_a_new_card_follows_with_it_unticked():
     step = plan.landings_step([box("z")], answered("y@abc1234", "z@abc1234"), ["y"], {"z"}, landed={"y": "1" * 40})
     assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z.", ["z"], [])
+
+
+def test_a_landing_whose_entry_is_still_in_flight_is_read_as_still_landing_and_its_card_left():
+    """read.5, plan.2: bolt.land's plan write reaches the branch a commit before its entry, and a close read between
+    the two read the bolt gone with no landing recorded, saying 'Landed or left the plan' of a bolt that landed. The
+    branch is read at the parent of the oldest commit whose entry it lacks, so that close reads y still landing and
+    leaves the card, even when another host's entry lands between the write and its own, as a push refused under load
+    leaves it; once the entry arrives it says where y landed; and a bolt that left by an act whose entry is there and
+    is no landing is the one said to have landed or left the plan."""
+    before, land, other, drop = ("20261030T140025Z-933437-deneb-8163-114", "20261030T140103Z-263678-deneb-74395-2",
+                                 "20261030T140104Z-101010-mac-studio-512-1", "20261030T235959Z-000001-mac-studio-9-1")
+    deneb, studio = "runs/deneb/2026-10-30.rec", "runs/mac-studio/2026-10-30.rec"
+    record, theirs = f"Id: {before}\nAct: x\n\n", f"Id: {other}\nAct: stage.start\n\n"
+    o, a, b, c, d, x = "0" * 40, "a" * 40, "b" * 40, "c" * 40, "d" * 40, "e" * 40
+    half = [(b, a, [land]), (a, o, [before])]  # the plan's commit pushed, its entry not yet
+    assert plan.decision_at(half, {deneb: record}) == a
+    assert plan.landings_step([], answered("y@abc1234"), ["y"], {"y"}) == ("leave",)  # y in the plan at a
+    between = [(x, b, [other])] + half  # another host's entry, its own commit holding it, lands first
+    assert plan.decision_at(between, {deneb: record, studio: theirs}) == a
+    assert plan.decision_at([(d, b, [drop])] + half, {deneb: record, "runs/mac-studio/2026-10-31.rec":
+                                                     f"Id: {drop}\nAct: plan.drop\n\n"}) == a
+    whole = [(c, x, [land])] + between  # the entry's own commit follows
+    assert plan.decision_at(whole, {deneb: record + f"Id: {land}\nAct: bolt.land\n\n", studio: theirs}) == c
+    assert plan.landings_step([], answered("y@abc1234"), ["y"], set(), landed={"y": "1" * 40}) == (
+        "close", f"Landed on GitHub's main: y at 1111111;{TIMER}", None, [])
+    # a write recorded past midnight is found in its host's file of the next day; a commit naming none is read
+    assert plan.decision_at([(d, a, [drop]), (a, o, [before])], {"runs/mac-studio/2026-10-31.rec":
+                                                                f"Id: {drop}\nAct: plan.drop\n\n", deneb: record}) == d
+    assert plan.landings_step([], answered("y@abc1234"), ["y"], set()) == ("close", "Landed or left the plan: y.", None, [])
+    assert plan.decision_at([(d, a, []), (a, o, [before])], {deneb: record}) == d
+    assert plan.decision_at(half, {}) == o  # none of them holds its entry: the branch is read below them all
+    assert plan.decision_at([(a, None, [before])], {}) == a and plan.decision_at([], {}) is None
 
 
 STANDS = ("your send stands for it: it lands once its team's fix has only taken main in and sluice has proven it, with "
@@ -1015,6 +1096,17 @@ class LandActs:
         self.calls, self.emitted, self.told, self.asked, self.works, self.worked = [], [], [], [], dict(works or {}), []
         # The forecast: each bolt's conflicts with main ({bolt: [("main", paths)]}) at the revision main (None, unread).
         self.against_main, self.main, self.forecasts, self.kept = dict(against_main or {}), main, [], {}
+        # The kit's card's lock: each taking of it, and the kit it is held for while the raise is inside it.
+        self.locked, self.holding = [], None
+
+    @contextlib.contextmanager
+    def raising(self, label, kit):
+        self.locked.append((label, kit))
+        self.holding = kit
+        try:
+            yield
+        finally:
+            self.holding = None
 
     def land_row(self, label, bolt, host):
         self.asked.append((bolt, host))
@@ -1104,6 +1196,43 @@ def test_two_proven_bolts_post_one_card_in_ops_name_with_two_boxes(monkeypatch, 
                                  Heads="y@abc1234 z@abc1234")]
     assert acts.told == [("swancloud-ops", "Your card land/crew is up for the user: call get_request (requestId req_k1, "
                                            "name swancloud-ops), to hear their answer.")]
+
+
+def test_a_kits_card_is_raised_under_its_lock_every_read_and_act_inside_it(monkeypatch):
+    """Two bolts landing at once each raise their kit's card as they close (t-journey-land, sluice's #402 on deneb,
+    2026-10-30: both read the card open and closed it, the second recording "ended in Pending You already"): the raise
+    holds the kit's lock over the plan, the rows, the record and Pending You, so the second reads the first's close."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED)
+    seen = []
+    for name in ("land_row", "entries", "partition", "forecast", "bridge", "emit", "tell"):
+        monkeypatch.setattr(acts, name, lambda *a, f=getattr(acts, name), n=name, **k: seen.append((n, acts.holding)) or f(*a, **k))
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: seen.append(("plan", acts.holding)) or plan.Plan(PLAN))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    assert acts.locked == [("swancloud", "crew")]
+    assert {n for n, _ in seen} >= {"plan", "land_row", "entries", "partition", "bridge", "emit"}
+    assert [(n, h) for n, h in seen if h != "crew"] == []
+
+
+def test_the_kits_card_lock_is_held_by_one_raise_and_fetches_the_plan_afresh_under_it(monkeypatch, tmp_path):
+    monkeypatch.setattr(plan, "CARDS", tmp_path)
+    monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("/state", f"{label}/main"))
+    lock = plan.landings_lock("swancloud", "crew")
+    fetched = []
+
+    def fetch(repo, ref, fresh=False):
+        with open(lock, "w") as other, pytest.raises(BlockingIOError):  # fetched with the lock held
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fetched.append((ref, fresh))
+    monkeypatch.setattr(plan, "fetch", fetch)
+    with plan.CardActs(FLEET).raising("swancloud", "crew"):
+        with open(lock, "w") as other, pytest.raises(BlockingIOError):  # a second raise of the kit's card waits
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with open(plan.landings_lock("swancloud", "swancloud"), "w") as other:  # another kit's card's does not
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with open(lock, "w") as other:  # and the kit's is free once the raise is done
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    assert fetched == [("swancloud/main", True)]
+    assert lock.parent == tmp_path / "swancloud" / "land" and not (tmp_path / "swancloud" / "land" / "crew").exists()
 
 
 def test_a_rows_head_moved_changes_the_waiting_card_in_place_naming_it(monkeypatch):

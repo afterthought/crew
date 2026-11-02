@@ -1,0 +1,336 @@
+{
+  "status": {
+    "places": [
+      {
+        "place": "/Users/chuck/Code/github_agentplot/flume/places/change--agent-mode-is-a-layered-setting",
+        "repository": "/Users/chuck/Code/github_agentplot/flume",
+        "kind": "change",
+        "version": 2,
+        "declared": "flume",
+        "name": "agent-mode-is-a-layered-setting",
+        "branch": "change/agent-mode-is-a-layered-setting",
+        "base": "main",
+        "mark": null,
+        "lands": true,
+        "phase": "live",
+        "readiness": {
+          "steps": [
+            {
+              "step": "toolchain",
+              "passed": true,
+              "words": ""
+            },
+            {
+              "step": "moon setup",
+              "passed": true,
+              "words": ""
+            }
+          ]
+        },
+        "stages": [
+          {
+            "name": "construct",
+            "state": "delivered",
+            "starts": 2,
+            "end": {
+              "head": "89a56eb01dc4aacf323b4164b1c4a5e48f025ba9",
+              "report": null,
+              "words": null,
+              "needs": null,
+              "last_words": null,
+              "commits": [],
+              "screen": null,
+              "made": []
+            },
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          },
+          {
+            "name": "code",
+            "state": "ended_short",
+            "starts": 8,
+            "end": {
+              "head": null,
+              "report": null,
+              "words": "Head 118ec46 is ready for your flume:live run (6.1). As you ruled (a), the mode is compared at the start's first prompt. SessionStart acks on the program and variables alone, and UserPromptSubmit blocks a first prompt whose permission_mode is not the start's, so no turn is taken in that mode. Its gate checks passed through sluice: seams, fakes, core, conformance, flume format, lint, test and tools (55 tests), plugin-claude, and root format, changes and specs. That is task 6.2, ticked. Run it outside sluice: FLUME_LIVE_CLAUDE_CODE_OAUTH_TOKEN=<token> env $(env | grep ^HERDR_ | cut -d= -f1 | sed 's/^/-u /') devenv shell -- moon run flume:live. The statement's C.4 started and received rows and 161 still say SessionStart. _open.md names them as yours to amend in blueprints (core.19). As you asked, I am carrying on with groups 7 and 8 in this session and committing them on the branch. Group 7 touches site/ alone. Group 8 edits crates/flume-conformance, which the live build compiles, and I will not start it until group 7 is committed. Retry with the run's result once I am quiet, and 6.1 will be ticked.",
+              "needs": "needs_answer",
+              "last_words": null,
+              "commits": [],
+              "screen": null,
+              "made": [],
+              "group": {
+                "index": 5,
+                "number": "6",
+                "title": "A mode reaching a real Claude Code agent",
+                "tasks": [
+                  "6.1 Add to `crates/flume/tests/profiles/live/walkthroughs.rs` design 12's fix under herdr with the pinned Claude Code, on a walkthrough host whose `[kinds.fix.agents]` gives `mode = \"ask\"`, the scratch repository's Claude Code settings giving `defaultMode: acceptEdits` and allowing every tool the fix uses. Its code agent's started ack is taken, status names the mode `ask` from `host-kind` passed as `manual` and read back, and the place lands (design 12; S66; 161, 162, 169, C.4). True when `sluice exec main -- moon run flume:lint` passes, which builds the live harness under `--all-features`, and `FLUME_LIVE_CLAUDE_CODE_OAUTH_TOKEN=<token> devenv shell -- moon run flume:live` passes with it and every other live walkthrough, run by the operator by hand outside the gate as `CLAUDE.md` says, the token a test account's from `claude setup-token`."
+                ]
+              }
+            },
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false,
+            "group": {
+              "place": 6,
+              "of": 8,
+              "number": "6",
+              "title": "A mode reaching a real Claude Code agent"
+            }
+          },
+          {
+            "name": "verify",
+            "state": "not_reached",
+            "starts": 0,
+            "end": null,
+            "refused_part": null,
+            "refused_setting": null,
+            "conversation": false
+          }
+        ],
+        "current": "code",
+        "agent": {
+          "identity": "flume:b3e4c15d5ebe:change--agent-mode-is-a-layered-setting:code:8",
+          "stage": "code",
+          "program": "claude",
+          "settings": {
+            "program": "claude",
+            "model": null,
+            "instructions": null,
+            "beside": null,
+            "env": {
+              "CLAUDE_CONFIG_DIR": "<set>",
+              "PATH": "<set>"
+            },
+            "from": {
+              "env.CLAUDE_CONFIG_DIR": {
+                "layer": "account",
+                "value": "<set>"
+              },
+              "env.PATH": {
+                "layer": "account",
+                "value": "<set>"
+              },
+              "program": {
+                "layer": "default",
+                "value": "claude"
+              }
+            }
+          },
+          "account": {
+            "pool": "madswan",
+            "name": "madswan",
+            "from": "affinity"
+          },
+          "state": "waiting",
+          "started": "yes",
+          "asking": "no",
+          "own_work": "no",
+          "past_limit": false,
+          "screen": null,
+          "printed": null,
+          "last_words": null,
+          "notes": []
+        },
+        "head": "d265124753f31a378220711068419cc866d65b2b",
+        "delivered": false,
+        "tasks": [
+          {
+            "text": "1.1 Add `Mode`, `ModeSetting` with `from_word`, `written` an",
+            "ticked": true,
+            "group": 0
+          },
+          {
+            "text": "1.2 Add `Agent::mode`, refusing every entry by default, `Age",
+            "ticked": true,
+            "group": 0
+          },
+          {
+            "text": "1.3 Run the checks of the projects this group touched. True ",
+            "ticked": true,
+            "group": 0
+          },
+          {
+            "text": "2.1 Read an agents table's `mode` with one reader, as design",
+            "ticked": true,
+            "group": 1
+          },
+          {
+            "text": "2.2 Have the host's `agent_settings` read `mode` with the sa",
+            "ticked": true,
+            "group": 1
+          },
+          {
+            "text": "2.3 Give `--agent [<stage>.]mode=<mode>` and `--agent [<stag",
+            "ticked": true,
+            "group": 1
+          },
+          {
+            "text": "2.4 Run the checks of the project this group touched. True w",
+            "ticked": true,
+            "group": 1
+          },
+          {
+            "text": "3.1 Add `crates/flume/src/profiles/agent/claude/mode.rs`: th",
+            "ticked": true,
+            "group": 2
+          },
+          {
+            "text": "3.2 Add to `crates/flume/tests/profiles/tools/claude_words.r",
+            "ticked": true,
+            "group": 2
+          },
+          {
+            "text": "3.3 Run the checks of the project this group touched. True w",
+            "ticked": true,
+            "group": 2
+          },
+          {
+            "text": "4.1 Fold `mode` in `Engine::resolve`, taken whole from the f",
+            "ticked": true,
+            "group": 3
+          },
+          {
+            "text": "4.2 Give `AgentStatus` its `mode` as a `ModeStatus` with `pa",
+            "ticked": true,
+            "group": 3
+          },
+          {
+            "text": "4.3 Run the checks of the projects this group touched. True ",
+            "ticked": true,
+            "group": 3
+          },
+          {
+            "text": "5.1 Have `compare` in `claude/hook.rs` take the mode the ses",
+            "ticked": true,
+            "group": 4
+          },
+          {
+            "text": "5.2 Read a start whose word names another mode as started wi",
+            "ticked": true,
+            "group": 4
+          },
+          {
+            "text": "5.3 Have the stand-in read `--permission-mode <value>` and g",
+            "ticked": true,
+            "group": 4
+          },
+          {
+            "text": "5.4 Run the checks of the projects this group touched. True ",
+            "ticked": true,
+            "group": 4
+          },
+          {
+            "text": "6.1 Add to `crates/flume/tests/profiles/live/walkthroughs.rs",
+            "ticked": false,
+            "group": 5
+          },
+          {
+            "text": "6.2 Compare the mode at the start's first prompt, since the ",
+            "ticked": true,
+            "group": 5
+          },
+          {
+            "text": "7.1 Write the mode into `site/src/content/docs/guides/agent-",
+            "ticked": true,
+            "group": 6
+          },
+          {
+            "text": "7.2 Run the checks of the project this group touched. True w",
+            "ticked": true,
+            "group": 6
+          },
+          {
+            "text": "8.1 Have the suite's clause list hold Part A, Part B, I1 to ",
+            "ticked": true,
+            "group": 7
+          },
+          {
+            "text": "8.2 Bring `docs/architecture/_open.md`'s item on records 002",
+            "ticked": true,
+            "group": 7
+          },
+          {
+            "text": "8.3 Run the checks of the projects this change touched. True",
+            "ticked": true,
+            "group": 7
+          }
+        ],
+        "submission": {
+          "read": "none",
+          "submits": 0,
+          "send_backs": 0,
+          "verdict": null,
+          "waiting": null,
+          "held": false
+        },
+        "refused_acts": [],
+        "cannot_read": [],
+        "failures": [],
+        "recipients": [],
+        "hold_words": {
+          "code": "The user reads the change's plan and approves it before any code is written."
+        },
+        "waiting_on": {
+          "act": "retry",
+          "stage": "code",
+          "why": "answer",
+          "since": 1793467470,
+          "words": "Head 118ec46 is ready for your flume:live run (6.1). As you ruled (a), the mode is compared at the start's first prompt. SessionStart acks on the program and variables alone, and UserPromptSubmit blocks a first prompt whose permission_mode is not the start's, so no turn is taken in that mode. Its gate checks passed through sluice: seams, fakes, core, conformance, flume format, lint, test and tools (55 tests), plugin-claude, and root format, changes and specs. That is task 6.2, ticked. Run it outside sluice: FLUME_LIVE_CLAUDE_CODE_OAUTH_TOKEN=<token> env $(env | grep ^HERDR_ | cut -d= -f1 | sed 's/^/-u /') devenv shell -- moon run flume:live. The statement's C.4 started and received rows and 161 still say SessionStart. _open.md names them as yours to amend in blueprints (core.19). As you asked, I am carrying on with groups 7 and 8 in this session and committing them on the branch. Group 7 touches site/ alone. Group 8 edits crates/flume-conformance, which the live build compiles, and I will not start it until group 7 is committed. Retry with the run's result once I am quiet, and 6.1 will be ticked."
+        },
+        "stalled": true,
+        "holds": [],
+        "priority": 0,
+        "stream": {
+          "name": "default",
+          "from": "default"
+        },
+        "intent": {
+          "from": "base",
+          "repository": "/Users/chuck/Code/github_agentplot/flume",
+          "base": "main",
+          "digest": "3faeac068ade9a725679578cb82090c671462277c5e4fade39cc3db0f3d064b0"
+        },
+        "moves": [],
+        "unsettled": [],
+        "ends": [],
+        "clues": {
+          "stage": "code 6/8",
+          "state": "waiting",
+          "title": "code 6/8 · waiting",
+          "display_agent": "change--agent-mode-is-a-layered-setting",
+          "shown_at": {
+            "place": "herdr:w1:tH@/Users/chuck/.config/herdr/sessions/flume/herdr.sock",
+            "agent": "herdr:w1:pJ@/Users/chuck/.config/herdr/sessions/flume/herdr.sock",
+            "base": null
+          }
+        }
+      }
+    ],
+    "host": {
+      "running": 9,
+      "bound": null,
+      "room": null,
+      "queue": [],
+      "streams": [
+        {
+          "name": "default",
+          "priority": 0,
+          "running": 9,
+          "bound": null,
+          "room": null,
+          "queue": []
+        }
+      ],
+      "pools": [],
+      "terminal_kept": [],
+      "addresses": [],
+      "watch": {
+        "bound": {
+          "seconds": 30
+        }
+      },
+      "bases": []
+    }
+  }
+}

@@ -2,8 +2,9 @@
 """crew's Stop hook: at the end of each turn of a standing crew agent, one that an update of crew, or of its brief, has
 made due a restart (crew.due_of, teams.19) is handed to crew _renew on its host, which restarts it on crew as it now is
 once herdr reads it idle, with no question to the user open and nothing of its own running in the background but crew's
-waits. The end of a turn is the agent's own good point to stop: whatever it was doing is done or handed to the
-background, and nothing it says is cut off.
+waits. One due an end instead, a crossed team's conductor or ops, or a main level's agent whose role now runs as its
+kind (crew.end_due), is handed over the same way and ended, never started again. The end of a turn is the agent's own
+good point to stop: whatever it was doing is done or handed to the background, and nothing it says is cut off.
 
 A unit slot's agent, which starts fresh at every stage and so always runs crew as it now is, the reviewer, started fresh
 for each batch, and any session crew never started cost one file lookup and are left alone; so is every agent while its

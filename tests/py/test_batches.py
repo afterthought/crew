@@ -522,3 +522,65 @@ def test_a_reckoning_whose_record_could_not_be_read_tells_nothing_and_says_why(m
     read = {"found": found, "logs": {"wldn": []}, "unread": {"wldn": {"wldn/main": "it could not be fetched"}}, "sv": {}}
     assert plan.reckon_batches(FLEET, found, read) == {}
     assert "no batch reckoned for swb-1: crew can't tell which changes have been in a batch" in capsys.readouterr().err
+
+
+class TestCrossed:
+    """review-batches "A crossed team's unit is batched once its change has landed on its bolt" (Decision 13 of
+    teams-cross-to-flume-as-their-bolts-land): a crossed unit's change is read once the runner's records read it merged
+    and its bolt, as the kit was read on GitHub after a fetch, holds it archived, at the commit its place landed at on the
+    bolt (plan.crossed_changes), and its reading opens its archived folder there (plan.reading_command)."""
+    LANDED = "d185a879b51dba33555c036392b50443f4dfc5e8"  # where flume's landed.json says its place landed
+
+    @pytest.fixture(autouse=True)
+    def writer(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
+
+    def stages(self, at, archived=("a",)):
+        """crossed crw-4's x, holding a and b after a, launched as requests 1 and 2, each at the flume fixture at names;
+        crew's kit as read on deneb, bolt x holding archived's changes archived."""
+        from facts import crew_read, crossed_fleet_read, launched, ran
+        fleet = crossed_fleet_read()
+        p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", [])], fleet=fleet)
+        return plan.Stages(fleet, p, crew_read(bolts={"x": {"archived": list(archived)}}), runs={"madswan": (requests, ran(at))})
+
+    def test_merged_then_batched(self):
+        """review-batches "Merged, then batched": a lands on bolt/x, its change archived there, and counts toward the next
+        batch, named at the commit its place landed at."""
+        st = self.stages({1: "landed", 2: "code"})
+        crossed = plan.crossed_changes(st.plan, st)
+        assert crossed == {"a": (self.LANDED, "2026-10-31T12:02:00Z")}
+        assert [(u, team, sha) for u, team, sha, _ in plan.due_changes(st.plan, [], crossed)] == [("a", "crw-4", self.LANDED)]
+
+    def test_constructed_but_not_landed_is_not_yet_due(self):
+        """review-batches "Constructed but not landed": b's construct has delivered and its place is in code."""
+        st = self.stages({1: "code", 2: "code"})
+        assert plan.crossed_changes(st.plan, st) == {} and plan.due_changes(st.plan, [], {}) == []
+
+    def test_merged_by_the_runner_and_not_yet_archived_on_the_bolt_as_read_waits_for_the_next_read(self):
+        st = self.stages({1: "landed"}, archived=())
+        assert plan.crossed_changes(st.plan, st) == {}
+
+    def test_held_by_a_batch_it_waits_on_its_answer_and_is_due_no_more(self):
+        st = self.stages({1: "landed"})
+        crossed = plan.crossed_changes(st.plan, st)
+        held = [reviewed(9, [("a", "crw-4", self.LANDED)], 10)]
+        assert plan.due_changes(st.plan, held, crossed) == []
+        assert plan.awaiting_answer(held, crossed) == {"a": 9}
+        assert plan.awaiting_answer(held + [card_closed("batch/9", "req_9", 20)], crossed) == {}
+
+    def test_its_reviewer_opens_its_archived_folder_at_that_commit(self):
+        from facts import crossed_fleet_read
+        fleet = crossed_fleet_read()
+        fleet["partitions"]["madswan"]["machine"] = "deneb"
+        assert plan.reading_command(fleet, "madswan", "crw-4", self.LANDED, "a", archived=True) == (
+            f"its change is archived at that commit: find its folder with `git -C /crew/main ls-tree -d --name-only {self.LANDED} "
+            "openspec/changes/archive/`, the one named <date>-a, then list its files with `git -C /crew/main ls-tree -r "
+            f"--name-only {self.LANDED} <folder>/` and read each with `git -C /crew/main show {self.LANDED}:<path>`")
+
+    def test_its_batch_reading_opens_the_change_at_that_commit_with_no_place_of_crews(self, monkeypatch, tmp_path):
+        from facts import crew_read, crossed_fleet_read
+        t = crossed_fleet_read()["teams"]["crw-4"]
+        monkeypatch.setattr(plan, "survey", lambda fleet, held: crew_read(bolts={"x": {}}))
+        monkeypatch.setattr(plan, "change_written", lambda main, ref, unit, into: f"{into} from {ref} of {unit} in {main}")
+        monkeypatch.setattr(plan.subprocess, "run", lambda *a, **k: pytest.fail("main was read for a change the batch's commit holds"))
+        assert plan.change_folder({}, t, "a", tmp_path, self.LANDED) == f"{tmp_path} from {self.LANDED} of a in /crew/main"

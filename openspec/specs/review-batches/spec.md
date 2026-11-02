@@ -28,11 +28,19 @@ A batch SHALL hold the changes due across every team of a partition. A partition
 - **THEN** no batch is due
 
 ### Requirement: The planner starts the partition's reviewer
-When a batch is due, crew SHALL tell the partition's planner once, and the planner SHALL start the reviewer: a main-level role, run fresh for each batch in its own tab of the main level's workspace, beside the planner, on the main level's host.
+When a batch is due, crew SHALL tell the partition's planner once, and the planner SHALL start the reviewer: a main-level role, run fresh for each batch in its own tab of the main level's workspace, beside the planner, on the main level's host. Where the partition runs its reviewer as its kind, `crew review <label>` SHALL instead write an ask of the reviewer carrying the batch, as the reviewer's first message carries it today, open no tab and start no agent, and `crew review <label> --wait` SHALL refuse, saying the batch's delivery reaches the planner as an ask.
 
 #### Scenario: A batch is due
 - **WHEN** a conductor's wait finds a batch due in the wldn partition
 - **THEN** wldn-planner is told once, and starts `wldn-reviewer` in the `wldn` workspace
+
+#### Scenario: A reviewer that runs as its kind
+- **WHEN** madswan runs its reviewer as its kind and the planner's run runs `crew review madswan`
+- **THEN** an ask of the reviewer holds the batch's changes, how to read each and the file to write, no tab is opened, and no reviewer is started by crew
+
+#### Scenario: Waiting on a reviewer that runs as its kind
+- **WHEN** madswan runs its reviewer as its kind and `crew review madswan --wait` runs
+- **THEN** it refuses, saying the batch's delivery reaches the planner as an ask, and waits on nothing
 
 ### Requirement: The reviewer summarizes a batch
 The reviewer SHALL read each due change whole and write one summary file holding, for each unit, its team, a short opening paragraph saying what the change does and what the user would most care about, then the decisions it took, its risks, what it touches named in words, and anything the user would likely care about, as paragraphs and plain lists with no code block, no table and no path. The batch SHALL end at that file, its deliverable, and the reviewer SHALL write nothing else. The run record SHALL name the batch, each unit it holds and the commit each unit's change was read at.
@@ -283,3 +291,25 @@ When the user sends a batch's reading session, approved or annotated, crew SHALL
 #### Scenario: Notes sent while the planner is down
 - **WHEN** the user sends batch 13's session with two annotations while the planner is not up, and the refresh runs
 - **THEN** batch 13 is not recorded read, its row stays, no bolt it holds is offered for landing, and once up the planner is told to run `crew card read batch/13`
+
+### Requirement: A crossed team's unit is batched once its change has landed on its bolt
+A unit of a crossed team's bolt SHALL become due for review when the runner's records read it merged, its change read archived on GitHub's bolt after a fetch, and SHALL be named in its batch at the commit of the bolt that holds it, its reading opening its archived folder. A note the user marks fix on such a unit SHALL reach its bolt as a fix place, by the planner's `crew fix`.
+
+#### Scenario: Merged, then batched
+- **WHEN** crossed crw-4's `a` lands on `bolt/x` at `9f1c2ab`, its change archived there
+- **THEN** `a` counts toward the partition's next batch, named `a:crw-4@9f1c2ab`
+
+#### Scenario: Constructed but not landed
+- **WHEN** `b`'s construct has delivered and its place is in code
+- **THEN** `b` is not yet due for review
+
+### Requirement: A reviewer's run hands its batch back
+`crew review delivered [--label L]`, run in the reviewer's run once each batch its turn took has its summary written, SHALL do for each what the planner's wait did once the summary was written: record the batch, start its one reading session, and raise its one card in the planner's name; and SHALL write an ask of the planner naming `batch/<n>` with the line that adopts its card. A batch whose summary file is not written SHALL be refused by name, and the others delivered.
+
+#### Scenario: A batch delivered
+- **WHEN** madswan's reviewer run has written batch 21's summary and runs `crew review delivered`
+- **THEN** batch 21 is recorded, its reading session started and its card raised in madswan-planner's name, and an ask of the planner names `batch/21` and the `get_request` line that adopts it
+
+#### Scenario: A summary not written
+- **WHEN** the reviewer's turn took batches 21 and 22, only 21's summary is written, and it runs `crew review delivered`
+- **THEN** batch 21 is delivered, and batch 22 is refused, naming its file

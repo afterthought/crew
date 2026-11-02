@@ -4,7 +4,8 @@
 # forecast against the unit for the settle's revision of it; a stop-short of the unit's merge for an archive it can
 # make itself is refused once in the stage, and a second is passed on; the unit merges through sluice once its change
 # is archived; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it, and undoes a
-# rebase that conflicts; the next read frees the merged unit's slot and removes its place; the dependent whose rebase
+# rebase that conflicts, removes the place, its slot.free naming it, and leaves a hand-cut worktree named like a chore
+# alone, naming it (plan.9); the next read frees the merged unit's slot and removes its place; the dependent whose rebase
 # conflicted is told how to make that rebase's upstream again, its older forecast against the bolt dropped; and of two
 # unmerged units forecast to conflict, the later's settle that stops short lifts the order a forecast wrote before
 # (plan.13, teams.12), and its next settle, taking the earlier's work, puts it after the earlier, holding its merge.
@@ -75,7 +76,13 @@ git -C "$kd/places/a" commit -qm "docs(openspec): archive a"
 merge_as swb-1-unit-1 "$kd/places/a" bolt/tenant-environments || fail "a's submission failed"
 eq "$(git -C "$k" log -1 --format='%an %(trailers:key=Sluice-Result,valueonly)' bolt/tenant-environments)" "sluice passed (stub)"
 b_before=$(git -C "$k" rev-parse unit/b) c_before=$(git -C "$k" rev-parse unit/c)
+# A worktree cut by hand where a chore's would be, as swancloud-design's chore-sluice-0-52-1 was on 2026-10-28.
+hand=$kd/places/chore-sluice-0-52-1; git -C "$k" worktree add -q -b chore/sluice-0-52-1 "$hand" bolt/tenant-environments
 expect_ok crew unit wait a
+has "$out" "$hand is not crew's, and is left to whoever made it: $box's run record holds no start of chore/sluice-0-52-1"
+[[ -d $hand ]] && git -C "$k" rev-parse -q --verify chore/sluice-0-52-1 >/dev/null || fail "the hand-cut worktree or its branch was removed"
+eq "$(field $box slot.free Paths agent/swb-1-unit-1 unit/a)" "$kd/places/a"
+git -C "$k" worktree remove "$hand"
 has "$out" "swb-1-unit-1 delivered merge on a: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 has "$out" "rebasing c onto bolt/tenant-environments conflicts: its place is as it was, and it is told"
 git -C "$k" merge-base --is-ancestor bolt/tenant-environments unit/b || fail "b was not rebased onto the bolt: $out"
@@ -92,7 +99,7 @@ eq "$(field $box forecast Took unit/c bolt/tenant-environments)" "a@$c_took"
 has "$out" "swb-1-unit-1 is free: a has merged into its bolt"
 has "$out" "$kd/places/a and unit/a are removed; the branch was at"
 [[ ! -d $kd/places/a ]] || fail "a's place is still there"
-ok "a forecast against the bolt starts the settle stage of a unit verified and fixed once, a dependent is forecast nothing for the unit's own work its place took, and the unit merges with its change archived, each a fresh agent ended at its deliverable; no card is named, and the merge's wait rebases a dependent onto the bolt, leaving out the unit's work as it took it, undoes a rebase that conflicts, and frees the slot and removes the place and branch"
+ok "a forecast against the bolt starts the settle stage of a unit verified and fixed once, a dependent is forecast nothing for the unit's own work its place took, and the unit merges with its change archived, each a fresh agent ended at its deliverable; no card is named, and the merge's wait rebases a dependent onto the bolt, leaving out the unit's work as it took it, undoes a rebase that conflicts, and frees the slot and removes the place and branch, its slot.free naming the place, leaving a hand-cut worktree named like a chore alone and naming it"
 
 expect_ok crew status swb-1
 lacks "$out" "swb-1-unit-1 is free"; lacks "$out" "places/a"

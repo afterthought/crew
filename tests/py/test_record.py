@@ -57,6 +57,17 @@ class TestEmit:
         assert (e["Outcome"], e["Submission"], e["Head"], e["Base"]) == ("queued", "412", "a" * 40, "b" * 40)
         assert "Submission" in text.split("%allowed:", 1)[1].splitlines()[0].split()
 
+    def test_a_teams_crossing_names_its_stream_and_its_trace_reads_it_after_the_landing_that_crossed_it(self, here):
+        """team.cross, once crw-4's conductor and ops are ended for its crossing (the change
+        teams-cross-to-flume-as-their-bolts-land, Decision 3): on team/crw-4, its State the stream."""
+        record.emit("madswan", "team.cross", ["team/crw-4"], why="team(crw-4): cross to flume", State="madswan")
+        text = next(here.parent.parent.parent.glob("madswan/runs/mac-studio/*.rec")).read_text()
+        cross, = record.parse(text)
+        assert (cross["Act"], cross["On"], cross["State"]) == ("team.cross", ["team/crw-4"], "madswan")
+        assert record.line(cross).endswith("team/crw-4 → Flume stream madswan")
+        given = entry("20260101T100000Z-deneb-1-1", "2026-01-01T10:00:00Z", "bolt.give", ["bolt/x", "team/crw-4"])
+        assert [e["Act"] for e in record.lineage([cross, given], "team/crw-4")] == ["bolt.give", "team.cross"]
+
     def test_the_users_entry_names_them_at_this_host_with_no_session(self, here):
         import getpass
         record.emit("wldn", "test.user")
@@ -84,7 +95,7 @@ class TestEmit:
 
         def unreachable(repo, ref, fresh=False):
             raise crew.Refusal(f"could not fetch {ref} of {repo} over https: fatal: unable to access\n'https://github.com/': timed out")
-        monkeypatch.setattr(plan, "fetch", unreachable)
+        monkeypatch.setattr(plan, "tip_of", unreachable)
         eid = record.emit("wldn", "stage.start", ["stage/a/construct"])
         assert eid and [e["Id"] for e in record.parse(next(here.glob("*.rec")).read_text())] == [eid]
         assert capsys.readouterr().err.splitlines() == [
@@ -112,7 +123,7 @@ class TestEmit:
         monkeypatch.setattr(plan, "git", lambda repo, *args, input=None, env=None, check=True: calls.append(args[0]) or types.SimpleNamespace(
             returncode=0, stdout="", stderr=""))
         monkeypatch.setattr(plan, "READ", plan.Reading())
-        assert plan.fetch("WilldanGroup/crew-state", "wldn/main") == "d" * 40 and calls == ["fetch"]
+        assert plan.tip_of("WilldanGroup/crew-state", "wldn/main") == "d" * 40 and calls == ["fetch"]
 
     def test_a_fetch_that_lost_the_caches_ref_to_another_command_on_this_host_is_made_again(self, monkeypatch, tmp_path):
         """Every act pushes its entry, so two commands on one host fetch the branch into crew's cache side by side, and
@@ -131,7 +142,7 @@ class TestEmit:
         monkeypatch.setattr(plan, "git", git)
         monkeypatch.setattr(plan, "READ", plan.Reading())
         monkeypatch.setattr(plan.time, "sleep", lambda s: None)
-        assert plan.fetch("WilldanGroup/crew-state", "wldn/main") == "c" * 40 and calls == ["fetch", "fetch", "fetch", "rev-parse"]
+        assert plan.tip_of("WilldanGroup/crew-state", "wldn/main") == "c" * 40 and calls == ["fetch", "fetch", "fetch", "rev-parse"]
 
         def refused(repo, *args, input=None, env=None, check=True):
             calls.append(args[0])
@@ -139,7 +150,7 @@ class TestEmit:
         calls.clear()
         monkeypatch.setattr(plan, "git", refused)
         with pytest.raises(crew.Refusal, match="^could not fetch wldn/main of WilldanGroup/crew-state over https: fatal: unable"):
-            plan.fetch("WilldanGroup/crew-state", "wldn/main", fresh=True)
+            plan.tip_of("WilldanGroup/crew-state", "wldn/main", fresh=True)
         assert calls == ["fetch"]
 
     def test_the_entries_of_one_second_sort_as_they_were_made_whichever_process_made_each(self):
@@ -257,6 +268,36 @@ class TestTrace:
             "bolt/b unit/a → switchboard-kit main at ccccccc")
 
 
+class TestRoleRuns:
+    """The run-record spec, An ask and a turn are entries: a role that runs as its kind has an ask entry for each ask
+    of it and a turn.begin and turn.end for each turn, all on its run, none holding an ask's words (record.3)."""
+
+    def test_a_tell_that_is_an_ask_records_its_length_and_never_its_text(self, here):
+        """run-record, A tell that is an ask."""
+        words = "the forty characters of a tell, as typed"
+        record.emit("wldn", **record.ask_entry("wldn-planner", "tell", None, words))
+        text = next(here.glob("*.rec")).read_text()
+        e, = record.parse(text)
+        assert (e["Act"], e["On"], e["Chars"], e["Why"]) == ("ask", ["agent/wldn-planner"], "40", "ask wldn-planner: tell")
+        assert words not in text and "Words" not in e
+
+    def test_a_turn_traced_lists_its_asks_its_begin_taking_them_and_its_end(self, here):
+        """run-record, A turn traced: the planner's run took two asks and ended. The record an ask names keeps the ask
+        in its own trace, and brings nothing of its history into the run's."""
+        for e in (record.ask_entry("wldn-planner", "tell", None, "Go."), record.ask_entry("wldn-planner", "card", "proposal/12"),
+                  record.turn_begin_entry("wldn-planner", 1, 2), record.turn_end_entry("wldn-planner", 1)):
+            record.emit("wldn", **e)
+        found = record.parse(next(here.glob("*.rec")).read_text()) + [
+            entry("20261005T090000Z-mac-9-1", "2026-10-05T09:00:00Z", "plan.propose", ["proposal/12"])]
+        start, _ = record.trace_start(found, "agent/wldn-planner")
+        traced = record.lineage(found, start)
+        assert [(e["Act"], e.get("Took"), e["Why"]) for e in traced] == [
+            ("ask", None, "ask wldn-planner: tell"), ("ask", None, "ask wldn-planner: card"), ("turn.begin", "2", "turn 1 of wldn-planner"),
+            ("turn.end", None, "turn 1 of wldn-planner ended")]
+        assert record.line(traced[2]).endswith(" agent/wldn-planner (took 2)") and record.line(traced[0]).endswith("(3 characters)")
+        assert [e["Act"] for e in record.lineage(found, "proposal/12")] == ["plan.propose", "ask"]
+
+
 class TestEvents:
     def test_events_are_shown_from_a_time_narrowed_to_one_object_and_a_branch_not_read_named(self):
         out = record.events_text(E, {"wldn/main": "could not fetch wldn/main"}, "2026-10-05T10:40:00Z", "unit/u").splitlines()
@@ -286,7 +327,7 @@ class TestEvents:
         monkeypatch.setattr(board, "labels_here", lambda fleet, host: ["wldn"])
         monkeypatch.setattr(board, "follower_here", lambda: follower)
         monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("madswan/swancloud-state", f"{label}/main"))
-        monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: got.append(ref))
+        monkeypatch.setattr(plan, "tip_of", lambda repo, ref, fresh=False: got.append(ref))
         monkeypatch.setattr(plan, "tip_here", lambda repo, ref: "")
 
         def stop(_):
