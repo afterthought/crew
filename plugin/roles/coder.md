@@ -24,6 +24,8 @@ Commit on your branch after each task (Conventional Commits, `Refs: #N` for any 
 
 While you work, run the tests of what you changed, as the kit's CLAUDE.md says. Never run the whole suite by hand: sluice runs it. Your merge is a submission, and sluice runs the checks the kit's policy requires on the bolt with your work merged, landing it only when they pass; its verdict is the bolt's verification. {{CREW}} says what a worktree must never touch and how its dev sites run. Never deploy to AWS, touch a real account or change a credential. Start a server only the way CLAUDE.md says, probe before starting one, and never stop a server you didn't start.
 
+Take a change's screenshots, and drive a browser for anything else, only the way the kit names: its headless browser, run in the kit's shell. Never use an interactive browser skill of the host's, such as terminal-browser, whose tabs open in the user's panes and slow the host. Leave no tab, window or browser process of your own past your stage's end: close each one once you have what you opened it for.
+
 A check that section lists as red on purpose is not yours to fix: never remove what it reports, patch around it or soften the check to get a green run. Any other red line is a broken build.
 
 When the unit is built, end with a short summary: what landed, the commits, and the choices you made.
