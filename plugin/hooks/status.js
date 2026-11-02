@@ -17,11 +17,18 @@ const EVERY_MS = 5000
 // Who this session is, where its partition's views are, and what was last read from them.
 const live = { agent: undefined, label: undefined, path: undefined, mtime: undefined, frame: undefined, stale: false }
 
-// The session's agent and partition: CREW_AGENT and CREW_LABEL, as crew-role starts every role, or, for a session
-// herdr resumed bare without them, the record crew's SessionStart hook keeps of the session (hooks/session-start).
+// The place a role's run is, its folder crew-<role>--<label>, as crew.py RUN_PLACE reads it.
+const RUN_PLACE = /^crew-([a-z]+)--([a-z0-9][a-z0-9-]*)$/
+
+// The session's agent and partition: CREW_AGENT and CREW_LABEL, as crew-role starts every role; for a role's run Flume
+// started, which carries no environment of crew's, its run's name, <label>-<role>, from FLUME_PLACE, the place the
+// role's record named (crew.py run_here; Decision 8 of roles-run-as-flume-kinds); or, for a session herdr resumed bare
+// without them, the record crew's SessionStart hook keeps of the session (hooks/session-start).
 async function identity($, home) {
   const agent = await $.env.get('CREW_AGENT')
   if (agent) return { agent, label: await $.env.get('CREW_LABEL') }
+  const run = RUN_PLACE.exec(((await $.env.get('FLUME_PLACE')) || '').split('/').filter(Boolean).pop() || '')
+  if (run) return { agent: run[2] + '-' + run[1], label: run[2] }
   try {
     const record = await $.fs.read(home + '/.local/state/crew/sessions/' + (await $.session.id()))
     const kv = Object.fromEntries(record.split('\n').filter((l) => l.includes('=')).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]))

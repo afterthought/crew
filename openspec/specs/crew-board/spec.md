@@ -404,3 +404,43 @@ Every holder of a bolt's time SHALL be read from what crew already keeps, and no
 #### Scenario: A landing by pull request
 - **WHEN** main's recent events name `#52`, from `pull/9`, landed, and the run record's queued `bolt.submit` of `b` names `#52`
 - **THEN** `#52` is `b`'s landing
+
+### Requirement: Construction shows a crossed team's bolts from the runner's records
+The Construction lane SHALL show each bolt a crossed team holds as a ledger of its units, chores and fixes with the stages the runner's records give, its head line naming the team's stream and host and no slots; a due team's head line SHALL say it is due to cross, or due back, and name what it finishes first. The board's JSON SHALL give each team its path and, for a crossed team, its stream.
+
+#### Scenario: A crossed team's ledger
+- **WHEN** crossed crw-4 holds `x`, `a` at `code 3/7` and `b` waiting on `a`
+- **THEN** the board's Construction lane shows `x` on deneb in stream `madswan`, `a` at code 3/7 and `b` waiting on `a`, and no slot line
+
+#### Scenario: A due team
+- **WHEN** crw-5 is due to cross while it builds `y`
+- **THEN** its head line says crw-5 is due to cross once `y` lands
+
+### Requirement: The planner's and ops's bands show what a crossed team's places wait on them for
+`board.agent_views` SHALL give the planner's band each crossed place that stopped short asking or waits on its caller, with its question or Flume's words, and main-level ops's band each fix of main and each take-main fix in flight with its stage; crew's mod SHALL draw both above the agent's prompt.
+
+#### Scenario: A question in the planner's band
+- **WHEN** `a`'s construct stopped short asking "Which partition's rail?"
+- **THEN** madswan-planner's view lists `a` with that question, and the mod draws it
+
+#### Scenario: A fix of main in ops's band
+- **WHEN** `main--a-test-reads-its-fixture` is in code
+- **THEN** madswan-ops's view lists it at code, and the mod draws it
+
+### Requirement: A role that runs as its kind has its view
+Each role its partition runs as its kind SHALL have a view among the agents' views under its run's name, `<label>-<role>`, drawn above its run's prompt by crew's mod where crew's plugin loads: what its turn took, and how many asks wait for the role and since when.
+
+#### Scenario: A run with an ask waiting
+- **WHEN** madswan's planner run took two asks and a third has waited four minutes
+- **THEN** madswan-planner's view shows the two it took and one waiting for four minutes
+
+#### Scenario: Nothing waiting
+- **WHEN** madswan's planner run took one ask and nothing else waits
+- **THEN** madswan-planner's view shows the one it took and says nothing waits
+
+### Requirement: The attention line names a role's run that waits
+The board's attention line SHALL name each run of a role that the runner's records show stopped short, with its words, or lost, with its place and host, and SHALL print no command for it.
+
+#### Scenario: A lost run
+- **WHEN** the runner's records show madswan's design run `crew-design--madswan` on deneb lost
+- **THEN** the attention line names madswan's design run as lost, with its place and deneb, and prints no command
