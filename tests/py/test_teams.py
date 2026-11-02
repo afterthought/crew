@@ -143,7 +143,7 @@ class TestRoleSettings:
 
 class TestRoleSessions:
     """A main-level role may run in a session of its own, named in its partition's roles (record 0035): so a
-    partition's design agent and planner, both Fable, sit in two sessions on two Claude accounts."""
+    partition's design agent and planner sit in two sessions on two Claude accounts."""
 
     def load(self, tmp_path, monkeypatch, roles, extra=None):
         def sess(space, partition, repos, account):

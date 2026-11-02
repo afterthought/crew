@@ -166,7 +166,7 @@ class TestKeyed:
         assert asks.keyed([ask(1)], None) is None and asks.keyed([dict(ask(1), Key="")], "") is None
 
 
-PLANNER = {"model": "claude-fable-5-1", "effort": "xhigh"}
+PLANNER = {"model": "claude-opus-5-5[1m]", "effort": "xhigh"}
 OPS = {"model": "claude-opus-5-5[1m]", "effort": "high"}
 FALSE = dict.fromkeys(("design", "planner", "reviewer", "ops", "operator"), False)
 
@@ -182,7 +182,7 @@ class TestRoleRecords:
         assert asks.role_record(madswan(planner="madswan-main"), "planner", PLANNER) == {
             "Role": "planner", "Address": "madswan/planner", "Run": "madswan-planner", "Host": "deneb", "Repository": "afterthought/blueprints",
             "Kinds": "crew", "Kind": "crew-planner", "Name": "madswan", "Stream": "madswan-main", "Priority": "0", "Intent": "madswan-planner",
-            "Model": "claude-fable-5-1", "Effort": "xhigh"}
+            "Model": "claude-opus-5-5[1m]", "Effort": "xhigh"}
 
     def test_a_role_that_stands_has_no_record(self):
         assert asks.role_record(madswan(), "planner", PLANNER) is None
@@ -190,10 +190,10 @@ class TestRoleRecords:
     def test_a_runs_model_is_its_definitions_after_the_teams_files_override(self):
         """role-runs, An override: wldn sets roles.planner.model; main-ops's override is read for ops."""
         wldn = dict(madswan(planner="wldn-main", ops="wldn-main"), label="wldn", machine="chuck-herdr-alpha",
-                    roles={"planner": {"model": "claude-opus-5-5[1m]"}, "main-ops": {"effort": "max"}})
-        assert (asks.role_record(wldn, "planner", PLANNER)["Model"], asks.role_record(wldn, "planner", PLANNER)["Effort"]) == ("claude-opus-5-5[1m]", "xhigh")
+                    roles={"planner": {"model": "claude-opus-5-5"}, "main-ops": {"effort": "max"}})
+        assert (asks.role_record(wldn, "planner", PLANNER)["Model"], asks.role_record(wldn, "planner", PLANNER)["Effort"]) == ("claude-opus-5-5", "xhigh")
         assert (asks.role_record(wldn, "ops", OPS)["Model"], asks.role_record(wldn, "ops", OPS)["Effort"]) == ("claude-opus-5-5[1m]", "max")
-        assert asks.role_record(madswan(planner="m"), "planner", PLANNER)["Model"] == "claude-fable-5-1"
+        assert asks.role_record(madswan(planner="m"), "planner", PLANNER)["Model"] == "claude-opus-5-5[1m]"
         assert asks.definition_of("ops") == "main-ops" and asks.definition_of("design") == "design"
 
     def test_the_records_due_are_those_missing_or_differing_and_a_role_that_stands_again_goes(self):
