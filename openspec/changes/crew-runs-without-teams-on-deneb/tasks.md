@@ -15,7 +15,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 
 - [x] 2.1 `openspec/specs/` holds `the-team-machinery-leaves`'s synced specs, with main's Opus models and #430's requirement kept for this change's delta to remove, and the restored archives are present (design Decision 2; Task notes 2.1). Verify `openspec validate crew-runs-without-teams-on-deneb` and `openspec validate --specs` both pass.
 - [x] 2.2 crew refuses the box's version-2 teams file and a version-5 file holding `teams`, each naming swancloud's `lib/crew-teams.nix` and doing nothing (main-level delta; Task notes 2.2). Passes `tests/py/test_teams.py` (`tests/suite logic`).
-- [ ] 2.3 The rule pages carry #418's amendments around main's later records, cite this change on `teamless/deneb` where they cited the reverted landing, and `_open.md` names deneb's crew from the branch and the stage briefs' browser words left behind (design Decision 6; Task notes 2.3). Verify `git grep -n 9d590e9f -- docs/architecture` prints nothing.
+- [x] 2.3 The rule pages carry #418's amendments around main's later records, cite this change on `teamless/deneb` where they cited the reverted landing, and `_open.md` names deneb's crew from the branch and the stage briefs' browser words left behind (design Decision 6; Task notes 2.3). Verify `git grep -n 9d590e9f -- docs/architecture` prints nothing.
 
 ## 3. The gate and the branch
 
