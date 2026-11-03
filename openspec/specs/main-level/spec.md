@@ -40,6 +40,14 @@ Above a partition's bolt teams: a design agent that elaborates on main, a planne
 - **WHEN** `teams.json` is at version 4, its `teams` listing a team for each kit
 - **THEN** crew refuses to load it, naming its version and swancloud's `lib/crew-teams.nix`, and does nothing
 
+#### Scenario: The box's file at version 2
+- **WHEN** `teams.json` is at version 2, its `partitions` and its `teams` as chuck-herdr-alpha's file holds them for wldn's teams
+- **THEN** crew refuses to load it, naming its version, that crew reads only version 5, and swancloud's `lib/crew-teams.nix`, and does nothing
+
+#### Scenario: A version-5 file that lists teams
+- **WHEN** `teams.json` is at version 5 and holds a `teams` key beside its `partitions`
+- **THEN** crew refuses to load it, saying version 5 has no place for teams since crew runs none, naming swancloud's `lib/crew-teams.nix`, and does nothing
+
 ### Requirement: The main level is one herdr workspace
 `crew main up <label>` SHALL open a herdr workspace named `<label>` in the main level's session. It SHALL hold a `design` tab with the design agent, a `planner` tab with the planner, an `ops` tab with the main-level ops and an `operator` tab with the partition's operator, each only while it stands, and start each, and nothing else. A role that runs as its kind SHALL get no tab and no start: `crew main up` SHALL instead write its role record to match the teams file, and SHALL end a standing agent of it still running once that agent is not working, leaving one working and saying so.
 

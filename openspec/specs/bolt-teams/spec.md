@@ -495,18 +495,3 @@ While a bolt's landing is queued or landing again, these SHALL be refused, namin
 #### Scenario: Another bolt's landing
 - **WHEN** `y`'s landing is queued and the user adds a unit to `z`
 - **THEN** the unit is added to `z` and launched
-
-### Requirement: A conductor reads a stuck report before it asks
-On a stuck report, the conductor SHALL read the agent's words and the branch's commits the report carries before it asks anyone, and act on what they settle, never reading the agent's pane. Only when they settle nothing SHALL it ask the user, saying what the report carries, and run the stage again or wait again on the user's word.
-
-#### Scenario: The agent's work is done and its next step follows
-- **WHEN** a stuck report lists a fix round's commit and quotes the agent saying every finding marked fix is fixed
-- **THEN** the conductor runs the unit's merge, and tells the user only what crew refuses of it
-
-#### Scenario: The agent asked in its pane
-- **WHEN** a stuck report quotes a construct agent asking which table holds tenants
-- **THEN** the conductor gets the answer as for a stop-short, from the design agent first, and runs construct again with it, asking the user only if nobody before them can answer
-
-#### Scenario: The report settles nothing
-- **WHEN** a stuck report says the agent has written nothing since the stage began and its branch holds no commit since then
-- **THEN** the conductor tells the user which agent and stage is stuck and what the report carries, and runs the stage again or waits again only on the user's word
