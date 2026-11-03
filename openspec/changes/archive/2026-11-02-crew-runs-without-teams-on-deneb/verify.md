@@ -2,7 +2,7 @@
 
 Read 2026-11-03 on deneb, at `989e4280` on `change/crew-runs-without-teams-on-deneb`, cut from main at `f3c5abd4`, which is still main on GitHub.
 
-**Outcome: archived.** All 15 tasks are ticked, and every check they name passes. Both deltas' requirements and scenarios are met, each refusal by a case. The tree holds exactly what the design says, and nothing else: it is ccb5f9a9's, apart from main's later words and records and this change's own case. One point is lesser, and this stage closes it: GitHub's `teamless/deneb` stood one commit behind the branch, at the tick of 3.2. Nothing fails a requirement.
+**Outcome: archived.** All 15 tasks are ticked, and every check they name passes. Both deltas' requirements and scenarios are met, each refusal by a case. The tree holds exactly what the design says, and nothing else: it is ccb5f9a9's, apart from main's later words and records and this change's own case. One point is lesser, and a push from outside the place closes it. GitHub's `teamless/deneb` stands at `9c877969`. That is behind the branch by the tick of 3.2 and by this stage's report and archive, which change only `openspec/`. Nothing fails a requirement.
 
 ## The tree against the design
 
@@ -51,7 +51,7 @@ Decision 2's table, file by file:
 | 2.2 | `TestLoad` keeps ccb5f9a9's cases. It refuses versions 1, 2, 3, 4, 6, `"5"`, `true` and `null` naming 5 and `lib/crew-teams.nix`, a version-4 file with teams by its version, and a version-5 file with a `teams` list, empty or not, saying version 5 has no place for teams. It gains `test_the_boxs_file_at_version_2_is_refused_by_its_version_with_nothing_further_read`, which refuses `teams_old`'s shape before the hosts file is read. `crew.load` refuses by version before it looks for `teams`, and both refusals end "crew has done nothing." |
 | 2.3 | `git grep -n 9d590e9f -- docs/architecture` prints nothing. The pages name `the-team-machinery-leaves` on `teamless/deneb`, dated 2026-11-03, for deneb alone. `core.md` opens by saying whose these pages are. `roles.8` reads retired on those terms, its details naming the departure from main's `roles.8`. `_open.md` keeps main's runner item and gains two items: *Move 5 on deneb alone, crew from `teamless/deneb`*, quoting the user's word, and *The stage briefs' browser words*. |
 | 3.1 | `sluice exec main` passes, as *Checks* below shows. |
-| 3.2 | GitHub's `refs/heads/main` is `f3c5abd4`, untouched. `refs/heads/teamless/deneb` was `9c877969`, the tick of 3.1, one commit behind HEAD. The commit between, `989e4280`, ticks 3.2 in `tasks.md` alone, so the code swancloud would pin is the same. Decision 7 has every later commit of the change's own stages pushed the same way. This stage pushes its report and archive to `teamless/deneb` as a fast-forward, without force, and `git ls-remote` then names the branch's head. |
+| 3.2 | GitHub's `refs/heads/main` is `f3c5abd4`, untouched. `refs/heads/teamless/deneb` is `9c877969`, the tick of 3.1, pushed from outside the place. Flume's hook refuses an agent's `git push` in its place: it refused the code stage's push, which then stopped short, and it refused this stage's. So the check names `rev-parse HEAD` only at the commit the push was made at. Each commit after it moves HEAD, the tick of 3.2 (`989e4280`) first. Those commits change only `openspec/`, so the crew a pin of `9c877969` loads is the crew of the branch's head. Decision 7 has each later commit of the change's own stages pushed the same way. That push is a fast-forward of `teamless/deneb` to the branch's head, without force, made from outside the place as `9c877969`'s was. Flume holds this place's submission ("Never submit to crew main: it deploys to every host and the box still runs teams."), so nothing reaches main. |
 
 ## The deltas
 
@@ -75,11 +75,14 @@ The restored scenarios, versions 3 and 4 among them, are the parametrized refusa
 | `openspec validate --specs` | 24 passed, 0 failed, with only the long-requirement warnings the restored specs already carry |
 | `git grep -n 9d590e9f -- docs/architecture` | nothing |
 | `git ls-remote origin refs/heads/main` | `f3c5abd4`, main's |
+| `git ls-remote origin refs/heads/teamless/deneb` | `9c877969`, an ancestor of the branch's head, so a fast-forward reaches it |
+| Flume's submission of the place | held, with the words "Never submit to crew main: it deploys to every host and the box still runs teams. The branch is pushed as teamless/deneb and pinned by swancloud for deneb alone." |
 
 No test task reads `openspec/specs/`, so the archive's merge of the deltas changes no check's outcome. `openspec validate --specs` is run again on the archived tree.
 
 ## What stays outside this change
 
+- **The push of the branch's head.** `teamless/deneb` is brought to `change/crew-runs-without-teams-on-deneb`'s head by a fast-forward without force, from outside the place, before swancloud pins it.
 - **swancloud's deploy.** swancloud pins deneb's crew to `teamless/deneb`'s head and writes deneb's teams file at version 5, in one deploy on the user's word. That work is swancloud's (*What this change rests on*, 3).
 - **deneb's main levels.** `crew main up madswan` and `crew main up swancloud` come after that deploy, by the user's hand (*After deploy*).
 - **Main's pages.** On main, the design agent records the user's word of 2026-11-03 and where deneb's crew comes from (Migration Plan, 4). This change lands nothing on main, so main's pages cannot learn it from here.
