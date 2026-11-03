@@ -9,7 +9,7 @@ The rules for the run record: what an entry is, when it is written, what it neve
 
 ## Rules
 
-Retired 2026-11-01 with the landing of `the-team-machinery-leaves` (9d590e9f): `record.5` (one `stage.end` per `stage.start`) and `record.6` (a fix's object), rules of entries crew no longer writes; the entries already written are read as before (`record.4`).
+Retired 2026-11-03 for deneb alone with `the-team-machinery-leaves` on `teamless/deneb`: `record.5` (one `stage.end` per `stage.start`) and `record.6` (a fix's object), rules of entries crew no longer writes; the entries already written are read as before (`record.4`).
 
 - **[record.1]** Every command that moves work appends one entry per act, after the act, done or refused; a pure read appends nothing.
 - **[record.2]** A failed append is said once on standard error and never changes what the command does or how it exits.
