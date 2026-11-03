@@ -38,6 +38,16 @@ flaky = "fail"
 timeout = "20m"
 trust = ["open"]
 
+# teamless/deneb is crew without teams, which deneb runs while the box keeps crew's release (record 0047 move 5;
+# swancloud record 0044). Until the refactor is confirmed and goes back into main, crew's own work lands here alone,
+# through sluice, as a push leased on where the round found it, with no pull request (the user, 2026-11-03).
+[branches."teamless/deneb"]
+remote = "origin"
+required = ["#check-full"]
+flaky = "fail"
+timeout = "20m"
+trust = ["open"]
+
 [branches.main.pull_requests]
 reviews = 0
 checks = []
