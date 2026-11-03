@@ -57,6 +57,20 @@ expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it run
 has "$out" "never the whole suite, which the merge gate runs"
 ok "the coder and verify run only the tests a change affects, and leave the whole suite to the merge gate"
 
+# A stage drives a browser only the way its kit names, never the host's interactive browser skill, which the fleet
+# gives every session on the host (swancloud agents.7, agents.2), and leaves nothing of its own open past its end:
+# swb-2's code stages on chuck-herdr-alpha took their screenshots through terminal-browser and left eight tabs open,
+# and the box went slow (wldn signal 2026-10-24-swb-2-conductor-1668df99/01).
+for role in coder verify; do
+  expect_ok crewpy brief swb-1 $role
+  for want in "only the way the kit names: its headless browser, run in the kit's shell" \
+    "Never use an interactive browser skill of the host's, such as terminal-browser" \
+    "Leave no tab, window or browser process of your own past your stage's end"; do
+    has "$out" "$want"
+  done
+done
+ok "the coder and verify take screenshots and drive a browser only the kit's way, never the host's browser skill, and leave nothing open past their end"
+
 # A change's content is the kit's (briefs.3, record 0025): the construct brief names no proof list, task shape or
 # design section, points at the kit's openspec/config.yaml, and keeps the Touches block crew reads.
 expect_ok crewpy brief swb-1 construct

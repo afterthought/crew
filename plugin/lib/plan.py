@@ -11661,14 +11661,7 @@ def stage_wait(fleet, a):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         fail(f"a wait on {agent}'s stage is already running: its answer is the one to read")
-    try:
-        reach(fleet, t)
-    except Refusal as e:
-        print(f"no forecast: {e}", file=sys.stderr)
-    try:
-        batch_check(fleet, t)
-    except Refusal as e:
-        print(f"no batch reckoned: {e}", file=sys.stderr)
+    before_waiting(fleet, t)
     held = {l.split()[0]: l.split() for l in (team_state(t) / "slots").read_text().splitlines() if l.strip()} \
         if (team_state(t) / "slots").exists() else {}
     with stages_file(t, shared=True) as lines:
@@ -11728,41 +11721,63 @@ def stage_wait(fleet, a):
                     continue
                 unmark(fleet, t, o)
                 then = after_delivery(o.stage, o.fix)
-                if "batch" in then and "landing" not in then:  # the change it delivered is due, and may make a batch due now
-                    batch_reckoned(fleet, t)
             if how in ("delivered", "short") and o.stage == "settle" and not o.fix and not o.chore:
                 said = settle_said(fleet, t, o.name, said)
             if how:
                 print(said, flush=True)
-                if "landing" in then:  # the head of the bolt it merged into moved: its row on its kit's landings card (land_hand)
-                    landing_after_merge(fleet, t, got.split("@")[0][len("bolt/"):])
-                if "batch" in then and "landing" in then:  # its last unit merged may make a batch due at once
-                    batch_reckoned(fleet, t)
-                if "tidy" in then:  # its slot, place and branch go as it lands, not at the next read
-                    try:
-                        reap(fleet, on_team_host(fleet, t))
-                    except Refusal as e:
-                        print(f"its place is not removed yet: {e}; the team's next read removes it", file=sys.stderr)
+                after_answer(fleet, t, then, got)
                 return
             time.sleep(min(POLL, remaining))
 
 
+def before_waiting(fleet, t):
+    """What each wait of a conductor's does before it waits: its units' merges forecast (reach), then the partition's
+    batch reckoned (batch_reckoned), so a bolt whose last unit merged reaches the planner on every wait until it is
+    told, whatever the merge's own end did (briefs.12). What crew can't read of either is said on standard error, and
+    neither keeps the other, or the wait, from going on."""
+    try:
+        reach(fleet, t)
+    except Refusal as e:
+        print(f"no forecast: {e}", file=sys.stderr)
+    batch_reckoned(fleet, t)
+
+
+def after_answer(fleet, t, then, got):
+    """What a wait does once it has said a stage delivered, each of after_delivery's acts in its order: "batch", the
+    partition's batch reckoned (batch_reckoned); "landing", the merge's end for the bolt it merged into, got being
+    bolt/<bolt>@<head> (landing_after_merge); "tidy", the team's read (reap), what it could not remove said on standard
+    error."""
+    for act in then:
+        if act == "batch":
+            batch_reckoned(fleet, t)
+        elif act == "landing":
+            landing_after_merge(fleet, t, got.split("@")[0][len("bolt/"):])
+        elif act == "tidy":
+            try:
+                reap(fleet, on_team_host(fleet, t))
+            except Refusal as e:
+                print(f"its place is not removed yet: {e}; the team's next read removes it", file=sys.stderr)
+
+
 def after_delivery(stage, fix):
-    """What crew does once a stage a wait watched has delivered (briefs.12, plan.16): "batch", reckon whether a batch is
-    due (batch_check), after a construct's change, not a fix's, which is due itself, and after a merge, whose last unit
-    merged makes a batch due at once for the bolt's units in none; "landing", raise or change the bolt's landing card,
-    after a merge, which moved the bolt's head; "tidy", the team's read (reap), after a merge, so the slot is freed and
-    the place and its branch removed as the merge lands rather than at the conductor's next read (teams.1, plan.9). A
-    bolt whose last unit merged left no wait to reckon its batch, since its conductor waits on nothing more
-    (every-deploy-has-its-live-card and every-host-reaches-every-other-by-its-tailnet-name on 2026-10-19, every unit
-    merged and the planner never told, for two hours), and no read to remove its places."""
-    return (["batch"] if stage == "construct" and not fix else []) + (["landing", "batch", "tidy"] if stage == "merge" else [])
+    """What crew does once a stage a wait watched has delivered, in this order (briefs.12, plan.16): "batch", reckon
+    whether a batch is due (batch_check), after a construct's change, not a fix's, which is due itself, and after a
+    merge, whose last unit merged makes a batch due at once for the bolt's units in none; "landing", raise or change the
+    bolt's landing card, after a merge, which moved the bolt's head; "tidy", the team's read (reap), after a merge, so
+    the slot is freed and the place and its branch removed as the merge lands rather than at the conductor's next read
+    (teams.1, plan.9). A bolt whose last unit merged left no wait to reckon its batch, since its conductor waits on
+    nothing more (every-deploy-has-its-live-card and every-host-reaches-every-other-by-its-tailnet-name on 2026-10-19,
+    every unit merged and the planner never told, for two hours), and no read to remove its places. A merge's batch
+    comes before its landing, so the landing card's hand, which may refuse, never keeps it (wldn's awb-1, 2026-10-27:
+    proven at 01:59Z with two units in no batch, and none reckoned due until one was started by hand at 12:18Z)."""
+    return (["batch"] if stage == "construct" and not fix else []) + (["batch", "landing", "tidy"] if stage == "merge" else [])
 
 
 def batch_reckoned(fleet, t):
-    """batch_check at a wait's end, what crew can't read said on standard error, the wait's answer standing."""
+    """batch_check at a wait's start and at its end, the team's bolts read where they live after a fetch, as a decision
+    of the moment reads them (plan.18, plan.19); what crew can't read said on standard error, the wait standing."""
     try:
-        batch_check(fleet, t)
+        batch_check(fleet, t, fetch=True)
     except Refusal as e:
         print(f"no batch reckoned: {e}", file=sys.stderr)
 
@@ -14152,32 +14167,34 @@ def batch_due(due, entries, setting, now, bolts):
     return why
 
 
-def batch_reckoners(found, teams, here):
-    """The teams the rail's sweep on this host (here) reckons a batch for (briefs.12): for each partition whose plan was
-    read, each team on this host holding a bolt of it, in the plan's order, as {label: [team]}; a partition is reckoned
-    by its first team until one tells its planner (reckon_batches). A batch due by the partition's clock, or at once for
-    a bolt whose units have all merged, so reaches the planner when no conductor waits on anything (2026-10-19: two
-    bolts merged two hours with no batch begun)."""
+def batch_reckoners(found, teams):
+    """The teams the rail's sweep reckons a batch for (briefs.12), wherever it runs: for each partition whose plan was
+    read, each team of the teams file holding a bolt of it, on any host, in the plan's order, as {label: [team]}; a
+    partition is reckoned by its first team until one tells its planner (reckon_batches). A batch due by the
+    partition's clock, or at once for a bolt whose units have all merged, so reaches the planner when no conductor
+    waits on anything (2026-10-19: two bolts merged two hours with no batch begun), and from a rail on another host
+    than the team's (wldn's awb-1, 2026-10-27: proven ten hours with its units in no batch, the sweep reckoning only
+    its own host's teams)."""
     out = {}
     for label, _, _, pl in found:
         if not pl:
             continue
-        names = [b.get("Team") for b in pl.bolts() if b.get("Team")]
-        held = [n for n in dict.fromkeys(names) if (teams.get(n) or {}).get("machine") == here]
+        held = [n for n in dict.fromkeys(b.get("Team") for b in pl.bolts() if b.get("Team")) if n in teams]
         if held:
             out[label] = held
     return out
 
 
 def reckon_batches(fleet, found, read=None, skip=()):
-    """The rail's sweep reckons each partition's batch on this host (batch_reckoners, batch_check), stopping at the first
-    of its teams that tells the planner, since a batch is told once; what crew can't read is said on standard error and
-    the rail read stands. With read, the rail read's, the plan, the run record and the stages are taken from it and
-    nothing is read again, as the host's follower reckons at every refresh, its read kept; a partition in skip, one the
-    follower told at its read's tip already (batch_told), is not reckoned. Returns each partition a batch was due for,
-    with whether its planner was told, {label: told}."""
+    """The rail's sweep reckons each partition's batch for every team holding a bolt of it (batch_reckoners,
+    batch_check), each team's kits read on its own host as survey reads them, as that host last fetched them (plan.18),
+    stopping at the first of its teams that tells the planner, since a batch is told once; what crew can't read is said
+    on standard error and the rail read stands. With read, the rail read's, the plan, the run record and the stages are
+    taken from it and nothing is read again, as the host's follower reckons at every refresh, its read kept; a partition
+    in skip, one the follower told at its read's tip already (batch_told), is not reckoned. Returns each partition a
+    batch was due for, with whether its planner was told, {label: told}."""
     told = {}
-    for label, names in batch_reckoners(found, fleet["teams"], crew.this_host()).items():
+    for label, names in batch_reckoners(found, fleet["teams"]).items():
         if label in skip:
             continue
         for name in names:
@@ -14202,15 +14219,17 @@ def batch_told(told, found, tick):
     return {label for label, _, tip, _ in found if tip and label in told and told[label][0] == tip and (told[label][1] or not tick)}
 
 
-def batch_check(fleet, t, read=None):
+def batch_check(fleet, t, read=None, fetch=False):
     """On each wait of a conductor of the partition, at the end of a construct or a merge it waited on
     (after_delivery), and on the rail's sweep (reckon_batches): the changes due across the partition, counted from the run
     record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
     one due, or at once when the team's bolt has every unit merged and some unit's latest change has been in no batch.
     crew then tells the partition's planner once, `batch.due` in the run record, until the next batch is delivered
-    (briefs.12). What crew can't read is said on standard error, and the wait goes on. With read, a rail read, the plan,
-    the run record and the stages are its, read nothing again (the host's follower's, every refresh, Decision 8 of
-    a-rail-refresh-after-no-change-reads-nothing). Returns whether it told the planner."""
+    (briefs.12). Read afresh, the bolts given through Flume are read with the team's own before the due changes are
+    counted, and with none, only the team's bolts with a unit due once they are, each where it lives, each kit's GitHub
+    fetched first with fetch (stages_for). What crew can't read is said on standard error, and the wait goes on. With
+    read, a rail read, the plan, the run record and the stages are its, read nothing again (the host's follower's, every
+    refresh, Decision 8 of a-rail-refresh-after-no-change-reads-nothing). Returns whether it told the planner."""
     label = t["label"]
     setting = fleet["partitions"][label]["review"]
     if read is not None:
@@ -14228,13 +14247,19 @@ def batch_check(fleet, t, read=None):
     # A crossed unit's change is read once it has landed on its bolt, from the runner's records and its kit (Decision 13
     # of teams-cross-to-flume-as-their-bolts-land), so every bolt given through Flume is read with the team's own.
     held, crossing = held_by(plan, t["name"]), [b for b in plan.bolts() if b.get("Team") and b.get("Path") == "flume"]
-    st = (Stages(fleet, plan, read["sv"], read.get("runs")) if read is not None else
-          stages_for(fleet, plan, held + [b for b in crossing if b not in held])) if held or crossing else None
+    if read is not None:
+        st = Stages(fleet, plan, read["sv"], read.get("runs")) if held or crossing else None
+    else:
+        st = stages_for(fleet, plan, held + [b for b in crossing if b not in held], fetch=fetch) if crossing else None
     due = due_changes(plan, entries, crossed_changes(plan, st) if crossing else None)
     if not due or told_since_last_batch(entries):
         return
+    waiting = [(b, [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]) for b in held]
+    ripe = [(b, us) for b, us in waiting if us]
+    if st is None and ripe:
+        st = stages_for(fleet, plan, [b for b, _ in ripe], fetch=fetch)
     bolts = [(b.name(), bool(plan.work_of(b.name())) and all(st.of(u.name())["stage"] in ("merged", "landed") for u in plan.work_of(b.name())),
-              [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]) for b in held]
+              us) for b, us in ripe]
     why = batch_due(due, entries, setting, datetime.datetime.now(datetime.timezone.utc), bolts)
     if not why:
         return
