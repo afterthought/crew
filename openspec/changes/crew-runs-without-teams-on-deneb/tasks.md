@@ -5,11 +5,11 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 ## 1. The teamless crew on today's main
 
 - [x] 1.1 The branch holds one commit applying ccb5f9a9's tree three-way against 09b2cf4d onto f3c5abd4, with every one of the 21 conflicts resolved as Decision 2's table says and no conflict marker or unmerged path left (design Decisions 1 and 2; Task notes 1.1). Verify `tests/suite logic contract` ends with "0 failed".
-- [ ] 1.2 Nothing of #430's stuck report is left: no `stuck_report`, `stuck_said`, `report_time`, `gather.since` or `transcript.last_words`, and none of their cases, unless something the teamless crew reaches calls it (design Decision 3; Task notes 1.2). Verify `tests/suite logic contract` ends with "0 failed".
-- [ ] 1.3 A partition's batch is reckoned as the teamless crew reckons it, on its main level's host over every started bolt, with nothing of #435's wait or team reckoning left, and the rail's branch-alone cases keep their fixed clock (design Decision 4; Task notes 1.3). Verify `tests/suite logic` ends with "0 failed".
-- [ ] 1.4 The design agent's brief carries the teamless words, the Opus model and #425's and #426's words on records. `t-briefs` pins those words and none of the conductor's stuck report or the stage briefs' browser words (design Decisions 2 and 4; Task notes 1.4). Verify `tests/suite t-briefs` ends with "0 failed".
-- [ ] 1.5 README, the crew skill and `crew`'s usage header say the teamless crew together, with nothing of #430's (design Decision 3; `docs.2`; Task notes 1.5). Verify `tests/suite t-docs` ends with "0 failed".
-- [ ] 1.6 `tests/moon.yml` is in step with the tests: no task for a deleted test, no `# Reads:` path that is gone (`tests.10`; Task notes 1.6). Verify `tests/suite logic` ends with "0 failed", since it refuses to run while the tasks are out of step.
+- [x] 1.2 Nothing of #430's stuck report is left: no `stuck_report`, `stuck_said`, `report_time`, `gather.since` or `transcript.last_words`, and none of their cases, unless something the teamless crew reaches calls it (design Decision 3; Task notes 1.2). Verify `tests/suite logic contract` ends with "0 failed".
+- [x] 1.3 A partition's batch is reckoned as the teamless crew reckons it, on its main level's host over every started bolt, with nothing of #435's wait or team reckoning left, and the rail's branch-alone cases keep their fixed clock (design Decision 4; Task notes 1.3). Verify `tests/suite logic` ends with "0 failed".
+- [x] 1.4 The design agent's brief carries the teamless words, the Opus model and #425's and #426's words on records. `t-briefs` pins those words and none of the conductor's stuck report or the stage briefs' browser words (design Decisions 2 and 4; Task notes 1.4). Verify `tests/suite t-briefs` ends with "0 failed".
+- [x] 1.5 README, the crew skill and `crew`'s usage header say the teamless crew together, with nothing of #430's (design Decision 3; `docs.2`; Task notes 1.5). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 1.6 `tests/moon.yml` is in step with the tests: no task for a deleted test, no `# Reads:` path that is gone (`tests.10`; Task notes 1.6). Verify `tests/suite logic` ends with "0 failed", since it refuses to run while the tasks are out of step.
 
 ## 2. The specs and the pages
 
