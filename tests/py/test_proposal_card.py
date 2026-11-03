@@ -44,10 +44,10 @@ def adds(prefix, k):
     return [f'unit add {prefix}-{i} "Unit {i}." --repo switchboard-kit' for i in range(1, k + 1)]
 
 
-def built(n, case, *dos, waiting=(), session=None, state="open"):
+def built(n, case, *dos, session=None, state="open"):
     argvs = [plan.do_args("wldn", d) for d in dos]
     return cards.proposal_card(dict(n=n, state=state, case=case, before=fresh().plan, after=apply(fresh(), *dos).plan,
-                                    argvs=argvs, waiting=list(waiting), session=session))
+                                    argvs=argvs, session=session))
 
 
 DOS = ('unit drop c-third "Not needed now."', 'unit amend b-second "The second thing, done better."',
@@ -60,16 +60,15 @@ class TestBuiltDropAmendAdd:
 
     @classmethod
     def setup_class(cls):
-        cls.B = built(1, "The third unit is not needed. The second needs more. Two units finish the bolt.", *DOS, waiting=["swb-2"])
+        cls.B = built(1, "The third unit is not needed. The second needs more. Two units finish the bolt.", *DOS)
 
     def test_its_title_is_the_kind_and_the_thing_with_its_counts_and_no_number_or_question(self):
         c = self.B["card"]
         assert self.B["key"] == "proposal/1"
         assert c["title"] == "Plan change to deploys: 1 dropped, 1 amended, 2 new"
         assert c["summary"] == ("The third unit is not needed. Each new unit below is ticked; clear any to leave it out, and send. "
-                                "What it drops or amends applies with it. It waits on swb-2-conductor to agree.")
-        assert c["context"]["background"] == ("The third unit is not needed. The second needs more. Two units finish the bolt."
-                                              "\n\nWaiting on swb-2-conductor to agree.")
+                                "What it drops or amends applies with it.")
+        assert c["context"]["background"] == "The third unit is not needed. The second needs more. Two units finish the bolt."
 
     def test_it_is_one_checkbox_list_of_its_new_units_ticked_with_no_box_for_the_drop_or_the_amendment(self):
         c = self.B["card"]
@@ -205,7 +204,7 @@ def test_a_long_proposal_whose_reading_could_not_open_is_raised_naming_crew_card
     why = "plannotator ended before proposal/7's session was ready: stub: refused to start"
     argvs = [plan.do_args("wldn", d) for d in adds("x", 16)]
     facts = dict(n=7, state="open", case="Sixteen units for the queue.", before=fresh().plan, after=apply(fresh(), *adds("x", 16)).plan,
-                 argvs=argvs, waiting=[], session=None)
+                 argvs=argvs, session=None)
     acts = Unopened(why)
     b = plan.card_built(acts, "wldn", cards.proposal_card, facts)
     c = b["card"]
@@ -351,6 +350,9 @@ class OnTheTip:
                             if path == "proposals.rec" else None)
         for name in ("row_card_post", "row_card_change", "row_card_close"):
             monkeypatch.setattr(plan, name, lambda *a, name=name, **kw: self.called.append((name, a, kw)) or "req_2")
+        # no runner has reported taking the kit's work, so the card is filed in the partition's blueprints (plan.kit_at)
+        monkeypatch.setattr(plan, "runners", lambda repo, label: {})
+        monkeypatch.setattr(plan, "kit_at", lambda fleet, label, kit, run=None: plan.fail(f"no runner has reported taking {kit}'s work yet"))
 
 
 class TestSweptOnThePlanAsItStands(OnTheTip):
@@ -382,33 +384,3 @@ class TestSweptOnThePlanAsItStands(OnTheTip):
         self.now = chain((1, "approved"))
         got, _ = self.swept(event="relink")
         assert (got, self.fetched, [n for n, *_ in self.called]) == ("req_2", [False], ["row_card_change"])
-
-
-# An agreement raises its proposal's card on the plan as it stands, not on its own write: wldn's proposal 553 was agreed
-# by swb-1 at 35d07471 and dropped by the planner at bc2c3b1 four seconds on, and the agreement then posted its card
-# again in the planner's name until the rail's sweep withdrew it (signal 2026-10-24-swancloud-planner-04891322/01).
-@pytest.mark.parametrize("closes, said", [
-    ((), None), (((1, "approved"),), "proposal 1 is approved. It is closed, so crew raises no card for it and changes none."),
-    (((1, "dropped"),), "proposal 1 is dropped: Not now. It is closed, so crew raises no card for it and changes none."),
-    (((1, "rewritten"),), "proposal 1 is dropped: replaced by proposal 2. It is closed, so crew raises no card for it and changes none.")])
-def test_an_agreement_to_a_proposal_the_plan_shows_closed_answers_that_it_is_closed_and_how(closes, said):
-    assert plan.agree_closed(plan.proposal(chain(*closes), 1, "wldn"), 1) == said
-
-
-class TestAgreedOnThePlanAsItStands(OnTheTip):
-    """plan.raise_agreed once swb-1's agreement to proposal 1 is written: the proposal read at the tip fetched anew, its
-    card raised only while it stands open there."""
-
-    def agreed(self):
-        return plan.raise_agreed(SWEPT_FLEET, "wldn", 1, ["swb-1"], self.Acts())
-
-    @pytest.mark.parametrize("state", ["approved", "dropped"])
-    def test_a_proposal_closed_since_the_agreements_write_raises_no_card_changes_none_and_says_how(self, capsys, state):
-        self.now = chain((1, state))
-        assert (self.agreed(), self.fetched, self.called) == (None, [True], [])
-        assert capsys.readouterr().out == plan.agree_closed(plan.proposal(self.now, 1, "wldn"), 1) + "\n"
-
-    def test_a_proposal_still_open_as_the_plan_stands_has_its_card_changed_to_wait_on_the_agreement_no_longer(self):
-        assert (self.agreed(), self.fetched) == ("req_2", [True])
-        (name, args, _), = self.called
-        assert (name, args[5]) == ("row_card_change", "No longer waits on swb-1-conductor")

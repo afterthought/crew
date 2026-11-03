@@ -60,41 +60,6 @@ The Bolt plan lane SHALL list each open proposal with its number, who proposed i
 - **WHEN** the plan holds bolt apex-zones with no team and unit zone-one in it
 - **THEN** Bolt plan lists apex-zones with its repository and goal, and zone-one under it as ready
 
-### Requirement: Construction shows each held bolt as a ledger
-The Construction lane SHALL show each bolt a team holds as a ledger: its head line with its repository, team and host, the number and state of its landing while one stands in sluice, and, once every unit and chore of it has merged and sluice is green at its head while not every one has landed, that it waits to land; while the run record's last `bolt.submit` on the bolt has its landing queued and sluice's queue, read, shows no landing of it standing, that its landing is queued, with the number the run record holds; once it has landed on main and its close was refused, that it landed and was not closed, with the words of its last refused close; each unit in plan order with its stage, its tasks done and total in code or verify, the number and state of its merge while one stands in sluice, the slot holding it and the URL of the dev server running in its worktree; each fix of the bolt with whether it has merged, its merge's number and state while one stands, its slot and its server; and the bolt's own server at the foot. A team holding two bolts SHALL have a ledger for each, and its conductor's band SHALL draw both. Main-level ops's band SHALL draw the head line of each bolt whose close was refused.
-
-#### Scenario: A unit in code
-- **WHEN** unit a of bolt tenant-environments is in code with 1 of 2 tasks ticked, held by swb-1's unit-1
-- **THEN** tenant-environments' ledger has a line for a saying code 1/2 and unit-1
-
-#### Scenario: No server running
-- **WHEN** a unit's worktree has no dev server running, or its kit has no dev server naming
-- **THEN** its line shows no URL and no note about it
-
-#### Scenario: A bolt waiting to land beside the one being built
-- **WHEN** swc-1 holds `doctor-rows`, every unit merged and sluice green at its head, and `ssh-fix`, with a unit in code
-- **THEN** the lane and swc-1-conductor's band each show `doctor-rows`'s head line saying it waits to land, and `ssh-fix`'s ledger beside it
-
-#### Scenario: A merge standing in sluice
-- **WHEN** unit a of bolt tenant-environments has its merge `#41` under test on `bolt/tenant-environments`
-- **THEN** a's line in the lane and in swb-1-conductor's band says `#41 under test`
-
-#### Scenario: A landing standing in sluice
-- **WHEN** `doctor-rows`'s landing `#355` is queued on its kit's main
-- **THEN** `doctor-rows`'s head line in the lane, in swc-1-conductor's band and in main-level ops's says `landing #355 queued`
-
-#### Scenario: A queue that can't be read
-- **WHEN** sluice's record of the queue could not be read on swb-1's host
-- **THEN** tenant-environments' head line says its submissions can't be read, and no line shows a number, though the run record has its landing queued
-
-#### Scenario: A landing recorded queued that sluice no longer has standing
-- **WHEN** the run record's last `bolt.submit` on `doctor-rows` is queued as submission 412, and sluice's queue, read on swc-1's host, shows no landing of it standing
-- **THEN** `doctor-rows`'s head line, on the lane and in swc-1-conductor's band, says its landing is queued as #412
-
-#### Scenario: A close refused
-- **WHEN** `doctor-rows` has landed on main and the run record's last `bolt.land` on it since then is refused, saying chore `tidy-rows` has not landed on main
-- **THEN** `doctor-rows`'s head line, on the lane, in swc-1-conductor's band and in main-level ops's band, says it landed on main and was not closed, with those words, in the attention gutter
-
 ### Requirement: Operation shows the bolts landed in the last seven days
 The Operation lane SHALL list each bolt landed in the last seven days, newest first, from the `bolt.land` entries of the partition's run record that were not refused, with when it landed, who landed it and its units.
 
@@ -168,28 +133,6 @@ When the host's follower refreshes, crew SHALL read the plan, the kits and the r
 #### Scenario: Never written
 - **WHEN** the board tab opens on a host where no follower has written wldn's frame
 - **THEN** it says there is no board for wldn yet and that the host's follower writes it
-
-### Requirement: The board's JSON lists each partition's teams
-`crew board --json` SHALL list, for each partition, its teams in the teams file's order, each with its kit and its host. The board's text SHALL not change.
-
-#### Scenario: The page's team control
-- **WHEN** `crew board --label wldn --json` runs
-- **THEN** wldn's partition lists each of its teams with its kit and host, in the teams file's order
-
-### Requirement: Each object in the board's JSON says whose it is
-Each object in the lanes of `crew board --json` SHALL carry the teams it belongs to: a held bolt or a landing, its team; a signal, the team whose agent captured it; a planned bolt, a queued unit or an exploration, every team building its repository; a proposal, the teams holding its bolts and those building its repositories. An object belonging to no team SHALL carry an empty list.
-
-#### Scenario: A held bolt and the work queued behind it
-- **WHEN** swb-1 and swb-2 both build switchboard-kit, swb-1 holds tenant-environments, and unit zone-two of switchboard-kit is queued
-- **THEN** the JSON gives tenant-environments the teams `["swb-1"]` and zone-two the teams `["swb-1", "swb-2"]`
-
-#### Scenario: A signal the user wrote
-- **WHEN** a signal was captured by the user rather than by an agent of a team
-- **THEN** the JSON gives it an empty list of teams
-
-#### Scenario: A proposal for a held bolt
-- **WHEN** proposal 4 adds a unit to tenant-environments, which swb-1 holds
-- **THEN** the JSON gives proposal 4 the team swb-1
 
 ### Requirement: The host's follower runs with no tab
 `crew _follow` SHALL be the host's follower with no tab, the command a job of the host's runs: once a minute on its clock, and whenever this host's cache of a partition's state branch moves, for every partition with an operator session on the host, it SHALL make the refresh the rail tab's loop makes. crew SHALL run no service of its own for it.
@@ -405,19 +348,8 @@ Every holder of a bolt's time SHALL be read from what crew already keeps, and no
 - **WHEN** main's recent events name `#52`, from `pull/9`, landed, and the run record's queued `bolt.submit` of `b` names `#52`
 - **THEN** `#52` is `b`'s landing
 
-### Requirement: Construction shows a crossed team's bolts from the runner's records
-The Construction lane SHALL show each bolt a crossed team holds as a ledger of its units, chores and fixes with the stages the runner's records give, its head line naming the team's stream and host and no slots; a due team's head line SHALL say it is due to cross, or due back, and name what it finishes first. The board's JSON SHALL give each team its path and, for a crossed team, its stream.
-
-#### Scenario: A crossed team's ledger
-- **WHEN** crossed crw-4 holds `x`, `a` at `code 3/7` and `b` waiting on `a`
-- **THEN** the board's Construction lane shows `x` on deneb in stream `madswan`, `a` at code 3/7 and `b` waiting on `a`, and no slot line
-
-#### Scenario: A due team
-- **WHEN** crw-5 is due to cross while it builds `y`
-- **THEN** its head line says crw-5 is due to cross once `y` lands
-
-### Requirement: The planner's and ops's bands show what a crossed team's places wait on them for
-`board.agent_views` SHALL give the planner's band each crossed place that stopped short asking or waits on its caller, with its question or Flume's words, and main-level ops's band each fix of main and each take-main fix in flight with its stage; crew's mod SHALL draw both above the agent's prompt.
+### Requirement: The planner's and ops's bands show what places wait on them for
+`board.agent_views` SHALL give the planner's band each launched place that stopped short asking or waits on its caller, with its question or Flume's words, and main-level ops's band each fix of main and each take-main fix in flight with its stage; crew's mod SHALL draw both above the agent's prompt.
 
 #### Scenario: A question in the planner's band
 - **WHEN** `a`'s construct stopped short asking "Which partition's rail?"
@@ -444,3 +376,53 @@ The board's attention line SHALL name each run of a role that the runner's recor
 #### Scenario: A lost run
 - **WHEN** the runner's records show madswan's design run `crew-design--madswan` on deneb lost
 - **THEN** the attention line names madswan's design run as lost, with its place and deneb, and prints no command
+
+### Requirement: Construction shows a started bolt from the runner's records
+The Construction lane SHALL show each started bolt as a ledger of its units, chores and fixes with the stages the runner's records give, its head line naming the host and the stream its work runs in, as the runner that took it reported them, and no slot. The board's JSON SHALL give each such ledger its host and stream.
+
+#### Scenario: A started bolt's ledger
+- **WHEN** `x` is started, deneb's runner keeping its kit with the stream `madswan`, `a` at `code 3/7` and `b` waiting on `a`
+- **THEN** the board's Construction lane shows `x` on deneb in stream `madswan`, `a` at code 3/7 and `b` waiting on `a`, and no slot line
+
+### Requirement: Construction shows each bolt in flight as a ledger, with no server for a started bolt's work
+The Construction lane SHALL show each bolt in flight as a ledger: its head line with its repository and its kit's host, the number and state of its landing while one stands in sluice, and, once every unit and chore of it has merged and sluice is green at its head while not every one has landed, that it waits to land; while the run record has its landing queued and sluice's queue, read, shows no landing of it standing, that its landing is queued, with the number the run record holds; while it is landing again, that, with the submission sluice rejected before it; while sluice's rejection of its landing is at its head, that its landing was rejected and the bolt is open for work, with sluice's words, each state its own (bolt-teams "A landing queued holds its bolt's work"); once it has landed on main and its close was refused, that it landed and was not closed, with the words of its last refused close; each unit in plan order with its stage, its tasks done and total in code or verify, and the number and state of its merge while one stands in sluice; and each fix of the bolt with whether it has merged, and its merge's number and state while one stands. A started bolt's ledger SHALL show no dev server for the bolt or any of its work, whose places are Flume's, until the runner reports a place's addresses. The planner's band SHALL draw each bolt in flight as this ledger, its head line as the lane's, since ordering within a bolt, batches and amendments are the planner's; main-level ops's band SHALL draw the number and state of each landing while one stands in sluice, and the head line of each bolt whose close was refused.
+
+#### Scenario: A unit in code
+- **WHEN** unit a of bolt tenant-environments is in code with 1 of 2 tasks ticked, 
+- **THEN** tenant-environments' ledger has a line for a saying code 1/2, and names no slot
+
+#### Scenario: A started bolt's work shows no server
+- **WHEN** `tenant-environments` is started, and a dev server runs in a worktree of its kit named for it
+- **THEN** its ledger shows no URL for the bolt, its units or its fixes, and no note about one
+
+#### Scenario: A bolt waiting to land beside the one being built
+- **WHEN** `doctor-rows` has every unit merged and sluice green at its head, and `ssh-fix` of the same kit has a unit in code
+- **THEN** the lane shows `doctor-rows`'s head line saying it waits to land, and `ssh-fix`'s ledger beside it
+
+#### Scenario: A merge standing in sluice
+- **WHEN** unit a of bolt tenant-environments has its merge `#41` under test on `bolt/tenant-environments`
+- **THEN** a's line in the lane says `#41 under test`
+
+#### Scenario: A landing standing in sluice
+- **WHEN** `doctor-rows`'s landing `#355` is queued on its kit's main
+- **THEN** `doctor-rows`'s head line in the lane and in main-level ops's band says `landing #355 queued`
+
+#### Scenario: A queue that can't be read
+- **WHEN** sluice's record of the queue could not be read on swb-1's host
+- **THEN** tenant-environments' head line says its submissions can't be read, and no line shows a number, though the run record has its landing queued
+
+#### Scenario: A landing recorded queued that sluice no longer has standing
+- **WHEN** the run record's last `bolt.submit` on `doctor-rows` is queued as submission 412, and sluice's queue, read on its kit's host, shows no landing of it standing
+- **THEN** `doctor-rows`'s head line, on the lane and in the planner's band, says its landing is queued as #412
+
+#### Scenario: A landing rejected
+- **WHEN** the run record has `doctor-rows`'s landing #412 refused at its present head for a conflict on `README.md`
+- **THEN** `doctor-rows`'s head line, on the lane and in the planner's band, says its landing #412 was rejected at that head and the bolt is open for work, with sluice's words
+
+#### Scenario: Landing again
+- **WHEN** `doctor-rows`, rejected as #412, is queued again as #415, and sluice's queue shows no landing of it standing
+- **THEN** its head line says it is landing again as #415, after #412 was rejected
+
+#### Scenario: A close refused
+- **WHEN** `doctor-rows` has landed on main and the run record's last `bolt.land` on it since then is refused, saying chore `tidy-rows` has not landed on main
+- **THEN** `doctor-rows`'s head line, on the lane and in main-level ops's band, says it landed on main and was not closed, with those words, in the attention gutter

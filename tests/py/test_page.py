@@ -9,7 +9,7 @@ from pathlib import PurePath
 
 import pytest
 
-from facts import plan_text
+from facts import FLEET, plan_text
 
 import page
 import plan
@@ -88,8 +88,13 @@ class TestLabels:
         pl = plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", "swb-1")], units=[]))
 
         class St:
+            fleet = FLEET
+
             def of(self, name):
                 return {"stage": "code"}
+
+            def at(self, b):  # where a started bolt's work runs, as the runner that took it reported (plan.bolt_at)
+                return {"machine": "chuck-herdr-alpha"}, None
 
             def bolt_state(self, b):
                 return "active"
@@ -164,8 +169,8 @@ class TestFile:
 class TestMade:
     """lineage-page, "A host was asleep": the page is drawn from the branch's entries alone, a Mac that wrote some of
     them and does not answer among them, and names a host only for its kits."""
-    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "state": "WilldanGroup/crew-state", "teams": []}},
-             "teams": {}, "hosts": {"mac-studio": {"kind": "darwin"}, "macbook-pro": {"kind": "darwin"}}}
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "state": "WilldanGroup/crew-state"}},
+             "hosts": {"mac-studio": {"kind": "darwin"}, "macbook-pro": {"kind": "darwin"}}}
 
     def made(self, monkeypatch, capsys, kits):
         import argparse
@@ -213,28 +218,68 @@ class TestSites:
         assert sites.url_of(self.FLEET, "mac-studio", "mac-studio", self.SITE, None) == (None, "portless did not answer")
 
 
+class TestSitesOfAStartedBolt:
+    """crew-sites "A started bolt's work shows no server": x, started, is listed with where its work runs and no
+    server, though one runs in a unit's place of crew's naming, since its places are Flume's (_open.md: the runner
+    reports a place's addresses)."""
+
+    def listed(self, monkeypatch):
+        import crew
+        from facts import CREW_AT, crew_read, flume_plan, madswan_fleet
+        fleet = dict(madswan_fleet(), hosts={"deneb": {"kind": "nixos"}})
+        p = plan.Plan(flume_plan([("x", True, "flume")], [("a", "x", [], "unit", [])]))
+        sv = crew_read(bolts={"x": {}})
+        k = sv["deneb"]["kits"]["/crew/main"]
+        k.update(places={"a": {"path": "/crew/places/unit-a"}}, sites={"/crew/places/unit-a": {"here": "https://unit-a--crew.local"}},
+                 routes=[{"name": "unit-a--crew", "url": "https://unit-a--crew.local"}])
+        monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("madswan", "afterthought/crew-state", "tip0", p)])
+        monkeypatch.setattr(plan, "survey", lambda fleet, held, sites=False: sv)
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        # x's work taken by deneb's runner, which reported crew in /crew/main (plan.known_at); madswan's hosts its main
+        # level's and its runners' (plan.partition_hosts)
+        monkeypatch.setattr(plan, "rail_runs", lambda found: {"madswan": ([], {})})
+        monkeypatch.setattr(plan, "known_at", lambda fleet, label, b, run=None: dict(CREW_AT, label=label))
+        monkeypatch.setattr(plan, "partition_hosts", lambda fleet, label, fetch=True: ["deneb"])
+        return sites.sites(fleet, ["madswan"])
+
+    def test_a_started_bolt_is_listed_with_no_server_saying_why(self, monkeypatch):
+        x, = self.listed(monkeypatch)["partitions"][0]["hosts"][0]["bolts"]
+        assert (x["bolt"], x["url"], x["units"], x["note"]) == ("x", None, [], sites.FLUME_PLACES)
+
+    def test_its_line_says_where_its_work_runs(self, monkeypatch):
+        line = next(l for l in sites.text(self.listed(monkeypatch)).splitlines() if l.strip().startswith("x "))
+        assert line.endswith("its work runs in Flume's places, whose servers crew does not show yet  [crew]")
+
+
 class TestMore:
     def test_a_unit_and_bolt_whose_host_does_not_answer_have_no_stage_or_status(self):
         d = page.data([entry("unit.add", ["unit/a", "bolt/tenant-environments"])])
-        pl = plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", "swb-1")], units=[("a", "switchboard-kit", "tenant-environments", [])]))
+        pl = plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", True)], units=[("a", "switchboard-kit", "tenant-environments", [])]))
 
         class Unknown:
+            fleet = FLEET
+
             def of(self, name):
                 return {"stage": "unknown"}
+
+            def at(self, b):  # no runner has reported taking tenant-environments' work
+                return None, "no runner has reported taking bolt tenant-environments' work yet"
 
             def bolt_state(self, b):
                 return "unknown"
         page.labelled(d, pl, Unknown(), {}, {}, {}, lambda name: None)
         by = {n["id"]: n for n in d["nodes"]}
         assert [by["unit/a"].get(k) for k in ("label", "stage", "status")] == ["Unit a.", None, None]
-        assert [by["bolt/tenant-environments"].get(k) for k in ("status", "team")] == [None, "swb-1"]
+        assert [by["bolt/tenant-environments"].get(k) for k in ("status", "facts")] == [None, []] and "team" not in by["bolt/tenant-environments"]
 
-    def test_the_page_opens_on_the_board_in_the_mockups_forms_with_a_phone_layout_and_the_teams_to_narrow_it_to(self):
+    def test_the_page_opens_on_the_board_in_the_mockups_forms_with_a_phone_layout_and_no_team_to_narrow_it_to(self):
+        """board-page, the removed "A viewer narrows every lane to one team", "The team chosen survives a reload" and "The
+        strip names the partition's teams" (Decision 11 of the-team-machinery-leaves)."""
         rest = re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D, PurePath("/s/wldn/page.html")), flags=re.S)
         for lane in ("Inception", "Bolt plan", "Construction", "Operation"):
             assert f'aria-label="{lane}"' in rest
         for has in ("@media (max-width:759px)", "prefers-color-scheme:dark", ':root[data-theme="dark"]', "repeating-linear-gradient",
-                    "design/flywheel-next/mockups/rail-and-board.html", 'id="team"', "history.replaceState", '"crew-page:" + D.label',
+                    "design/flywheel-next/mockups/rail-and-board.html", "history.replaceState", '"crew-page:" + D.label',
                     'id="hide"', 'id="find"', 'id="bars"', "Nothing has been recorded"):
             assert has in rest
         for form in (".quote", ".sheet", ".slip", ".ledger", ".record", ".mark.attention", ".lg-unit.building"):
@@ -243,6 +288,8 @@ class TestMore:
             assert deploys in rest
         for sample in ("atlas", "plan-decisions", "books", "Manrope", "JetBrains Mono"):
             assert sample not in rest
+        for team in ('id="team"', "B.teams", "dataset.teams", "narrow(", "team:", "u.slot", "f.slot"):
+            assert team not in rest, team
 
     def test_a_marker_whose_rows_post_was_refused_says_so_with_pending_yous_words_in_its_title(self):
         """board-page "A deploy whose card was refused": the marker says it has no card, its post refused, and pointing
@@ -266,8 +313,10 @@ class TestMore:
 class TestDocks:
     """board-page: every item the page draws opens a dock with what the page's data and lineage hold of it (page.docks),
     on the board of test_board's fixture: a signal, a proposal waiting with its card open, a planned bolt and a queued
-    unit, tenant-environments held by swb-1 with a in code and a fix, atlas-maps landed by atl-1 and deployed to
-    mac-studio, a newer deploy waiting on the word, and operations waiting on the environment."""
+    unit, tenant-environments started, its work taken by the box's runner in stream wldn, with a in code, b at construct
+    and a fix, atlas-maps landed and deployed to mac-studio, a newer deploy waiting on the word, and operations waiting
+    on the environment; and wldn's main level on mac-studio, its design agent, planner and reviewer in its session wldn
+    on account madswan-2, ops in ops on willdan, and its operator in op, which names no account."""
     SIG = "2026-10-01-planning/01-zones"
 
     @pytest.fixture(autouse=True)
@@ -279,11 +328,9 @@ class TestDocks:
         import copy
         from test_board import BOX, FLEET
         f = copy.deepcopy(FLEET)
-        f["hosts"][BOX]["sessions"] = {"crew-a": {"account": "madswan-2"}, "crew-b": {"account": "madswan-2"}, "brd": {}}
-        f["hosts"]["mac-studio"]["sessions"] = {"wldn": {"account": "madswan-2"}, "atlas": {"account": "willdan"}}
-        for t, s in (("swb-1", "crew-a"), ("swb-2", "crew-b"), ("brd-1", "brd"), ("atl-1", "atlas")):
-            f["teams"][t]["session"] = s
-        f["partitions"]["wldn"]["sessions"] = {r: "wldn" for r in ("design", "planner", "ops", "operator", "reviewer")}
+        f["hosts"][BOX]["sessions"] = {"crew-a": {"account": "madswan-2"}}  # where the runner takes the work, no agent of crew's
+        f["hosts"]["mac-studio"]["sessions"] = {"wldn": {"account": "madswan-2"}, "ops": {"account": "willdan"}, "op": {}}
+        f["partitions"]["wldn"]["sessions"] = dict({r: "wldn" for r in ("design", "planner", "reviewer")}, ops="ops", operator="op")
         return f
 
     def paged(self, label=None):
@@ -291,7 +338,7 @@ class TestDocks:
         from test_board import NOW, OPS, SIGS, WAITS, data
         card = dict(label="wldn", card="req_2", key="proposal/2", by="wldn-planner", host="mac-studio", at=NOW)
         landing = dict(label="wldn", bolt="atlas-maps", units=["map-one"], at=NOW - datetime.timedelta(hours=1), by="chuck@mac-studio", host="mac-studio")
-        bd = data(signals=SIGS, props=WAITS, cards=[card], entries=OPS, landings=[landing], gives={("wldn", "atlas-maps"): "atl-1"})
+        bd = data(signals=SIGS, props=WAITS, cards=[card], entries=OPS, landings=[landing])
         lineage = [entry("capture", [f"signals/{self.SIG}"], why="captured"), entry("plan.propose", ["proposal/2", "unit/d", "bolt/tenant-environments"]),
                    entry("unit.add", ["unit/a", "bolt/tenant-environments"], ["signals/" + self.SIG]), entry("unit.add", ["unit/d", "bolt/tenant-environments"], ["proposal/2"]),
                    entry("bolt.land", ["bolt/atlas-maps", "unit/map-one"], minutes=5), entry("unit.add", ["unit/x", "bolt/c"], ["agenda/8"])]
@@ -299,30 +346,34 @@ class TestDocks:
         for n in d["nodes"]:
             n["label"] = label if n["id"] == f"signals/{self.SIG}" and label else n.get("label")
         d["board"] = dict(bd["partitions"][0], read_at=bd["read_at"], unread=bd["unread"])
+        # A fix in flight on tenant-environments, a Flume place, as the board draws a started bolt's fix.
+        te = next(b for b in d["board"]["construction"] if b["bolt"] == "tenant-environments")
+        te["fixes"] = [{"fix": "fix/tenant-environments/edge", "merged": False, "submission": None, "worktree": None,
+                        "url": None, "flume": {"stage": "code", "place": "/kit/places/fix--tenant-environments--edge"}}]
         d["deploys"] = page.deploys(d, OPS, "mac-studio")
         d["docks"] = page.docks(d, self.fleet(), "wldn")
         return d
 
-    def test_every_item_of_each_kind_and_every_team_carries_the_key_of_a_dock_the_page_holds(self):
+    def test_every_item_of_each_kind_carries_the_key_of_a_dock_the_page_holds_and_no_team_has_one(self):
         """board-page "Every item has its dock"."""
         d = self.paged()
         B = d["board"]
         drawn = list(page.walk(B, d["deploys"]))
         assert drawn and all(x["dock"] in d["docks"] for x in drawn)
         kinds = {d["docks"][x["dock"]]["kind"] for x in drawn}
-        assert kinds == {"signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation", "team"}
-        assert [t["dock"] for t in B["teams"]] == ["team:swb-1", "team:swb-2", "team:brd-1", "team:atl-1"]
+        assert kinds == {"signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation"}
+        assert not [k for k in d["docks"] if k.startswith("team:")]
         assert B["bolt_plan"]["planned"][0]["dock"] == "bolt:apex-zones" and B["bolt_plan"]["queue"][0]["dock"] == "unit:zone-two"
         assert B["construction"][0]["fixes"][0]["dock"] == "fix:tenant-environments/edge"
 
-    def test_a_units_dock_in_a_ledger_says_its_bolt_as_a_link_its_stage_its_tasks_and_its_slot(self):
+    def test_a_units_dock_in_a_ledger_says_its_bolt_as_a_link_its_stage_and_its_tasks(self):
         """board-page "A unit being built"."""
         a = self.paged()["docks"]["unit:a"]
         assert (a["kind"], a["title"], a["tail"], a["form"]) == ("unit", "a", "unit · in tenant-environments", None)
         facts = {f[0]: f[1:] for f in a["facts"]}
         assert facts["bolt"] == ["tenant-environments", "bolt:tenant-environments"]
-        assert (facts["stage"], facts["tasks"], facts["slot"]) == (["code"], ["1 of 2 tasks"], ["unit-1"])
-        assert facts["server"] == ["https://unit-a--switchboard-kit--box.dev"]
+        assert (facts["stage"], facts["tasks"]) == (["code"], ["1 of 2 tasks"]) and "slot" not in facts
+        assert "server" not in facts and "worktree" not in facts
 
     def test_the_same_deploy_from_the_operation_lane_and_the_deploys_view_has_one_key(self):
         """board-page "A deploy from either view"."""
@@ -365,43 +416,44 @@ class TestDocks:
         """board-page "A proposal waiting"."""
         p = self.paged()["docks"]["proposal:2"]
         assert (p["form"], p["title"], p["tail"]) == ("sheet", "Tenants get d.", "proposal 2 · by wldn-planner · opened 2026-10-12")
-        assert p["facts"] == [["waiting on", "swb-1-conductor"]]
+        assert p["facts"] == [["waiting on", "the user"]]
         assert [(m["glyph"], m["card"]["by"]) for m in p["markers"]] == [("✓", "wldn-planner")]
         assert {"title": "units and bolts", "rows": [{"text": "unit d"}]} in p["parts"]
-        assert {"title": "teams", "rows": [{"text": "swb-1", "key": "team:swb-1"}]} in p["parts"]
+        assert [x["title"] for x in p["parts"]] == ["units and bolts"]  # naming no team (the-team-machinery-leaves)
 
-    def test_a_held_bolts_dock_is_a_ledger_of_its_units_and_fixes_and_a_planned_ones_says_no_team(self):
+    def test_a_started_bolts_dock_is_a_ledger_of_its_units_and_fixes_and_a_planned_ones_says_not_started(self):
+        from test_board import BOX
         d = self.paged()
         b = d["docks"]["bolt:tenant-environments"]
-        assert (b["form"], b["title"], b["tail"]) == ("ledger", "tenant-environments", "switchboard-kit · swb-1 on chuck-herdr-alpha · active")
-        assert ["team", "swb-1", "team:swb-1"] in b["facts"]
+        assert (b["form"], b["title"], b["tail"]) == ("ledger", "tenant-environments", f"switchboard-kit · on {BOX} in stream wldn · active")
+        assert ["host", BOX] in b["facts"] and ["stream", "wldn"] in b["facts"] and not [f for f in b["facts"] if f[0] == "team"]
         units = next(p["rows"] for p in b["parts"] if p["title"] == "units")
-        assert units == [{"text": "a · code 1/2", "key": "unit:a"}, {"text": "b · planned", "key": "unit:b"}]
+        assert units == [{"text": "a · code 1/2", "key": "unit:a"}, {"text": "b · construct", "key": "unit:b"}]
         assert next(p["rows"] for p in b["parts"] if p["title"] == "fixes") == [
             {"text": "fix/tenant-environments/edge · not merged", "key": "fix:tenant-environments/edge"}]
         assert b["history"] == d["histories"]["bolt/tenant-environments"]
         z = d["docks"]["bolt:apex-zones"]
-        assert (z["tail"], z["markers"]) == ("switchboard-kit · planned, no team", [])
+        assert (z["tail"], z["markers"]) == ("switchboard-kit · planned, not started", [])
 
     def test_a_queued_unit_is_a_slip_with_its_sources(self):
         q = self.paged()["docks"]["unit:zone-two"]
         assert (q["form"], q["tail"]) == ("slip", "unit · queued")
         assert {f[0]: f[1] for f in q["facts"]} == {"repository": "switchboard-kit", "stage": "queued", "sources": "docs/zones.md"}
 
-    def test_a_fix_says_whether_it_merged_its_slot_and_server_and_links_its_bolt(self):
+    def test_a_fix_says_whether_it_merged_and_links_its_bolt(self):
         """board-page "A fix"."""
         f = self.paged()["docks"]["fix:tenant-environments/edge"]
         assert (f["title"], f["tail"]) == ("fix/tenant-environments/edge", "fix of tenant-environments")
-        assert {x[0]: x[1] for x in f["facts"]} == {"state": "not merged", "slot": "unit-4", "worktree": "/kit/places/fix-edge"}
+        assert {x[0]: x[1] for x in f["facts"]} == {"state": "not merged", "stage": "code"}  # its stage as the runner's records give it, no slot
         assert f["parts"] == [{"title": "bolt", "rows": [{"text": "tenant-environments", "key": "bolt:tenant-environments"}]}]
         assert f["history"] == []
 
-    def test_a_landing_is_a_record_with_its_team_units_the_deploys_carrying_it_and_its_bolt_land_entry(self):
+    def test_a_landing_is_a_record_with_its_units_the_deploys_carrying_it_and_its_bolt_land_entry(self):
         d = self.paged()
         o = d["docks"]["landing:atlas-maps"]
         at = d["board"]["operation"][0]["at"]
         assert (o["form"], o["title"], o["tail"]) == ("record", "atlas-maps", f"landed {at} by chuck@mac-studio")
-        assert ["team", "atl-1", "team:atl-1"] in o["facts"]
+        assert not [f for f in o["facts"] if f[0] == "team"]
         carried = next(p["rows"] for p in o["parts"] if p["title"] == "carried by")
         assert [r["text"] for r in carried] == ["deploy aaaaaaa to mac-studio"]
         assert [d["entries"][i]["Act"] for i in o["history"]] == ["bolt.land", "bolt.land"]
@@ -426,35 +478,17 @@ class TestDocks:
         assert (w["form"], w["title"], w["tail"]) == ("record", "rotate-key", "on mac-studio · waits on you")
         assert w["parts"] == [{"title": "text", "rows": [{"text": "Rotate the key."}]}]
         assert [m["key"] for m in w["markers"]] == ["op/mac-studio/2"]
-        assert d["docks"]["operation:mac-studio/restart-teams/1"]["tail"] == "on mac-studio · handed to wldn-dispatch-mac-studio"
+        assert d["docks"]["operation:mac-studio/restart-roles/1"]["tail"] == "on mac-studio · handed to wldn-ops"
 
-    def test_a_team_with_no_bolt_shows_its_kits_host_session_and_account_and_says_it_holds_no_bolt(self):
-        """board-page "A team with no bolt"."""
-        t = self.paged()["docks"]["team:swb-2"]
-        assert (t["title"], t["tail"]) == ("swb-2", "switchboard-kit on chuck-herdr-alpha")
-        assert t["facts"] == [["kits", "switchboard-kit"], ["host", "chuck-herdr-alpha"], ["session", "crew-b"], ["account", "madswan-2", "subscription:madswan-2"]]
-        assert t["parts"][0] == {"title": "bolts held", "rows": [{"text": "holds no bolt"}]}
-
-    def test_a_teams_dock_names_its_bolts_landings_signals_and_the_environment_on_its_host(self):
-        d = self.paged()
-        assert d["docks"]["team:swb-1"]["parts"][0] == {"title": "bolts held", "rows": [{"text": "tenant-environments", "key": "bolt:tenant-environments"}]}
-        parts = {p["title"]: p["rows"] for p in d["docks"]["team:atl-1"]["parts"]}
-        assert parts["landings"][0]["key"] == "landing:atlas-maps"
-        assert [r["key"] for r in parts["environment mac-studio"]] == [k for k in d["docks"] if k.startswith(("deploy:", "operation:"))]
-
-    def test_an_account_the_hosts_file_does_not_name_is_said_not_named_never_blank(self):
-        t = self.paged()["docks"]["team:brd-1"]
-        assert ["account", page.NO_ACCOUNT] in t["facts"] and page.NO_ACCOUNT == "no account named in herdr-hosts"
-
-    def test_a_subscriptions_dock_lists_the_partitions_sessions_on_it_teams_and_main_level_agents(self):
-        """board-page "Two teams on one account"."""
+    def test_a_subscriptions_dock_lists_the_main_levels_sessions_on_it(self):
+        """board-page "A subscription's dock lists its sessions": madswan-2's dock lists the design agent, the planner and
+        the reviewer in mac-studio's session wldn, and willdan's ops; op names no account, so no dock lists it."""
         d = self.paged()
         s = d["docks"]["subscription:madswan-2"]
         assert (s["title"], s["tail"]) == ("madswan-2", "Claude account")
-        assert s["parts"] == [{"title": "sessions on it", "rows": [
-            {"text": "swb-1 · chuck-herdr-alpha session crew-a", "key": "team:swb-1"}, {"text": "swb-2 · chuck-herdr-alpha session crew-b", "key": "team:swb-2"}]
-            + [{"text": f"wldn-{r} · mac-studio session wldn"} for r in ("design", "planner", "ops", "operator", "reviewer")]}]
-        assert [r["text"] for r in d["docks"]["subscription:willdan"]["parts"][0]["rows"]] == ["atl-1 · mac-studio session atlas"]
+        assert s["parts"] == [{"title": "sessions on it", "rows": [{"text": f"wldn-{r} · mac-studio session wldn"} for r in ("design", "planner", "reviewer")]}]
+        assert [r["text"] for r in d["docks"]["subscription:willdan"]["parts"][0]["rows"]] == ["wldn-ops · mac-studio session ops"]
+        assert sorted(k for k in d["docks"] if k.startswith("subscription:")) == ["subscription:madswan-2", "subscription:willdan"]
 
     def rest(self):
         return re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D, PurePath("/s/wldn/page.html")), flags=re.S)
@@ -468,7 +502,7 @@ class TestDocks:
                     ".dk-h.dk-record", ".dk-h.dk-slip", "transform:translateX(102%)", "body.docked .dock{transform:none",
                     ".dock{width:100%;position:fixed;top:0;bottom:0;left:0;right:0}", ".dk-h .back.solo{display:inline-flex}",
                     "D.docks", 'ev.key === "Escape"', 'ev.key === "Enter"', 'ev.key === " "', '$("scrim").addEventListener("click", closeDock)',
-                    'x.setAttribute("role", "button")', "x.tabIndex = 0", 'el("span", "host tm")', "preventScroll: true", "opener.focus"):
+                    'x.setAttribute("role", "button")', "x.tabIndex = 0", "preventScroll: true", "opener.focus"):
             assert has in rest
         for no in (".dk-f", "innerHTML", "XMLHttpRequest", "WebSocket", "<script src", "<link", "@import", "url("):
             assert no not in rest
@@ -504,11 +538,11 @@ class TestWord:
         d = TestDocks().paged()
         to = {k: p["to"] for k, p in d["docks"].items()}
         deploy = next(k for k in to if k.startswith("deploy:"))
-        assert [to[k] for k in ("bolt:tenant-environments", "unit:a", "fix:tenant-environments/edge")] == ["swb-1-conductor"] * 3
-        assert [to[k] for k in ("bolt:apex-zones", "unit:zone-one", "unit:zone-two")] == ["wldn-operator"] * 3
+        assert [to[k] for k in ("bolt:tenant-environments", "unit:a", "fix:tenant-environments/edge")] == ["wldn-planner"] * 3
+        assert [to[k] for k in ("bolt:apex-zones", "unit:zone-one", "unit:zone-two")] == ["wldn-planner"] * 3
         assert (to["proposal:2"], to[f"signal:{TestDocks.SIG}"]) == ("wldn-planner", "wldn-design")
         assert [to[k] for k in ("landing:atlas-maps", deploy, "operation:mac-studio/rotate-key")] == ["wldn-ops"] * 3
-        assert [to[k] for k in ("team:swb-1", "subscription:madswan-2")] == ["wldn-operator"] * 2
+        assert to["subscription:madswan-2"] == "wldn-operator"
 
     def test_every_dock_page_names_its_agent(self):
         d = TestDocks().paged()
@@ -530,9 +564,8 @@ class TestWord:
             assert no not in rest
 
     def test_a_kind_with_no_dock_yet_goes_to_its_role_and_any_other_to_the_operator(self):
-        d = TestDocks().paged()
-        assert [page.word_to(k, d, "wldn") for k in ("batch:14", "record:0038", "partition:wldn", "unit:nosuch")] == [
-            "wldn-planner", "wldn-design", "wldn-operator", "wldn-operator"]
+        assert [page.word_to(k, "wldn") for k in ("batch:14", "record:0038", "partition:wldn", "unit:nosuch", "nosuch:x")] == [
+            "wldn-planner", "wldn-design", "wldn-operator", "wldn-planner", "wldn-operator"]
 
 
 def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labelled_by_its_words():
@@ -541,11 +574,16 @@ def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labell
     d = page.data([entry("chore.add", ["chore/bump", "queue/switchboard-kit"]), entry("chore.move", ["chore/bump", "bolt/c"], ["bolt/b"])])
     assert page.column("chore/bump") == page.column("unit/u")
     assert [f"{e['from']}>{e['to']}" for e in d["edges"]] == ["chore/bump>bolt/c"]
-    pl = plan.Plan(plan_text(bolts=[("c", "switchboard-kit", "swb-1")], units=[("bump", "switchboard-kit", "c", [], "chore")]))
+    pl = plan.Plan(plan_text(bolts=[("c", "switchboard-kit", True)], units=[("bump", "switchboard-kit", "c", [], "chore")]))
 
     class St:
+        fleet = FLEET
+
         def of(self, name):
             return {"stage": "verify"}
+
+        def at(self, b):
+            return {"machine": "chuck-herdr-alpha"}, None
 
         def bolt_state(self, b):
             return "active"

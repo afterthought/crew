@@ -114,18 +114,19 @@ class TestFiles:
 
 
 class TestCaptureText:
-    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2")]))
+    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "breadboard-kit", True)]))  # started, its work run with swb-2, breadboard-kit's
 
     def text(self, v, name="swb-2-conductor", raw="chuck-herdr-alpha:~/.local/state/crew/wldn/raw/x.jsonl"):
         key, cap, date, *_ = named(v, name=name)
         return plan.capture_text(FLEET, name, "chuck-herdr-alpha", v, "s-1", key, cap, date, NOW, raw, self.PLAN)
 
     def test_a_verified_capture_says_where_its_excerpt_came_from_and_how_well_it_was_checked(self):
-        c = self.text(verdict("verified"))
-        for want in (f"capture: {CAP}", "source: crew-session", "key: session/s-1/9f2c1a7e-5b6d-4c3e-8f00-112233445566", "captured_by: swb-2-conductor",
-                     "host: chuck-herdr-alpha", "session: s-1", "record: 9f2c1a7e-5b6d-4c3e-8f00-112233445566", "at: 2026-10-12T14:29:01Z",
-                     "excerpt: verified", "asserted_by: user", "where: team swb-2, bolt smoke-2", "raw: chuck-herdr-alpha:~/.local/state/crew/wldn/raw/x.jsonl",
-                     "event_date: 2026-10-12", "status: read", "signals: 1", "# swb-2-conductor, 2026-10-12 14:29Z"):
+        c = self.text(verdict("verified"), name="wldn-planner")
+        for want in ("capture: 2026-10-12-wldn-planner-9f2c1a7e", "source: crew-session", "key: session/s-1/9f2c1a7e-5b6d-4c3e-8f00-112233445566",
+                     "captured_by: wldn-planner", "host: chuck-herdr-alpha", "session: s-1", "record: 9f2c1a7e-5b6d-4c3e-8f00-112233445566",
+                     "at: 2026-10-12T14:29:01Z", "excerpt: verified", "asserted_by: user", "where: main level",
+                     "raw: chuck-herdr-alpha:~/.local/state/crew/wldn/raw/x.jsonl", "event_date: 2026-10-12", "status: read", "signals: 1",
+                     "# wldn-planner, 2026-10-12 14:29Z"):
             assert want in c
 
     def test_an_unverified_capture_says_why_and_holds_no_record_time_or_raw(self):
@@ -140,28 +141,12 @@ class TestCaptureText:
 
 
 class TestWhere:
-    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2")]))
+    PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "breadboard-kit", True)]))  # started, its work run with swb-2, breadboard-kit's
 
-    def test_a_conductor_is_at_its_team_and_the_bolt_it_holds_a_planner_at_the_main_level(self):
-        assert plan.where_of(FLEET, "swb-2-conductor", self.PLAN) == "team swb-2, bolt smoke-2"
-        assert plan.where_of(FLEET, "swb-1-ops", self.PLAN) == "team swb-1"
-        assert plan.where_of(FLEET, "wldn-planner", self.PLAN) == "main level"
-        assert plan.where_of(FLEET, "wldn-operator", self.PLAN) == "main level"
+    def test_a_main_level_role_is_at_the_main_level_and_an_agent_crew_names_no_role_for_is_nowhere(self):
+        for name in ("wldn-planner", "wldn-design", "wldn-ops", "wldn-operator"):
+            assert plan.where_of(FLEET, name, self.PLAN) == "main level"
         assert plan.where_of(FLEET, "stranger", self.PLAN) is None
-
-    def test_a_slot_agent_is_also_at_the_unit_or_fix_its_slot_holds(self, monkeypatch):
-        held = {"unit-1": {"kind": "unit", "name": "cfn-lint-treefmt"}, "unit-2": {"kind": "fix", "name": "fix/smoke-2/edge"}}
-        monkeypatch.setattr(crew, "slot_of", lambda t, slot: held[slot])
-        assert plan.where_of(FLEET, "swb-2-unit-1", self.PLAN) == "team swb-2, bolt smoke-2, unit cfn-lint-treefmt"
-        assert plan.where_of(FLEET, "swb-2-unit-2", self.PLAN) == "team swb-2, bolt smoke-2, fix edge"
-
-    def test_a_team_holding_two_bolts_is_at_both(self):
-        p = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2"), ("smoke-3", "switchboard-kit", "swb-2")]))
-        assert plan.where_of(FLEET, "swb-2-conductor", p) == "team swb-2, bolt smoke-2, bolt smoke-3"
-
-    def test_a_slot_agents_own_stage_prompts_are_its_conductors_and_no_one_elses_are(self):
-        assert plan.stage_by(FLEET, "swb-2-unit-1") == "swb-2-conductor"
-        assert [plan.stage_by(FLEET, n) for n in ("swb-2-ops", "swb-2-conductor", "wldn-planner")] == [None, None, None]
 
     def test_a_session_on_another_host_is_not_read_here(self):
         assert plan.session_here("chuck-herdr-alpha:s-1", "chuck-herdr-alpha") == ("s-1", None)
@@ -234,7 +219,7 @@ class TestShortId:
 
 class TestRefused:
     FLEET = {"partitions": {"wldn": {"label": "wldn", "blueprints": ["WilldanGroup/willdan-blueprints"], "state": "WilldanGroup/crew-state"}},
-             "teams": {}, "hosts": {}}
+             "hosts": {}}
 
     def test_a_signal_in_neither_home_is_refused_naming_both(self):
         with pytest.raises(Refusal, match="^no signal x/01-y on wldn/main of WilldanGroup/crew-state or on main of WilldanGroup/willdan-blueprints"):
@@ -341,7 +326,7 @@ class TestCaptureAsk:
 
     def fleet(self, design):
         return {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "blueprints": ["afterthought/blueprints"], "roles": {},
-                                           "flume": dict(dict.fromkeys(crew.KIND_ROLES, False), design=design)}}, "teams": {}, "hosts": {}}
+                                           "flume": dict(dict.fromkeys(crew.KIND_ROLES, False), design=design)}}, "hosts": {}}
 
     @pytest.fixture
     def w(self, monkeypatch):

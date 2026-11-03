@@ -8,22 +8,26 @@ import datetime
 
 import pytest
 
-from facts import FLEET, START, at, card_closed, constructed, plan_of, reviewed, told
+from facts import FLEET, START, at, card_closed, constructed, plan_of, plan_text, reviewed, told
 from facts import told as told_entry
 
 import plan
 
-PLAN = plan_of(bolts={"b1": "swb-1", "b2": "swb-2", "queued": None},
-               units={"x1": "b1", "x2": "b1", "y1": "b2", "z1": "queued", "w1": None})
+# b1 started in switchboard-kit, b2 started in breadboard-kit, and queued planned.
+PLAN = plan.Plan(plan_text(bolts=[("b1", "switchboard-kit", True), ("b2", "breadboard-kit", True), ("queued", "switchboard-kit", None)],
+                           units=[("x1", "switchboard-kit", "b1", []), ("x2", "switchboard-kit", "b1", []), ("y1", "breadboard-kit", "b2", []),
+                                  ("z1", "switchboard-kit", "queued", []), ("w1", "switchboard-kit", None, [])]))
 EVERY_5 = {"every": 5, "hours": 4}
 HOUR = datetime.timedelta(hours=1)
 
 
 class TestDue:
     def test_each_unit_whose_last_construct_no_batch_has_held_is_due_in_the_plans_order(self):
+        """Each due change names its started bolt (review-batches "A unit is batched once its change has landed on its
+        bolt" of the-team-machinery-leaves)."""
         entries = [constructed("y1", "aaa1"), constructed("x1", "bbb1"), constructed("x2", "ccc1", 5)]
-        assert [(u, team, sha) for u, team, sha, _ in plan.due_changes(PLAN, entries)] == [
-            ("x1", "swb-1", "bbb1"), ("x2", "swb-1", "ccc1"), ("y1", "swb-2", "aaa1")]
+        assert [(u, bolt, sha) for u, bolt, sha, _ in plan.due_changes(PLAN, entries)] == [
+            ("x1", "b1", "bbb1"), ("x2", "b1", "ccc1"), ("y1", "b2", "aaa1")]
 
     def test_a_change_a_batch_held_is_not_due_and_constructed_again_it_is(self):
         entries = [constructed("x1", "bbb1"), reviewed(1, [("x1", "swb-1", "bbb1")], 10)]
@@ -31,7 +35,7 @@ class TestDue:
         entries.append(constructed("x1", "bbb2", 20))
         assert [(u, sha) for u, _, sha, _ in plan.due_changes(PLAN, entries)] == [("x1", "bbb2")]
 
-    def test_units_of_no_bolt_a_team_holds_are_not_due(self):
+    def test_units_of_no_started_bolt_are_not_due(self):
         assert plan.due_changes(PLAN, [constructed("z1", "ddd1"), constructed("w1", "eee1")]) == []
 
     def test_a_construct_that_stopped_or_was_refused_delivers_no_change(self):
@@ -383,9 +387,11 @@ def test_a_batch_whose_first_start_fails_and_second_opens_is_posted_with_its_lin
     monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
     kit = {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}
-    fleet = dict(FLEET, teams={t: dict(v, kit=kit) for t, v in FLEET["teams"].items()})
-    acts = RaiseActs([reviewed(3, [("x1", "swb-1", "aaa1")])], refusals=["plannotator did not list batch/3's session within 10 seconds"])
-    assert plan.raise_batch(fleet, {"label": "wldn", "key": "batch/3", "group": "batches"}, acts) == "req_b3"
+    # x1 was built where the runner that took b1's work reported switchboard-kit (plan.batch_unit_at)
+    monkeypatch.setattr(plan, "batch_unit_at", lambda fleet, label, bolt, unit: {"label": label, "machine": "chuck-herdr-alpha",
+                                                                                 "stream": "wldn", "kit": kit})
+    acts = RaiseActs([reviewed(3, [("x1", "b1", "aaa1")])], refusals=["plannotator did not list batch/3's session within 10 seconds"])
+    assert plan.raise_batch(FLEET, {"label": "wldn", "key": "batch/3", "group": "batches"}, acts) == "req_b3"
     assert acts.sessions == ["batch/3", "batch/3"]
     card = next(a for t, a in acts.calls if t == "post_request")
     assert card["context"]["links"][0] == {"label": "Read batch 3", "url": RaiseActs.LINK}
@@ -427,11 +433,13 @@ class TestBatchFacts:
         assert plan.batch_subjects(p) == {"x1": "the deployer holds at a failure", "y1": "AWS accounts are named"}
         assert plan.batch_subjects(None) == {}
 
-    def test_the_summary_delivered_gives_every_unit_in_the_batchs_order_with_its_team_commit_subject_and_paragraph(self):
+    def test_the_summary_delivered_gives_every_unit_in_the_batchs_order_with_its_bolt_commit_subject_and_paragraph(self):
+        """Each unit with the name its entry holds between it and its commit: its bolt, or an older entry's team read as
+        written (units_of_batch)."""
         entries = [reviewed(2, [("w1", "swb-2", "ddd1")], 0), reviewed(3, UNITS, 10)]
         f = plan.batch_facts(3, entries, SUMMARY, {"x1": "the tenant's zone is its own"})
         assert (f["n"], f["previous"], f["link"]) == (3, 2, None)
-        assert [(u["unit"], u["team"], u["commit"], u["subject"]) for u in f["units"]] == [
+        assert [(u["unit"], u["bolt"], u["commit"], u["subject"]) for u in f["units"]] == [
             ("x1", "swb-1", "aaa1", "the tenant's zone is its own"), ("x10", "swb-1", "bbb1", "x10"), ("z1", "atl-1", "ccc1", "z1")]
         assert f["units"][1]["paragraph"] == "The reviewer's summary has no section for x10."
         assert plan.batch_facts(1, [reviewed(1, UNITS)], SUMMARY, {})["previous"] is None
@@ -460,88 +468,14 @@ class TestBatchFacts:
         assert plan.batch_facts(3, held, SUMMARY, {}) is None
 
 
-@pytest.mark.parametrize("stage, fix, then", [
-    ("construct", False, ["batch"]),
-    ("construct", True, []),
-    ("code", False, []),
-    ("verify", False, []),
-    ("merge", False, ["batch", "landing", "tidy"]),
-    ("merge", True, ["batch", "landing", "tidy"]),
-])
-def test_a_merge_reckons_a_batch_as_a_construct_does(stage, fix, then):
-    """A wait's end reckons a batch after a construct's change and after a merge (briefs.12): a bolt whose last unit
-    merged leaves its conductor waiting on nothing, so no later wait would tell the planner its batch is due at once, as
-    on 2026-10-19, when every-deploy-has-its-live-card and swc-1's bolt sat merged two hours with no batch begun; and
-    a merge's end removes its place and branch as it lands, for the same reason (teams.1, plan.9). The batch comes
-    before the landing card's hand."""
-    assert plan.after_delivery(stage, fix) == then
-
-
-class TestReckonedAtOnce:
-    """A bolt whose last unit has merged has its batch reckoned from the bolt where it lives, after a fetch, before and
-    whatever the landing card's hand does, and again on every wait of its conductor until the planner is told
-    (briefs.12; wldn's awb-1, 2026-10-27: proven at 01:59Z with two units in no batch, the reckoning read with no fetch,
-    skipped by a refusal in the same wait's tail and never repeated, so no batch was due until one was started by hand
-    at 12:18Z)."""
-    T = FLEET["teams"]["swb-1"]
-
-    def reckoned(self, monkeypatch, acts):
-        monkeypatch.setattr(plan, "batch_check", lambda fleet, t, fetch=False: acts.append(("batch", t["name"], fetch)))
-
-    def test_a_merges_end_reckons_the_batch_after_a_fetch_before_the_landing_cards_hand_that_refuses(self, monkeypatch):
-        acts = []
-        self.reckoned(monkeypatch, acts)
-
-        def landing(fleet, t, bolt):
-            acts.append(("landing", bolt))
-            raise plan.Refusal("crew could not raise the landings card")
-        monkeypatch.setattr(plan, "landing_after_merge", landing)
-        with pytest.raises(plan.Refusal):
-            plan.after_answer(FLEET, self.T, plan.after_delivery("merge", False), "bolt/b1@abc1234")
-        assert acts == [("batch", "swb-1", True), ("landing", "b1")]
-
-    def test_every_conductors_wait_reckons_the_batch_after_a_fetch_whatever_its_forecast_could_not_read(self, monkeypatch, capsys):
-        acts = []
-        self.reckoned(monkeypatch, acts)
-
-        def reach(fleet, t):
-            raise plan.Refusal("wldn's plan could not be read")
-        monkeypatch.setattr(plan, "reach", reach)
-        plan.before_waiting(FLEET, self.T)
-        assert acts == [("batch", "swb-1", True)]
-        assert "no forecast: wldn's plan could not be read" in capsys.readouterr().err
-
-    def test_a_bolt_whose_units_have_all_merged_is_read_where_it_lives_after_a_fetch_and_its_batch_told_at_once(self, monkeypatch):
-        """Only the team's bolts with a unit due are read, so a wait fetches nothing for a bolt that can make no batch
-        due."""
-        pl = plan_of(bolts={"b0": "swb-1", "b1": "swb-1"}, units={"w0": "b0", "x1": "b1", "x2": "b1"})
-        entries = [constructed("x1", "bbb1"), constructed("x2", "ccc1")]
-        read, told_, emitted = [], [], []
-
-        class Merged:
-            def of(self, name):
-                return {"stage": "merged"}
-        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: pl)
-        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: entries)
-        monkeypatch.setattr(plan, "stages_for", lambda fleet, p, bolts, fetch=False: read.append(([b.name() for b in bolts], fetch)) or Merged())
-        monkeypatch.setattr(plan.crew, "tell", lambda fleet, name, text: told_.append((name, text)) or True)
-        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **kw: emitted.append((act, on)))
-        assert plan.batch_check(FLEET, self.T, fetch=True) is True
-        assert read == [(["b1"], True)]
-        assert [n for n, _ in told_] == ["wldn-planner"]
-        assert "bolt b1 has every unit merged, and lands only once x1 or x2 have been in a batch the user has answered" in told_[0][1]
-        assert emitted == [("batch.due", ["agent/wldn-planner", "unit/x1", "unit/x2"])]
-
-
-def test_the_rails_sweep_reckons_a_batch_for_every_team_of_the_partition_wherever_it_runs():
-    """The rail's sweep reckons each partition's batch for every team of the teams file holding a bolt of it, in the
-    plan's order, on whichever host the rail runs (briefs.12), so a bolt whose units have all merged reaches the planner
-    with no conductor waiting, from a rail on another host than its team's (wldn's awb-1, 2026-10-27); a team the teams
-    file lacks, and a partition whose plan was not read, are not reckoned."""
-    teams = {"swb-1": {"machine": "mac-studio"}, "swb-2": {"machine": "chuck-herdr-alpha"}}
+def test_the_rails_sweep_reckons_a_batch_on_the_partitions_main_level_host():
+    """review-batches "A batch is reckoned at the rail's sweep on the main level's host" (the-team-machinery-leaves): the
+    rail's sweep reckons each partition's batch once, on the host its main level runs on, wldn's on mac-studio, so a bolt
+    whose units have all merged reaches the planner with no agent waiting; another host, and a partition whose plan was
+    not read, reckon none."""
     found = [("wldn", None, None, PLAN), ("swancloud", None, None, None)]
-    assert plan.batch_reckoners(found, teams) == {"wldn": ["swb-1", "swb-2"]}
-    assert plan.batch_reckoners(found, {"swb-2": teams["swb-2"]}) == {"wldn": ["swb-2"]}
+    assert plan.batch_reckoners(FLEET, found, "mac-studio") == ["wldn"]
+    assert plan.batch_reckoners(FLEET, found, "chuck-herdr-alpha") == []
 
 
 def test_the_followers_reckoning_takes_its_read_and_tells_the_planner_once(monkeypatch):
@@ -549,12 +483,13 @@ def test_the_followers_reckoning_takes_its_read_and_tells_the_planner_once(monke
     follower's refresh tells the planner from its kept read, reading nothing to find it; once its read holds the entry
     that tell wrote it tells nothing, and at the tip it told at it does not reckon again."""
     told, emitted = [], []
+    monkeypatch.setattr(plan.crew, "this_host", lambda: "mac-studio")
     monkeypatch.setattr(plan.crew, "tell", lambda fleet, name, text: told.append(name) or True)
     monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **kw: emitted.append(act))
     for read_again in ("plan_of", "partition_entries", "stages_for", "survey"):
         monkeypatch.setattr(plan, read_again, lambda *a, **k: pytest.fail("the reckoning read again"))
     found = [("wldn", "WilldanGroup/crew-state", "a" * 40, PLAN)]
-    read = {"found": found, "logs": {"wldn": [constructed("x1", "bbb1")]}, "unread": {"wldn": {}}, "sv": {}}
+    read = {"found": found, "logs": {"wldn": [constructed("x1", "bbb1")]}, "unread": {"wldn": {}}, "sv": {}, "runs": {"wldn": ([], {})}}
     assert plan.reckon_batches(FLEET, found, read) == {"wldn": True} and told == ["wldn-planner"] and emitted == ["batch.due"]
     assert plan.reckon_batches(FLEET, found, dict(read, logs={"wldn": read["logs"]["wldn"] + [told_entry()]})) == {} and told == ["wldn-planner"]
     assert plan.reckon_batches(FLEET, found, read, skip={"wldn"}) == {} and told == ["wldn-planner"]
@@ -571,16 +506,17 @@ def test_a_partition_told_at_its_reads_tip_is_not_reckoned_again_and_one_whose_t
 
 
 def test_a_reckoning_whose_record_could_not_be_read_tells_nothing_and_says_why(monkeypatch, capsys):
+    monkeypatch.setattr(plan.crew, "this_host", lambda: "mac-studio")
     monkeypatch.setattr(plan.crew, "tell", lambda *a: pytest.fail("told on a record it could not read"))
     found = [("wldn", "WilldanGroup/crew-state", "a" * 40, PLAN)]
     monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("WilldanGroup/crew-state", "wldn/main"))
     read = {"found": found, "logs": {"wldn": []}, "unread": {"wldn": {"wldn/main": "it could not be fetched"}}, "sv": {}}
     assert plan.reckon_batches(FLEET, found, read) == {}
-    assert "no batch reckoned for swb-1: crew can't tell which changes have been in a batch" in capsys.readouterr().err
+    assert "no batch reckoned for wldn: crew can't tell which changes have been in a batch" in capsys.readouterr().err
 
 
 class TestCrossed:
-    """review-batches "A crossed team's unit is batched once its change has landed on its bolt" (Decision 13 of
+    """review-batches "A unit is batched once its change has landed on its bolt" (Decision 13 of
     teams-cross-to-flume-as-their-bolts-land): a crossed unit's change is read once the runner's records read it merged
     and its bolt, as the kit was read on GitHub after a fetch, holds it archived, at the commit its place landed at on the
     bolt (plan.crossed_changes), and its reading opens its archived folder there (plan.reading_command)."""
@@ -591,20 +527,21 @@ class TestCrossed:
         monkeypatch.setenv("CREW_AGENT", "madswan-dispatch-deneb")
 
     def stages(self, at, archived=("a",)):
-        """crossed crw-4's x, holding a and b after a, launched as requests 1 and 2, each at the flume fixture at names;
-        crew's kit as read on deneb, bolt x holding archived's changes archived."""
-        from facts import crew_read, crossed_fleet_read, launched, ran
-        fleet = crossed_fleet_read()
+        """x, started, holding a and b after a, launched as requests 1 and 2, each at the flume fixture at names on
+        deneb's runner; crew's kit as read on deneb, bolt x holding archived's changes archived."""
+        from facts import CREW_AT, crew_read, launched, madswan_fleet, ran
+        fleet = madswan_fleet()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", [])], fleet=fleet)
-        return plan.Stages(fleet, p, crew_read(bolts={"x": {"archived": list(archived)}}), runs={"madswan": (requests, ran(at))})
+        return plan.Stages(fleet, p, crew_read(bolts={"x": {"archived": list(archived)}}), runs={"madswan": (requests, ran(at))},
+                           label="madswan")
 
     def test_merged_then_batched(self):
         """review-batches "Merged, then batched": a lands on bolt/x, its change archived there, and counts toward the next
-        batch, named at the commit its place landed at."""
+        batch, named with its bolt at the commit its place landed at."""
         st = self.stages({1: "landed", 2: "code"})
         crossed = plan.crossed_changes(st.plan, st)
         assert crossed == {"a": (self.LANDED, "2026-10-31T12:02:00Z")}
-        assert [(u, team, sha) for u, team, sha, _ in plan.due_changes(st.plan, [], crossed)] == [("a", "crw-4", self.LANDED)]
+        assert [(u, bolt, sha) for u, bolt, sha, _ in plan.due_changes(st.plan, [], crossed)] == [("a", "x", self.LANDED)]
 
     def test_constructed_but_not_landed_is_not_yet_due(self):
         """review-batches "Constructed but not landed": b's construct has delivered and its place is in code."""
@@ -623,18 +560,22 @@ class TestCrossed:
         assert plan.awaiting_answer(held, crossed) == {"a": 9}
         assert plan.awaiting_answer(held + [card_closed("batch/9", "req_9", 20)], crossed) == {}
 
-    def test_its_reviewer_opens_its_archived_folder_at_that_commit(self):
-        from facts import crossed_fleet_read
-        fleet = crossed_fleet_read()
+    def test_its_reviewer_opens_its_archived_folder_at_that_commit(self, monkeypatch):
+        """Read where the runner that took x's work reported crew's kit (plan.batch_unit_at): deneb, in /crew/main, the
+        main level's host, so with no ssh before it; a batch written before named a team in the bolt's place, read as
+        written."""
+        st = self.stages({1: "landed"})
+        monkeypatch.setattr(plan, "runner_facts", lambda fleet, label: st.runs[label])
+        fleet = st.fleet
         fleet["partitions"]["madswan"]["machine"] = "deneb"
-        assert plan.reading_command(fleet, "madswan", "crw-4", self.LANDED, "a", archived=True) == (
+        assert plan.reading_command(fleet, "madswan", "x", self.LANDED, "a", archived=True) == (
             f"its change is archived at that commit: find its folder with `git -C /crew/main ls-tree -d --name-only {self.LANDED} "
             "openspec/changes/archive/`, the one named <date>-a, then list its files with `git -C /crew/main ls-tree -r "
             f"--name-only {self.LANDED} <folder>/` and read each with `git -C /crew/main show {self.LANDED}:<path>`")
 
     def test_its_batch_reading_opens_the_change_at_that_commit_with_no_place_of_crews(self, monkeypatch, tmp_path):
-        from facts import crew_read, crossed_fleet_read
-        t = crossed_fleet_read()["teams"]["crw-4"]
+        from facts import CREW_AT, crew_read, madswan_fleet
+        t = CREW_AT
         monkeypatch.setattr(plan, "survey", lambda fleet, held: crew_read(bolts={"x": {}}))
         monkeypatch.setattr(plan, "change_written", lambda main, ref, unit, into: f"{into} from {ref} of {unit} in {main}")
         monkeypatch.setattr(plan.subprocess, "run", lambda *a, **k: pytest.fail("main was read for a change the batch's commit holds"))

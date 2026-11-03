@@ -218,7 +218,7 @@ class TestRefusals:
         (["word", "mac-studio", "--label", "nolabel"], "no partition nolabel in the teams file. partitions: wldn"),
         (["step", "mac-studio", "--label", "wldn", "--key", "has space", "--state", "done"], "--key has space is no step key crew takes"),
         (["step", "mac-studio", "--label", "wldn", "--key", "k", "--state", "waiting", "--doer", "user", "--held"],
-         "--held marks an agent's step held for the user's word: give its --doer, dispatcher or main-ops"),
+         "--held marks an agent's step held for the user's word: give its --doer, main-ops"),
         (["step", "mac-studio", "--label", "wldn", "--key", "k", "--state", "waiting", "--doer", "main-ops", "--when", "quiet", "--held"], None),
         (["offer", "mac-studio", "--label", "wldn", "--from", "none", "--to", S1, "--notes", "n.md", "--steps", "s.txt"], None),
         (["offer", "mac-studio", "--label", "wldn", "--from", "none", "--to", S1], None)])
@@ -236,7 +236,7 @@ import cards  # noqa: E402
 
 STEPS = ("step\t1\tuser\t\tswancloud-srv\tOnly you hold the vault.\trotate the kanidm admin password\n"
          "step\t2\tmain-ops\tquiet held\t\tIt ends a stage mid-unit.\trestart crew's teams\n"
-         "step\t1\tdispatcher\tdeployed\tmac-studio\tNo check sees it.\trestart the box's herdr\n")
+         "step\t1\tmain-ops\tdeployed\tmac-studio\tNo check sees it.\trestart the box's herdr\n")
 NOTES = "## swancloud-srv-v0.3.0 (2026-10-15)\n### Fixes\n- deployer: crew reaches the boxes with the peer key (e5b8322)"
 
 
@@ -246,14 +246,17 @@ class TestOfferHanded:
         assert why is None and steps == [dict(n="1", text="rotate the kanidm admin password", doer="user", held=False),
                                          dict(n="2", text="restart crew's teams", doer="swancloud-ops", held=True)]
         assert [(x["n"], x["doer"]) for x in ops.handed_steps(STEPS, "mac-studio", "swancloud")[0]] == [
-            ("2", "swancloud-ops"), ("1", "swancloud-dispatch-mac-studio")]
+            ("2", "swancloud-ops"), ("1", "swancloud-ops")]
         assert ops.handed_steps(None, "mac-studio", "swancloud") == ([], None)
 
     def test_a_steps_file_crew_cant_read_is_named_by_its_line(self):
         assert ops.handed_steps("step\t1\tuser\t\t\twhy\trotate it\nfault\t2\tno why\tx\n", "srv", "swancloud") == (
             None, "line 2 is no step crew reads: step <n> <doer> <when> <environments> <why> <text>, tab-separated, "
-                  "the doer dispatcher, main-ops or user")
+                  "the doer main-ops or user")
         assert ops.handed_steps("step\t1\tthe-user\t\t\twhy\trotate it\n", "srv", "swancloud")[0] is None
+        assert ops.handed_steps("step\t1\tdispatcher\tdeployed\tsrv\twhy\trestart it\n", "srv", "swancloud") == (
+            None, "line 1 is no step crew reads: step <n> <doer> <when> <environments> <why> <text>, tab-separated, "
+                  "the doer main-ops or user")
 
     def test_the_notes_release_is_the_one_git_cliff_heads_them_with(self):
         assert ops.release_of(NOTES) == "swancloud-srv-v0.3.0"
@@ -427,7 +430,7 @@ class TestDeployCard:
         notes, listed = c["artifacts"]
         assert (notes["lang"], notes["title"], notes["lines"]) == ("markdown", "What's in it: swancloud-srv-v0.3.0", NOTES.split("\n"))
         assert listed["lines"] == ["2  restart crew's teams", "   swancloud-ops, held for your word", "1  restart the box's herdr",
-                                   "   swancloud-dispatch-mac-studio"]
+                                   "   swancloud-ops"]
         assert c["context"]["background"] == "Landings since mac-studio's last deploy:\ndoctor-names-step\n#66 retry-offered"
 
     def test_an_offer_handed_no_notes_gives_the_ranges_commits_from_git_though_the_record_holds_no_landing_of_them(self):

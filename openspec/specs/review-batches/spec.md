@@ -12,21 +12,6 @@ A unit's change SHALL be due for the user's review each time a construct stage o
 - **WHEN** a unit already in a batch is constructed again with the user's notes
 - **THEN** its change is due again, and counts toward the next batch
 
-### Requirement: A batch spans the partition
-A batch SHALL hold the changes due across every team of a partition. A partition SHALL have a batch setting, a count N and a number of hours T, read from its entry in the teams file. A batch SHALL be due, on any wait of a conductor of the partition, when N changes are due across its teams, or when T hours have passed since the partition's last batch and at least one change is due, whichever comes first.
-
-#### Scenario: Changes from several teams
-- **WHEN** a partition's setting is 5 and 4 hours, and two of swb-1's units and three of swb-3's have been constructed since its last batch
-- **THEN** a batch is due, holding those five changes
-
-#### Scenario: The time is reached
-- **WHEN** two changes have been constructed across the partition's teams since its last batch, four hours ago
-- **THEN** a batch is due, holding those two
-
-#### Scenario: Nothing due
-- **WHEN** four hours have passed since the last batch and no change has been constructed since
-- **THEN** no batch is due
-
 ### Requirement: The planner starts the partition's reviewer
 When a batch is due, crew SHALL tell the partition's planner once, and the planner SHALL start the reviewer: a main-level role, run fresh for each batch in its own tab of the main level's workspace, beside the planner, on the main level's host. Where the partition runs its reviewer as its kind, `crew review <label>` SHALL instead write an ask of the reviewer carrying the batch, as the reviewer's first message carries it today, open no tab and start no agent, and `crew review <label> --wait` SHALL refuse, saying the batch's delivery reaches the planner as an ask.
 
@@ -43,11 +28,11 @@ When a batch is due, crew SHALL tell the partition's planner once, and the plann
 - **THEN** it refuses, saying the batch's delivery reaches the planner as an ask, and waits on nothing
 
 ### Requirement: The reviewer summarizes a batch
-The reviewer SHALL read each due change whole and write one summary file holding, for each unit, its team, a short opening paragraph saying what the change does and what the user would most care about, then the decisions it took, its risks, what it touches named in words, and anything the user would likely care about, as paragraphs and plain lists with no code block, no table and no path. The batch SHALL end at that file, its deliverable, and the reviewer SHALL write nothing else. The run record SHALL name the batch, each unit it holds and the commit each unit's change was read at.
+The reviewer SHALL read each due change whole and write one summary file holding, for each unit, its bolt, a short opening paragraph saying what the change does and what the user would most care about, then the decisions it took, its risks, what it touches named in words, and anything the user would likely care about, as paragraphs and plain lists with no code block, no table and no path. The batch SHALL end at that file, its deliverable, and the reviewer SHALL write nothing else. The run record SHALL name the batch, each unit it holds and the commit each unit's change was read at.
 
 #### Scenario: A batch of three
-- **WHEN** a batch holds three units' changes from two teams
-- **THEN** the reviewer's file holds one section for each of the three, naming its team and opening with its paragraph, and the run record names the three units and their commits
+- **WHEN** a batch holds three units' changes from two bolts
+- **THEN** the reviewer's file holds one section for each of the three, naming its bolt and opening with its paragraph, and the run record names the three units and their commits
 
 #### Scenario: What a change touches
 - **WHEN** the reviewer summarizes a change whose Touches lists the card hook and its test
@@ -79,36 +64,6 @@ A batch card SHALL be a notice that asks nothing, which the user sends back with
 #### Scenario: Answered in a pane
 - **WHEN** the user writes in the planner's pane "Batch 9: x1's design should name the host" and the planner runs `crew card answer batch/9` with those words
 - **THEN** batch 9's card is closed as answered, and those words are batch 9's note
-
-### Requirement: Notes reach the unit's conductor
-The planner SHALL send the user's notes, word for word, to the conductor of the team of each unit they speak of: the session's annotations, by the file each is on or what it says; the card's own note, by the unit it names or what it says of a unit's summary; and the user's words that answered the batch in a main-level pane, by the unit they name or what they say of one. Each message SHALL name every unit it went to. When the operator answered the batch in its pane, crew SHALL tell the planner the user's words, saying the batch was answered in the operator's pane, and the operator SHALL send none itself. Words that speak of no unit the planner can tell SHALL go to every unit's conductor, saying so. The planner SHALL NOT split, reword or summarize the user's words. A unit of which no annotation and no note speaks SHALL be fine. The card's closing line SHALL name the units notes went to.
-
-#### Scenario: Fine
-- **WHEN** the user sends no annotation on a unit's files and the card's note does not speak of it
-- **THEN** nothing about the unit changes, and its change is no longer due
-
-#### Scenario: One note for two units
-- **WHEN** the user's note on the card speaks of `x1` and `z1`, of teams swb-1 and atl-1
-- **THEN** swb-1's conductor gets the note word for word as `x1`'s notes, atl-1's conductor gets it as `z1`'s, each message names both units, and the card's closing line names `x1` and `z1`
-
-#### Scenario: Words that name no unit
-- **WHEN** the user's note on a card of three units speaks of none of them that the planner can tell
-- **THEN** each of the three units' conductors gets the note word for word, saying it named no unit
-
-#### Scenario: Answered in the operator's pane
-- **WHEN** the user writes in swancloud-operator's pane "Batch 9: z1's tasks miss the rail test" and the operator runs `crew card answer batch/9` with those words
-- **THEN** crew tells swancloud-planner those words, saying batch 9 was answered in swancloud-operator's pane, and the planner sends them word for word to `z1`'s conductor
-
-### Requirement: Notes amend a unit in flight with no re-approval
-For a unit that has not merged, its conductor SHALL run construct again with the notes, as an amendment, waiting while that unit's construct is running until it settles. Once that construct has committed, the unit SHALL go on from its tasks with no approval asked, and its revised change SHALL be due for the next batch. A merged unit SHALL NOT be amended: a defect SHALL become a fix on the bolt, and new work the planner's.
-
-#### Scenario: Notes on a unit in code
-- **WHEN** the user's notes on a unit of swb-2 in code arrive on a batch card
-- **THEN** swb-2's conductor runs construct again with the notes, and once it commits the unit's code goes on with nobody asked to approve it
-
-#### Scenario: Notes on a merged unit
-- **WHEN** the user's notes name a defect in a unit that has merged into its bolt
-- **THEN** the unit is not amended, and its conductor starts a fix with the user's words
 
 ### Requirement: A bolt lands only once every unit's latest change has been in a batch the user has answered
 A bolt SHALL be offered for landing only once every unit's latest change, the commit its last construct left, has been in a batch the user has answered. A batch is answered when its card was sent back with a tap or closed in Pending You, as crew records the card's close, when its reading session was sent, as crew records the card's close or, with no card closed, the batch's, or when the user answered it in their own words in a main-level pane, as crew records from that session's transcript. When a bolt is otherwise ready to land and some unit's latest change has not been in a batch, a batch SHALL be due at once for those units, and the bolt's landing row SHALL name them. While a batch holding a unit's latest change waits on the user's answer, the landing row SHALL name that batch. No landing card SHALL be raised, and the row SHALL carry no word to land, until every unit's latest change has been in a batch the user has answered. `crew bolt land` SHALL be refused while any unit's latest change remains outside a batch. A card Pending You lost to its owner SHALL be no answer, and neither SHALL an agent's own words or another agent's tell of what the user said. A chore SHALL be in no batch and SHALL hold no landing.
@@ -199,25 +154,6 @@ A batch SHALL wait on nothing once each of its units has landed, has been droppe
 - **WHEN** macbook-pro, which holds a wldn operator session, does not answer a rail read
 - **THEN** each batch is closed as far as the entries on `wldn/main` show it, as when every host answers
 
-### Requirement: A batch is reckoned from the partition's branch alone
-Whether a batch is due, what a review holds, and whether every unit's latest change of a bolt has been in a batch, SHALL be read from the run record on the partition's branch alone, asking no host for it. A host that does not answer SHALL hold none of them. When the branch cannot be read, each SHALL be refused naming the branch, as crew can't tell then which changes have been in a batch.
-
-#### Scenario: The laptop asleep at a conductor's wait
-- **WHEN** a wldn conductor's wait on chuck-herdr-alpha runs while macbook-pro, which holds a wldn operator session, does not answer, and five changes are due
-- **THEN** the wait finds the batch due and the planner is told, and macbook-pro is not asked
-
-#### Scenario: A review while the laptop is asleep
-- **WHEN** the planner runs `crew review wldn` while macbook-pro does not answer and a batch is due
-- **THEN** the reviewer is started on the batch's due changes, and no earlier batch's summary is returned in its place
-
-#### Scenario: A landing while the laptop is off
-- **WHEN** `crew bolt land` runs on mac-studio for a bolt whose every unit's latest change has been in a batch the user answered, while macbook-pro is off the tailnet
-- **THEN** the bolt is closed as landed, and nothing names macbook-pro
-
-#### Scenario: The branch cannot be read
-- **WHEN** a conductor's wait runs while `wldn/main` cannot be fetched
-- **THEN** whether a batch is due is not reckoned, and the wait says crew can't tell which changes have been in a batch, naming `wldn/main` and why
-
 ### Requirement: A batch is answered by the user's own words in a main-level pane
 A batch SHALL also be answered by the user's own words in the planner's pane or the operator's pane of its partition. The agent in that pane SHALL run `crew card answer batch/<n> --excerpt "<the user's words>"`. crew SHALL record the batch answered only when it finds the words in that agent's own live session transcript, on the host where the command runs, in a record the session received and that crew reads as the user's under `signals.5`. That is typing in the pane, or a `crew tell` from `<user>@<host>`. A later echo of the same words, in a tool's output or a tell, SHALL NOT hide the user's record. crew SHALL refuse the command, recording no answer, in each of these cases:
 - the words are not in the transcript, or are only in what the agent wrote itself;
@@ -292,12 +228,12 @@ When the user sends a batch's reading session, approved or annotated, crew SHALL
 - **WHEN** the user sends batch 13's session with two annotations while the planner is not up, and the refresh runs
 - **THEN** batch 13 is not recorded read, its row stays, no bolt it holds is offered for landing, and once up the planner is told to run `crew card read batch/13`
 
-### Requirement: A crossed team's unit is batched once its change has landed on its bolt
-A unit of a crossed team's bolt SHALL become due for review when the runner's records read it merged, its change read archived on GitHub's bolt after a fetch, and SHALL be named in its batch at the commit of the bolt that holds it, its reading opening its archived folder. A note the user marks fix on such a unit SHALL reach its bolt as a fix place, by the planner's `crew fix`.
+### Requirement: A unit is batched once its change has landed on its bolt
+A unit of a started bolt SHALL become due for review when the runner's records read it merged, its change read archived on GitHub's bolt after a fetch, and SHALL be named in its batch with its bolt at the commit of the bolt that holds it, `<unit>:<bolt>@<commit>`, its reading opening its archived folder. A note the user marks fix on such a unit SHALL reach its bolt as a fix place, by the planner's `crew fix`.
 
 #### Scenario: Merged, then batched
-- **WHEN** crossed crw-4's `a` lands on `bolt/x` at `9f1c2ab`, its change archived there
-- **THEN** `a` counts toward the partition's next batch, named `a:crw-4@9f1c2ab`
+- **WHEN** `a` of started `x` lands on `bolt/x` at `9f1c2ab`, its change archived there
+- **THEN** `a` counts toward the partition's next batch, named `a:x@9f1c2ab`
 
 #### Scenario: Constructed but not landed
 - **WHEN** `b`'s construct has delivered and its place is in code
@@ -313,3 +249,41 @@ A unit of a crossed team's bolt SHALL become due for review when the runner's re
 #### Scenario: A summary not written
 - **WHEN** the reviewer's turn took batches 21 and 22, only 21's summary is written, and it runs `crew review delivered`
 - **THEN** batch 21 is delivered, and batch 22 is refused, naming its file
+
+### Requirement: A batch spans the partition's bolts
+A batch SHALL hold the changes due across every bolt of a partition. A partition SHALL have a batch setting, a count N and a number of hours T, read from its entry in the teams file. A batch SHALL be due, at the rail's sweep on the partition's main-level host, when N changes are due across its bolts, or when T hours have passed since the partition's last batch and at least one change is due, whichever comes first.
+
+#### Scenario: Changes from several bolts
+- **WHEN** a partition's setting is 5 and 4 hours, and two units of bolt `x` and three of bolt `y` have been constructed since its last batch
+- **THEN** a batch is due at the rail's next sweep on the main level's host, holding those five changes
+
+#### Scenario: The time is reached
+- **WHEN** two changes have been constructed across the partition's bolts since its last batch, four hours ago
+- **THEN** a batch is due, holding those two
+
+#### Scenario: Nothing due
+- **WHEN** four hours have passed since the last batch and no change has been constructed since
+- **THEN** no batch is due
+
+#### Scenario: Swept on another host
+- **WHEN** the rail's sweep runs on a host that is not wldn's main-level host
+- **THEN** it reckons no batch for wldn
+
+### Requirement: A batch is reckoned from the partition's branch, never a host
+Whether a batch is due, what a review holds, and whether every unit's latest change of a bolt has been in a batch, SHALL be read from the run record on the partition's branch alone, asking no host for it. A host that does not answer SHALL hold none of them. When the branch cannot be read, each SHALL be refused naming the branch, as crew can't tell then which changes have been in a batch.
+
+#### Scenario: The laptop asleep at the rail's sweep
+- **WHEN** the rail's sweep on chuck-herdr-alpha, wldn's main-level host, runs while macbook-pro, which holds a wldn operator session, does not answer, and five changes are due
+- **THEN** the sweep finds the batch due and the planner is told, and macbook-pro is not asked
+
+#### Scenario: A review while the laptop is asleep
+- **WHEN** the planner runs `crew review wldn` while macbook-pro does not answer and a batch is due
+- **THEN** the reviewer is started on the batch's due changes, and no earlier batch's summary is returned in its place
+
+#### Scenario: A landing while the laptop is off
+- **WHEN** `crew bolt land` runs on mac-studio for a bolt whose every unit's latest change has been in a batch the user answered, while macbook-pro is off the tailnet
+- **THEN** the bolt is closed as landed, and nothing names macbook-pro
+
+#### Scenario: The branch cannot be read
+- **WHEN** the rail's sweep runs while `wldn/main` cannot be fetched
+- **THEN** whether a batch is due is not reckoned, and the sweep says crew can't tell which changes have been in a batch, naming `wldn/main` and why

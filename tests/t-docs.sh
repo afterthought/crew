@@ -1,7 +1,7 @@
 # README, the crew skill and crew's usage name the same commands: every command in the README is in the usage,
 # and none of the removed ones is in any of them. CLAUDE.md names how an agent runs crew's tools through the shell
 # per command, and no role brief or crew skill does (tests.7); a landing pushes nothing and levels no host in each of
-# them (docs.2, plan.18), and a give, a land and a drop go through sluice's branch create and delete, a dropped bolt's
+# them (docs.2, plan.18), and a start, a land and a drop go through sluice's branch create and delete, a dropped bolt's
 # branch kept while main lacks its tip (plan.19); CLAUDE.md
 # says a host loads crew live from crew/live/plugin or released at a tag swancloud pins, never from a checkout on main,
 # which nobody pulls or levels (plan.18, plan.19); a checkout carries the .envrc a person's direnv enters the shell
@@ -27,16 +27,31 @@ while read -r line; do
   done
 done < <(grep -E '^crew ' "$CREW/README.md")
 echo "$n commands checked"
-(( n > 40 )) || fail "too few commands read from the README"
+(( n >= 100 )) || fail "too few commands read from the README"
 ok "every command in the README is in crew's usage"
 
 for gone in assign release opsx fable explorer verifier coder-; do
   for doc in usage readme skill; do lacks "${!doc}" "$gone"; done
 done
-for gone in assign release opsx; do expect_fail "A team builds one bolt at a time" crew $gone swb-1; done
+for gone in assign release opsx list status up rebuild close restart resume clear down _tidy _status _team; do
+  expect_fail "every bolt, unit and chore of the plans" crew $gone swb-1
+done
+for doc in usage readme skill; do
+  team=$(grep -oE '(^|[^a-z_])crew +(list|status|up|rebuild|close|restart|resume|clear|down)([^a-z]|$)' <<<"${!doc}" || true)
+  [[ -z $team ]] || fail "the $doc names a team command:"$'\n'"$team"
+  for gone in "<team or partition>" "(sent to <team" "SLUICE_BRANCH" "sluice_branch" "conductor fresh" "unit slot"; do
+    lacks "${!doc}" "$gone"
+  done
+  has "${!doc}" 'crew send'; has "${!doc}" '<partition> "<text>"'
+done
 for doc in usage readme skill; do lacks "${!doc}" "unit approve"; lacks "${!doc}" "review/<unit>"; done
-for doc in usage readme skill; do has "${!doc}" "crew review"; has "${!doc}" "settle"; done
-ok "none of the removed commands or roles is in the README, the skill or the usage, and each names crew review and the settle stage"
+for doc in usage readme skill; do has "${!doc}" "crew review"; done
+for gone in "unit run" "unit wait" "unit free" "chore run" "chore wait" "chore free" "crew needs" "fix <team>"; do
+  for doc in usage readme skill; do lacks "${!doc}" "$gone"; done
+done
+for gone in "unit run a code" "unit wait a" "chore free c"; do expect_fail "invalid choice" crew $gone; done
+expect_fail "crew: each partition's plan of bolts, its main level of agents in herdr" crew needs "what it needs"
+ok "none of the removed commands or roles is in the README, the skill or the usage, a team command among them, crew drives no stage and waits on none, crew send names a partition alone, and each names crew review"
 
 for doc in usage readme skill; do has "${!doc}" "crew ops offer <env>"; has "${!doc}" "[--notes <file>] [--steps <file>]"; done
 for doc in usage readme skill; do
@@ -71,18 +86,41 @@ done
 for doc in readme skill; do has "${!doc}" "origin/bolt/<bolt>"; done
 for doc in usage readme skill; do has "${!doc}" "while main lacks its tip"; lacks "${!doc}" "a dropped bolt's whatever it holds"; done
 has "$usage" "land and drop have sluice delete it"; has "$skill" "\`crew bolt land\` and \`crew bolt drop\` have sluice delete"
-has "$readme" "for a bolt a team holds, it then has sluice delete the bolt's branch"
-ok "the README, the skill and the usage say a give has sluice make the bolt's branch on GitHub and a land and a drop have sluice delete it, a dropped bolt's kept while main lacks its tip, a give refused below sluice 0.20.0, every place cut from the bolt on GitHub, and a bolt made before local until it lands"
-
-for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "one more"; has "${!doc}" "waits to land"; done
-ok "the README, the skill and the usage say a team may hold one more bolt that waits to land, and crew fix names its bolt with --bolt"
+has "$readme" "for a started bolt, it then has sluice delete the bolt's branch"
+ok "the README, the skill and the usage say a start has sluice make the bolt's branch on GitHub and a land and a drop have sluice delete it, a dropped bolt's kept while main lacks its tip, a start refused below sluice 0.20.0, every place cut from the bolt on GitHub, and a bolt made before local until it lands"
 
 for doc in usage readme skill; do
-  for want in "version 2, 3 or 4" "due to cross once <bolt> lands" "in Flume stream" "Path: flume" "team.cross" "still closes" \
-    "however they went down" "closes what the hold left" \
-    "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
+  has "${!doc}" '<bolt> <name> "<what is wrong>"'; has "${!doc}" "start"; has "${!doc}" "started already"; has "${!doc}" "waits to land"
+  for gone in "bolt give" "crew bolt give" "one more" "a give" "never refused for the bolts" "plan agree" "dispatch" "agreement"; do
+    lacks "${!doc}" "$gone"
+  done
+  has "${!doc}" "bolt start"
 done
-ok "the README, the skill and the usage say a team's setting and path, its crossing however its roles went down and after a hold, what a crossed team refuses, its launches in requests.rec and its runner's branch, crew answer and crew main fix"
+expect_fail "unrecognized arguments: --merge" crew fix tenant-environments edge --merge
+ok "the README, the skill and the usage say a bolt's work is started by crew bolt start, refused for one started already, and name no give, agreement or dispatcher, a proven bolt waits to land, and crew fix names its bolt, with no --merge or --wait"
+
+for doc in usage readme skill; do
+  for want in "version 5, which lists no team" "version 2, 3 or 4 among them" "in Flume stream" "Path: flume" "no team's conductor, ops or slot" \
+    "requests.rec" "<label>/runner/<host>" "crew answer" "fix <kit> <name> --send"; do has "${!doc}" "$want"; done
+  for gone in "due to cross" "due back" "however they went down" "closes what the hold left" "crossed team" "version 3 of the teams file" \
+    "Version 3 of the teams file" "version-2 file" "version 4 names" "version 4 of the teams file" "at version 2 or 3" "versions 2 and 3" \
+    "<team|label>"; do lacks "${!doc}" "$gone"; done
+done
+ok "the README, the skill and the usage say the teams file is version 5 and lists no team, an older one refused, that crew runs no team's agents, its launches in requests.rec and its runner's branch, crew answer and crew main fix, and no team due to cross or crossing"
+
+# The README, the skill and the usage keep no team section, roles row or run-record act of the old path (Task 8.3 of
+# the-team-machinery-leaves): the README's roles are the five main-level definitions, the acts an older crew wrote are
+# entries from before, and the usage opens on the plan and the main level.
+for gone in "## Teams" "Bolt teams of" "conductor.md" "construct.md" "coder.md" "verify.md" "dispatcher.md" "| ops, team and main level" \
+  "such as \`unit.add\`, \`bolt.give\`" "\`team.up\` or" "on the host of the team holding" "on the team's host" "sent to their teams"; do
+  lacks "$readme" "$gone"
+done
+for want in "## Bolts" "| main-level ops | \`main-ops.md\` |" "\`bolt.start\`" "in entries from before, acts crew writes no more" \
+  "in entries from before, \`team/<team>\`"; do has "$readme" "$want"; done
+for gone in "**A team**" "of the team holding" "on the team's host" "its team's fix"; do lacks "$skill" "$gone"; done
+for doc in usage readme skill; do lacks "${!doc}" "bolt teams"; done
+has "$(head -1 <<<"$usage")" "crew: each partition's plan of bolts, its main level of agents in herdr, and its bolts' work in Flume."
+ok "the README, the skill and the usage keep no team section, roles row or old run-record act as current, and the usage opens on the plan and the main level"
 
 for doc in usage readme skill; do
   for want in "runs as its kind" "every role stands" "asks.rec" "roles.rec" "crew-<role>--<label>" "end --report <path>" \

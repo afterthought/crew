@@ -1,23 +1,20 @@
-"""What a team's read frees and removes (teams.1, plan.9): plan.slot_stage for the work each slot holds,
-plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
-plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
-goes with its place (plan.10) and plan.branch_said for what is said of it, plan.bolt_branch_judged for a bolt's own
-branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing,
-plan.overview_runs and plan.run_kept for a worktree sluice has a run in, plan.release_kept for one sluice did not
-release before its removal, plan.made_works, plan.crews_place and plan.stranger_said for a place crew made and one it
-did not, and plan.freed_recorded for the entry that names what the tidy removed. The documents under sluice-0.36.4/ were recorded from sluice 0.36.4 on deneb, 2026-10-22,
-their scratch folder written /scratch: a kit whose place a ran `sluice exec main -- sleep 25` (overview-run.json) until
-it ended (overview-ended.json); and on mac-studio, 2026-10-23, the same way: a kit whose policy's release command,
-`sh -c 'echo tearing down; exit 1'`, failed after a `sluice exec main -- true` in places/unit-u, `sluice release
---worktree <place> --json` exiting 3 (release-failed.json), then, the command's exit taken out and merged in, exiting 0
-once with it released (release.json) and once with nothing left to release (release-nothing.json). How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
-settles, the journey's (t-journey-merge, t-journey-fix)."""
+"""What crew's sweep removes on a kit's host (plan.9, bolt-teams "crew removes only its own worktrees"): plan.tidy_over
+for which worktree is crew's own, a landing's place alone, and whether its work is over, plan.kept_why for one kept,
+plan.wt_refused and plan.wt_left_branch for what the kit's wt remove said, plan.branch_kept and plan.branch_said for a
+branch kept, plan.bolt_branch_judged for a bolt's own branch and plan.kept_record for what a kept one's record says,
+plan.unread_plans for a sweep that removes nothing, plan.overview_runs and plan.run_kept for a worktree sluice has a
+run in, and plan.release_kept for one sluice did not release before its removal. The documents under sluice-0.36.4/
+were recorded from sluice 0.36.4 on deneb, 2026-10-22, their scratch folder written /scratch: a kit whose place a ran
+`sluice exec main -- sleep 25` (overview-run.json) until it ended (overview-ended.json); and on mac-studio,
+2026-10-23, the same way: a kit whose policy's release command, `sh -c 'echo tearing down; exit 1'`, failed after a
+`sluice exec main -- true` in places/unit-u, `sluice release --worktree <place> --json` exiting 3
+(release-failed.json), then, the command's exit taken out and merged in, exiting 0 once with it released
+(release.json) and once with nothing left to release (release-nothing.json). How worktrunk's remove behaves is a
+contract case (tests/contract/test_wt.py); the landing's sweep, the landing journey's (t-journey-land)."""
 import json
 import pathlib
 
 import pytest
-
-from facts import plan_of
 
 import plan
 
@@ -25,65 +22,11 @@ KD = "/kit"
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
 
 
-# A fix branch's facts as gather.fix_facts reads them: in flight, merged into its bolt, landed with it, or cut at a
-# commit main holds and never moved.
-GOING = {"bolt": "t", "merged": False, "on_main": False, "moved": None}
-MERGED = dict(GOING, merged=True, moved=True)
-LANDED = dict(GOING, on_main=True, moved=True)
-CUT = dict(GOING, on_main=True, moved=False)
-
-
-def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix=GOING, dropped=(), made=None):
-    """units: each unit the plan holds, in bolt t, or as (unit, its bolt or None for the queue); made, the work this
-    host's run record holds a start of, the branch's own unless given."""
-    return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), dict((u, "t") if isinstance(u, str) else u for u in units),
-                          set(on_main), lambda bolt: set(merged), lambda b: fix, chores_of=lambda ref: set(), dropped=set(dropped),
-                          made={branch} if made is None else made)
+def over(path, branch, bolts=("t",)):
+    return plan.tidy_over(f"{KD}/{path}", branch, KD, set(bolts))
 
 
 class TestOver:
-    def test_a_bolts_worktree_is_over_once_no_plan_has_the_bolt(self):
-        assert over("bolts/gone", "bolt/gone") == (None, "bolt gone is in no plan")
-        assert over("bolts/t", "bolt/t") == (None, None)
-
-    def test_a_bolts_worktree_the_tidy_detached_is_still_crews_and_goes_with_its_bolt(self):
-        assert over("bolts/gone", "") == (None, "bolt gone is in no plan")
-        assert over("bolts/t", "") == (None, None)
-
-    def test_a_units_place_is_over_once_it_merged_landed_or_left_every_plan(self):
-        assert over("places/merged-one", "unit/merged-one", "bolt/t", merged={"merged-one"}) == (
-            "merged-one", "unit merged-one has merged into bolt/t")
-        assert over("places/a", "unit/a", "bolt/t", on_main={"a"}) == ("a", "unit a has landed on main")
-        assert over("places/ignored-only", "unit/ignored-only", "bolt/t") == ("ignored-only", "unit ignored-only is in no plan")
-        assert over("places/planned", "unit/planned", "bolt/t") == ("planned", None)
-
-    def test_a_units_place_is_over_once_it_has_left_the_bolt_its_place_tracks(self):
-        """teams.1: a unit added again to another bolt, or moved to the queue, leaves the place its old bolt's stage cut,
-        which goes as a dropped unit's does, its branch judged by git cherry (plan.10); one whose place tracks no bolt crew
-        can name stays (read.1)."""
-        assert over("places/a", "unit/a", "origin/bolt/gone", units=[("a", "t")]) == ("a", "unit a has left bolt/gone for bolt/t")
-        assert over("places/a", "unit/a", "bolt/t", units=[("a", None)]) == ("a", "unit a has left bolt/t for the queue")
-        assert over("places/a", "unit/a", "", units=[("a", "t")]) == ("a", None)
-
-    def test_a_fixs_place_is_over_once_it_merged_was_dropped_or_its_bolt_left_every_plan(self):
-        assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")
-        assert over("places/fix-t--y", "fix/t/y", "bolt/t", dropped={"fix/t/y"}) == ("fix/t/y", "fix/t/y was dropped")
-        assert over("places/fix-gone--y", "fix/gone/y", "bolt/gone") == ("fix/gone/y", "bolt gone, which fix/gone/y was made from, is in no plan")
-        assert over("places/fix-t--y", "fix/t/y", "bolt/t") == ("fix/t/y", None)
-
-    def test_a_landed_fixs_place_is_over_with_its_bolt_planned_or_gone(self):
-        # wldn, swb-3, 2026-10-20: fixes of landed bolts held their slots and branches (teams.3).
-        assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=LANDED) == ("fix/t/y", "fix/t/y has landed on main")
-        assert over("places/fix-gone--y", "fix/gone/y", "bolt/gone", fix=LANDED) == ("fix/gone/y", "fix/gone/y has landed on main")
-        assert over("places/fix-gone--y", "fix/gone/y", "bolt/gone", fix=CUT) == ("fix/gone/y", "fix/gone/y has landed on main")
-        assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=CUT) == ("fix/t/y", None)
-
-    def test_a_fix_tracking_its_bolt_on_github_is_crews_and_over_once_merged(self):
-        # plan.19: a place cut from origin/bolt/<bolt> tracks the remote-tracking branch.
-        assert over("places/fix-t--y", "fix/t/y", "origin/bolt/t", fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")
-        assert over("places/fix-t--y", "fix/t/y", "origin/bolt/t") == ("fix/t/y", None)
-        assert over("places/fix-gone--y", "fix/gone/y", "origin/bolt/gone") == (
-            "fix/gone/y", "bolt gone, which fix/gone/y was made from, is in no plan")
 
     def test_a_landings_place_goes_with_its_bolt(self):
         """bolt-teams "A bolt lands on main on the user's word" (plan.19): the landing's place, <kit>/places/land-<bolt>
@@ -92,117 +35,19 @@ class TestOver:
         assert over("places/land-gone", "bolt/gone") == ("land-gone", "bolt gone is in no plan")
         assert over("places/land-t", "bolt/t") == ("land-t", None)
 
-    def test_a_units_place_tracking_its_bolt_on_github_is_a_place_of_that_bolt(self):
-        """plan.19: a unit's place cut from origin/bolt/<bolt> is read as a place of that bolt, merged and over as any."""
-        assert over("places/merged-one", "unit/merged-one", "origin/bolt/t", merged={"merged-one"}) == (
-            "merged-one", "unit merged-one has merged into bolt/t")
-        assert over("places/planned", "unit/planned", "origin/bolt/t") == ("planned", None)
-
-    @pytest.mark.parametrize("path, branch, up", [
-        ("mine", "mine", ""), ("places/fix-t--y", "fix/t/y", "origin/main"), ("x", "unit/x", "bolt/t"), ("bolts/not-elsewhere", "bolt/elsewhere", ""),
-        ("places/detached", "", ""), ("places/fix-t--y", "fix/t/y", ""), ("main", "main", ""),
-        ("places/land-gone", "bolt/elsewhere", ""), ("places/land-gone", "", ""), ("places/gone", "bolt/gone", "")])
-    def test_a_worktree_crew_did_not_make_is_never_touched(self, path, branch, up):
-        assert over(path, branch, up, units=()) is None
-
-
-class TestCrewsPlace:
-    """plan.9, as read on 2026-10-28 (signal 2026-10-28-swancloud-design-9a4472f9/01): swc-3's tidy removed the design
-    agent's hand-cut swancloud/places/chore-sluice-0-52-1 and its branch chore/sluice-0-52-1, reading them as a crew
-    chore in no plan by their names alone. A place is crew's only when it stands at crew's own path for the work its
-    branch names and this host's run record holds that work's stage.start or fix.start, a refused one included."""
-    HAND = ("places/chore-sluice-0-52-1", "chore/sluice-0-52-1")
-
-    def test_a_hand_cut_worktree_named_like_a_chore_is_left_alone_and_named(self):
-        assert over(*self.HAND, "bolt/t", made=set()) is None
-        assert plan.crews_place(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, set()) is False
-        assert plan.stranger_said(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, "deneb") == (
-            f"{KD}/places/chore-sluice-0-52-1 is not crew's, and is left to whoever made it: deneb's run record holds no "
-            "start of chore/sluice-0-52-1")
-
-    def test_a_place_whose_start_this_hosts_record_holds_is_crews_and_judged(self):
-        assert over(*self.HAND, "bolt/t", made={"chore/sluice-0-52-1"}) == ("sluice-0-52-1", "chore sluice-0-52-1 is in no plan")
-        assert over("places/a", "unit/a", "bolt/t", made={"unit/a"}, units=()) == ("a", "unit a is in no plan")
-        assert over("places/fix-t--y", "fix/t/y", "bolt/t", made={"fix/t/y"}, fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")
-
-    @pytest.mark.parametrize("path, branch, made", [
-        ("places/a", "unit/a", {"chore/a", "fix/t/a"}), ("places/chore-c", "chore/c", {"unit/c"}),
-        ("places/fix-t--y", "fix/t/y", {"unit/y", "fix/t/z"})])
-    def test_a_start_of_other_work_makes_no_place_crews(self, path, branch, made):
-        assert over(path, branch, "bolt/t", made=made, units=()) is None
-        assert plan.crews_place(f"{KD}/{path}", branch, KD, made) is False
-
-    @pytest.mark.parametrize("path, branch, own", [
-        ("places/other", "unit/a", "places/a"), ("places/c", "chore/c", "places/chore-c"), ("places/fix-y", "fix/t/y", "places/fix-t--y")])
-    def test_one_at_another_path_than_crews_for_its_branch_is_a_stranger_whatever_the_record_holds(self, path, branch, own):
-        assert over(path, branch, "bolt/t", units=()) is None
-        assert plan.crews_place(f"{KD}/{path}", branch, KD, {branch}) is False
-        assert plan.stranger_said(f"{KD}/{path}", branch, KD, "deneb").endswith(f": crew's place for {branch} is {KD}/{own}")
-
     @pytest.mark.parametrize("path, branch", [
-        ("places/land-t", "bolt/t"), ("places/design-x", "design/x"), ("elsewhere/a", "unit/a"), ("places/x", "fix/legacy")])
-    def test_any_other_worktree_is_no_stranger(self, path, branch):
-        assert plan.crews_place(f"{KD}/{path}", branch, KD, set()) is None
-
-    def test_while_the_record_cannot_be_read_no_place_is_judged_or_named(self):
-        """read.1: crew removes nothing on a guess."""
-        assert over(*self.HAND, "bolt/t", made=None) == ("sluice-0-52-1", "chore sluice-0-52-1 is in no plan")  # over()'s default
-        assert plan.tidy_over(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, "bolt/t", {"t"}, {}, set(), lambda b: set(),
-                              lambda b: GOING, made=None) is None
-        assert plan.crews_place(f"{KD}/{self.HAND[0]}", self.HAND[1], KD, None) is None
-
-
-class TestMadeWorks:
-    """What this host's run record says crew started (plan.9): the work a stage.start or fix.start names."""
-
-    def test_a_start_refused_or_not_names_its_unit_chore_or_fix(self):
-        es = [{"Act": "stage.start", "On": ["stage/a/code", "unit/a", "agent/t-unit-1"]},
-              {"Act": "stage.start", "On": ["stage/c/code", "chore/c"], "Refused": "made but not ready"},
-              {"Act": "fix.start", "On": ["fix/t/y", "bolt/t", "agent/t-unit-2", "unit/waits"]},
-              {"Act": "fix.start", "On": ["fix/t/z", "bolt/t"], "Refused": "every slot is in flight"}]
-        assert plan.made_works(es) == {"unit/a", "chore/c", "fix/t/y", "fix/t/z"}
-
-    def test_no_other_act_makes_a_place(self):
-        es = [{"Act": "unit.add", "On": ["unit/a"]}, {"Act": "slot.free", "On": ["agent/t-unit-1", "chore/c"]},
-              {"Act": "stage.end", "On": ["stage/a/code", "unit/a"]}, {"Act": "fix.merge", "On": ["fix/t/y"]}]
-        assert plan.made_works(es) == set()
-
-
-class TestHostMade:
-    """The record of making a place is this host's own (plan.9): every day's file of its runs/<host>/ for the labels
-    building the kit, the oldest included; one that cannot be read judges no place (read.1)."""
-
-    def test_every_days_file_of_this_host_is_read_and_no_other_hosts(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(plan.record, "ROOT", tmp_path)
-        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
-        for host, day, on in (("deneb", "2026-10-07", "chore/old"), ("deneb", "2026-10-29", "unit/new"), ("mac-studio", "2026-10-15", "unit/there")):
-            f = tmp_path / "swancloud" / "runs" / host / f"{day}.rec"
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(plan.record.DESCRIPTOR + f"Id: {day}-{host}\nAt: {day}T10:00:00Z\nHost: {host}\nBy: x\nAct: stage.start\nOn: {on}\n\n")
-        assert plan.host_made(["swancloud", "madswan"]) == ({"chore/old", "unit/new"}, None)
-
-    def test_a_file_that_cannot_be_read_judges_nothing(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(plan.record, "ROOT", tmp_path)
-        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
-        (tmp_path / "swancloud" / "runs" / "deneb" / "2026-10-29.rec").mkdir(parents=True)  # a folder, so its read fails
-        works, why = plan.host_made(["swancloud"])
-        assert works is None and why.startswith(f"deneb's run record at {tmp_path}/swancloud/runs/deneb could not be read: ")
+        ("mine", "mine"), ("places/fix-t--y", "fix/t/y"), ("x", "unit/x"), ("bolts/gone", "bolt/gone"), ("bolts/t", ""),
+        ("places/detached", ""), ("main", "main"), ("places/land-gone", "bolt/elsewhere"), ("places/land-gone", ""),
+        ("places/gone", "bolt/gone"), ("places/a", "unit/a"), ("places/chore-c", "chore/c"), ("places/change--a", "change/a")])
+    def test_a_worktree_crew_did_not_make_is_never_touched(self, path, branch):
+        """bolt-teams "crew removes only its own worktrees": a unit's, a chore's or a fix's place, Flume's or one an older
+        crew made, a bolt's worktree from before record 0026 and every other worktree are left alone."""
+        assert over(path, branch) is None
 
 
 class TestRemovalRecorded:
-    """plan.9: a removal is recorded on the entry of the act in whose command it happens, naming the place in Paths:
-    the slot.free of the slot that held its work, written once the tidy has run; one no slot.free carries, the landing's
-    place or a place whose slot an earlier command freed, is said in the tidy's output alone, since a drop's and a
-    landing's entries are written, and read in the same command, before the tidy on the team's host runs."""
-
-    def test_each_slot_free_held_back_names_the_place_the_tidy_removed_of_its_work(self, monkeypatch):
-        emitted = []
-        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: emitted.append((label, act, on, f)))
-        freed = [("wldn", ["agent/t-unit-1", "unit/a"], "team(t): free t-unit-1", f"{KD}/places/a"),
-                 ("wldn", ["agent/t-unit-2", "unit/b"], "team(t): free t-unit-2", f"{KD}/places/b")]
-        plan.freed_recorded(freed, [f"{KD}/places/a", f"{KD}/places/land-t"])
-        assert emitted == [("wldn", "slot.free", ["agent/t-unit-1", "unit/a"], dict(why="team(t): free t-unit-1", Paths=f"{KD}/places/a")),
-                           ("wldn", "slot.free", ["agent/t-unit-2", "unit/b"], dict(why="team(t): free t-unit-2", Paths=None))]
+    """plan.9: a slot.free crew wrote before it stopped freeing slots named the place its tidy removed in Paths, and
+    crew events still reads it so; the sweep of a landing's place says it in its output alone."""
 
     def test_a_removal_reads_as_one_in_crew_events_and_a_forecast_still_as_its_conflict(self):
         import record
@@ -210,33 +55,6 @@ class TestRemovalRecorded:
              "Paths": f"{KD}/places/a"}
         assert record.line(e).endswith(f"agent/t-unit-1 unit/a (removed {KD}/places/a)")
         assert record.line(dict(e, Act="forecast", Paths="a.txt", Reached="told")).endswith("(conflict on a.txt, told)")
-
-
-class TestFixBranchesOver:
-    """A fix's branch whose place is gone goes once main or its bolt holds its tip and no slot or worktree holds it
-    (teams.3, plan.10): read on the box on 2026-10-20, more than forty fix/ branches of long-gone bolts in
-    switchboard-kit, each one's tip on origin/main."""
-
-    def gone(self, facts, held=(), dropped=(), bolts=("t",)):
-        return plan.fix_branches_over(facts, set(held), set(dropped), set(bolts))
-
-    def test_a_merged_or_landed_branch_goes_saying_why(self):
-        facts = {"fix/t/merged": MERGED, "fix/gone/landed": dict(LANDED, bolt="gone"), "fix/gone/cut": dict(CUT, bolt="gone"),
-                 "fix/t/landed": LANDED}
-        assert self.gone(facts) == [("fix/gone/cut", "it has landed on main"), ("fix/gone/landed", "it has landed on main"),
-                                    ("fix/t/landed", "it has landed on main"), ("fix/t/merged", "it has merged into bolt/t")]
-
-    def test_one_a_slot_or_a_worktree_holds_stays(self):
-        assert self.gone({"fix/t/merged": MERGED, "fix/t/landed": LANDED}, held={"fix/t/merged", "fix/t/landed"}) == []
-
-    def test_one_its_conductor_dropped_is_left_to_the_dropped_sweep(self):
-        assert self.gone({"fix/t/merged": MERGED}, dropped={"fix/t/merged"}) == []
-
-    def test_one_holding_work_main_and_its_bolt_lack_stays(self):
-        assert self.gone({"fix/gone/kept": dict(GOING, bolt="gone"), "fix/none/kept": dict(GOING, bolt=None, on_main=True, moved=False)}) == []
-
-    def test_one_whose_bolt_is_planned_and_not_merged_stays(self):
-        assert self.gone({"fix/t/y": GOING, "fix/t/cut": CUT}) == []
 
 
 @pytest.mark.parametrize("up, bolt", [
@@ -265,38 +83,6 @@ class TestBoltMadeBefore:
         assert plan.bolt_local_said("b", None, None) is None
 
 
-class TestLegacyBolt:
-    """crew removes only its own worktrees (bolt-teams): a bolt's worktree from before record 0026, still on its
-    branch, is detached at the bolt's tip by the team's read while the bolt lasts when it is clean, and named as kept on
-    the branch while it is not (plan.9, plan.18)."""
-
-    def detach(self, path="bolts/t", branch="bolt/t", over=None, locked=False, status=(0, "", ""), run=None):
-        return plan.bolt_detach(f"{KD}/{path}", branch, KD, over, locked, lambda: status, lambda: run)
-
-    def test_a_legacy_bolt_worktree_on_its_branch_with_nothing_modified_is_detached(self):
-        assert self.detach() == (True, None)
-
-    def test_a_legacy_bolt_worktree_with_changes_stays_on_its_branch_named_as_kept_for_them(self):
-        assert self.detach(status=(0, " M README.md\n", "")) == (False, (
-            "it has uncommitted changes, which are the user's to keep or discard, and crew detaches it at the bolt's tip "
-            "once it is clean"))
-
-    def test_a_clean_one_sluice_has_a_run_in_stays_on_its_branch_named_for_the_run(self):
-        # wldn's signal 2026-10-20-swb-2-ops-20f43d6b/01: the tidy detached one 45 s into a run in it (plan.9).
-        assert self.detach(run="sluice's overview lists a run in it, `sleep 25`") == (False, (
-            "sluice's overview lists a run in it, `sleep 25`, and crew detaches it at the bolt's tip once no run is in it"))
-
-    def test_a_locked_one_or_one_git_cannot_read_stays_on_its_branch(self):
-        assert self.detach(locked=True, status=None) == (False, "it is locked, and crew detaches it at the bolt's tip once it is not")
-        assert self.detach(status=(128, "", "fatal: bad index\n"))[1].startswith("git cannot read its status (fatal: bad index)")
-
-    @pytest.mark.parametrize("path, branch, over", [
-        ("bolts/t", "", None), ("bolts/t", "bolt/t", "bolt t is in no plan"), ("bolts/t", "bolt/other", None),
-        ("places/t", "bolt/t", None), ("main", "main", None)])
-    def test_nothing_else_is_detached_and_a_finished_bolts_worktree_goes_as_any(self, path, branch, over):
-        assert self.detach(path, branch, over, status=None) is None
-
-
 class TestKept:
     def test_a_locked_one_is_kept_unread(self):
         assert plan.kept_why("x", True, None, lambda: None) == "it is locked"
@@ -314,7 +100,6 @@ class TestKept:
     def test_a_landings_place_whose_submission_is_still_with_sluice_is_kept_and_named(self):
         assert plan.kept_why("bolt gone is in no plan", False, (0, "", ""), lambda: None, True) == (
             "bolt gone is in no plan, and its submission is still with sluice")
-
 
     def test_a_clean_one_sluice_has_a_run_in_is_kept_and_named_for_it_and_only_then_is_the_overview_read(self):
         ran = "sluice's overview lists a run in it, `sleep 25`, started 2026-10-22T23:31:30Z"
@@ -409,81 +194,6 @@ def test_a_plan_that_cannot_be_read_removes_nothing_saying_why_on_one_line():
         "no worktree was removed: wldn/main of WilldanGroup/crew-state could not be read: fatal: '/x' does not appear to be a git repository")
 
 
-class TestSlotStage:
-    PLAN = plan_of({"t": "swb-1", "other": "swb-2"}, {"a": "t", "c": "t", "moved": "other", "carried": "t", "carried-gone": "t"})
-    KIT = {"ok": True, "main": {"landed-one"},
-           "bolts": {"t": {"changes": ["merged-one", "carried"], "archived": ["merged-one"], "open": {"carried": [3, 3], "carried-gone": [2, 3]}}},
-           "places": {"merged-one": {"bolt": "t"}, "a": {"bolt": "t", "tasks": (1, 4), "planning": True, "head": "h"},
-                      "c": {"bolt": "t", "tasks": None, "planning": False, "head": "h"},
-                      "carried": {"bolt": "t", "tasks": (3, 3), "planning": True, "head": "h", "open": []}},
-           "fixes": [{"fix": "fix/t/done", "merged": True, "bolt": "t", "on_main": False, "moved": True},
-                     {"fix": "fix/gone/y", "merged": False, "bolt": "gone", "on_main": False, "moved": None},
-                     {"fix": "fix/t/y", "merged": False, "bolt": "t", "on_main": False, "moved": None},
-                     {"fix": "fix/t/cut", "merged": False, "bolt": "t", "on_main": True, "moved": False},
-                     {"fix": "fix/t/landed", "merged": False, "bolt": "t", "on_main": True, "moved": True},
-                     {"fix": "fix/gone/never-moved", "merged": False, "bolt": "gone", "on_main": True, "moved": False}],
-           # Fix branches no worktree holds, their places gone (wldn, swb-3, 2026-10-20: four slots kept, read `none`).
-           "fix_branches": {"fix/gone/landed": {"merged": False, "bolt": "gone", "on_main": True, "moved": True},
-                            "fix/t/merged": {"merged": True, "bolt": "t", "on_main": False, "moved": True},
-                            "fix/gone/kept": {"merged": False, "bolt": "gone", "on_main": False, "moved": None}}}
-
-    def stage(self, kind, name, kit=None, plan_=PLAN):
-        return plan.slot_stage(kind, name, kit or self.KIT, plan_, {"t"}, {})
-
-    @pytest.mark.parametrize("name, stage", [
-        ("landed-one", "landed"), ("merged-one", "merged"), ("dropped-one", "dropped"), ("moved", "left"), ("c", "construct")])
-    def test_a_units(self, name, stage):
-        assert self.stage("unit", name) == (stage, None)
-
-    def test_a_unit_in_code_counts_its_tasks(self):
-        assert self.stage("unit", "a") == ("code", "1/4")
-
-    def test_a_unit_whose_change_the_bolt_holds_open_has_not_merged_and_is_said_carried(self):
-        # wldn, swb-4, 2026-10-13: carried onto its bolt inside another unit's merge (teams.17, signal 45f551aa/01).
-        assert self.stage("unit", "carried") == ("verify", "3/3", True)
-
-    def test_one_whose_place_is_gone_reads_its_stage_from_the_change_on_the_bolt(self):
-        assert self.stage("unit", "carried-gone") == ("code", "2/3", True)
-
-    @pytest.mark.parametrize("name, stage", [
-        ("fix/t/landed", "landed"), ("fix/gone/never-moved", "landed"), ("fix/t/done", "merged"), ("fix/gone/y", "dropped"),
-        ("fix/t/y", "fix"), ("fix/t/cut", "fix"), ("fix/t/z", "none")])
-    def test_a_fixs(self, name, stage):
-        assert self.stage("fix", name) == (stage, None)
-
-    @pytest.mark.parametrize("name, stage", [("fix/gone/landed", "landed"), ("fix/t/merged", "merged"), ("fix/gone/kept", "dropped")])
-    def test_a_fix_whose_place_is_gone_is_read_from_its_branch(self, name, stage):
-        assert self.stage("fix", name) == (stage, None)
-
-    @pytest.mark.parametrize("name, stage", [
-        ("fix/gone/y", "fix"), ("fix/gone/never-moved", "fix"), ("fix/gone/kept", "fix"), ("fix/t/landed", "landed"), ("fix/t/done", "merged")])
-    def test_with_the_plan_unread_no_fix_is_read_dropped_or_landed_by_the_plan(self, name, stage):
-        assert self.stage("fix", name, plan_=None) == (stage, None)
-
-    def test_a_fix_tracking_no_bolt_is_never_read_dropped(self):
-        f = {"merged": False, "bolt": None, "on_main": True, "moved": False}
-        assert plan.fix_stage(f, None) == "fix"
-
-    def test_a_kit_crew_could_not_read_is_unknown(self):
-        assert self.stage("unit", "a", kit={"ok": False}) == ("unknown", None)
-
-    def test_with_the_plan_unread_nothing_is_taken_for_dropped(self):
-        assert self.stage("unit", "dropped-one", plan_=None) == ("none", None)
-
-
-class TestTidied:
-    def test_a_host_that_does_not_answer_leaves_the_removal_to_the_teams_next_read(self):
-        assert plan.tidied("swb-2", "bolt lint-twice", 255, "", "ssh: connect to host chuck-herdr-alpha port 22: Operation timed out\n") == (
-            "swb-2's host did not answer, so its worktrees for bolt lint-twice are not removed yet: the team's next read removes them")
-
-    def test_a_tidy_that_failed_says_its_last_line(self):
-        assert plan.tidied("swb-2", "unit d", 1, "", "one\nno such team\n") == (
-            "swb-2's host failed (no such team), so its worktrees for unit d are not removed yet: the team's next read removes them")
-
-    def test_else_it_says_what_the_tidy_said(self):
-        assert plan.tidied("swb-2", "unit d", 0, "swb-2-unit-1 is free\n", "") == "swb-2-unit-1 is free"
-
-
 class TestBoltBranch:
     """A bolt is a branch and no worktree (record 0026): the branch crew marked when it gave the bolt goes once no plan
     has the bolt and no worktree holds it (plan.9), a landed bolt's only when git cherry finds nothing on it whose patch
@@ -564,25 +274,6 @@ class TestBranch:
     its bolt goes with its landing; nothing for a fix tracking no bolt (plan.10, record 0003, record 0028, teams.3).
     Else it is kept, counted for the run record."""
     NOW = "refs/remotes/origin/main"
-
-    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
-    def test_one_is_compared_with_its_bolt_while_the_bolts_branch_stands_unlanded(self, kind):
-        assert plan.branch_target(kind, "bolt/t", True, False, self.NOW) == "bolt/t"
-
-    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
-    def test_once_its_bolt_is_marked_landed_it_is_compared_with_the_kits_main_now_not_the_bolt(self, kind):
-        assert plan.branch_target(kind, "bolt/t", True, True, self.NOW) == self.NOW
-
-    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
-    def test_once_the_bolts_branch_is_gone_it_is_compared_with_the_kits_main_now(self, kind):
-        assert plan.branch_target(kind, "bolt/gone", False, False, self.NOW) == self.NOW
-
-    @pytest.mark.parametrize("kind", ["unit", "chore"])
-    def test_a_unit_or_chore_tracking_nothing_is_compared_with_main(self, kind):
-        assert plan.branch_target(kind, "", False, False, "refs/heads/main") == "refs/heads/main"
-
-    def test_a_fix_tracking_no_bolt_has_nothing_to_compare_with(self):
-        assert plan.branch_target("fix", "", False, False, self.NOW) is None
 
     def test_only_plus_lines_are_counted_and_keep_it(self):
         assert plan.branch_kept("bolt/t", (0, "+ 1a2b3c\n- 4d5e6f\n+ 7a8b9c\n", "")) == (

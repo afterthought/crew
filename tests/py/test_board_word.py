@@ -13,12 +13,11 @@ import facts
 import plan
 import transcript
 
-FLEET = {**facts.FLEET, "partitions": {**facts.FLEET["partitions"], "swancloud": {"label": "swancloud", "machine": "mac-studio"}},
-         "teams": {**facts.FLEET["teams"], "crw-5": {"name": "crw-5", "label": "swancloud", "machine": "mac-studio"}}}
+FLEET = {**facts.FLEET, "partitions": {**facts.FLEET["partitions"], "swancloud": {"label": "swancloud", "machine": "mac-studio"}}}
 
 
 def word(**f):
-    return json.dumps({"label": "wldn", "key": "unit:a", "to": "swb-1-conductor", "text": "Keep the zone check", **f})
+    return json.dumps({"label": "wldn", "key": "unit:a", "to": "wldn-planner", "text": "Keep the zone check", **f})
 
 
 class TestTell:
@@ -31,24 +30,26 @@ class TestTell:
         monkeypatch.setattr(crew, "tell", lambda fleet, name, text, **kw: told.append((name, text, kw)) or sent["ok"])
         return told, sent
 
-    def test_a_word_on_a_unit_is_told_its_conductor_from_the_board_naming_the_item(self, told, capsys):
-        """board-page "A word on a unit"."""
+    def test_a_word_on_a_unit_is_told_the_planner_from_the_board_naming_the_item(self, told, capsys):
+        """board-page "A word on a unit"; "A word goes to the agent its item's kind names"."""
         told, _ = told
         assert crew.board_tell(FLEET, word()) is True
-        assert told == [("swb-1-conductor", "(on unit a) Keep the zone check", {"sender": "chuck@board"})]
-        assert len(told[0][1]) == 31 and capsys.readouterr().out == "sent to swb-1-conductor\n"
+        assert told == [("wldn-planner", "(on unit a) Keep the zone check", {"sender": "chuck@board"})]
+        assert len(told[0][1]) == 31 and capsys.readouterr().out == "sent to wldn-planner\n"
 
     def test_a_word_on_a_proposal_goes_to_the_planner_and_one_on_a_deploy_to_main_level_ops(self, told):
         assert crew.board_word(FLEET, word(key="proposal:4", to="wldn-planner")) == ("wldn-planner", "(on proposal 4) Keep the zone check")
         key = "deploy:mac-studio/" + "a" * 40 + "/2026-10-12T10:06:00Z"
         assert crew.board_word(FLEET, word(key=key, to="wldn-ops"))[1].startswith(f"(on deploy {key[7:]}) ")
         assert crew.board_word(FLEET, word(key="signal:2026-10-01-planning/01-zones", to="wldn-design"))[0] == "wldn-design"
-        assert crew.board_word(FLEET, word(key="team:swb-1", to="wldn-operator"))[0] == "wldn-operator"
+        assert crew.board_word(FLEET, word(key="subscription:max-1", to="wldn-operator"))[0] == "wldn-operator"
+        with pytest.raises(crew.Refusal, match="no item of the kind 'team'"):
+            crew.board_word(FLEET, word(key="team:swb-1", to="wldn-operator"))  # no team has a dock
 
-    def test_a_bolts_word_goes_to_any_conductor_of_the_partition_or_its_operator(self, told):
-        """Which team holds a bolt is the page's read, not the command's (design, Decision 1)."""
-        for to in ("swb-1-conductor", "swb-2-conductor", "wldn-operator"):
-            assert crew.board_word(FLEET, word(key="bolt:tenant-environments", to=to))[0] == to
+    def test_a_word_on_a_bolt_or_a_fix_goes_to_the_planner(self, told):
+        """board-page "Each kind's agent": a bolt's and a fix's word goes to the planner, as a unit's does."""
+        assert crew.board_word(FLEET, word(key="bolt:tenant-environments"))[0] == "wldn-planner"
+        assert crew.board_word(FLEET, word(key="fix:tenant-environments/edge"))[0] == "wldn-planner"
 
     def test_a_tell_that_types_nothing_prints_nothing_and_fails(self, told, capsys):
         """board-page "An agent waiting on a question": the tell's own words are on standard error, tell's to say."""
@@ -71,14 +72,15 @@ class TestRefused:
     @pytest.mark.parametrize("raw, said", [
         ("not json", "a word from the board is one JSON object holding label, key, to and text"),
         ('["wldn"]', "one JSON object holding label, key, to and text"),
-        (json.dumps({"label": "wldn", "key": "unit:a", "to": "swb-1-conductor"}), "one JSON object holding label, key, to and text"),
+        (json.dumps({"label": "wldn", "key": "unit:a", "to": "wldn-planner"}), "one JSON object holding label, key, to and text"),
         (word(text=7), "one JSON object holding label, key, to and text"),
         (word(label="nosuch"), "no partition 'nosuch'. partitions: wldn swancloud"),
         (word(key="ledger:a"), "a word from the board is on no item of the kind 'ledger': kinds signal proposal"),
         (word(key="unit:a b"), "a word from the board is on an item's key, <kind>:<name>, not 'unit:a b'"),
-        (word(key="proposal:4"), "a word on a proposal goes to wldn-planner, not swb-1-conductor"),
+        (word(key="proposal:4", to="wldn-ops"), "a word on a proposal goes to wldn-planner, not wldn-ops"),
         (word(key="operation:mac-studio/rotate-key", to="wldn-planner"), "a word on an operation goes to wldn-ops, not wldn-planner"),
-        (word(to="crw-5-conductor"), "a word on a unit goes to the conductor of the wldn team holding its bolt, or to wldn-operator, not crw-5-conductor"),
+        (word(to="swb-1-conductor"), "a word on a unit goes to wldn-planner, not swb-1-conductor"),
+        (word(key="bolt:tenant-environments", to="wldn-operator"), "a word on a bolt goes to wldn-planner, not wldn-operator"),
         (word(text="  "), "a word from the board holds no text"),
         (word(text="x" * 1001), "a word from the board is at most 1000 characters, not 1001"),
         (word(text="Keep\nthe zone check"), "a word from the board is one line"),

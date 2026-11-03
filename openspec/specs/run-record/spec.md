@@ -124,33 +124,6 @@ Entries SHALL be recutils records in `~/.local/state/crew/<label>/runs/<host>/<d
 - **WHEN** `crew trace unit/<unit>` names a unit no entry mentions
 - **THEN** it says so and exits non-zero
 
-### Requirement: A stage's end is recorded when crew sees it
-Each `stage.start` entry SHALL be followed by exactly one `stage.end` entry, carrying the stage crew then reads from the kit, the unit's tasks done and total, the head of the unit's or fix's branch, how the stage ended in `Ended`, and, when it delivered, its deliverable as an object in `Delivered`. `Ended` SHALL be `delivered` when the deliverable exists and the agent has stopped working, `short` when the agent said what it needs through crew, and `stopped` when crew ended the stage's agent before either. A wait SHALL record a delivered end when it sees it; a stop-short SHALL be recorded by the command the agent ran; when no wait recorded a delivered end, the next crew command that reads the team SHALL record it, marked as observed late. A stage whose agent has only gone quiet SHALL have no end recorded. Ops's proof SHALL be recorded the same way, on `stage/<bolt>/proof`.
-
-#### Scenario: The conductor waits
-- **WHEN** a conductor runs `crew unit wait <unit>` and the construct agent commits its change and stops working
-- **THEN** a `stage.end` entry is written with the stage `review`, `Ended: delivered`, the unit branch's head, and `Delivered: unit/<unit>@<head>`
-
-#### Scenario: A verify's report
-- **WHEN** a verify stage ends at its report
-- **THEN** its `stage.end` entry has `Delivered: report/<the report's file name>`
-
-#### Scenario: Nobody waited
-- **WHEN** a stage's agent has delivered and stopped working, no wait ran, and `crew status <team>` is run later
-- **THEN** a `stage.end` entry is written then, marked observed late, and a second read writes no second entry
-
-#### Scenario: Quiet with nothing delivered
-- **WHEN** a code agent has stopped working with tasks still open, and `crew status <team>` is run
-- **THEN** no `stage.end` entry is written
-
-#### Scenario: A stop-short
-- **WHEN** a stage's agent runs `crew needs "<what it needs>"`
-- **THEN** a `stage.end` entry is written with `Ended: short` and no `Delivered`, and the agent's words appear nowhere in the run record
-
-#### Scenario: A stage run again before it ended
-- **WHEN** the conductor runs a unit's code stage again while the previous code stage has neither delivered nor stopped short
-- **THEN** the previous stage's `stage.end` is written with `Ended: stopped` before the new stage's start
-
 ### Requirement: A send is one entry in the receiving partition's record
 Each `crew send` that reaches its operator SHALL append one entry, act `send`, to the run record of the partition it was sent to, on the host the command ran on. Its `By` SHALL be the sender, its `On` the operator, `agent/<label>-operator`, and the team, `team/<team>`, when a team was named; its `Why` SHALL be `send <team or partition>`; and its `Chars` the length of the text. It SHALL hold no part of the text, and no separate tell entry SHALL be written for it. A send that types nothing SHALL write no entry, as a tell that types nothing writes none.
 
@@ -220,10 +193,10 @@ When an entry cannot be pushed, crew SHALL say so once on standard error, naming
 - **THEN** it names `wldn/main` as not read, and why
 
 ### Requirement: A bolt's landing entry records its time by holder
-Every `bolt.land` entry crew writes for a bolt a team held SHALL record two things: the bolt's age, in whole minutes, from its newest give to its landing, as `Age`; and the minutes of that age each holder held, as `Split`, in the order team, kit, team-or-kit, user, hold, nobody, each named with its minutes, `team 130, kit 12, team-or-kit 0, user 40, hold 0, nobody 3`, team-or-kit being the minutes of a submission's stay in sluice that crew can't split between queued and under test. The split SHALL be made by the same rule the board's head line uses, and its minutes SHALL sum to `Age`. The landing SHALL be the moment sluice's record says the bolt's landing submission was decided, or the entry's own time when no submission of the bolt landed. sluice's record of the bolt's submissions SHALL be read once, on the team's host, when the entry is written. When the give or that record can't be read, the entry SHALL carry neither field, and the landing SHALL go on as it does today.
+Every `bolt.land` entry crew writes SHALL record two things: the bolt's age, in whole minutes, from its start, the newest entry of the run record that made its branch, to its landing, as `Age`; and the minutes of that age each holder held, as `Split`, in the order team, kit, team-or-kit, user, hold, nobody, each named with its minutes, `team 130, kit 12, team-or-kit 0, user 40, hold 0, nobody 3`, team-or-kit being the minutes of a submission's stay in sluice that crew can't split between queued and under test, and team the minutes the bolt's own work held it. The split SHALL be made by the same rule the board's head line uses, and its minutes SHALL sum to `Age`. The landing SHALL be the moment sluice's record says the bolt's landing submission was decided, or the entry's own time when no submission of the bolt landed. sluice's record of the bolt's submissions SHALL be read once, on the kit's host, when the entry is written. When the start or that record can't be read, the entry SHALL carry neither field, and the landing SHALL go on as it does today.
 
 #### Scenario: A bolt lands
-- **WHEN** main-level ops closes the landing of `b`, given 6h 10m before sluice landed it, with team 3h 20m, kit 25m, user 2h 05m, hold 0 and nobody 20m
+- **WHEN** main-level ops closes the landing of `b`, started 6h 10m before sluice landed it, with its work holding it 3h 20m, kit 25m, user 2h 05m, hold 0 and nobody 20m
 - **THEN** its `bolt.land` entry holds `Age: 370` and `Split: team 200, kit 25, team-or-kit 0, user 125, hold 0, nobody 20`
 
 #### Scenario: A merge whose checks' start sluice's record does not keep
@@ -231,15 +204,8 @@ Every `bolt.land` entry crew writes for a bolt a team held SHALL record two thin
 - **THEN** those seventeen minutes are in `Split`'s team-or-kit, not its team or its kit, and `Split` still sums to `Age`
 
 #### Scenario: sluice's record can't be read at the landing
-- **WHEN** `sluice status` fails on the team's host as `b`'s landing is recorded
+- **WHEN** `sluice status` fails on the kit's host as `b`'s landing is recorded
 - **THEN** the `bolt.land` entry is written without `Age` and `Split`, and the landing is closed as it is today
-
-### Requirement: A team's crossing is an entry
-When a crossed team's conductor and ops have both been ended for its crossing, crew SHALL record one `team.cross` entry on `team/<team>`, naming the stream its work now runs in, so `crew trace team/<team>` reads when it crossed.
-
-#### Scenario: Traced
-- **WHEN** crw-4's conductor and ops are ended at their stops after its last bolt of today's path lands
-- **THEN** one `team.cross` entry on `team/crw-4` names stream `madswan`, and `crew trace team/crw-4` shows it after `x`'s landing
 
 ### Requirement: An ask and a turn are entries
 Each ask crew writes SHALL be one `ask` entry in the asked partition's record, naming the role's run and the record the ask names, with the length of its words and never their text. A run's start SHALL be one `turn.begin` entry naming the run and how many it took, and its end one `turn.end` entry. `crew trace agent/<label>-<role>` SHALL list them with the rest of the role's entries.

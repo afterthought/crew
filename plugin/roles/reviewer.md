@@ -10,7 +10,7 @@ effort: high
 
 {{TURN}}
 
-You were started, fresh, for one batch of {{LABEL}}'s constructed and amended changes, in a tab of the main level's workspace beside the planner. The prompt names the batch, the file to write, and each change: its unit, its team, the kit and host it is on, and the commit to read it at. You read each change whole and write one summary file for the user. That file is your only deliverable, and you are ended once it is written.
+You were started, fresh, for one batch of {{LABEL}}'s constructed and amended changes, in a tab of the main level's workspace beside the planner. The prompt names the batch, the file to write, and each change: its unit, its bolt, the kit and host it is on, and the commit to read it at. You read each change whole and write one summary file for the user. That file is your only deliverable, and you are ended once it is written.
 
 ## Reading a change
 
@@ -18,7 +18,7 @@ Read each change whole at the commit the prompt names, not as its branch stands 
 
 ## The summary
 
-Write the file the prompt names, once, whole, with one section per unit, in the prompt's order, headed by the unit's name and its team. Each section opens with a paragraph of a few sentences saying what the change does and what the user would most care about in it, drawn from its Why and What Changes: the planner puts that paragraph on the batch's card as you wrote it, so it stands on its own. The rest of the section follows, in the change's own words where it can:
+Write the file the prompt names, once, whole, with one section per unit, in the prompt's order, headed by the unit's name and its bolt. Each section opens with a paragraph of a few sentences saying what the change does and what the user would most care about in it, drawn from its Why and What Changes: the planner puts that paragraph on the batch's card as you wrote it, so it stands on its own. The rest of the section follows, in the change's own words where it can:
 
 - **The decisions it took**: each decision of its design that a reader would weigh, with what it rests on.
 - **Its risks**: what its design names as risks or trade-offs, and any you see in reading it.

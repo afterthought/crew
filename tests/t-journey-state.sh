@@ -34,9 +34,11 @@ chmod 755 "$st"
 eq "$out" "wldn/main of WilldanGroup/crew-state $(git --git-dir "$ws" rev-parse --short wldn/main): started an empty plan; added moves.rec with 0 moves of WilldanGroup/willdan-blueprints at $(git --git-dir "$wb" rev-parse --short main)"
 eq "$(grep -c "crew: the run record at $st/wldn/runs/mac-studio/.* could not be written" "$T/err") $(wc -l < "$T/err" | tr -d ' ')" "2 2"
 eq "$(git --git-dir "$ws" ls-tree --name-only wldn/main)" $'moves.rec\nplan.rec\nproposals.rec'
+eq "$(git --git-dir "$ws" show wldn/main:plan.rec | grep '^%allowed: Bolt ')" "%allowed: Bolt Repo Goal Source Path"
+[[ $(git --git-dir "$ws" show wldn/main:proposals.rec) != *Agreed* ]] || fail "a new branch's proposals allow Agreed"
 expect_ok crew state init wldn; has "$out" "nothing to do"
 eq "$(commits)" "2"
-ok "a new flywheel gets an empty plan, moves and proposals, a record that can't be written is said once an entry and changes nothing else, and a second run writes nothing"
+ok "a new flywheel gets an empty plan, moves and proposals, allowing no bolt's team or proposal's agreement, a record that can't be written is said once an entry and changes nothing else, and a second run writes nothing"
 
 # planfile [<records>]: plan.rec as crew writes it, each record (recutils text, \n for a line break) in its own set
 planfile() {

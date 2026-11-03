@@ -2,9 +2,9 @@
 <!-- crew's fleet page: page.py puts the fleet's data in the placeholder below and writes the file whole. It shows each
      Claude subscription first, its use as the host holding its sign-in published it, who read it and how long ago, and
      the sessions and partitions on it; then every partition in the teams file at once, a block to each: where it runs,
-     its kits and their mains, its teams and how busy each is, and what needs attention. Everything it draws is in this
-     file: no font, script or style is loaded from anywhere, and the only links are to each partition's page and each
-     team's dock there, beside it. Every text is set as text, never as markup, a bar's width as a number, and nothing on
+     its kits and their mains, and what needs attention. Everything it draws is in this file: no font, script or style
+     is loaded from anywhere, and the only links are to each partition's page beside it, and from a subscription to
+     its dock there. Every text is set as text, never as markup, a bar's width as a number, and nothing on
      it answers anything. -->
 <html lang="en">
 <head>
@@ -14,7 +14,7 @@
 <style>
 /* The colour tokens, light and dark, are page.html's own, copied whole, so the two pages read as one board; a logic
    case holds the blocks equal (tests/py/test_fleet.py). The forms are page.html's too, its header, .host, .dot,
-   .sec-h, .empty and .mark, and a partition's teams are its ledgers' kin. */
+   .sec-h, .empty and .mark. */
 :root{
   --bg:#EEF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --ink:#16202A; --ink2:#4A5763; --ink3:#7A8794;
   --line:#D5DBE1; --line2:#E4E8EC; --accent:#0B6E79; --accent-ink:#FFFFFF; --accent-soft:#D9EEF0; --accent-hatch:rgba(11,110,121,.10);
@@ -98,27 +98,8 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
 .kit{padding:4px 0 6px;border-bottom:1px solid var(--line2);font-size:12px}
 .kit:last-child{border-bottom:0}
 .kit .kn{font:600 12px var(--mono)}
-.kit .kb{color:var(--ink3);margin-left:6px}
 .kit .kl{display:block;color:var(--ink2)}
-/* a team, the ledger's kin: flat, square, its slots under its bolt */
-.tm{background:var(--surface2);border:1px solid var(--ink3);margin-bottom:10px;font-size:12px}
-.tm-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:4px 9px;background:var(--surface);border-bottom:1px solid var(--ink3)}
-.tm-h .tn{font:700 12.5px var(--mono);text-decoration:none}
-.tm-h a.tn:hover{color:var(--accent)}
-.tm-h .tw{font:11px var(--mono);color:var(--ink3)}
-.tm-b{padding:5px 9px 7px}
-.tm-bolt{font:12px var(--mono);font-weight:600}
-.tm-bolt.none{font-weight:400;color:var(--ink3)}
-.slots{list-style:none;margin:4px 0;padding:0;font:11.5px var(--mono)}
-.slots li{margin:1px 0;color:var(--ink3)}
-.slots li.work{color:var(--ink)}
-.slots li.work::before{content:"● ";color:var(--accent)}
-.slots li.held{color:var(--ink2)}
-.slots li.held::before{content:"◐ ";color:var(--ink3)}
-.slots li.free::before{content:"○ "}
-.tm-f{display:flex;flex-wrap:wrap;gap:4px 12px;padding:4px 9px;border-top:1px dashed var(--ink3);font:11px var(--mono);color:var(--ink2)}
-.tm-f .wt{font-weight:600}
-.pt-h,.pt-name,.host,.sessions,.kit,.tm-h,.tm-bolt,.slots,.tm-f,.mark,.sub-h,.sub-from,.use,.others,.sub-parts{overflow-wrap:anywhere}
+.pt-h,.pt-name,.host,.sessions,.kit,.mark,.sub-h,.sub-from,.use,.others,.sub-parts{overflow-wrap:anywhere}
 
 @media (max-width:759px){
   .top{gap:6px 8px;padding:6px 10px}
@@ -203,7 +184,8 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
       card.append(others);
     }
 
-    // The sessions on it, by host, each with crew's agents and each team's work; then the partitions on it.
+    // The sessions on it, by host, each with crew's agents; then the partitions on it, each opening its page at this
+    // subscription's dock.
     card.append(el("h4", "sec-h", "sessions"));
     if (!s.sessions.length) card.append(el("span", "empty", s.sessions_said));
     var at = null, ul = null;
@@ -217,7 +199,6 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
       }
       var li = el("li");
       li.append(el("span", "sn", x.session), document.createTextNode(" "), el("span", "sa", x.said));
-      x.teams.forEach(function (t) { li.append(el("span", "acct", t.team + ": " + t.at_work_said + " · " + t.waits_said)); });
       ul.append(li);
     });
     card.append(el("h4", "sec-h", "partitions"));
@@ -267,31 +248,13 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
       pt.append(ul);
     });
 
-    // Its kits: who builds each, its main's last landing and what is queued for it.
+    // Its kits: each one's main's last landing and what is queued for it.
     pt.append(el("h3", "sec-h", "kits"));
     p.kits.forEach(function (k) {
       var row = el("div", "kit");
-      row.append(el("span", "kn", k.kit), el("span", "kb", "built by " + k.teams.join(", ")));
+      row.append(el("span", "kn", k.kit));
       line(row, "kl", k.said);
       pt.append(row);
-    });
-
-    // Its teams: each one's bolt, its slots, how many are at work and what its conductor waits on.
-    pt.append(el("h3", "sec-h", "teams"));
-    p.teams.forEach(function (t) {
-      var tm = el("div", "tm"), th = el("div", "tm-h"), tb = el("div", "tm-b"), tf = el("div", "tm-f");
-      th.append(link(t.link, "tn", t.team), el("span", "tw", t.host + " · " + t.session + " · " + t.account_said));
-      if (t.bolts.length) {
-        t.bolts.forEach(function (b) { tb.append(el("div", "tm-bolt", b.said)); });
-      } else {
-        tb.append(el("div", "tm-bolt none", t.holds));
-      }
-      var slots = el("ul", "slots");
-      t.slots.forEach(function (s) { slots.append(el("li", s.state, s.said)); });
-      tb.append(slots);
-      tf.append(el("span", null, t.at_work_said), el("span", "wt", t.waits.said));
-      tm.append(th, tb, tf);
-      pt.append(tm);
     });
 
     fleet.append(pt);

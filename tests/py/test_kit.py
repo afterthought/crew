@@ -1,5 +1,5 @@
-"""A kit's declaration of its toolchain and tests, and the steps that make a worktree ready from it (kit-toolchain
-spec; plan.17; record 0023)."""
+"""A kit's policy as sluice reads it, and what crew reads of a kit's main and its bolts (kit.py; plan.18, plan.19).
+crew readies no place (kit-toolchain spec)."""
 import base64
 import pathlib
 
@@ -10,92 +10,6 @@ from crew import Refusal
 
 FULL = '[tests]\ntoolchain = ["devenv", "print-dev-env"]\nrunner = "moon"\n'
 SCRIPT = "/kit.git/worktrees/a/crew/toolchain.sh"
-
-
-class TestDeclared:
-    def test_a_kit_that_declares_both(self):
-        assert kit.declared(FULL) == {"toolchain": ["devenv", "print-dev-env"], "runner": "moon", "command": None}
-
-    def test_a_kit_with_no_file_declares_nothing(self):
-        assert kit.declared(None) is None
-
-    def test_a_file_with_no_tests_table_declares_nothing(self):
-        assert kit.declared('[branches."bolt/*"]\nrequired = ["#check-fast"]\n') == {"toolchain": None, "runner": None, "command": None}
-
-    def test_a_command_runner_with_its_command(self):
-        assert kit.declared('[tests]\nrunner = "command"\ncommand = "make check"\n')["command"] == "make check"
-
-    @pytest.mark.parametrize("text, key", [
-        ("[tests\n", "is not TOML"),
-        ('[tests]\ntoolchain = "devenv print-dev-env"\n', "toolchain is a list of strings"),
-        ("[tests]\ntoolchain = []\n", "toolchain is a list of strings"),
-        ('[tests]\ntoolchain = ["devenv", 1]\n', "toolchain is a list of strings"),
-        ('[tests]\nrunner = "cargo"\n', 'runner is "moon" or "command"'),
-        ('[tests]\nrunner = "command"\n', "names no command"),
-        ("[tests]\ncommand = 3\n", "command is a string"),
-        ("tests = 1\n", "[tests] is a table"),
-    ])
-    def test_a_declaration_crew_cannot_read_is_refused_naming_the_file_and_key(self, text, key):
-        with pytest.raises(Refusal) as e:
-            kit.declared(text, "places/a/.config/sluice.toml")
-        assert "places/a/.config/sluice.toml" in str(e.value) and key in str(e.value)
-
-
-class TestReadying:
-    def test_a_kit_on_moon_runs_its_toolchain_then_moon_inside_it(self):
-        steps = kit.readying(kit.declared(FULL), SCRIPT)
-        assert [what for what, _, _ in steps] == ["the toolchain", "moon --version", "moon setup"]
-        assert steps[0] == ("the toolchain", ["devenv", "print-dev-env"], SCRIPT)
-        assert steps[2] == ("moon setup", kit.in_toolchain(SCRIPT, ["moon", "setup"]), None)
-
-    def test_a_command_runner_needs_no_setup(self):
-        decl = kit.declared('[tests]\ntoolchain = ["sh", "print"]\nrunner = "command"\ncommand = "make check"\n')
-        assert [what for what, _, _ in kit.readying(decl, SCRIPT)] == ["the toolchain"]
-
-    def test_moon_with_no_toolchain_runs_on_the_hosts_path(self):
-        steps = kit.readying(kit.declared('[tests]\nrunner = "moon"\n'), SCRIPT)
-        assert steps == [("moon --version", ["moon", "--version"], None), ("moon setup", ["moon", "setup"], None)]
-
-    def test_a_kit_that_declares_nothing_has_no_steps(self):
-        assert kit.readying(None, SCRIPT) == []
-        assert kit.readying(kit.declared("[tests]\n"), SCRIPT) == []
-
-
-def test_a_command_inside_the_toolchain_is_sourced_by_the_bash_on_path():
-    assert kit.in_toolchain(SCRIPT, ["moon", "setup"]) == ["bash", "-c", 'source "$0" >&2; exec "$@"', SCRIPT, "moon", "setup"]
-    assert kit.in_toolchain(None, ["moon", "setup"]) == ["moon", "setup"]
-
-
-@pytest.mark.parametrize("version, refused", [
-    ("moon 2.6.1\n", None), ("moon 3.0.2", None), ("moon 2.5.3\n", None), ("moon 1.41.7", None),
-    ("", "no version crew can read: nothing"),
-    ("bash: moon: command not found\n", "no version crew can read: bash: moon: command not found"),
-])
-def test_any_moon_the_kit_runs_is_set_up_and_only_one_whose_version_cant_be_read_is_refused(version, refused):
-    """plan.17: crew enforces no moon floor; readying refuses a moon only when it can't read its version (read.1).
-    sluice's moon runner keeps its own floor, 2.6, at its run."""
-    why = kit.moon_said(version)
-    assert why is None if refused is None else refused in why
-
-
-class TestPlaceSaid:
-    def test_a_worktree_with_a_declaration(self):
-        out = f"GITDIR=/kit.git/worktrees/a\nDECLARATION={base64.b64encode(FULL.encode()).decode()}\n"
-        assert kit.place_said(out) == ("/kit.git/worktrees/a", FULL)
-
-    def test_a_worktree_without_one(self):
-        assert kit.place_said("GITDIR=/kit.git/worktrees/a\nDECLARATION=-\n") == ("/kit.git/worktrees/a", None)
-
-    def test_output_that_is_not_places_is_refused(self):
-        with pytest.raises(Refusal):
-            kit.place_said("fatal: not a git repository\n")
-
-
-def test_a_failed_step_names_the_place_the_step_and_its_last_lines():
-    out = "\n".join(f"line {n}" for n in range(40))
-    why = kit.step_failed("/kit/places/a", "moon setup", 1, out)
-    assert why.startswith("/kit/places/a is made but not ready: moon setup exited 1")
-    assert "line 39" in why and "line 24" not in why and why.endswith("Running the command again sets it up.")
 
 
 class TestPreviewed:
@@ -125,7 +39,7 @@ POLICY = '[tests]\nrunner = "moon"\n\n[branches."bolt/*"]\nrequired = ["#check-f
 
 
 class TestBoltChecks:
-    """A kit merges and lands only through sluice, so crew gives a bolt only in a kit whose policy names the checks its
+    """A kit merges and lands only through sluice, so crew starts a bolt only in a kit whose policy names the checks its
     bolt branches must pass (teams.5, record 0026)."""
 
     def test_the_bolt_branches_required_checks(self):
@@ -142,14 +56,14 @@ class TestBoltChecks:
         ('[branches."bolt/*"]\nrequired = []\n', "names no checks for its bolt branches"),
         ("[branches\n", "is not TOML"),
     ])
-    def test_a_kit_whose_policy_gates_no_bolt_is_given_none_naming_the_file(self, text, said):
+    def test_a_kit_whose_policy_gates_no_bolt_starts_none_naming_the_file(self, text, said):
         with pytest.raises(Refusal) as e:
             kit.bolt_checks(text, "switchboard-kit")
         assert "switchboard-kit" in str(e.value) and said in str(e.value)
 
     def test_the_policy_is_read_by_ref_at_main_now_and_a_refusal_names_the_ref(self):
         """plan.18: the policy is the one at main now, GitHub's for a kit with an origin and the kit's own for one with
-        none, as POLICY read both, and a kit given no bolt is told which ref lacks it."""
+        none, as POLICY read both, and a kit whose bolt is not started is told which ref lacks it."""
         b64 = base64.b64encode(POLICY.encode()).decode()
         assert kit.policy_said(mains("yes", at_github=b64), "switchboard-kit", "h") == (POLICY, "origin/main", GITHUB)
         assert kit.policy_said(mains("no", github="-", at_own=b64), "switchboard-kit", "h") == (POLICY, "main", OWN)
@@ -169,7 +83,7 @@ ON_GITHUB = POLICY.replace('required = ["#check-full"]\n', 'required = ["#check-
 
 class TestBoltRemote:
     """Where sluice keeps a branch, as the policy routes it (plan.19, sluice's core.15): the `remote` of the table that
-    matches the branch, which a give needs for a bolt's branch, since crew gives bolts only on GitHub."""
+    matches the branch, which a start needs for a bolt's branch, since crew starts bolts only on GitHub."""
 
     def test_the_bolt_branches_remote(self):
         assert kit.bolt_remote(ON_GITHUB, "bolt/b") == "origin"
@@ -187,17 +101,17 @@ class TestBoltRemote:
         with pytest.raises(Refusal, match=r"^\.config/sluice\.toml at bolt/b is not TOML"):
             kit.bolt_remote("[branches\n", "bolt/b", ".config/sluice.toml at bolt/b")
 
-    def test_a_give_takes_the_remote_the_policy_at_main_now_names(self):
+    def test_a_start_takes_the_remote_the_policy_at_main_now_names(self):
         assert kit.give_remote(ON_GITHUB, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b") == "origin"
 
-    def test_a_give_in_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
+    def test_a_start_in_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
         """bolt-plan "A kit whose bolts have no remote"."""
         with pytest.raises(Refusal) as e:
             kit.give_remote(POLICY, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b", ref="origin/main")
         assert str(e.value) == (
-            "switchboard-kit gives bolts only on GitHub, and its /k/main/.config/sluice.toml on origin/main names no remote "
+            "switchboard-kit starts bolts only on GitHub, and its /k/main/.config/sluice.toml on origin/main names no remote "
             "for its bolt branches: its [branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change "
-            "(plan.17), then give the bolt again")
+            "(plan.17), then start the bolt again")
 
 
 def b64(text):
@@ -223,10 +137,6 @@ class TestWhereABoltLives:
     def test_by_origins_when_the_host_has_none(self):
         assert kit.bolt_lives(at(tracked=self.SHA, at_tracked=b64(ON_GITHUB)), "b") == "origin"
 
-    def test_a_place_is_cut_where_it_lives(self):
-        assert kit.place_base(at(self.SHA, at_local=b64(ON_GITHUB)), "b") == "origin/bolt/b"
-        assert kit.place_base(at(self.SHA, at_local=b64(POLICY)), "b") == "bolt/b"
-
     @pytest.mark.parametrize("said, why", [
         (at(), "crew can't tell where bolt/b lives: this host has neither bolt/b nor origin/bolt/b"),
         ("fatal: bad\n", "crew can't read where bolt/b lives from: fatal: bad"),
@@ -243,59 +153,6 @@ class TestWhereABoltLives:
         assert kit.bolt_home(at(self.SHA, at_local=b64(POLICY), main="-"), "b") == (None, None)
         with pytest.raises(Refusal, match="crew can't read the policy at main"):
             kit.bolt_home(at(self.SHA, at_local=b64(POLICY)), "b")
-
-
-class TestASplitBolt:
-    """Whether a merge reads a bolt's copy on a remote for a split (plan.19, design Decisions 1 to 3): only when the host
-    has its own bolt/<bolt> whose tip's policy names a remote; and what BOLT_SPLIT printed of that copy."""
-    LOCAL, THERE = "1" * 40, "2" * 40
-
-    def test_a_host_with_no_bolt_of_its_own_reads_no_remote(self):
-        assert kit.split_remote(at(tracked=self.LOCAL, at_tracked=b64(ON_GITHUB)), "b") is None
-
-    def test_a_host_tip_whose_policy_names_origin_reads_origin(self):
-        assert kit.split_remote(at(self.LOCAL, self.THERE, b64(ON_GITHUB), b64(POLICY)), "b") == "origin"
-
-    def test_a_host_tip_whose_policy_names_no_remote_reads_none_whatever_the_tracking_ref_says(self):
-        assert kit.split_remote(at(self.LOCAL, self.THERE, b64(POLICY), b64(ON_GITHUB)), "b") is None
-        assert kit.split_remote(at(self.LOCAL, self.THERE, "-", b64(ON_GITHUB)), "b") is None
-
-    def test_a_split_is_read_with_its_commits_and_the_merges_lacked(self):
-        said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=no\nMERGES=2\n"
-        assert kit.bolt_split(said, "b") == dict(local=self.LOCAL, there=self.THERE, held="no", merges=2, carried=None,
-                                                 read=None)
-
-    def test_the_work_to_merge_is_read_as_carrying_the_hosts_tip_or_not(self):
-        said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=no\nMERGES=2\n"
-        assert kit.bolt_split(said + "CARRIED=yes\n", "b")["carried"] == "yes"
-        assert kit.bolt_split(said + "CARRIED=no\n", "b")["carried"] == "no"
-
-    def test_a_held_copy_is_read_as_held(self):
-        said = f"LOCAL={self.LOCAL}\nTHERE={self.THERE}\nHELD=yes\nMERGES=0\n"
-        assert kit.bolt_split(said, "b")["held"] == "yes"
-
-    def test_an_absent_copy_is_read_as_absent(self):
-        assert kit.bolt_split("THERE=-\n", "b") == dict(local=None, there="-", held=None, merges=None, carried=None,
-                                                         read=None)
-
-    def test_a_copy_git_could_not_read_is_read_with_gits_words(self):
-        said = "READ=fatal: '/gone.git' does not appear to be a git repository fatal: Could not read from remote repository. \n"
-        assert kit.bolt_split(said, "b")["read"] == ("fatal: '/gone.git' does not appear to be a git repository fatal: "
-                                                     "Could not read from remote repository.")
-        assert kit.bolt_split("READ=\n", "b")["read"] == "git said nothing"
-
-    @pytest.mark.parametrize("said", [
-        "",
-        "fatal: bad\n",
-        f"LOCAL={LOCAL}\nTHERE={THERE}\nMERGES=2\n",
-        f"LOCAL=\nTHERE={THERE}\nHELD=no\nMERGES=2\n",
-        f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=maybe\nMERGES=2\n",
-        f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=no\nMERGES=\n",
-        f"LOCAL={LOCAL}\nTHERE={THERE}\nHELD=no\nMERGES=2\nCARRIED=\n",
-    ])
-    def test_an_output_that_is_none_of_these_is_refused(self, said):
-        with pytest.raises(Refusal, match=r"^crew can't read whether bolt/b is split from: "):
-            kit.bolt_split(said, "b")
 
 
 def copies(own, there, at_there, held, ahead, lacks, beyond):
@@ -432,13 +289,13 @@ def recorded(name):
 
 
 class TestSluiceVersion:
-    """A give needs sluice's `branch create`, first in sluice 0.20.0 (plan.19, sluice ADR 0026)."""
+    """A start needs sluice's `branch create`, first in sluice 0.20.0 (plan.19, sluice ADR 0026)."""
 
     def test_the_version_sluice_prints(self):
         assert kit.sluice_version(recorded("version.txt")[0]) == (0, 36, 4)
 
     @pytest.mark.parametrize("out", ["sluice 0.36.4\n", "sluice 0.20.0", "sluice 1.0.0\n"])
-    def test_a_sluice_with_branch_create_gives(self, out):
+    def test_a_sluice_with_branch_create_starts(self, out):
         assert kit.sluice_refusal(out, "chuck-herdr-alpha") is None
 
     @pytest.mark.parametrize("out, said", [
@@ -451,7 +308,7 @@ class TestSluiceVersion:
     def test_an_older_sluice_or_one_crew_cannot_read_is_refused_naming_the_version_needed_and_the_hosts_words(self, out, said):
         """bolt-plan "A host whose sluice cannot make a branch" (read.1)."""
         assert kit.sluice_refusal(out, "chuck-herdr-alpha") == (
-            "a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice --version on "
+            "a bolt is started through sluice 0.20.0 or later, which has `branch create`, and sluice --version on "
             f"chuck-herdr-alpha said: {said}")
 
 

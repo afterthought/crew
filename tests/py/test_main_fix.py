@@ -1,13 +1,13 @@
-"""A red main's fix is a Flume fix place on main (Decision 11 of teams-cross-to-flume-as-their-bolts-land, the main-level
-spec's "A red main's fix is a fix place on main where a crossed team builds the kit", state.3): plan.main_fix_change
-on a write of madswan's plan, with crw-4 crossed to Flume in stream madswan and crw-5 on today's path, both building
-crew on deneb (facts.crossed_fleet); runner.main_fixer and runner.main_fix_launch for the team and the launch. That
-crew main fix reaches the plan from the command line, on the stubs, is t-journey-main-fix's."""
+"""A red main's fix is a Flume fix place on main (Decision 11 of teams-cross-to-flume-as-their-bolts-land, Decision 15 of
+the-team-machinery-leaves, state.3): plan.main_fix_change on a write of madswan's plan, the launch in crew's repository
+naming no team, host or stream, taken by a runner whose configuration names it (the user's ruling of 2026-11-01;
+runner.main_fix_launch), deneb's runner answering for madswan by default (facts.ran). That crew main fix reaches the plan
+from the command line, on the stubs, is t-journey-main-fix's."""
 import pytest
 
 import plan
 import runner
-from facts import FactsWrite, crossed_fleet, flume_plan, ran
+from facts import FactsWrite, flume_plan, madswan_fleet, ran
 
 WORDS = "tests:logic failed on main after landing x: tests/py/test_rail.py::TestRows reads a fixture that is gone."
 
@@ -30,96 +30,58 @@ class TestLaunch:
     def test_main_red_after_a_landing_is_a_fix_place_on_main_held_for_the_users_send_with_ops_its_recipient(self):
         """The spec's "Main red after a landing": ops runs crew main fix crew a-test-reads-its-fixture "<words>"."""
         w = write()
-        assert plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "start", WORDS, None) == dict(
-            n=1, host="deneb", stream="madswan")
+        assert plan.main_fix_change(madswan_fleet(), w, "crew", "a-test-reads-its-fixture", "start", WORDS) == dict(n=1, host=None)
         assert requests(w) == [{
-            "Request": "1", "Act": "launch", "Host": "deneb", "Work": "fix/main/crew/a-test-reads-its-fixture", "Repo": "afterthought/crew",
-            "Kind": "fix", "Name": "main--a-test-reads-its-fixture", "Base": "main", "Stream": "madswan", "Priority": "1",
+            "Request": "1", "Act": "launch", "Work": "fix/main/crew/a-test-reads-its-fixture", "Repo": "crew",
+            "Kind": "fix", "Name": "main--a-test-reads-its-fixture", "Base": "main", "Priority": "1",
             "Intent": "madswan/main/crew", "Recipient": "madswan/ops", "Hold": "submission", "Brief": WORDS}]
         assert w.subject == "plan(main): fix a-test-reads-its-fixture of crew"
 
-    def test_its_priority_is_above_every_bolt_given_through_flume(self):
-        w = write([("x", "crw-4", "flume"), ("y", "crw-4", "flume"), ("z", "crw-5", None)])
-        plan.main_fix_change(crossed_fleet(), w, "crew", "red", "start", WORDS, None)
+    def test_its_priority_is_above_every_started_bolt(self):
+        """x and y are started and z planned: the fix goes above x and y, and z counts for nothing."""
+        w = write([("x", None, "flume"), ("y", None, "flume"), ("z", None, None)])
+        plan.main_fix_change(madswan_fleet(), w, "crew", "red", "start", WORDS)
         assert requests(w)[0]["Priority"] == "3"
         assert runner.priority_of(w.plan, "x") == 2
 
     def test_a_name_in_use_on_the_kits_main_is_refused(self):
         w = write()
-        plan.main_fix_change(crossed_fleet(), w, "crew", "red", "start", WORDS, None)
+        plan.main_fix_change(madswan_fleet(), w, "crew", "red", "start", WORDS)
         with pytest.raises(plan.Refusal, match=r"^fix red of crew's main is in use: it is launched as Flume place main--red \(request 1\), "
                                                r"so name this fix differently$"):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "red", "start", "Again.", None)
+            plan.main_fix_change(madswan_fleet(), w, "crew", "red", "start", "Again.")
 
-    def test_no_runner_answering_on_the_teams_host_is_refused_naming_state_3s_way(self):
+    def test_no_runner_answering_for_the_partition_is_refused_naming_state_3s_way(self):
         w = write(runners={})
-        with pytest.raises(plan.Refusal, match="^no runner answers on deneb: madswan/runner/deneb does not exist, so nothing would launch "
-                                               "the fix there; until the runner \\(flywheel-runner\\) serves madswan there, a fix of crew's red "
-                                               "main is a bolt of one chore, proposed first among the planned \\(state.3\\); tell "
-                                               "madswan-planner, who proposes it$"):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "red", "start", WORDS, None)
+        with pytest.raises(plan.Refusal, match="^no runner answers for madswan: its state repository holds no madswan/runner/<host>, so "
+                                               "nothing would take the fix; until a runner \\(flywheel-runner\\) serves madswan, a fix of "
+                                               "crew's red main is a bolt of one chore, proposed first among the planned \\(state.3\\); "
+                                               "tell madswan-planner, who proposes it$"):
+            plan.main_fix_change(madswan_fleet(), w, "crew", "red", "start", WORDS)
         assert "requests.rec" not in w.files
-
-
-class TestWhichTeam:
-    NONE = ("^no team of madswan crossed to Flume builds crew, so a fix of its red main is no Flume place: it is a bolt of one chore, "
-            "proposed first among the planned, which the dispatcher gives to the next team that frees \\(state.3\\); tell "
-            "madswan-planner, who proposes it$")
-
-    def test_no_crossed_team_builds_the_kit_and_it_is_refused_naming_a_bolt_of_one_chore(self):
-        """The spec's "No crossed team builds the kit"."""
-        w = write()
-        with pytest.raises(plan.Refusal, match=self.NONE):
-            plan.main_fix_change(crossed_fleet(**{"crw-4": False}), w, "crew", "gate-word", "start", WORDS, None)
-        assert "requests.rec" not in w.files
-
-    def test_a_team_due_to_cross_has_not_crossed(self):
-        """crw-4's setting names a stream while it builds x on today's path: it is due, and builds no fix of main yet."""
-        w = write([("x", "crw-4", None)])
-        assert runner.path_of(w.plan, crossed_fleet()["teams"]["crw-4"]) == ("due", "cross")
-        with pytest.raises(plan.Refusal, match=self.NONE):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "gate-word", "start", WORDS, None)
-
-    def test_crossed_teams_on_one_host_launch_on_it_in_the_first_by_names_stream(self):
-        fleet = crossed_fleet(**{"crw-5": "late"})
-        assert runner.main_fixer(plan.Plan(flume_plan()), fleet["teams"], "madswan", "crew") == ("crw-4", None)
-        assert runner.main_fixer(plan.Plan(flume_plan()), fleet["teams"], "madswan", "afterthought/crew", "crw-5") == ("crw-5", None)
-
-    def test_crossed_teams_on_several_hosts_need_team_to_choose(self):
-        fleet = crossed_fleet(**{"crw-5": "late"})
-        fleet["teams"]["crw-5"]["machine"] = "alpha"
-        p = plan.Plan(flume_plan())
-        assert runner.main_fixer(p, fleet["teams"], "madswan", "crew") == (
-            None, "crw-4 and crw-5 build crew through Flume on alpha and deneb: name the team on whose host the fix runs, --team <team>")
-        w = write(runners=ran(host="alpha"))
-        assert plan.main_fix_change(fleet, w, "crew", "red", "start", WORDS, "crw-5") == dict(n=1, host="alpha", stream="late")
-
-    def test_a_team_named_that_has_not_crossed_is_refused(self):
-        assert runner.main_fixer(plan.Plan(flume_plan()), crossed_fleet()["teams"], "madswan", "crew", "crw-5") == (
-            None, "crw-5 is no team of madswan crossed to Flume building crew; crw-4 is")
 
 
 class TestDrop:
     def test_drop_drops_its_launch(self):
         w = write(runners=ran({1: "code"}))
-        plan.main_fix_change(crossed_fleet(), w, "crew", "red", "start", WORDS, None)
-        assert plan.main_fix_change(crossed_fleet(), w, "crew", "red", "drop", None, None) == dict(n=2, host="deneb", stream="madswan")
-        assert requests(w)[1] == {"Request": "2", "Act": "drop", "Host": "deneb", "Work": "fix/main/crew/red", "Of": "1"}
+        plan.main_fix_change(madswan_fleet(), w, "crew", "red", "start", WORDS)
+        assert plan.main_fix_change(madswan_fleet(), w, "crew", "red", "drop", None) == dict(n=2, host="deneb")
+        assert requests(w)[1] == {"Request": "2", "Act": "drop", "Work": "fix/main/crew/red", "Of": "1"}
         assert w.subject == "plan(main): drop fix red of crew"
 
     @pytest.mark.parametrize("at, said", [
         ("landed", "^fix/main/crew/red has merged into main, so it is not dropped: what it changed is main's, and a new fix undoes it$"),
-        (None, "^can't tell whether fix/main/crew/red's place has merged into main, so it is not dropped: no runner answers on deneb")])
+        (None, "^can't tell whether fix/main/crew/red's place has merged into main, so it is not dropped: no runner answers for the partition")])
     def test_a_landed_fix_or_one_crew_cant_read_is_not_dropped(self, at, said):
         w = write()
-        plan.main_fix_change(crossed_fleet(), w, "crew", "red", "start", WORDS, None)
+        plan.main_fix_change(madswan_fleet(), w, "crew", "red", "start", WORDS)
         w = FactsWrite(w.plan.text(), files=w.files, runners=ran({1: at}) if at else {}, label="madswan")
         with pytest.raises(plan.Refusal, match=said):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "red", "drop", None, None)
+            plan.main_fix_change(madswan_fleet(), w, "crew", "red", "drop", None)
 
     def test_a_fix_with_no_launch_is_not_there_to_drop(self):
         with pytest.raises(plan.Refusal, match="^crew has no fix fix/main/crew/red: no launch of it stands in requests.rec$"):
-            plan.main_fix_change(crossed_fleet(), write(), "crew", "red", "drop", None, None)
+            plan.main_fix_change(madswan_fleet(), write(), "crew", "red", "drop", None)
 
 
 class TestSend:
@@ -130,54 +92,55 @@ class TestSend:
         """crew main fix crew a-test-reads-its-fixture launched as request 1, deneb's runner showing its place at the flume
         fixture named."""
         w = write(runners=ran({1: at}))
-        plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "start", WORDS, None)
+        plan.main_fix_change(madswan_fleet(), w, "crew", "a-test-reads-its-fixture", "start", WORDS)
         return w
 
     def test_the_users_send_appends_the_retry_of_its_submission(self):
         w = self.launched()
-        assert plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None) == dict(
-            n=2, host="deneb", stream="madswan")
-        assert requests(w)[1] == {"Request": "2", "Act": "retry", "Host": "deneb", "Work": "fix/main/crew/a-test-reads-its-fixture",
-                                  "Of": "1", "Submission": "yes"}
+        assert plan.main_fix_change(madswan_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None) == dict(n=2, host="deneb")
+        assert requests(w)[1] == {"Request": "2", "Act": "retry", "Work": "fix/main/crew/a-test-reads-its-fixture", "Of": "1",
+                                  "Submission": "yes"}
         assert w.subject == "plan(main): send fix a-test-reads-its-fixture of crew"
 
     def test_a_send_is_made_once(self):
         w = self.launched()
-        plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+        plan.main_fix_change(madswan_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None)
         with pytest.raises(plan.Refusal, match="^fix/main/crew/a-test-reads-its-fixture was sent on the user's word by request 2, which "
-                                               "the runner on deneb acts on, so it is not sent twice$"):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+                                               "the runner that took it acts on, so it is not sent twice$"):
+            plan.main_fix_change(madswan_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None)
 
     def test_a_send_the_runner_refused_is_made_again_and_one_crew_cant_read_stands(self):
         reading = ran({1: "held"})["deneb"]
         reading["answers"][2] = plan.Rec("Answer", [("Request", "2"), ("Outcome", "refused"), ("At", "2026-10-31T12:03:00Z")])
         rs = [plan.Rec("Request", [("Request", "1"), ("Act", "launch"), ("Work", "fix/main/crew/x")]),
               plan.Rec("Request", [("Request", "2"), ("Act", "retry"), ("Of", "1"), ("Submission", "yes")])]
-        assert runner.sent_of(rs, reading, rs[0]) is None
-        assert runner.sent_of(rs, dict(reading, why="unread"), rs[0]) is rs[1]
+        assert runner.sent_of(rs, {"deneb": reading}, rs[0]) is None
+        assert runner.sent_of(rs, {"deneb": dict(reading, why="unread")}, rs[0]) is rs[1]
 
     def test_a_fix_whose_code_has_not_delivered_is_not_sent(self):
         w = self.launched("code")
         with pytest.raises(plan.Refusal, match=r"^fix/main/crew/a-test-reads-its-fixture's place \S+ is at code, and a fix of main is sent "
                                                r"only once its code has delivered and its submission waits held$"):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+            plan.main_fix_change(madswan_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None)
 
     def test_one_crew_cant_read_or_with_no_launch_is_not_sent(self):
         w = self.launched()
-        w.runner_of = lambda host: runner.of_host({}, "madswan", host)
+        w.runners = lambda: {}
         with pytest.raises(plan.Refusal, match="^can't tell whether fix/main/crew/a-test-reads-its-fixture's submission waits held, so it "
-                                               "is not sent: no runner answers on deneb"):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None, None)
+                                               "is not sent: no runner answers for the partition"):
+            plan.main_fix_change(madswan_fleet(), w, "crew", "a-test-reads-its-fixture", "send", None)
         with pytest.raises(plan.Refusal, match="^no launch of fix/main/crew/red stands in requests.rec, so there is no fix of main to send$"):
-            plan.main_fix_change(crossed_fleet(), w, "crew", "red", "send", None, None)
+            plan.main_fix_change(madswan_fleet(), w, "crew", "red", "send", None)
 
 
 class TestCommand:
     def test_crew_main_fix_is_its_own_row_of_the_role_table(self, monkeypatch):
         """Decision 16: main-level ops and the user run it; a conductor or the planner is refused, told ops runs it."""
-        fleet = dict(crossed_fleet(), partitions={"madswan": {"label": "madswan", "teams": ["crw-4", "crw-5"], "roles": {}}})
+        fleet = dict(madswan_fleet(), partitions={"madswan": {"label": "madswan", "roles": {}}})
         a = plan.parser().parse_args(["main", "fix", "crew", "red", WORDS])
-        assert (a.cmd, a.sub, a.kit, a.name, a.words, a.drop, a.team) == ("main", "fix", "crew", "red", WORDS, False, None)
+        assert (a.cmd, a.sub, a.kit, a.name, a.words, a.drop) == ("main", "fix", "crew", "red", WORDS, False)
+        with pytest.raises(SystemExit):
+            plan.parser().parse_args(["main", "fix", "crew", "red", WORDS, "--team", "crw-4"])
         plan.may_write(fleet, ("main", "fix"), a)
         monkeypatch.setenv("CREW_AGENT", "madswan-planner")
         with pytest.raises(plan.Refusal, match="^madswan-planner does not run crew main fix: main-level ops and the user do; tell madswan-ops$"):
