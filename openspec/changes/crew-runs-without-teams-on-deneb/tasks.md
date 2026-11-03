@@ -20,4 +20,4 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 ## 3. The gate and the branch
 
 - [x] 3.1 Every check crew's gate requires of main that the head affects passes on the branch (design Decision 7; Task notes 3.1). Verify `sluice exec main` passes every check it runs.
-- [ ] 3.2 The branch is on GitHub as `teamless/deneb`, pushed without force, and main is untouched (design Decision 7; Task notes 3.2). Verify `git ls-remote origin refs/heads/teamless/deneb` names `git rev-parse HEAD`.
+- [x] 3.2 The branch is on GitHub as `teamless/deneb`, pushed without force, and main is untouched (design Decision 7; Task notes 3.2). Verify `git ls-remote origin refs/heads/teamless/deneb` names `git rev-parse HEAD`.
