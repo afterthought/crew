@@ -114,6 +114,8 @@ eq "$(field $box fix.drop On "$xf")" "$xf bolt/tenant-environments agent/swb-1-$
 lacks "$(cat "$slots")" "$xf"
 of=fix/tenant-environments/old op=$kd/places/fix-tenant-environments--old
 git -C "$k" worktree add -q --track -b "$of" "$op" bolt/tenant-environments || fail "the standing fix's place was not made"
+# crew started it on this host, so its place is crew's to remove (plan.9)
+as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act fix.start --on "$of" --on bolt/tenant-environments >/dev/null
 echo kept > "$op/kept"; commit_all "$op" "fix: a commit of its own"
 at=$(short "$of")
 echo stray > "$op/note"

@@ -1,5 +1,5 @@
 # A team's agents through the crew command on the stubs (tests.11, record 0022): crew up starts a team's conductor and
-# ops on its host in one workspace, each greeted once and recorded, and status, down, resume, restart, clear, rebuild and
+# ops on its host in one workspace, its conductor tab alone with no git tab on a Mac as on a box, each greeted once and recorded, and status, down, resume, restart, clear, rebuild and
 # close act on them; a give is refused, nothing changed, while the kit's policy names no remote for its bolts or the
 # host's sluice has no branch create; a bolt given to a team that is up is made on GitHub by sluice from main as it
 # stands, with no worktree, and restarts them in the kit's main checkout, greeting each; a role resumes where its
@@ -133,23 +133,31 @@ for gone in "assign swb-1 coder-1 x" "opsx swb-1 explorer /opsx:propose x"; do
   has "$out" "A team builds one bolt at a time"
 done
 expect_ok crew up atl-1
-eq "$(herdr_state mac-studio wldn-5 '[.tabs[].label] | join(",")')" "conductor,git"
-ok "assign and opsx are gone, and a team on a Mac has a git tab"
+eq "$(herdr_state mac-studio wldn-5 '[.tabs[].label] | join(",")')" "conductor"
+grep -q gitgui "$CREW_TEST_LOG" && fail "crew up ran gitgui for a team on a Mac"
+ok "assign and opsx are gone, and a team on a Mac opens no git tab: its workspace holds its conductor tab alone"
 
-# herdr brings atl-1's conductor and ops back dead, their folder gone at its restart, as it brought crw-2's back before
-# test D (2026-10-18): crew up closes each and opens it again in the team's workspace, the git tab left as it stands.
+# A git tab an earlier crew opened in atl-1's workspace stands there, the user's to close. herdr brings atl-1's
+# conductor and ops back dead, their folder gone at its restart, as it brought crw-2's back before test D (2026-10-18):
+# crew up closes each and opens it again in the team's workspace, the git tab left as it stands; crew rebuild opens the
+# team's workspace again with no git tab.
 crew down atl-1 >/dev/null
 apane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of mac-studio)/.local/state/atl-1-team/panes"; }
-c=$(apane conductor); o=$(apane ops); g=$(apane git-kit)
+c=$(apane conductor); o=$(apane ops)
+w=$(awk '$1 == "ws:atl-1" {print $2}' "$(home_of mac-studio)/.local/state/atl-1-team/layout")
+g=$(as mac-studio herdr --session wldn-5 tab create --workspace "$w" --cwd "$T" --label git --no-focus | jq -r .result.root_pane.pane_id)
 for p in "$c" "$o"; do as mac-studio herdr --session wldn-5 stub dead "$p" "$T/trash/gone"; done
 expect_ok crew up atl-1
 has "$out" "atl-1's conductor pane $c is dead: herdr could not bring it back in $T/trash/gone (Saved directory is unavailable. Restore the directory and restart this session.); crew closes it and opens it again"
 has "$out" "atl-1's ops pane $o is dead"; has "$out" "atl-1-conductor started"; has "$out" "atl-1-ops started"
 eq "$(herdr_state mac-studio wldn-5 "[.panes | keys[] | select(. == \"$c\" or . == \"$o\")] | length")" "0"
-eq "$(herdr_state mac-studio wldn-5 '[.workspaces[].label] | join(",")'),$(apane git-kit)" "atl-1,$g"
+eq "$(herdr_state mac-studio wldn-5 '[.workspaces[].label] | join(",")'),$(herdr_state mac-studio wldn-5 ".panes[\"$g\"].workspace")" "atl-1,$w"
 eq "$(herdr_state mac-studio wldn-5 '[.tabs[].label] | join(",")')" "git,conductor"
 eq "$(herdr_state mac-studio wldn-5 '[.agents[].name] | sort | join(",")')" "atl-1-conductor,atl-1-ops"
-ok "crew up closes the conductor's and ops' panes herdr brought back dead, saying so, and opens them again in the team's workspace beside its git tab"
+expect_ok crew rebuild atl-1
+eq "$(herdr_state mac-studio wldn-5 '[.tabs[].label] | join(",")')" "conductor"
+grep -q gitgui "$CREW_TEST_LOG" && fail "crew up or rebuild ran gitgui for a team on a Mac"
+ok "crew up closes the conductor's and ops' panes herdr brought back dead, saying so, and opens them again in the team's workspace beside a git tab left there, and crew rebuild opens no git tab"
 
 # A unit of swb-2's bolt waits amended: the conductor brought back is told so, by its greeting or, on resume, as crew's notice.
 crew bolt new later "What comes next." --repo switchboard-kit >/dev/null

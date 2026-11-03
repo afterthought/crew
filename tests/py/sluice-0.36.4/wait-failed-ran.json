@@ -1,0 +1,32 @@
+{
+  "after": [],
+  "attempt": 1,
+  "branch": "main",
+  "failed": [
+    {
+      "hash": "9d1c0e7b4a2f6358c1e0b7d94f2a6c3e5b8d0f1a2c4e6b8d0f1a3c5e7b9d1f20",
+      "log": ".sluice/logs/main/41a7c09/tests-logic.log",
+      "task": "tests:logic"
+    }
+  ],
+  "from": {
+    "agent": "wldn-ops",
+    "head": "bolt/a-standing-class-takes-a-release-by-break-glass",
+    "worktree": "pull/212"
+  },
+  "head": "8ec587a3c1d94e7b2a6f0c5d8e1b4a7f3c9d2e60",
+  "id": 214,
+  "priority": 0,
+  "result": "failed",
+  "schema": "sluice/submission@1",
+  "state": "failed",
+  "submitted": "2026-10-23T21:04:11Z",
+  "tested": {
+    "combination": "41a7c09e5b3d8f2a6c1e4b7d0a9f3c6e2b5d8a10",
+    "on": "db8bc25f0e3a6d9c2b5e8a1d4f7c0b3e6a9d2c50",
+    "submissions": [
+      214
+    ]
+  },
+  "told": "2026-10-23T21:11:37Z"
+}

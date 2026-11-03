@@ -1,0 +1,300 @@
+{
+  "at": "2026-10-29T13:41:23Z",
+  "branches": [
+    {
+      "at": "6f21248b6a1a04f108c4e4af08bdb0df8b4f7859",
+      "branch": "bolt/crew-reads-a-bolts-time-and-its-landing",
+      "candidates": [],
+      "depth": 0,
+      "held_checkouts": [],
+      "parallel": 4,
+      "recent": [
+        {
+          "at": "2026-10-28T19:30:45Z",
+          "event": "landed",
+          "ids": [
+            365
+          ],
+          "schema": "sluice/log@1",
+          "to": "da9cdedc6d2235a556d7461157256821a7e11134"
+        },
+        {
+          "at": "2026-10-28T20:40:09Z",
+          "event": "landed",
+          "ids": [
+            366
+          ],
+          "schema": "sluice/log@1",
+          "to": "f08c95d4cca2af6c843f71d9d4257cdbfd267688"
+        },
+        {
+          "at": "2026-10-28T21:56:08Z",
+          "event": "landed",
+          "ids": [
+            367
+          ],
+          "schema": "sluice/log@1",
+          "to": "6f21248b6a1a04f108c4e4af08bdb0df8b4f7859"
+        }
+      ],
+      "recent_from": {
+        "365": "fix/crew-reads-a-bolts-time-and-its-landing/take-main",
+        "366": "unit/a-bolts-row-shows-its-age-and-who-holds-it",
+        "367": "unit/a-landing-is-read-from-sluices-record"
+      },
+      "recent_subjects": {},
+      "remote": "origin",
+      "submissions": [],
+      "version": 28,
+      "window": 4
+    },
+    {
+      "at": "54f68b7c283cbe530b124267e3e3b376d638f1c5",
+      "branch": "bolt/crews-chores-of-the-24th-night",
+      "candidates": [
+        {
+          "executor": "open",
+          "failed": [],
+          "id": "c12",
+          "limit": 1200,
+          "ran": 0,
+          "replayed": 0,
+          "revision": "07a5c1c61f8e7dc5689b44522f5f95362cf48d41",
+          "started": "2026-10-28T01:03:27Z",
+          "state": "testing",
+          "submissions": [
+            317
+          ],
+          "targets": [
+            "#check-full"
+          ]
+        },
+        {
+          "executor": "open",
+          "failed": [],
+          "id": "c13",
+          "limit": 1200,
+          "ran": 0,
+          "replayed": 0,
+          "revision": "45c4c6fff706e7de29087163df752398dc87b66c",
+          "state": "formed",
+          "submissions": [
+            317,
+            318
+          ],
+          "targets": [
+            "#check-full"
+          ]
+        }
+      ],
+      "depth": 2,
+      "held_checkouts": [],
+      "parallel": 4,
+      "recent": [
+        {
+          "at": "2026-10-28T00:18:15Z",
+          "combination": "50b1d85bd8457805e566c8fb331957527d534e90",
+          "event": "blamed",
+          "id": 313,
+          "schema": "sluice/log@1"
+        },
+        {
+          "at": "2026-10-28T00:43:33Z",
+          "combination": "4ba8ae86810bedd84e84a8510c20c0bf3e208ba0",
+          "event": "blamed",
+          "id": 315,
+          "schema": "sluice/log@1"
+        },
+        {
+          "at": "2026-10-28T01:02:27Z",
+          "combination": "34684964905872397a1bd59d7db0e1aba6949be0",
+          "event": "blamed",
+          "id": 316,
+          "schema": "sluice/log@1"
+        }
+      ],
+      "recent_from": {
+        "313": "chore/a-stage-drives-a-browser-only-the-kits-way",
+        "315": "chore/crew-needs-help-prints-its-usage-and-records-nothing",
+        "316": "chore/a-failed-taking-with-no-conflict-is-said-in-gits-words"
+      },
+      "recent_subjects": {},
+      "remote": "origin",
+      "submissions": [
+        {
+          "after": [],
+          "attempt": 1,
+          "branch": "bolt/crews-chores-of-the-24th-night",
+          "from": {
+            "agent": "crw-5-unit-2",
+            "path": "/Users/chuck/Code/github_afterthought/crew/places/chore-a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives",
+            "worktree": "chore/a-proven-bolts-batch-is-reckoned-at-once-wherever-it-lives"
+          },
+          "head": "aa1a9c7fa2f7a64d505f4c6a99e0f76b5f948d2b",
+          "id": 317,
+          "priority": 0,
+          "schema": "sluice/submission@1",
+          "state": "testing",
+          "submitted": "2026-10-28T00:01:43Z",
+          "tested": {
+            "combination": "07a5c1c61f8e7dc5689b44522f5f95362cf48d41",
+            "on": "54f68b7c283cbe530b124267e3e3b376d638f1c5",
+            "submissions": [
+              317
+            ]
+          }
+        },
+        {
+          "after": [],
+          "attempt": 2,
+          "branch": "bolt/crews-chores-of-the-24th-night",
+          "from": {
+            "agent": "crw-5-unit-1",
+            "path": "/Users/chuck/Code/github_afterthought/crew/places/chore-a-stage-drives-a-browser-only-the-kits-way",
+            "worktree": "chore/a-stage-drives-a-browser-only-the-kits-way"
+          },
+          "head": "ed8e7a92d5f8385895c2cf99d277a4c147738e6f",
+          "id": 318,
+          "priority": 0,
+          "schema": "sluice/submission@1",
+          "state": "queued",
+          "submitted": "2026-10-28T00:23:06Z"
+        }
+      ],
+      "version": 57,
+      "window": 1
+    },
+    {
+      "at": "c54726002f37a92aca9c0b38ff4bf6c53c9c2324",
+      "branch": "main",
+      "candidates": [],
+      "depth": 0,
+      "held_checkouts": [],
+      "parallel": 4,
+      "recent": [
+        {
+          "at": "2026-10-28T14:23:29Z",
+          "event": "landed",
+          "ids": [
+            350
+          ],
+          "schema": "sluice/log@1",
+          "to": "3b66d6899081c8a387742feda24f21ced96ecbc3"
+        },
+        {
+          "at": "2026-10-28T14:33:32Z",
+          "event": "landed",
+          "ids": [
+            351
+          ],
+          "schema": "sluice/log@1",
+          "to": "b0e23361908b28cf1ad2bcecb2d59b1070e0e4dc"
+        },
+        {
+          "at": "2026-10-28T14:45:29Z",
+          "event": "landed",
+          "ids": [
+            352
+          ],
+          "schema": "sluice/log@1",
+          "to": "aaad920ebf822030b7995fdc21b7aeaeba1b75c0"
+        },
+        {
+          "at": "2026-10-28T14:47:23Z",
+          "event": "landed",
+          "ids": [
+            353
+          ],
+          "schema": "sluice/log@1",
+          "to": "39ff59d02fba3c263f8870d0a60edb919e5a30e2"
+        },
+        {
+          "at": "2026-10-28T15:41:31Z",
+          "event": "landed",
+          "ids": [
+            355
+          ],
+          "schema": "sluice/log@1",
+          "to": "448c54383a531407f3e4a110dc7804f4319e154f"
+        },
+        {
+          "at": "2026-10-28T18:00:01Z",
+          "event": "landed",
+          "ids": [
+            360
+          ],
+          "schema": "sluice/log@1",
+          "to": "c5b086ab8af2f0e8203918bc9685ce30291f25ad"
+        },
+        {
+          "at": "2026-10-28T19:13:30Z",
+          "event": "landed",
+          "ids": [
+            363
+          ],
+          "schema": "sluice/log@1",
+          "to": "e20636fd308e2da4ad3f05110fdd5df281df12e6"
+        },
+        {
+          "at": "2026-10-28T19:23:53Z",
+          "event": "landed",
+          "ids": [
+            364
+          ],
+          "schema": "sluice/log@1",
+          "to": "16f84c540c0c29536ccd7203e9bbcd94ad58ac4b"
+        },
+        {
+          "at": "2026-10-29T13:26:09Z",
+          "event": "landed",
+          "ids": [
+            369
+          ],
+          "schema": "sluice/log@1",
+          "to": "865cfd326c47b91a175f26e29ff8a269a1cd18e9"
+        },
+        {
+          "at": "2026-10-29T13:37:35Z",
+          "event": "landed",
+          "ids": [
+            370
+          ],
+          "schema": "sluice/log@1",
+          "to": "c54726002f37a92aca9c0b38ff4bf6c53c9c2324"
+        }
+      ],
+      "recent_from": {
+        "350": "pull/194",
+        "351": "pull/195",
+        "352": "pull/196",
+        "353": "pull/197",
+        "355": "pull/198",
+        "360": "pull/199",
+        "363": "pull/200",
+        "364": "pull/201",
+        "369": "pull/202",
+        "370": "pull/203"
+      },
+      "recent_subjects": {
+        "369": "bolt/a-card-carries-what-the-stages-run-made",
+        "370": "design/crew-onto-flume"
+      },
+      "remote": "origin",
+      "submissions": [],
+      "version": 5911,
+      "window": 4
+    }
+  ],
+  "host": "deneb",
+  "hosts": [],
+  "previews": [],
+  "repository": "/Users/chuck/Code/github_afterthought/crew/crew.git",
+  "room": {
+    "bound": 2,
+    "queue": 1,
+    "reserve": 0,
+    "sessions": 1
+  },
+  "schema": "sluice/overview@1",
+  "sessions": []
+}

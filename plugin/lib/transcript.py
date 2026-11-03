@@ -44,6 +44,14 @@ other value seen); and a record of type user follows it only once the session is
 background task's notice. A record of a subagent's, isSidechain true, is neither. When these stop holding, no turn
 reads as over, and a verify whose agent has finished with no report is reported stuck at crew's limit instead.
 
+A wait that finds a stage stuck reads there the agent's last words since the stage began (last_words), by one more
+fact, read from Claude Code 2.1.308's transcripts on deneb of 2026-10-23, session a20445ef-708d-464a-847a-2f4c6b84da49
+among them (3,178 records, 207 message ids of the session's own, 138 spanning several records, 47 of the 89 holding
+text): Claude Code writes each content block of one model message as a record of its own of type assistant, every one
+under the message's message.id and one after another, a text block's text in its "text", so a message's words are read
+across the records that share its id. When this stops holding, the words read as none written since the stage began,
+never as another session's.
+
 When crew sends an agent a prompt, a stage's or a greeting, it reads here whether Claude received
 it (teams.15). Run on the agent's host, sent there as questions.py is, it answers one JSON object and writes nothing:
 
@@ -349,6 +357,43 @@ def turn_over(path):
     if not isinstance(message, dict) or message.get("stop_reason") != "end_turn":
         return None
     return stamp(last.get("timestamp"))
+
+
+def last_words(path, since):
+    """The agent's own last message since a time, as (its text, when it was written): the text blocks, joined in
+    order, of the records of type assistant, not a subagent's (isSidechain), that share the message.id of the last such
+    message holding text, its time the earliest its records carry; a record with no id a message of its own, and a
+    message with no time crew reads passed over, never taken as since. ("", None) when no message since then holds
+    text, as when the session wrote its last words before the stage began; None when the transcript is missing or
+    can't be read."""
+    found = lines(path) if path else None
+    if found is None or isinstance(found, str):
+        return None
+    messages, order = {}, []
+    for n, _, v in found:
+        message = v.get("message") if kind(v) == "assistant" and not v.get("isSidechain") else None
+        if not isinstance(message, dict):
+            continue
+        key = message["id"] if isinstance(message.get("id"), str) and message["id"] else f"line {n}"
+        if key not in messages:
+            messages[key] = ([], [])
+            order.append(key)
+        texts, times = messages[key]
+        content = message.get("content")
+        if isinstance(content, str):
+            texts.append(content)
+        for c in content if isinstance(content, list) else []:
+            if isinstance(c, dict) and c.get("type") == "text" and isinstance(c.get("text"), str):
+                texts.append(c["text"])
+        t = stamp(v.get("timestamp"))
+        if t:
+            times.append(t)
+    for key in reversed(order):
+        texts, times = messages[key]
+        text = "\n\n".join(x.strip() for x in texts if x.strip())
+        if text and times:
+            return (text, min(times)) if min(times) >= since else ("", None)
+    return "", None
 
 
 def unnamed(session):

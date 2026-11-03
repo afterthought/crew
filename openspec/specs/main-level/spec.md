@@ -6,7 +6,7 @@ Above a partition's bolt teams: a design agent that elaborates on main, a planne
 ## Requirements
 
 ### Requirement: Partitions are declared in the teams file
-`teams.json` SHALL list each partition with a main level. Each entry gives the partition's label (`wldn`, `madswan`, `swancloud`), its swancloud name, its blueprints repos, its state repository (`state`, as `<owner>/<name>`), and the machine and session its main level runs in. The first blueprints repo listed SHALL be the one the partition's signals and elaboration go to by default. A partition with no `state` SHALL be an error naming the field and the machine's configuration as the fix, never a default. A partition's `roles.<role>` MAY name a `session` for a main-level role other than the dispatcher, a session of the main level's machine in the partition, where that role runs; any other session SHALL be an error naming it.
+`teams.json` SHALL list each partition with a main level. Each entry gives the partition's label (`wldn`, `madswan`, `swancloud`), its swancloud name, its blueprints repos, its state repository (`state`, as `<owner>/<name>`), the machine and session its main level runs in, and, from version 4, `flume`, naming each of its five main-level roles, `design`, `planner`, `reviewer`, `ops` and `operator`, as `false` while it stands or as the Flume stream its runs run in on the main level's host. The first blueprints repo listed SHALL be the one the partition's signals and elaboration go to by default. A partition with no `state`, or at version 4 with no `flume`, SHALL be an error naming the field and the machine's configuration as the fix, never a default, and so SHALL a `flume` that leaves a role out, names another key, or gives a role anything but `false` or a stream's name. crew SHALL read versions 2, 3 and 4 of the file, every role standing in a file below 4. A partition's `roles.<role>` MAY name a `session` for a main-level role other than the dispatcher, a session of the main level's machine in the partition, where that role runs while it stands; any other session SHALL be an error naming it.
 
 #### Scenario: clients/willdan
 - **WHEN** `teams.json` lists `wldn` as `clients/willdan` with willdan-blueprints and `WilldanGroup/crew-state`, running on the box in `wldn-2`
@@ -24,18 +24,38 @@ Above a partition's bolt teams: a design agent that elaborates on main, a planne
 - **WHEN** swancloud's `roles.planner.session` names `madswan-1`, a session of partition business
 - **THEN** crew refuses to load the teams file, naming the planner, the session and its partition
 
-### Requirement: The main level is one herdr workspace
-`crew main up <label>` SHALL open a herdr workspace named `<label>` in the main level's session. It SHALL hold a `design` tab with the design agent, a `planner` tab with the planner, an `ops` tab with the main-level ops and an `operator` tab with the partition's operator, and start each. It SHALL then start a dispatcher on every host where the partition's teams run.
+#### Scenario: A partition with no flume
+- **WHEN** a partition's entry in a version 4 file has no `flume`
+- **THEN** crew refuses to load the teams file, naming the partition, the field and swancloud's `lib/crew-teams.nix`
 
-Every agent crew starts outside a team, the main level's four and each dispatcher, SHALL be greeted once it is up, exactly once per start, as a team's conductor is: told to read where the partition stands and carry on with what is its role's. The greeting SHALL be marked as crew's. An agent brought back by `crew revive` or `crew main up` after the main level was taken down SHALL be greeted the same way, so none sits idle until someone tells it what to do.
+#### Scenario: A role crew has no kind for
+- **WHEN** madswan's `flume` names `dispatcher`, leaves out `operator`, or gives `planner` the value `true`
+- **THEN** crew refuses to load the teams file, naming the partition and the role
+
+#### Scenario: The file before version 4
+- **WHEN** `teams.json` is at version 3
+- **THEN** crew loads it, and every main-level role of every partition stands
+
+### Requirement: The main level is one herdr workspace
+`crew main up <label>` SHALL open a herdr workspace named `<label>` in the main level's session. It SHALL hold a `design` tab with the design agent, a `planner` tab with the planner, an `ops` tab with the main-level ops and an `operator` tab with the partition's operator, each only while it stands, and start each. A role that runs as its kind SHALL get no tab and no start: `crew main up` SHALL instead write its role record to match the teams file, and SHALL end a standing agent of it still running once that agent is not working, leaving one working and saying so. It SHALL then start a dispatcher on every host where the partition's teams run.
+
+Every agent crew starts outside a team, the main level's standing roles and each dispatcher, SHALL be greeted once it is up, exactly once per start, as a team's conductor is: told to read where the partition stands and carry on with what is its role's. The greeting SHALL be marked as crew's. An agent brought back by `crew revive` or `crew main up` after the main level was taken down SHALL be greeted the same way, so none sits idle until someone tells it what to do. `crew revive` SHALL bring back no role its partition runs as its kind.
 
 #### Scenario: The main level comes up
-- **WHEN** `crew main up wldn` runs
+- **WHEN** `crew main up wldn` runs and wldn's `flume` names every role `false`
 - **THEN** `wldn-design`, `wldn-planner`, `wldn-ops` and `wldn-operator` start in the `wldn` workspace, and `wldn-dispatch-chuck-herdr-alpha` starts on the box, and each is greeted once it is up
+
+#### Scenario: Two roles run as their kinds
+- **WHEN** madswan's `flume` names a stream for its reviewer and its planner, and `crew main up madswan` runs
+- **THEN** the `madswan` workspace has no `planner` tab and no planner is started or greeted, `roles.rec` on `madswan/main` holds the planner's and the reviewer's records, and the design agent, ops and the operator start as today
+
+#### Scenario: A standing planner from before
+- **WHEN** madswan's `flume` has just come to name a stream for its planner, `madswan-planner` still stands idle in its tab, and `crew main up madswan` runs
+- **THEN** `madswan-planner`'s standing agent is ended and the command says so; had it been working, it would be left and named
 
 #### Scenario: The main level comes back
 - **WHEN** the user runs `crew main down swancloud` and then `crew main up swancloud`
-- **THEN** each of its agents starts and is greeted, and picks up its role from the rail and the bolts without the user or the operator telling it to
+- **THEN** each of its standing agents starts and is greeted, and picks up its role from the rail and the bolts without the user or the operator telling it to
 
 #### Scenario: Brought up again while it is up
 - **WHEN** `crew main up wldn` runs while its agents and dispatchers are up
@@ -111,7 +131,7 @@ A dispatcher SHALL run on each host where the partition's teams run, in a herdr 
 - **THEN** each host has its own dispatcher, and asking either one about allocation answers for its host only
 
 ### Requirement: Main-level ops lands bolts by one procedure
-The main-level ops SHALL land bolts whose verification is green on the user's word: their send on a kit's landings card, which crew raises in ops's name, the word for every bolt they ticked, in the card's order unless their note moves one; or their words in ops's own pane. It SHALL submit them with one `crew bolt submit <bolt>...` in that order, which queues each in sluice behind the one before and closes each with `crew bolt land` as it lands. It SHALL push nothing, level no host and move no branch by git. A bolt that does not land SHALL be told to its conductor in sluice's words, the rest going on. A landing SHALL deploy nothing. Until a kit's deployer records its deploys through crew, the main-level ops SHALL deploy that kit's main only on the user's word for that deploy. A failure after landing SHALL be a fix on main.
+The main-level ops SHALL land bolts whose verification is green on the user's word: their send on a kit's landings card, which crew raises in ops's name, the word for every bolt they ticked, in the card's order unless their note moves one; or their words in ops's own pane. It SHALL submit them with one `crew bolt submit <bolt>...` in that order, which queues each in sluice behind the one before and closes each with `crew bolt land` as it lands. It SHALL push nothing, level no host and move no branch by git. A bolt that does not land for its own content, a conflict or a failed check, SHALL be told to its conductor in sluice's words, the rest going on. A bolt whose landing sluice or its host stopped SHALL be reported as a finding outside any bolt and submitted again by the same `crew bolt submit` once what stopped it is cleared, on the word it has, with no new word of the user's. A landing SHALL deploy nothing. Until a kit's deployer records its deploys through crew, the main-level ops SHALL deploy that kit's main only on the user's word for that deploy. A failure after landing SHALL be a fix on main.
 
 #### Scenario: Landing
 - **WHEN** the user sends swb-1's bolt ticked on willdan's landings card
@@ -141,6 +161,10 @@ The main-level ops SHALL land bolts whose verification is green on the user's wo
 - **WHEN** main-level ops's brief is read
 - **THEN** it says to submit every bolt the user ticked with one `crew bolt submit` in the card's order, and says nothing of landing one bolt at a time
 
+#### Scenario: A landing sluice stopped
+- **WHEN** `crew bolt submit y z` says `y` did not land because the host could not run main's checks, nothing of the bolt's
+- **THEN** the main-level ops tells no conductor, records what stopped it as a signal and tells the planner, `z` lands all the same, and once the host runs checks again ops runs `crew bolt submit y` on the user's send that still stands, asking the user nothing
+
 ### Requirement: Signals reach the plan only through a route
 Signals SHALL stay in the partition's first blueprints repo, in the signals model its `signals/README.md` gives. A bolt's agents SHALL record a finding outside their bolt as a signal there with `crew signal`. A signal SHALL become work only through a `route` move written by `crew unit add --signal`.
 
@@ -161,6 +185,8 @@ Every move SHALL be appended to `moves.rec` on the flywheel's branch of its stat
 
 ### Requirement: Any agent crew starts is reached by name
 `crew tell <agent> "<text>"` SHALL prompt any agent crew starts, by its name alone, in the host and session where it runs. An agent that is not up SHALL be reported and the command SHALL fail, with nothing sent. An agent waiting on a question in its pane SHALL be reported the same way, naming the wait, and nothing SHALL be typed into the question: a tell is delivered as a prompt the agent receives, never as text that lands in a dialog and is lost. An agent is waiting on a question when herdr reports it blocked, or when it has opened a question or a plan for the user's answer in Claude Code and that call has no answer yet in its session, however the dialog looks on screen. The agent's session is the one herdr names for its pane, or, when herdr names none, the newest session crew recorded of that agent starting in that pane. When neither names a session, herdr's reading of the pane alone SHALL guard the tell, and a missing session SHALL NOT refuse it. When crew cannot read whether the agent is waiting on a question, it SHALL refuse the same way, naming what it could not read, and type nothing. crew's greetings and notices SHALL be delivered on the same terms.
+
+A tell to a role its partition runs as its kind, `<label>-<role>`, whose standing agent is not up, SHALL NOT fail for it: it SHALL be written as an ask of the role, from the sender, `crew` for crew's own notice, carrying the text, and the command SHALL say it asked the role and type nothing. A standing agent of that role still up SHALL be told as today.
 
 #### Scenario: A conductor asks the design agent
 - **WHEN** swb-1's conductor on the box runs `crew tell wldn-design "<question>"`
@@ -201,6 +227,10 @@ Every move SHALL be appended to `moves.rec` on the flywheel's branch of its stat
 #### Scenario: A pane crew cannot find
 - **WHEN** herdr on the agent's host lists no agent named wldn-planner in its session
 - **THEN** `crew tell wldn-planner "<text>"` fails saying it is not up, and nothing is sent
+
+#### Scenario: A role that runs as its kind
+- **WHEN** madswan's planner runs as its kind, herdr lists no agent named madswan-planner, and swc-3's conductor runs `crew tell madswan-planner "<text>"`
+- **THEN** an ask of the planner from swc-3-conductor holds the text, nothing is typed, and the command says it asked madswan-planner
 
 ### Requirement: Main-level ops reports results as one glyph per line
 Whenever the main-level ops reports the results of a landing's checks, of main's deploy or of any test or proof it ran, it SHALL list them first, before any prose, one bullet per suite, check or proof: ✅ passed, with its counts where the tool gave them; ❌ failed, with how many failed and one line on why; ⏳ not yet run, or still running. It SHALL NOT state a result only in a sentence, nor fold several into one bullet.
@@ -481,3 +511,65 @@ When a bolt whose landing was submitted on the user's words in ops's pane is clo
 #### Scenario: Landed on the card
 - **WHEN** the user sent `land/crew` with `y` ticked on Pending You, and ops ran `crew bolt submit y`, which closed `y` as it landed
 - **THEN** `land/crew` closes as any landings card the user answered, naming no pane
+
+### Requirement: Ops lands a bolt on a send that still stands
+`crew card read land/<kit>` SHALL name each bolt an earlier send of the user's still lands, at its head now, with the `crew bolt submit` that lands it, whether or not a landings card of the kit is open; a bolt whose head now crew cannot read SHALL be named as one it cannot tell of, and left out of the command. Main-level ops SHALL land such a bolt on that send, asking the user nothing, once its conductor says it is proven.
+
+#### Scenario: No card open
+- **WHEN** the user's send on `land/crew` ticked `z`, its card closed with `z` held for sluice's refusal, `z`'s take-main fix has merged, and no landings card of crew is open
+- **THEN** `crew card read land/crew` by swancloud-ops names `z` as landing on the user's earlier send and prints `crew bolt submit z --label swancloud`, and refuses nothing
+
+#### Scenario: A head crew cannot read
+- **WHEN** an earlier send ticked `z`, and `z`'s branch is on no ref crew can read where the kit's forecasts are made
+- **THEN** `crew card read land/crew` says it cannot tell whether the send still lands `z`, and why, and the command it prints leaves `z` out
+
+#### Scenario: The brief lands on a standing send
+- **WHEN** main-level ops's brief is read
+- **THEN** it says a bolt the user ticked whose head moved only by taking main in lands on that send once its conductor says it is proven, with nothing asked, and that the user's words in ops's pane stand the same way
+
+### Requirement: A landing stopped in ops's pane is recorded as the user's words
+When the user's own words in main-level ops's pane stop a bolt's landing, ops SHALL run `crew bolt leave <bolt>... --excerpt "<the user's words>"`. Before recording anything, crew SHALL read the words in the caller's own live session transcript as it reads a landing said in ops's pane, and SHALL refuse in the same cases, recording no stop. A stop SHALL be recorded on each bolt as a `bolt.leave` entry naming its head, the caller, its session, the transcript record the words were read from and the words' length, and holding none of the words (`record.3`), and crew SHALL raise the bolt's kit's landings card. A stop SHALL end when the user ticks the bolt on a send of that card, when ops lands it on the user's words, or when its head moves.
+
+#### Scenario: Stopped in the pane
+- **WHEN** the user types "Hold the phone bolt, don't land it yet" in swancloud-ops's pane, and ops runs `crew bolt leave builds-reach-the-phone --excerpt "Hold the phone bolt, don't land it yet"`
+- **THEN** a `bolt.leave` entry on `bolt/builds-reach-the-phone` is recorded with its head, the transcript record and the words' length, and none of the words, and `land/swancloud` is raised showing it unticked as left
+
+#### Scenario: Words that are not the user's
+- **WHEN** ops runs `crew bolt leave builds-reach-the-phone --excerpt "<words>"` with words only another agent's tell holds
+- **THEN** crew refuses, naming the tell, and records no stop
+
+#### Scenario: Landed on their words later
+- **WHEN** the user later tells ops to land the bolt, and ops runs `crew bolt submit builds-reach-the-phone --excerpt "<their words>"`
+- **THEN** the stop ends, and the bolt is no longer left
+
+### Requirement: A red main's fix is a fix place on main where a crossed team builds the kit
+`crew main fix <kit> <name> "<the failure's words>"`, main-level ops's or the user's on reading the kit's main red after a landing, SHALL append a launch of the fix kind on `main`, named `main--<name>`, its brief the failure's words, its submission held and its recipient `<label>/ops`, on the host of the crossed team that builds the kit, `--team` choosing among several and required when they run on different hosts. `--drop` SHALL drop it.
+
+#### Scenario: Main red after a landing
+- **WHEN** crew's main fails its checks after a landing, crw-4 is crossed and builds crew, and ops runs `crew main fix crew a-test-reads-its-fixture "<the check's words>"`
+- **THEN** `requests.rec` gains a launch of `fix` named `main--a-test-reads-its-fixture` on `main`, its submission held, recipient `madswan/ops`, on deneb
+
+### Requirement: A red main's fix stays a bolt of one chore where no crossed team builds the kit
+Where no crossed team builds the kit, `crew main fix` SHALL be refused, naming a bolt of one chore, proposed first among the planned, as the way.
+
+#### Scenario: No crossed team builds the kit
+- **WHEN** no crossed team builds switchboard-kit and ops runs `crew main fix switchboard-kit gate-word "<words>"`
+- **THEN** it is refused, naming a bolt of one chore proposed first among the planned
+
+### Requirement: A fix of main lands on the user's send
+Once a fix of main's code has delivered and its submission waits held, the kit's landings row SHALL carry it; `crew main fix <kit> <name> --send`, ops's on the user's send and read as a landing's words are, SHALL append the retry of its submission, and nothing else SHALL submit it.
+
+#### Scenario: The user's send
+- **WHEN** the runner's record shows `main--a-test-reads-its-fixture`'s code delivered and its submission held, and the user sends the kit's landings card with it ticked
+- **THEN** ops's `crew main fix crew a-test-reads-its-fixture --send` appends a retry of its submission
+
+### Requirement: A role that runs as its kind is not started by crew-role
+`crew-role <label> <role>`, fresh or with `resume`, SHALL refuse a role its partition runs as its kind, naming `crew role open <role> --label <label>`, and start no Claude. `crew main status <label>` SHALL say of each such role that it runs as its kind, whether the runner's records show a run of it standing, and how many asks wait for it since when.
+
+#### Scenario: The planner started by hand
+- **WHEN** madswan's planner runs as its kind and `crew-role madswan planner` runs
+- **THEN** it refuses, saying madswan's planner runs as its kind and is opened with `crew role open planner --label madswan`, and no Claude starts
+
+#### Scenario: Main status
+- **WHEN** madswan's planner runs as its kind, two asks of it wait and no run of it stands, and `crew main status madswan` runs
+- **THEN** it says the planner runs as its kind, that no run stands, and that two asks wait, with the oldest's age
