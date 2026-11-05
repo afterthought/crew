@@ -35,6 +35,6 @@ Each check is a moon task of the `tests` project, run through `tests/suite`: `lo
   - The user's run writes one commit and its entry.
   - The planner's direct run is refused.
   - A proposal holding a rename is checked, carded and applied on approval.
-- [ ] 4.2 README, `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage header name `crew kit rename`, what it rewrites and who runs it, together (`docs.2`; Task notes 4.2). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 4.2 README, `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage header name `crew kit rename`, what it rewrites and who runs it, together (`docs.2`; Task notes 4.2). Verify `tests/suite t-docs` ends with "0 failed".
 - [ ] 4.3 The planner's brief names the rename among its commands, and says a renamed kit is renamed by proposing it, never by dropping and adding its work again (design Decision 2; Task notes 4.3). Verify `tests/suite t-briefs` ends with "0 failed".
 - [ ] 4.4 Every test the change affects passes (Task notes 4.4). Verify `tests/suite --affected` ends with "0 failed".
