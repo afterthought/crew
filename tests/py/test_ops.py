@@ -200,6 +200,17 @@ class TestCarried:
         assert ops.carried(S3, S1, self.LANDS) == (["two", "three"], None)
         assert ops.carried(S2, "none", self.LANDS) == (["one", "two"], None)
 
+    def test_landings_under_a_kits_former_name_are_its_landings_after_the_rename(self):
+        """Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan: one and two landed on tailrace, renamed
+        timber before three landed: a deploy of timber to three's commit from one's carries two and three."""
+        rename = dict(Id="20261012T100230Z-mac-studio-1-r", At="2026-10-12T10:02:30Z", Act="kit.rename", On=["kit/timber"],
+                      From=["kit/tailrace"], Commit=[], Repo="timber", Count="2")
+        es = [landed("one", S1, repo="tailrace", minutes=0), landed("crew-one", "d" * 40, repo="crew", minutes=1),
+              landed("two", S2, repo="agentplot/tailrace", minutes=2), rename, landed("three", S3, repo="timber", minutes=3)]
+        assert [x["repo"] for x in ops.landings(es)] == ["timber", "crew", "timber", "timber"]
+        assert ops.carried(S3, S1, ops.landings(es)) == (["two", "three"], None)
+        assert ops.carried(S3, S1, ops.landings([x for x in es if x is not rename])) == (None, "aaaaaaa is no landing's commit in the record")
+
     def test_a_commit_no_landing_left_main_at_is_said_rather_than_guessed(self):
         assert ops.carried("e" * 40, S1, self.LANDS) == (None, "eeeeeee is no landing's commit in the record")
         assert ops.carried(S3, "f" * 40, self.LANDS) == (None, "fffffff is no landing's commit in the record")

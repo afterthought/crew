@@ -913,10 +913,11 @@ def main_fixes_waiting(requests, reads):
     """Each fix of main a kit's landings row carries (Decision 11; crew-rail "A fix of main waits to land on its kit's
     row"): those whose launch stands and whose code has delivered with its submission waiting held, their stage read
     from the runner that took them (reads, by host; taken, piece_stage), in requests.rec's order, each {kit, name, host,
-    brief, since, carried, sent}: since, when Flume read it waiting, in seconds, or None; carried, when the runner
-    carried that status; sent, the number of the request that sent it on the user's word (sent_of), None while it waits
-    on that word. One crew can't read is left off, as a bolt whose stage crew can't read is, being in no state it can
-    tell to send (read.1)."""
+    brief, since, carried, sent}: kit, the kit its launch's Repo names, which a launch read through the partition's
+    renames names by its name now (plan.launches_now), so a fix launched under a former name is its renamed kit's;
+    since, when Flume read it waiting, in seconds, or None; carried, when the runner carried that status; sent, the
+    number of the request that sent it on the user's word (sent_of), None while it waits on that word. One crew can't
+    read is left off, as a bolt whose stage crew can't read is, being in no state it can tell to send (read.1)."""
     out = []
     for l in standing(requests):
         work = l.get("Work") or ""
@@ -928,7 +929,7 @@ def main_fixes_waiting(requests, reads):
         reading = taken(reads, number(l.get("Request")))[0]
         place, sent = reading["places"][number(l.get("Request"))], sent_of(requests, reads, l)
         _, _, kit, name = work.split("/", 3)
-        out.append(dict(kit=kit, name=name, host=reading["host"], brief=l.get("Brief") or "",
+        out.append(dict(kit=(l.get("Repo") or kit).split("/")[-1], name=name, host=reading["host"], brief=l.get("Brief") or "",
                         since=flume_facts(place["status"], place["place"])["waiting_since"], carried=place["at"],
                         sent=number(sent.get("Request")) if sent is not None else None))
     return out

@@ -27,6 +27,52 @@ def the_plan(bolts=(), units=()):
     return plan.Plan(plan_text(bolts, units))
 
 
+def renamed(old, new, at="2026-11-05T10:00:00Z", n=1, refused=None):
+    """A kit.rename entry as record.parse gives it: crew kit rename <old> <new>."""
+    return dict({"Id": f"20261105T100000Z-{n}-deneb-1-1", "At": at, "Act": "kit.rename", "On": [f"kit/{new.split('/')[-1]}"],
+                 "From": [f"kit/{old}"], "Commit": [], "Repo": new}, **({"Refused": refused} if refused else {}))
+
+
+class TestKitNow:
+    """Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan: a kit's name now, read through the
+    partition's renames in the order they were written (plan.kit_now)."""
+
+    def test_a_name_no_rename_names_reads_as_written(self):
+        assert plan.kit_now("crew", [("tailrace", "timber")]) == "crew"
+        assert plan.kit_now("agentplot/tailrace", []) == "agentplot/tailrace"
+
+    def test_a_renamed_kit_reads_by_its_new_name_from_its_name_or_its_forge_address(self):
+        assert plan.kit_now("tailrace", [("tailrace", "timber")]) == "timber"
+        assert plan.kit_now("agentplot/tailrace", [("tailrace", "timber")]) == "timber"
+        assert plan.kit_now("tailrace", [("agentplot/tailrace", "agentplot/timber")]) == "agentplot/timber"
+
+    def test_a_chain_of_renames_reads_to_its_last(self):
+        renames = [("a", "b"), ("b", "c")]
+        assert (plan.kit_now("a", renames), plan.kit_now("b", renames), plan.kit_now("c", renames)) == ("c", "c", "c")
+
+    def test_a_rename_and_its_undoing_read_back(self):
+        renames = [("a", "b"), ("b", "a")]
+        assert (plan.kit_now("a", renames), plan.kit_now("b", renames)) == ("a", "a")
+
+    def test_renames_read_in_the_order_they_were_written(self):
+        """b->c written before a->b: a reads b, and b, renamed before a took its name, reads c."""
+        renames = [("b", "c"), ("a", "b")]
+        assert (plan.kit_now("a", renames), plan.kit_now("b", renames)) == ("b", "c")
+
+    def test_an_unrelated_kit_is_unchanged(self):
+        assert plan.kit_now("flume", [("tailrace", "timber"), ("flywheel-cloud", "boomdrive-cloud")]) == "flume"
+
+
+class TestRenamesIn:
+    def test_each_rename_not_refused_as_old_and_new_in_the_order_written(self):
+        entries = [renamed("b", "c", at="2026-11-05T12:00:00Z"), landing("crew"), renamed("x", "y", refused="deneb keeps no y"),
+                   renamed("a", "b", at="2026-11-05T11:00:00Z", n=2), renamed("tailrace", "agentplot/timber", at="2026-11-05T11:00:00Z")]
+        assert plan.renames_in(entries) == [("tailrace", "agentplot/timber"), ("a", "b"), ("b", "c")]
+
+    def test_none_where_the_record_holds_none(self):
+        assert plan.renames_in([landing("crew")]) == [] and plan.renames_in([]) == []
+
+
 class TestPartitionKits:
     def test_the_plan_alone_names_its_bolts_and_units_repositories(self):
         p = the_plan([("console-pages", "switchboard-kit", True)], [("a", "switchboard-kit", "console-pages", []),
@@ -51,6 +97,37 @@ class TestPartitionKits:
     def test_a_refused_landing_or_another_act_names_no_kit(self):
         assert plan.partition_kits(the_plan(), [landing("atlas-kit", refused="it conflicts"), landing("atlas-kit", act="bolt.drop"),
                                                 landing(None)]) == []
+
+    def test_landings_under_a_kits_former_name_name_it_once_by_its_name_now(self):
+        """Two bolts landed under tailrace, renamed timber after."""
+        assert plan.partition_kits(the_plan(), [landing("tailrace"), landing("tailrace")], [("tailrace", "timber")]) == ["timber"]
+
+    def test_a_plan_renamed_and_landings_under_the_former_name_are_one_kit(self):
+        p = the_plan([("b", "timber", True)], [("a", "timber", "b", [])])
+        assert plan.partition_kits(p, [landing("tailrace"), landing("crew")], [("tailrace", "timber")]) == ["crew", "timber"]
+        assert plan.partition_kits(p, [landing("agentplot/tailrace")], [("tailrace", "timber")]) == ["timber"]
+
+    def test_with_no_renames_each_kit_reads_as_written(self):
+        p = the_plan([("b", "timber", True)])
+        assert plan.partition_kits(p, [landing("tailrace")]) == plan.partition_kits(p, [landing("tailrace")], []) == ["tailrace", "timber"]
+
+
+class TestRunsRead:
+    """plan.12: a partition's landings and its renames come of one read of runs/ at a tip, kept for the command."""
+
+    def test_the_landings_and_the_renames_are_one_read_per_tip(self, monkeypatch):
+        shown = []
+        text = ("%rec: Entry\n\nId: 1\nAt: 2026-10-30T11:00:00Z\nAct: bolt.land\nOn: bolt/b\nRepo: tailrace\nHead: abc\n\n"
+                "Id: 2\nAt: 2026-11-05T10:00:00Z\nAct: kit.rename\nOn: kit/timber\nFrom: kit/tailrace\nRepo: timber\nCount: 2\n")
+        monkeypatch.setattr(plan, "READ", plan.Reading())
+        monkeypatch.setattr(plan, "paths_at", lambda repo, tip, prefix: ["runs/deneb/2026-11-05.rec"])
+        monkeypatch.setattr(plan, "kept_listing", lambda repo, tip: {})
+        monkeypatch.setattr(plan, "show", lambda repo, tip, path: shown.append((tip, path)) or text)
+        assert [e["Id"] for e in plan.landings_at("o/state", "t1")] == ["1"]
+        assert plan.renames_at("o/state", "t1") == [("tailrace", "timber")]
+        assert plan.kits_at("o/state", "t1", the_plan()) == ["timber"]
+        assert shown == [("t1", "runs/deneb/2026-11-05.rec")]
+        assert plan.renames_at("o/state", None) == [] and plan.kits_at("o/state", None, None) == []
 
 
 class TestKitIn:
@@ -181,6 +258,36 @@ class TestWhereABoltRuns:
         assert (at["machine"], at["kit"]["main"]) == ("alpha", "/a/crew")
         with pytest.raises(plan.Refusal, match="^no runner has reported taking atlas-kit's work yet"):
             plan.kit_at(FLEET, "madswan", "atlas-kit", (self.LAUNCHES, {"deneb": took("deneb", 1)}))
+
+    def test_a_launch_under_a_kits_former_name_is_its_kits_after_the_rename(self):
+        """Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan: request 1 was launched in flywheel-cloud,
+        which madswan renamed boomdrive-cloud after; read through the renames (plan.launches_now) it is boomdrive-cloud's
+        work, for the kit (plan.kit_at) and for a batch's unit read from its bolt's launches (plan.batch_unit_at), and
+        requests.rec's record itself is left as written."""
+        renames = [("flywheel-cloud", "boomdrive-cloud")]
+        launches = [launch(1, "unit/one-seam", "bolt/you-sign-in-to-staging", repo="flywheel-cloud")]
+        reads = {"deneb": took("deneb", 1, repository="/w/boomdrive-cloud")}
+        now = plan.launches_now(launches, renames)
+        at = plan.kit_at(FLEET, "madswan", "boomdrive-cloud", (now, reads))
+        assert (at["machine"], at["kit"]["name"], at["kit"]["main"]) == ("deneb", "boomdrive-cloud", "/w/boomdrive-cloud")
+        assert plan.batch_unit_at(FLEET, "madswan", "you-sign-in-to-staging", "one-seam", (now, reads))["kit"]["repo"] == "boomdrive-cloud"
+        assert [(f, v) for f, v in now[0].fields if f != "Repo"] == [(f, v) for f, v in launches[0].fields if f != "Repo"]
+        assert launches[0].get("Repo") == "flywheel-cloud"
+        with pytest.raises(plan.Refusal, match="^no runner has reported taking boomdrive-cloud's work yet"):
+            plan.kit_at(FLEET, "madswan", "boomdrive-cloud", (launches, reads))
+
+    def test_a_commands_launches_are_read_through_the_renames_at_the_tip_they_were_read_at(self, monkeypatch):
+        """plan.runner_facts and the rail's plan.rail_runs read requests.rec and the renames at one tip."""
+        asked, text = [], runner.REQUESTS + "".join(f"\n{f}: {v}" for f, v in launch(1, "unit/a", "bolt/x", repo="flywheel-cloud").fields)
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("o/state", "refs/crew/madswan/main"))
+        monkeypatch.setattr(plan, "fetch", lambda repo, ref, fresh=False: "t1")
+        monkeypatch.setattr(plan, "show", lambda repo, tip, path: text if path == "requests.rec" else None)
+        monkeypatch.setattr(plan, "renames_at", lambda repo, tip: asked.append(tip) or [("flywheel-cloud", "boomdrive-cloud")])
+        monkeypatch.setattr(plan, "runners", lambda repo, label: {})
+        requests, _ = plan.runner_facts(FLEET, "madswan")
+        assert [r.get("Repo") for r in requests] == ["boomdrive-cloud"]
+        runs = plan.rail_runs([("madswan", "o/state", "t2", plan.Plan(flume_plan([("x", None, "flume")])))])
+        assert [r.get("Repo") for r in runs["madswan"][0]] == ["boomdrive-cloud"] and asked == ["t1", "t2"]
 
 
 def test_a_partitions_hosts_are_its_main_levels_and_its_runners():

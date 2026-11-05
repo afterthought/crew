@@ -956,6 +956,11 @@ class Write:
             self._entries = sorted(seen.values(), key=lambda e: (e["At"], e["Id"]))
         return self._entries
 
+    def renames(self):
+        """The partition's renames of its kits as the run record holds them at the tip the change is applied to
+        (renames_at), whole, since a launch made under a former name stands in requests.rec however old it is."""
+        return renames_at(self.repo, self.tip)
+
     def bolt(self, name):
         return self.plan.bolt(name) or self.gone("Bolt", name)
 
@@ -1531,6 +1536,27 @@ def kit_in(kit, kits):
     return kit.split("/")[-1] in {k.split("/")[-1] for k in kits}
 
 
+def kit_now(kit, renames):
+    """A kit's name now (Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan), as crew reads what it
+    recorded under a former name and never rewrites, a launch, a landing, a fix of main or a source: from kit, each
+    rename (renames, the partition's as (old, new) in the order they were written, renames_in) whose old names the name
+    so far, by its name or forge address (kit_in), makes its new the name; a name no rename names reads as written.
+    Read in order, a rename and its undoing read back, a->b then b->a reading both as a."""
+    for old, new in renames:
+        if kit and kit_in(kit, [old]):
+            kit = new
+    return kit
+
+
+def renames_in(entries):
+    """A partition's renames of its kits (Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan), as kit_now
+    reads them: each kit.rename entry not refused among a run record's entries, as (old, new), the kit its From names
+    and its Repo, in the order they were written, by At then Id."""
+    out = sorted((e for e in entries if e.get("Act") == "kit.rename" and not e.get("Refused")), key=lambda e: (e["At"], e["Id"]))
+    return [(old, e.get("Repo")) for e in out for old in [next((o[4:] for o in e.get("From") or [] if o.startswith("kit/")), None)]
+            if old and e.get("Repo")]
+
+
 def plan_for(fleet, kit, label):
     """The plan a kit's work goes in, (label, state repository) (Decision 3 of the-team-machinery-leaves): the partition
     the command runs as (label, --label or the agent's own: default_label), a kit entering a partition with its first
@@ -1931,11 +1957,24 @@ def reprioritise(w):
 
 def runner_facts(fleet, label):
     """What a crossed piece's stage is read from in a partition (runner.piece_stage; Decision 8 of teams-cross-to-flume-
-    as-their-bolts-land): requests.rec's records at the tip of its branch this command reads (fetch), none where the
-    branch is not started, and each host's runner read beside it (runners)."""
+    as-their-bolts-land): requests.rec's records at the tip of its branch this command reads (fetch), read through the
+    partition's renames at that tip (launches_now), none where the branch is not started, and each host's runner read
+    beside it (runners)."""
     repo, ref = state_of(fleet, label)
     tip = fetch(repo, ref)
-    return (Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request") if tip else []), runners(repo, label)
+    requests = Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request") if tip else []
+    return launches_now(requests, renames_at(repo, tip)), runners(repo, label)
+
+
+def launches_now(requests, renames):
+    """requests.rec's records as crew reads them (Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan):
+    each record's Repo by its kit's name now through the partition's renames (kit_now), read at the tip the records
+    were, so a launch made under a former name is its kit's launch; the file itself is never changed, and every other
+    field reads as written."""
+    if not renames:
+        return requests
+    return [Rec(r.kind, [(f, kit_now(v, renames) if f == "Repo" else v) for f, v in r.fields]) if r.get("Repo") else r
+            for r in requests]
 
 
 def launch_label(fleet, work, label):
@@ -2025,35 +2064,49 @@ def land_refusal(bolt, units, stage_of, outside, label, held=None, kit_name=None
     return None
 
 
-def partition_kits(plan, landings):
+def partition_kits(plan, landings, renames=()):
     """A partition's kits (Decision 3 of the-team-machinery-leaves): the repositories its plan's Bolt and Unit records
     name, with those its run record's landings name, each bolt.land entry not refused (landings, as record.acts_in
-    finds them), by Repo as written, sorted and each once. There is no registry of repositories in crew: a kit enters
+    finds them), each by its name now through the partition's renames (kit_now), sorted and each once, so a kit whose
+    landings were recorded under a former name is one kit. There is no registry of repositories in crew: a kit enters
     a partition with its first bolt, and a kit whose last bolt has landed stays one by its landings. plan None, a
     branch not started, names none."""
     named = [r.get("Repo") for r in (plan.bolts() + plan.work() if plan is not None else [])]
     named += [e.get("Repo") for e in landings if e.get("Act") == "bolt.land" and not e.get("Refused")]
-    return sorted({r for r in named if r})
+    return sorted({kit_now(r, renames) for r in named if r})
 
 
-def landings_at(repo, tip):
-    """Every bolt.land entry the run record holds at a tip of a drive's branch, from each of its files under runs/,
-    found by their act (record.acts_in), read once for the command by the tip."""
-    name = f"landings-{tip}"
+def runs_at(repo, tip):
+    """What crew reads of the run record by its acts at a tip of a drive's branch, in one pass over its files under
+    runs/, read once for the command by the tip (plan.12): every bolt.land entry and every kit.rename entry, found by
+    their act (record.acts_in), {"landings", "renames"}."""
+    name = f"runs-{tip}"
     held = READ.held(name)
     if held is not None:
         return held
     paths = [p for p in paths_at(repo, tip, "runs/") if p.endswith(".rec")]
     texts = [show(repo, tip, p) for p in paths] if kept_listing(repo, tip) is not None else cat_file(repo, [f"{tip}:{p}" for p in paths])
-    out = [e for t in texts for e in record.acts_in(t or "", "bolt.land")]
+    out = {"landings": [e for t in texts for e in record.acts_in(t or "", "bolt.land")],
+           "renames": [e for t in texts for e in record.acts_in(t or "", "kit.rename")]}
     READ.keep(name, out)
     return out
 
 
+def landings_at(repo, tip):
+    """Every bolt.land entry the run record holds at a tip of a drive's branch (runs_at)."""
+    return runs_at(repo, tip)["landings"]
+
+
+def renames_at(repo, tip):
+    """The partition's renames of its kits as the run record holds them at a tip of a drive's branch (runs_at,
+    renames_in), read with its landings; none for a branch not started (tip None)."""
+    return renames_in(runs_at(repo, tip)["renames"]) if tip else []
+
+
 def kits_at(repo, tip, pl):
     """A partition's kits (partition_kits) as its branch holds them at a tip: the plan read there (pl) and the landings
-    its run record holds; none for a branch not started (tip None)."""
-    return partition_kits(pl, landings_at(repo, tip) if tip else [])
+    and renames its run record holds; none for a branch not started (tip None)."""
+    return partition_kits(pl, landings_at(repo, tip) if tip else [], renames_at(repo, tip))
 
 
 def kits_read(fleet, label, fresh=True):
@@ -4725,15 +4778,16 @@ def landing_hold(phase, bolt, what):
 
 def landing_at(fleet, label, plan, entries, bolt):
     """Where a landing's read reads (bolt_at): where the bolt's work runs while the plan holds it started, else, a read
-    after a close by another, where its launches ran (launched_at) in the kit its last queued submission names (Repo);
-    None for neither. Refused when crew can't tell where its work runs (read.1)."""
+    after a close by another, where its launches ran (launched_at) in the kit its last queued submission names (Repo),
+    by its name now through the kit.rename entries among entries (kit_now); None for neither. Refused when crew can't
+    tell where its work runs (read.1)."""
     b = plan.bolt(bolt) if plan else None
     t = bolt_at(fleet, label, b) if b else None
     if t:
         return t
     q = next((e for e in reversed(entries) if e.get("Act") == "bolt.submit" and e.get("Outcome") == "queued"
               and f"bolt/{bolt}" in (e.get("On") or [])), None)
-    return launched_at(fleet, label, bolt, q["Repo"]) if q and q.get("Repo") else None
+    return launched_at(fleet, label, bolt, kit_now(q["Repo"], renames_in(entries))) if q and q.get("Repo") else None
 
 
 def landing_queued_last(entries, bolt):
@@ -6462,14 +6516,15 @@ def record_refs(source, kit_repo):
     return list(dict.fromkeys((m.group(1) or kit_repo, int(m.group(2))) for m in RECORD_REF.finditer(source)))
 
 
-def record_items(fleet, label, plan, argvs):
+def record_items(fleet, label, plan, argvs, renames=()):
     """The records a proposal's new work names (plan-proposals, briefs.15): for each bolt its `bolt new`s create, then
     each unit or chore it makes new to a bolt or the queue (new_units), as the plan its commands leave holds them, each
     record its sources name (record_refs), as (kind, name, kit, repo, number): kit the record's kit as a refusal names
     it, the work's kit by its name, or <owner>/<name> when the record is another repository's, and repo the repository
     it is read in, the work's kit as the partition's main-level host keeps it (main_kit; the user's ruling of
-    2026-11-01). Work whose sources name a record and whose kit that host keeps no checkout of is refused, since crew
-    can't tell whose records they are (read.1)."""
+    2026-11-01). A source naming the work's kit by a former name names the kit (renames, the partition's, kit_now),
+    its record read in the kit's checkout. Work whose sources name a record and whose kit that host keeps no checkout
+    of is refused, since crew can't tell whose records they are (read.1)."""
     work = [("bolt", a.bolt, plan.bolt(a.bolt)) for a in argvs if (a.cmd, a.sub) == ("bolt", "new")]
     work += [(kind_of(plan.item(u)) if plan.item(u) else "unit", u, plan.item(u)) for u in new_units(argvs)]
     out = []
@@ -6482,7 +6537,10 @@ def record_items(fleet, label, plan, argvs):
         t or fail(f"{kind} {name} names a decision record, and " + main_kit_said(fleet, label, kit, "tell whose it is"))
         k = t["kit"]
         for s in sources:
-            out += [(kind, name, k["name"] if repo == k["repo"] else repo, repo, n) for repo, n in record_refs(s, k["repo"])]
+            for repo, n in record_refs(s, k["repo"]):
+                now = kit_now(repo, renames)
+                own = repo == k["repo"] or (now != repo and kit_in(now, [k["repo"]]))
+                out.append((kind, name, k["name"], k["repo"], n) if own else (kind, name, repo, repo, n))
     return list(dict.fromkeys(out))
 
 
@@ -6509,13 +6567,14 @@ def unaccepted(items, held):
     return "\n".join([UNACCEPTED, *lines, UNACCEPTED_AFTER]) if lines else None
 
 
-def proposal_records(fleet, label, scratch, argvs):
+def proposal_records(fleet, label, scratch, argvs, renames=()):
     """The records a proposal's new work names, read on each repository's main as GitHub holds it now (plan.18): the
-    items record_items finds in the plan its commands leave (scratch), and what each repository's main holds by each
+    items record_items finds in the plan its commands leave (scratch), a source's repository read through the
+    partition's renames (renames), and what each repository's main holds by each
     number, for unaccepted. Each repository is fetched once into crew's cache, held for the command (plan.12), its
     docs/adr/ listed at that tip and the one file by a number read; a main that can't be fetched, or a file that can't
     be read as text, gives why, naming it (read.1, read.2). Returns (items, held)."""
-    items, held = record_items(fleet, label, scratch.plan, argvs), {}
+    items, held = record_items(fleet, label, scratch.plan, argvs, renames), {}
     for repo in dict.fromkeys(i[3] for i in items):
         numbers = sorted({i[4] for i in items if i[3] == repo})
         try:
@@ -6563,7 +6622,7 @@ def plan_propose(fleet, a):
         pl = proposals(w)
         n = next_proposal(pl)
         scratch = check_ops(fleet, label, w, argvs, n)
-        said = unaccepted(*proposal_records(fleet, label, scratch, argvs))
+        said = unaccepted(*proposal_records(fleet, label, scratch, argvs, w.renames()))
         not said or fail(said)
         seen["old_by"] = open_proposal(pl, n, case, dos, agent(), datetime.date.today().isoformat(), a.replaces, label)
         w.replace("proposals.rec", pl.text())
@@ -7279,7 +7338,8 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, outcome=None, reason
         facts = proposal_facts(fleet, label, w, n)
         kit_ = named_kit(w.plan, facts["argvs"])
         try:  # where the kit's work runs, from the runners and requests the write read at its tip
-            t = kit_at(fleet, label, kit_, (Plan(w.text("requests.rec") or runner.REQUESTS).recs("Request"), w.runners())) if kit_ else None
+            t = kit_at(fleet, label, kit_, (launches_now(Plan(w.text("requests.rec") or runner.REQUESTS).recs("Request"), w.renames()),
+                                            w.runners())) if kit_ else None
         except Refusal:
             t = None
         where = card_where(card_kit(fleet, t, kit_, {"main": part["checkout"], "repo": part["blueprints"][0]}))
@@ -8821,9 +8881,12 @@ def main_fix_change(fleet, w, repo, name, mode, words):
     new fix, a runner answering for the partition and the launch appended in the kit's repository (repo, as the
     partition's kits name it; runner.main_fix_launch); for --drop, its launch's drop (runner.fix_drop_refusal); for
     --send, the retry of its submission (runner.send_refusal); each stage read from the runner that took it as the write
-    reads them. Returns what it asked, {n, host}: host, the runner's that took the launch, where crew can tell."""
+    reads them. A fix launched under a former name of the kit is found under it, its launch read through the partition's
+    renames (main_fix_work), so its kit's landings row's send reaches it. Returns what it asked, {n, host}: host, the
+    runner's that took the launch, where crew can tell."""
     kit = repo.split("/")[-1]
-    requests, work = requests_of(w).recs("Request"), f"fix/main/{kit}/{name}"
+    requests = requests_of(w).recs("Request")
+    work = f"fix/main/{kit}/{name}" if mode == "start" else main_fix_work(launches_now(requests, w.renames()), kit, name)
     if mode == "send":
         launch = runner.launch_of(requests, work)
         reads = w.runners()
@@ -8844,6 +8907,16 @@ def main_fix_change(fleet, w, repo, name, mode, words):
     act, work, given = launched
     w.subject = f"plan(main): fix {name} of {kit}"
     return dict(n=request(w, act, work, **given), host=None)
+
+
+def main_fix_work(requests, kit, name):
+    """The work a fix of a kit's main is launched as, fix/main/<kit>/<name> as requests.rec names it (requests, read
+    through the partition's renames, launches_now): the newest launch of a fix of main by that name whose Repo names
+    the kit, by its name now, which a fix launched before the kit's rename names by its former name; else as the kit
+    names it now."""
+    return next((r.get("Work") for r in reversed(requests) if r.get("Act") == "launch"
+                 and (r.get("Work") or "").startswith("fix/main/") and r.get("Work").split("/", 3)[3:] == [name]
+                 and kit_in(kit, [r.get("Repo") or ""])), f"fix/main/{kit}/{name}")
 
 
 def greeting(fleet, agents, roles):
@@ -10408,8 +10481,9 @@ def rail_record(fleet, found, props, crossed=None):
     "closed": card keys closed, "posts": batch card keys posted, "due": units whose latest change no batch has held,
     "unanswered": {unit: the batch} whose card the user has not answered that holds its latest change}}, the last two
     None for a partition whose branch could not be read, since then they can't be told; the rail's rows for the
-    operations; the entries the operations are read from, {label: entries}, the ops entries of the main level's host
-    and the landings, oldest first, which the board's Operation lane reads (ops.environments); and every entry read,
+    operations; the entries the operations are read from, {label: entries}, the ops entries of the main level's host,
+    the landings and the kits' renames, oldest first, which the board's Operation lane reads (ops.environments); and
+    every entry read,
     {label: entries}, oldest first, which the sweep (sweep_cards) and the board's design band read. crossed, each
     partition's crossed units' changes, {label: crossed_changes'}, which its due and unanswered units count."""
     times, cards, unread, landings, held, deploys, opses, logs = {}, [], {}, [], {}, [], {}, {}
@@ -10430,7 +10504,7 @@ def rail_record(fleet, found, props, crossed=None):
         import ops  # ops.py imports nothing of this module
         mine = [e for e in entries if (e.get("Act") or "").startswith("ops.") and e.get("Host") == fleet["partitions"][l]["machine"]]
         deploys += [dict(r, at=utc(r["at"]), doc=None) for r in ops.rows(fleet, l, mine)]
-        opses[l] = sorted(mine + [e for e in entries if e.get("Act") == "bolt.land"], key=lambda e: (e["At"], e["Id"]))
+        opses[l] = sorted(mine + [e for e in entries if e.get("Act") in ("bolt.land", "kit.rename")], key=lambda e: (e["At"], e["Id"]))
     return times, cards, unread, landings, held, deploys, opses, logs
 
 
@@ -10986,14 +11060,15 @@ def sweep_judgment(label, rowed, cards, unread, batched, readings=()):
 def rail_runs(found):
     """What the rail reads of each partition's runners, once for its read, for the stages of its crossed work (Stages)
     and the fixes of main its landings rows carry (rail_rows, runner.main_fixes_waiting): {label: (requests.rec's
-    records at the tip the read found, its runners as read beside it, runners)}, for each partition whose plan holds a
-    bolt given through Flume or whose requests hold a fix of main standing; a partition with neither reads no runner."""
+    records at the tip the read found, read through the partition's renames there (launches_now), its runners as read
+    beside it, runners)}, for each partition whose plan holds a bolt given through Flume or whose requests hold a fix of
+    main standing; a partition with neither reads no runner."""
     out = {}
     for l, repo, tip, p in found:
         rq = Plan(show(repo, tip, "requests.rec") or runner.REQUESTS).recs("Request") if p and tip else []
         if any((r.get("Work") or "").startswith("fix/main/") for r in runner.standing(rq)) or (
                 p and any(b.get("Path") == "flume" for b in p.bolts())):
-            out[l] = (rq, runners(repo, l))
+            out[l] = (launches_now(rq, renames_at(repo, tip)), runners(repo, l))
     return out
 
 
