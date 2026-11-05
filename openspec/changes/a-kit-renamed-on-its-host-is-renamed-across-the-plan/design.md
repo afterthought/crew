@@ -150,9 +150,9 @@ Alternatives considered:
 | Read | Where it is now | Read through `kit_now` |
 |---|---|---|
 | A partition's kits | `plan.partition_kits`, the plan's and the landings' `Repo` | Each name, so each kit once by its name now. With it go `kits_at`, `kits_read`, `kit_labels` and `plan_for`, `land_key`, `kit_named`, and the main level's kit folders (`crew.kits_on`) |
-| A kit's launches | `plan.kit_at`'s `kit_in(kit, [r.Repo])` over `requests.rec` | The launch's `Repo` |
-| A bolt's kit from its launches | `plan.launched_at`, `batch_unit_at` (`mine[-1].get("Repo")`) | The kit named to `kit_of` |
-| A fix of main | `fix/main/<kit>/<name>` works: `runner.main_fixes_waiting`'s `kit`, and every match of a fix of main to its kit's landings row | The work's kit part, where it is matched to a kit or shown |
+| A kit's launches | `plan.kit_at`'s `kit_in(kit, [r.Repo])` over `requests.rec` | The launch's `Repo`, read through the renames where `requests.rec` is read for a run (`launches_now`, in `runner_facts`, `rail_runs` and a write's read), at the same tip |
+| A bolt's kit from its launches | `plan.launched_at`, `batch_unit_at` (`mine[-1].get("Repo")`) | The kit named to `kit_of`, the launch's `Repo` as read above |
+| A fix of main | `fix/main/<kit>/<name>` works: `runner.main_fixes_waiting`'s `kit`, and every match of a fix of main to its kit's landings row | The kit its launch's `Repo` names, as read above, which crew writes as the work's kit part; a send or drop of the row finds the launch by its name and that kit (`main_fix_work`), its work as launched |
 | A kit's landings and deploys | `ops.py`'s landings by `Repo` (the deploys' contents), `page.fleet_kits`'s last landing by `Repo` | The entry's `Repo` |
 | Card keys | `land/<kit>` (`cards.row_object`, `plan.land_key`, `row_gone`); `record/<kit>/<n>` (`record_settled`, `record_proposed`, the sweep's record cards) | The key's kit part (Decision 5) |
 | A source's repository | `record_refs`'s `<owner>/<name>` before a `docs/adr/NNNN` | The repository, where crew finds its checkout through `main_kit` |
