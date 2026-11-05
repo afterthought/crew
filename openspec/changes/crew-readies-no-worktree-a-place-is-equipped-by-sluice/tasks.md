@@ -18,7 +18,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 
 ## 4. The shell
 
-- [ ] 4.1 The toolchain crew's policy names only activates. `enterShell` runs no `proto install`, and the task `crew:proto:install` installs a missing pin before the shell's entry, skipped by its status while every pin is installed. A new contract case runs the policy's toolchain and finds `proto activate` and no `proto install`, and the contract task takes `.config/sluice.toml` as an input (test-suite, "The toolchain crew's policy names only activates"; design, Decisions 3 and 4; Task notes 4.1). Verify `tests/suite contract` ends with "0 failed".
+- [x] 4.1 The toolchain crew's policy names only activates. `enterShell` runs no `proto install`, and the task `crew:proto:install` installs a missing pin before the shell's entry, skipped by its status while every pin is installed. A new contract case runs the policy's toolchain and finds `proto activate` and no `proto install`, and the contract task takes `.config/sluice.toml` as an input (test-suite, "The toolchain crew's policy names only activates"; design, Decisions 3 and 4; Task notes 4.1). Verify `tests/suite contract` ends with "0 failed".
 
 ## 5. The change's tests
 

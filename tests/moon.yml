@@ -8,7 +8,7 @@ tasks:
   contract:
     command: 'python3 -m pytest -q -p no:cacheprovider tests/contract'
     deps: ['~:venv']
-    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.yaml', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/contract/**/*']
+    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.yaml', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/.config/sluice.toml', '/tests/contract/**/*']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
   logic:
