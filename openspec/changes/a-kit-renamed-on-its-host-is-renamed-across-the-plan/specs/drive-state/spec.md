@@ -38,6 +38,7 @@ Where crew must act on or say where a bolt's work runs, it SHALL read what the r
 The kit SHALL be named as unread, nothing of it landed and every other bolt read as it stands, in each of these cases:
 - a runner that reports its repositories names none for the kit's name now. The refusal names the host, the repositories it keeps and `crew kit rename`;
 - no runner has reported the bolt or the kit;
+- the runner that took it reports two repositories by the kit's name, and the plan names the kit by its name alone;
 - two runners took the bolt's newest launch.
 
 #### Scenario: The runner that took the work

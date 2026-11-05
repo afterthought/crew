@@ -193,6 +193,7 @@ Today crew reads a started bolt's kit folder, and a kit's, from Flume's status o
 
 - **The runner reports its repositories:** the folder of the repository whose address names the kit's name now (`kit_now`, `kit_in`).
 - **It reports repositories, but not the kit:** the kit is unread. The refusal names the host, the kit, what the runner keeps there, and, where one of those might be the kit's new name, `crew kit rename`.
+- **It reports two repositories by the kit's name** (two owners of one name): the one at the kit's forge address, where the plan names the kit by it; else the kit is unread, naming both, as `crew.kit_kept` refuses two for the main-level host (`read.1`). Taking the first was not done: it would be a guess.
 - **It reports none:** as today, from Flume's status of its newest place naming one.
 
 The stream is still read from Flume's status of a place, since the stream is the place's fact.
