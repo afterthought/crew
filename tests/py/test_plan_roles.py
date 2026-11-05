@@ -49,6 +49,27 @@ def test_any_other_write_is_refused_naming_the_planner(monkeypatch, agent, key, 
     assert may(monkeypatch, agent, key, bolt) == said
 
 
+@pytest.mark.parametrize("agent, said", [
+    ("chuck@mac-studio", None),
+    ("wldn-planner", "the planner changes the plan through a proposal: crew plan propose, not crew kit rename"),
+    ("wldn-design", "wldn-design does not write the plan with crew kit rename: tell wldn-planner, who proposes it"),
+    ("wldn-ops", "wldn-ops does not write the plan with crew kit rename: tell wldn-planner, who proposes it"),
+    ("wldn-operator", "wldn-operator does not write the plan with crew kit rename: tell wldn-planner, who proposes it")])
+def test_a_kits_rename_is_the_users_at_a_shell_and_the_planners_by_proposal(monkeypatch, agent, said):
+    """Decision 2 of a-kit-renamed-on-its-host-is-renamed-across-the-plan (roles.1): the user runs crew kit rename at a
+    shell; the planner proposes it, and its direct run is refused naming crew plan propose; any other agent's is refused
+    naming the planner."""
+    assert may(monkeypatch, agent, ("kit", "rename")) == said
+
+
+def test_a_proposal_holding_a_rename_is_the_planners_to_make_and_the_users_to_approve(monkeypatch):
+    """plan.3: the planner proposes a rename, its Do read by the command line's grammar, and its approval, by the user on
+    the card, applies it by the same function as a direct run (plan.apply_all), which asks may_write nothing."""
+    assert may(monkeypatch, "wldn-planner", ("plan", "propose")) is None
+    assert may(monkeypatch, "chuck@mac-studio", ("plan", "approve")) is None
+    assert plan.OPS[(lambda a: (a.cmd, a.sub))(plan.do_args("wldn", "kit rename tailrace timber"))] is plan.op_kit_rename
+
+
 # wldn running its planner, design agent and ops as their kinds, and its reviewer and operator standing.
 RUNS = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], flume=dict(
     dict.fromkeys(crew.KIND_ROLES, False), planner="wldn-main", design="wldn-main", ops="wldn-main"))})

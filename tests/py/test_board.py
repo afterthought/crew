@@ -2055,3 +2055,28 @@ class TestRuns:
 
 def crew_standing():
     return {r: False for r in crew.KIND_ROLES}
+
+
+class TestRenamedKit:
+    """Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan: a partition whose landings were recorded under
+    tailrace, renamed timber since, names timber alone, its kits read as the rail's read reads them (plan.kits_at, from
+    the landings and the renames of one read of runs/); and the agents' views keep the keys crew's mod reads (code.8), so
+    plugin/hooks/status.js is untouched."""
+    LANDED = {"Id": "20261104T100000Z-1-deneb-1-1", "At": "2026-11-04T10:00:00Z", "Act": "bolt.land", "On": ["bolt/ledger"],
+              "From": [], "Commit": [], "Repo": "agentplot/tailrace", "Head": "a" * 40}
+    RENAMED = {"Id": "20261105T100000Z-1-deneb-1-1", "At": "2026-11-05T10:00:00Z", "Act": "kit.rename", "On": ["kit/timber"],
+               "From": ["kit/tailrace"], "Commit": [], "Repo": "timber", "Count": "21"}
+
+    def board(self, monkeypatch, renames):
+        monkeypatch.setattr(plan, "runs_at", lambda repo, tip: {"landings": [self.LANDED], "renames": renames})
+        r = read()
+        r["kits"] = {l: plan.kits_at(repo, tip, p) for l, repo, tip, p in r["found"]}
+        return board.board_data(FLEET, ["wldn"], r, NOW)
+
+    def test_the_board_names_the_kit_by_its_name_now_and_the_views_keep_their_keys(self, monkeypatch):
+        renamed, before = self.board(monkeypatch, [self.RENAMED]), self.board(monkeypatch, [])
+        assert renamed["partitions"][0]["kits"] == ["breadboard-kit", "switchboard-kit", "timber"]
+        assert before["partitions"][0]["kits"] == ["agentplot/tailrace", "breadboard-kit", "switchboard-kit"]
+        v, was = json.loads(json.dumps(board.agent_views(renamed))), json.loads(json.dumps(board.agent_views(before)))
+        assert set(v) == set(was) == {"read_at", "stale_after_ms", "stale", "views", "cards"}
+        assert set(v["views"]) == set(was["views"]) and not any("tailrace" in t for lines in v["views"].values() for l in lines for t, _ in l)

@@ -367,6 +367,7 @@ class TestRaise:
         monkeypatch.setattr(plan, "recfix", lambda text, what: None)
         # switchboard-kit's work runs where the runner that took it reported it, in /w/switchboard-kit/main (plan.kit_at)
         monkeypatch.setattr(plan, "runners", lambda repo, label: {})
+        monkeypatch.setattr(plan, "renames_at", lambda repo, tip: [])  # no kit renamed
         monkeypatch.setattr(plan, "kit_at", lambda fleet, label, kit, run=None: {
             "label": label, "machine": "chuck-herdr-alpha", "stream": "wldn",
             "kit": {"name": KIT, "repo": f"WilldanGroup/{KIT}", "main": f"/w/{KIT}/main", "dir": f"/w/{KIT}/main"}})

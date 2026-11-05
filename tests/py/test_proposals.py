@@ -218,10 +218,21 @@ class TestRestsOnAccepted:
         w = apply(FactsWrite(text), *dos)
         assert plan.record_items(self.FLEET, "wldn", w.plan, args(*dos)) == []
 
+    def test_a_source_naming_the_works_kit_by_a_former_name_is_read_in_the_kits_checkout(self):
+        """Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan: switchboard-kit was WilldanGroup/old-board,
+        renamed; a source naming old-board's record is the kit's record, read where its host keeps switchboard-kit, and
+        another repository's is still its own."""
+        dos = (f'unit add n "N." --bolt held --source WilldanGroup/old-board:docs/adr/0017 --source agentplot/sluice:docs/adr/0022',)
+        w = apply(FactsWrite(plan_text(bolts=[("held", KIT, "swb-1")])), *dos)
+        assert plan.record_items(self.FLEET, "wldn", w.plan, args(*dos), [("old-board", KIT)]) == [
+            ("unit", "n", KIT, self.REPO, 17), ("unit", "n", "agentplot/sluice", "agentplot/sluice", 22)]
+        assert plan.record_items(self.FLEET, "wldn", w.plan, args(*dos))[0] == (
+            "unit", "n", "WilldanGroup/old-board", "WilldanGroup/old-board", 17)
+
     def test_work_of_a_kit_its_main_level_host_keeps_no_checkout_of_naming_a_record_is_refused(self):
         said, _ = refused(self.items, 'unit add n "N." --repo breadboard-kit --source docs/adr/0001')
         assert said == ("unit n names a decision record, and wldn's main level runs on mac-studio, and no space there keeps "
-                        "breadboard-kit, so crew can't tell whose it is")
+                        "breadboard-kit, so crew can't tell whose it is; if it was renamed on its host, crew kit rename breadboard-kit <new> names it so in the plan")
         assert self.items('unit add m "M." --repo breadboard-kit --source docs/architecture/core.md') == []
 
 

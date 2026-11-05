@@ -145,3 +145,36 @@ class TestCommand:
         monkeypatch.setenv("CREW_AGENT", "madswan-planner")
         with pytest.raises(plan.Refusal, match="^madswan-planner does not run crew main fix: main-level ops and the user do; tell madswan-ops$"):
             plan.may_write(fleet, ("main", "fix"), a)
+
+
+class TestRenamed:
+    """Decision 3 of a-kit-renamed-on-its-host-is-renamed-across-the-plan: a fix of main launched under its kit's former
+    name, fix/main/tailrace/x, read once madswan has renamed tailrace timber, is timber's: on timber's landings row, and
+    reached by that row's send, crew main fix timber x --send."""
+    RENAME = {"Id": "20261105T100000Z-1-deneb-1-1", "At": "2026-11-05T10:00:00Z", "Act": "kit.rename", "On": ["kit/timber"],
+              "From": ["kit/tailrace"], "Commit": [], "Repo": "timber", "Count": "21"}
+
+    def launched(self, entries=()):
+        """madswan's write with fix x launched on tailrace's main before the rename, its code delivered and its submission
+        held (tests/py/flume-0.3.6/held.json), then read at a tip whose run record holds entries."""
+        w = write(runners=ran({1: "held"}))
+        plan.main_fix_change(madswan_fleet(), w, "agentplot/tailrace", "x", "start", WORDS)
+        return FactsWrite(w.plan.text(), files=w.files, runners=ran({1: "held"}), label="madswan", entries=entries)
+
+    def test_it_is_shown_on_the_renamed_kits_row(self, monkeypatch):
+        import crew
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        w = self.launched()
+        now = plan.launches_now(plan.Plan(w.files["requests.rec"]).recs("Request"), plan.renames_in([self.RENAME]))
+        assert [f["kit"] for f in runner.main_fixes_waiting(now, w.runners())] == ["timber"]
+        land, = [r for r in plan.rail_rows(madswan_fleet(), [("madswan", "o/state", "tip", w.plan)], {}, [], {}, None,
+                                            {"madswan": (now, w.runners())}) if r["group"] == "land"]
+        assert land["key"] == "land/timber"
+        assert land["what"][1].endswith("can land: madswan-ops sends it with crew main fix timber x --send")
+
+    def test_the_rows_send_reaches_it_and_its_work_stays_as_launched(self):
+        w = self.launched([self.RENAME])
+        assert plan.main_fix_change(madswan_fleet(), w, "timber", "x", "send", None) == dict(n=2, host="deneb")
+        assert requests(w)[1] == {"Request": "2", "Act": "retry", "Work": "fix/main/tailrace/x", "Of": "1", "Submission": "yes"}
+        with pytest.raises(plan.Refusal, match="^no launch of fix/main/timber/x stands in requests.rec"):
+            plan.main_fix_change(madswan_fleet(), self.launched(), "timber", "x", "send", None)

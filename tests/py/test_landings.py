@@ -84,6 +84,9 @@ def test_the_plan_write_that_adds_a_bolt_named_as_a_kit_refuses_it_writing_nothi
 
         def kits(self, label):
             return KITS
+
+        def renames(self, label):
+            return []
     a = argparse.Namespace(repo="swancloud", bolt="crew", goal="x", source=[], before=None)
     with pytest.raises(crew.Refusal, match="may not be named crew"):
         plan.op_bolt_new(Ctx(), a)

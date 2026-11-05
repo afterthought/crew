@@ -857,6 +857,7 @@ def landing(monkeypatch, tmp_path):
     monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(
         plan.HEADER.replace("%rec: Unit", "Bolt: tools\nRepo: crew\nGoal: g\n\n%rec: Unit")))
     monkeypatch.setattr(plan, "landings_at", lambda repo, tip: [])
+    monkeypatch.setattr(plan, "renames_at", lambda repo, tip: [])
     b.brief = tmp_path / "record-0053.md"
     b.brief.write_text("Write docs/adr/0053-roles-run-as-kinds.md with this text whole:\n# 53. Roles run as kinds\n")
     return b

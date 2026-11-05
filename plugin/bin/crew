@@ -112,6 +112,19 @@
 #                                      same hands, and built in its bolt as a Flume place of the chore kind; a unit or
 #                                      chore added to or moved into a bolt whose landing is queued, or landing again,
 #                                      is refused naming the landing
+#   crew kit   rename <old> <new> [--label L]
+#                                      a kit renamed on its host renamed across the plan, the user's at a shell or a
+#                                      proposal's, the planner's own run refused naming crew plan propose and any other
+#                                      agent's naming the planner: in one commit the Repo of every Bolt and Unit record
+#                                      naming <old>, by its name or <owner>/<name>, set to <new>, and a kit.rename entry
+#                                      in the run record naming both, with Count the records renamed; nothing else
+#                                      rewritten, no request appended and nothing launched, so a started bolt goes on as
+#                                      it stood; refused, nothing written, for an old name that is no kit of the
+#                                      partition or that a rename already renamed, while the partition's main-level
+#                                      host's spaces keep a repository by <old> or none by <new>, for a new name a
+#                                      bolt's, for two names of one kit, and when the hosts file can't be read. What
+#                                      crew recorded under a former name and never rewrites is read under the name now,
+#                                      and bolt new, unit add and chore add given one write the name now and say so
 #   crew plan  propose|proposed|approve|answer|drop ...
 #                                      the planner's proposals: a change to the plan, waiting on the user alone and applied
 #                                      once the user approves it,
@@ -434,7 +447,7 @@ need_label() { [[ -n ${1:-} ]] || { echo "which partition? partitions: $(py labe
 # ------------------------------------------------------------------------------------------------- commands
 
 case $cmd in
-  bolts | bolt | unit | chore | fix | signal | state | plan | rail | card | record | answer) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  bolts | bolt | unit | chore | kit | fix | signal | state | plan | rail | card | record | answer) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   role)  # crew role start | end --report <path> "<what was done>" | land <repo> <name> --brief-file <file>: a role's
     # run's start, end and work that lands, in its place on its main level's host; and crew role open <role>, the
     # user's; never forwarded

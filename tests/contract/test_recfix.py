@@ -3,7 +3,9 @@ commits, a signal's and a capture's markdown by its frontmatter as one record, s
 refused, named by its file and line, and nothing is pushed (plan.1, signals.4); a Move the moves file's enum does not
 allow is refused (the route a unit add --signal writes); a hand edit that duplicates a key is refused by name
 (read.1, crew bolts naming the commit); a started bolt is marked Path: flume, the one Path the plan takes, and a new
-branch allows no Team or Agreed while an old branch's records still pass; and requests.rec and a runner's branch files are refused for what their descriptors do not allow."""
+branch allows no Team or Agreed while an old branch's records still pass; requests.rec and a runner's branch files are refused for what their descriptors do not allow;
+and a kit's rename (plan.op_kit_rename) is one commit whose plan passes, its entry the commit after, while a plan it
+would leave naming a record's Repo twice is refused before any commit."""
 import json
 import re
 
@@ -215,3 +217,86 @@ def test_a_request_is_written_in_the_commit_of_the_plan_write_that_occasions_it_
         with pytest.raises(Refusal, match=said):
             plan.write(state.fleet, state.LABEL, lambda w: change(w) and [], "plan: ask again")
         assert state.git("rev-parse", ref) == sha
+
+
+def madswan_plan():
+    """madswan's plan.rec as afterthought/crew-state held it on 2026-11-05, under crew's descriptors (plan.HEADER): 21
+    Bolt and Unit records in tailrace, the started bolt you-sign-in-to-staging and its unit in flywheel-cloud, and a
+    bolt of timber's own whose goal a tailrace bolt shares."""
+    bolt = lambda b, repo, goal, path=None: f"Bolt: {b}\nRepo: {repo}\nGoal: {goal}\n" + (f"Path: {path}\n" if path else "") + "\n"
+    unit = lambda u, repo, b: f"Unit: {u}\nRepo: {repo}\nBolt: {b}\nIntent: {u} is built.\n\n"
+    bolts = "".join(bolt(f"trc-{n}", "tailrace", f"Goal {n}.") for n in (1, 2, 3)) + bolt("you-sign-in-to-staging", "flywheel-cloud", "Sign in.", "flume")
+    bolts += bolt("timber-own", "timber", "Goal 1.")
+    units = "".join(unit(f"tailrace-work-{n}", "tailrace", f"trc-{1 + n % 3}") for n in range(18))
+    units += unit("one-seam-turns-every-credential-into-a-principal", "flywheel-cloud", "you-sign-in-to-staging")
+    return plan.HEADER.replace("%rec: Unit", bolts + "%rec: Unit") + "\n" + units
+
+
+def renamed_fleet(state):
+    """madswan's fleet with its main level on deneb, whose spaces keep agentplot/timber and no tailrace."""
+    return dict(state.fleet, partitions={state.LABEL: dict(state.fleet["partitions"][state.LABEL], machine="deneb")},
+                hosts={"deneb": {"sessions": {"main": {"dir": "/d", "repos": ["agentplot/timber", "agentplot/boomdrive-cloud"]}}}})
+
+
+def a_rename(state, monkeypatch):
+    """crew kit rename tailrace timber, run by the user on deneb over madswan's plan: the fleet crew reads, the
+    entry's push to the branch (record.reach) among it, and the command's arguments."""
+    import argparse
+    import crew
+    import record
+    fleet = renamed_fleet(state)
+    monkeypatch.setenv("CREW_AGENT", "")
+    monkeypatch.setenv("CREW_SESSION", "")
+    monkeypatch.setattr(crew, "load", lambda: fleet)
+    monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+    monkeypatch.setattr(record, "_session", ...)
+    state.push(f"{state.LABEL}/main", {"plan.rec": madswan_plan()}, "plan: madswan's plan (chuck@deneb)")
+    return fleet, argparse.Namespace(cmd="kit", sub="rename", old="tailrace", new="timber", label=state.LABEL)
+
+
+def test_a_rename_is_one_commit_whose_plan_passes_recfix_and_its_entry_names_both_names(state, monkeypatch):
+    """Decision 2 of a-kit-renamed-on-its-host-is-renamed-across-the-plan (plan.1, plan.2, state.1): the user's crew kit
+    rename tailrace timber is one commit of plan.rec alone, under its Crew-Entry, the plan it leaves passing a real
+    recfix --check with every tailrace record naming timber, two bolts of one goal now under one name among them, since
+    %unique holds a field once within a record and not across records; its kit.rename entry, the commit after on the
+    branch (read.5), names kit/timber and kit/tailrace with Repo timber and Count 21."""
+    import datetime
+    import record
+    fleet, a = a_rename(state, monkeypatch)
+    ref = f"{state.LABEL}/main"
+    before = state.git("rev-parse", ref)
+    plan.COMMANDS[("kit", "rename")](fleet, a)
+    commits = state.git("rev-list", "--reverse", f"{before}..{ref}").split()
+    assert len(commits) == 2
+    sha, entry = commits
+    assert state.git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split() == ["plan.rec"]
+    assert state.git("log", "-1", "--format=%s", sha) == f"plan(kit): rename tailrace timber ({plan.agent()})"
+    eid = state.git("log", "-1", "--format=%(trailers:key=Crew-Entry,valueonly)", sha).strip()
+    text = state.git("show", f"{sha}:plan.rec")
+    plan.recfix(text, "plan.rec")
+    p = plan.Plan(text)
+    assert [r.name() for r in p.bolts() + p.work() if r.get("Repo") == "timber"][:4] == ["trc-1", "trc-2", "trc-3", "timber-own"]
+    assert sum(1 for r in p.bolts() + p.work() if r.get("Repo") == "timber") == 22 and "Repo: tailrace" not in text
+    assert [(b.get("Repo"), b.get("Path")) for b in p.bolts() if b.name() == "you-sign-in-to-staging"] == [("flywheel-cloud", "flume")]
+    day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    e, = [e for e in record.parse(state.git("show", f"{entry}:runs/deneb/{day}.rec")) if e["Id"] == eid]
+    assert (e["Act"], e["On"], e["From"], e["Repo"], e["Count"], e.get("Refused")) == (
+        "kit.rename", ["kit/timber"], ["kit/tailrace"], "timber", "21", None)
+    assert plan.renames_in([e]) == [("tailrace", "timber")]
+
+
+def test_a_rename_whose_plan_breaks_unique_repo_goal_is_refused_before_any_commit(state, monkeypatch):
+    """plan.1: the plan a rename leaves goes through a real recfix --check before land commits it, so one that would
+    hold a record naming its Repo twice, against %unique: Repo Goal, is refused, the branch as it was."""
+    fleet, a = a_rename(state, monkeypatch)
+    ref = f"{state.LABEL}/main"
+    before = state.git("rev-parse", ref)
+    op = plan.op_kit_rename(plan.Direct(fleet, a), a)
+
+    def twice(w):
+        op.change(w)
+        w.plan.bolt("trc-1").add("Repo", "tailrace")
+        return []
+    with pytest.raises(Refusal, match=r"^plan.rec fails recfix --check: .*field 'Repo' should be unique in this record"):
+        plan.write(fleet, state.LABEL, twice, op.subject, act=op.act, on=op.on, frm=op.frm, fields=op.fields)
+    assert state.git("rev-parse", ref) == before

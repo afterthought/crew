@@ -107,7 +107,7 @@ def plan_text(bolts=(), units=()):
 class FactsWrite:
     """A plan.Write over a plan in memory: its files given, each host's runner as given (runners, {host: its reading as
     runner.host_read gives it}), the run record at its tip as given (entries, oldest first, none unless given; logged,
-    which a case may set after), and a
+    which a case may set after), the partition's renames and kits read from those entries, and a
     refusal for a missing bolt or unit that reads no git for the commit that removed it."""
 
     def __new__(cls, text, files=None, runners=None, label="wldn", entries=()):
@@ -126,6 +126,12 @@ class FactsWrite:
 
             def entries(self):
                 return list(self.logged)
+
+            def renames(self):
+                return plan.renames_in(self.logged) + self.renamed
+
+            def kits(self):
+                return plan.partition_kits(self.plan, self.logged, self.renames())
         w = W(None, label, None, plan.Plan(text))
         w.files, w.logged = dict(files or {}), list(entries)
         return w

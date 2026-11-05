@@ -166,13 +166,16 @@ WAITING = ("waiting", "handed", "failed")  # a step in one of these states is an
 
 def landings(es):
     """The partition's landings, from its bolt.land entries not refused, oldest first: each {bolt, units, at, by, repo,
-    head}, the kit it landed on and the commit that kit's main held afterwards, None where the entry has none."""
-    out = []
+    head}, the kit it landed on, by its name now through the kit.rename entries among es (plan.kit_now), so a deploy
+    carries the landings recorded under a kit's former name, and the commit that kit's main held afterwards, None where
+    the entry has none."""
+    import plan
+    out, renames = [], plan.renames_in(es)
     for e in es:
         bolt = next((o[5:] for o in e["On"] if o.startswith("bolt/")), None) if e.get("Act") == "bolt.land" and not e.get("Refused") else None
         if bolt:
             out.append(dict(bolt=bolt, units=[o[5:] for o in e["On"] if o.startswith("unit/")], at=e["At"], by=e.get("By"),
-                            repo=e.get("Repo"), head=e.get("Head")))
+                            repo=plan.kit_now(e.get("Repo"), renames), head=e.get("Head")))
     return out
 
 
@@ -592,7 +595,8 @@ def raise_deploy(fleet, row, acts=None, note=None):
     offer = state(es)[0][env]
     since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=DAYS)).isoformat()
     gathered, _ = record.gather(fleet, [label], since)
-    lands = sorted({e["Id"]: e for e in es + [e for e in gathered if e.get("Act") == "bolt.land"]}.values(), key=lambda e: (e["At"], e["Id"]))
+    lands = sorted({e["Id"]: e for e in es + [e for e in gathered if e.get("Act") in ("bolt.land", "kit.rename")]}.values(),
+                   key=lambda e: (e["At"], e["Id"]))
     base = offer.get("Base")
     ranged = kit_range(fleet, label, base, offer["Head"]) if base not in (None, "", "none") else (None, None, None)
     d = kept(label, env, offer["Head"])

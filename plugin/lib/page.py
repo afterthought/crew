@@ -182,9 +182,11 @@ def release_notes(d, bolt):
 
 def deploys(d, entries, machine, since=None):
     """The deploys view: each environment's deploys that moved since since or are still open, and the operations waiting
-    on it, from the ops entries the partition's main level's host wrote and the landings (ops.environments), each
-    carried bolt with its release notes from the page's lineage: [{env, deploys, waiting}], by environment."""
-    mine = [e for e in entries if ((e.get("Act") or "").startswith("ops.") and e.get("Host") == machine) or e.get("Act") == "bolt.land"]
+    on it, from the ops entries the partition's main level's host wrote, the landings and the kits' renames
+    (ops.environments), each carried bolt with its release notes from the page's lineage: [{env, deploys, waiting}], by
+    environment."""
+    mine = [e for e in entries if ((e.get("Act") or "").startswith("ops.") and e.get("Host") == machine)
+            or e.get("Act") in ("bolt.land", "kit.rename")]
     return [{"env": env, "waiting": v["waiting"],
              "deploys": [dict(x, notes=[{"bolt": b, "proposals": release_notes(d, b)} for b in x["bolts"] or []]) for x in v["deploys"]]}
             for env, v in ops.environments(sorted(mine, key=lambda e: (e["At"], e["Id"])), since).items()]
@@ -264,12 +266,13 @@ def agents_in(fleet, label):
 def fleet_kits(part, entries, since):
     """Each of the partition's kits, the repositories its plan and its landings name (plan.partition_kits, as the board
     read them), once, in their order; its main's last landing in the window, the newest bolt.land not refused whose
-    Repo is the kit, or none since the window's start; and what is queued for that main: its started bolts that wait
-    to land, each with its landing's card open or none, those in construction, and its planned bolts and queued units,
-    counted."""
-    out = []
+    Repo is the kit by its name now, through the kit.rename entries in the window (plan.kit_now), or none since the
+    window's start; and what is queued for that main: its started bolts that wait to land, each with its landing's card
+    open or none, those in construction, and its planned bolts and queued units, counted."""
+    out, renames = [], plan.renames_in(entries)
     for kit in dict.fromkeys(part["kits"]):
-        land = next((e for e in reversed(entries) if e.get("Act") == "bolt.land" and not e.get("Refused") and e.get("Repo") == kit), None)
+        land = next((e for e in reversed(entries) if e.get("Act") == "bolt.land" and not e.get("Refused")
+                     and plan.kit_now(e.get("Repo"), renames) == kit), None)
         landing = land and {"bolt": next((o[5:] for o in land["On"] if o.startswith("bolt/")), None), "head": land.get("Head"), "at": land["At"], "by": land.get("By")}
         mine = [b for b in part["construction"] if b["repo"] == kit]
         waits = [{"bolt": b["bolt"], "card": next((m["card"] for m in b["markers"] if m["card"]), None)} for b in mine if b["state"] == "waits"]

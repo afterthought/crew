@@ -82,6 +82,32 @@ class TestDeploys:
         assert page.deploys(d, self.es(), "mac-studio", "2026-10-12T10:30:00Z") == [{"env": "mac-studio", "deploys": [], "waiting": []}]
 
 
+class TestFleetKits:
+    """The fleet page's kits (page.fleet_kits): a kit's main's last landing, read by the kit's name now (Decision 3 of
+    a-kit-renamed-on-its-host-is-renamed-across-the-plan), from an entry recorded under its former name."""
+    PART = {"kits": ["crew", "timber"], "construction": [], "bolt_plan": {"planned": [], "queue": []}}
+
+    def test_a_renamed_kits_last_landing_is_read_from_an_entry_under_its_former_name(self):
+        es = [entry("bolt.land", ["bolt/b"], minutes=1, Repo="crew", Head="a" * 40, By="madswan-ops"),
+              entry("bolt.land", ["bolt/ledger"], minutes=2, Repo="tailrace", Head="b" * 40, By="madswan-ops"),
+              entry("kit.rename", ["kit/timber"], ["kit/tailrace"], minutes=3, Repo="timber", Count="21")]
+        kits = {k["kit"]: k["landing"] for k in page.fleet_kits(self.PART, es, "2026-10-12T00:00:00Z")}
+        assert (kits["timber"]["bolt"], kits["timber"]["head"], kits["crew"]["bolt"]) == ("ledger", "b" * 40, "b")
+        assert {k["kit"]: k["landing"] for k in page.fleet_kits(self.PART, es[:2], "2026-10-12T00:00:00Z")}["timber"] is None
+
+    def test_a_renamed_kits_deploy_carries_the_landings_under_its_former_name(self):
+        """page.deploys reads the renames with the landings and the main level's ops entries."""
+        S1, S2 = "a" * 40, "b" * 40
+        es = [entry("bolt.land", ["bolt/one"], minutes=1, Host="deneb", Repo="tailrace", Head=S1),
+              entry("ops.deploy", ["env/deneb"], minutes=2, Host="deneb", Head=S1, Base="none", Phase="start"),
+              entry("ops.deploy", ["env/deneb"], minutes=3, Host="deneb", Head=S1, Phase="end", Outcome="done"),
+              entry("kit.rename", ["kit/timber"], ["kit/tailrace"], minutes=4, Host="deneb", Repo="timber", Count="1"),
+              entry("bolt.land", ["bolt/two"], minutes=5, Host="deneb", Repo="timber", Head=S2),
+              entry("ops.deploy", ["env/deneb"], minutes=6, Host="deneb", Head=S2, Base=S1, Phase="start")]
+        env, = page.deploys(page.data(es), es, "deneb")
+        assert [(x["to"], x["bolts"], x["bolts_why"]) for x in env["deploys"]] == [(S2, ["two"], None), (S1, ["one"], None)]
+
+
 class TestLabels:
     def test_each_node_is_labelled_from_the_state_and_one_the_state_no_longer_holds_from_its_entries(self):
         d = page.data(FLOW + [entry("unit.drop", ["unit/d", "bolt/tenant-environments"], why="plan(tenant-environments): drop d")])
