@@ -121,7 +121,7 @@ Alternatives considered:
 - The partition's main-level host keeps a repository by `<new>` in its spaces (`crew.kit_kept`) and keeps none by `<old>`. This is the fleet's word that the rename has happened. The refusal names the host and what its spaces keep, say "deneb's spaces still keep agentplot/tailrace, so it is not renamed there", or "deneb's spaces keep no timber". The hosts file is read as `main_kit` reads it; one crew cannot read is a refusal (`read.1`).
 - `<new>` is not the name of a bolt of the partition, since `land/<new>` would then name a bolt and not the kit (`kit_named`).
 - `<old>` and `<new>` differ by name.
-- The plan the rename leaves passes `recfix --check` and crew's own rules (`plan.1`). `%unique: Repo Goal` refuses two bolts of one goal meeting under one name.
+- The plan the rename leaves passes `recfix --check` and crew's own rules (`plan.1`). recutils' `%unique: Repo Goal` holds each of those fields once within a record, so a record left naming its Repo twice is refused before any commit; two bolts of one goal meeting under one name are two records, and pass.
 
 **The write.** One commit sets the `Repo` of every Bolt and Unit record that names `<old>` to `<new>`, as `<new>` is given. A record names `<old>` when it does by name or forge address, compared as `kit_in` compares names. The write moves no record, and touches no other field of any record or any other file.
 - The commit's subject is `plan(kit): rename <old> <new> (<agent>)`, with its `Crew-Entry` (`plan.2`).
