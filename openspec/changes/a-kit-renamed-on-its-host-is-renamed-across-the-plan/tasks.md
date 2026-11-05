@@ -31,7 +31,7 @@ Each check is a moon task of the `tests` project, run through `tests/suite`: `lo
 
 ## 4. The command, its docs and its brief
 
-- [ ] 4.1 `crew kit rename` runs through the crew command on the stubs (Task notes 4.1). Verify `tests/suite t-journey-plan` ends with "0 failed".
+- [x] 4.1 `crew kit rename` runs through the crew command on the stubs (Task notes 4.1). Verify `tests/suite t-journey-plan` ends with "0 failed".
   - The user's run writes one commit and its entry.
   - The planner's direct run is refused.
   - A proposal holding a rename is checked, carded and applied on approval.

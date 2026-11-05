@@ -434,7 +434,7 @@ need_label() { [[ -n ${1:-} ]] || { echo "which partition? partitions: $(py labe
 # ------------------------------------------------------------------------------------------------- commands
 
 case $cmd in
-  bolts | bolt | unit | chore | fix | signal | state | plan | rail | card | record | answer) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  bolts | bolt | unit | chore | kit | fix | signal | state | plan | rail | card | record | answer) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   role)  # crew role start | end --report <path> "<what was done>" | land <repo> <name> --brief-file <file>: a role's
     # run's start, end and work that lands, in its place on its main level's host; and crew role open <role>, the
     # user's; never forwarded
