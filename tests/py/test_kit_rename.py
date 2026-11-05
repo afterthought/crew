@@ -4,15 +4,18 @@ in one act"): crew kit rename <old> <new> sets the Repo of every Bolt and Unit r
 and nothing else, refused with nothing written unless the partition's main-level host's spaces keep the new name and
 not the old (plan.op_kit_rename, plan.rename_refusal). And a plan command given a kit's former name writes its name now
 and says so (Decision 4; plan.kit_given), a proposal approved after the rename among them. The rename's one commit and
-its entry under a real recfix are the contract tier's (tests/contract/test_recfix.py)."""
+its entry under a real recfix are the contract tier's (tests/contract/test_recfix.py). And madswan's started bolt
+you-sign-in-to-staging, renamed, lands under its kit's name now in the folder the runner reports keeping it in (Decision
+7; runner.where)."""
 import argparse
+import json
 
 import pytest
 
 import plan
 import runner
 
-from facts import STANDING, FactsWrite, apply, keeping, known, plan_text
+from facts import FLUME, STANDING, FactsWrite, apply, crew_read, keeping, known, plan_text
 
 # madswan's plan as afterthought/crew-state held it on 2026-11-05 (design's Context): 21 records in tailrace, three bolts
 # and eighteen units, one of them queued; the started bolt you-sign-in-to-staging and its merged unit in flywheel-cloud;
@@ -201,3 +204,75 @@ class TestAFormerName:
         op.change(w)
         op.after("afterthought/crew-state", "0" * 40)
         assert w.plan.bolt("y").get("Repo") == "crew" and capsys.readouterr().out == ""
+
+
+# Where deneb's runner keeps flywheel-cloud's clone, which Flume's status of one-seam's place still names, and the
+# folder the clone was renamed to (design's Context; runbook 3.5, step 3).
+OLD = "/Users/chuck/.local/share/flywheel/repositories/agentplot/flywheel-cloud"
+NEW = "/Users/chuck/.local/share/flywheel/repositories/agentplot/boomdrive-cloud"
+PLACE = f"/Users/chuck/.local/share/flume/places/5d2c7e914b0a/change--{SEAM}"
+COMMIT = "84393d4" + "0" * 33  # one-seam's landing on bolt/you-sign-in-to-staging, its first seven as read
+
+
+def deneb(kept=(("agentplot/boomdrive-cloud", NEW), ("agentplot/timber", "/Users/chuck/.local/share/flywheel/repositories/agentplot/timber"))):
+    """deneb's runner of madswan as crew reads it (runner.host_read): request 1 answered launched, its place carried once
+    Flume tidied it, landed at COMMIT, a flume 0.3.6 status (tests/py/flume-0.3.6/landed.json) naming the old clone's
+    folder; and repositories.rec naming each repository it keeps (kept) by its forge address with its folder, as the
+    runner reports them once it keeps the renamed clone (R2)."""
+    status = json.loads((FLUME / "landed.json").read_text())
+    p = status["status"]["places"][0]
+    p.update(place=f"{PLACE}@1793474400", repository=OLD, name=SEAM, branch=f"change/{SEAM}", base=f"bolt/{STAGING}",
+             stream={"name": "madswan", "from": "intent"})
+    p["phase"]["tidied"]["over"]["landed"]["commit"] = COMMIT
+    files = {"runner.rec": plan.Plan(runner.RUNNER + "\nHost: deneb\nVersion: 0.1.0\nSince: 2026-11-04T22:00:00Z\n"),
+             "answers.rec": plan.Plan(runner.ANSWERS + f"\nRequest: 1\nOutcome: launched\nPlace: {PLACE}\nAt: 2026-11-04T23:01:00Z\n"),
+             "places.rec": plan.Plan(runner.PLACES + f"\nRequest: 1\nPlace: {PLACE}\nAt: 2026-11-05T00:23:12Z\nStatus: {json.dumps(status)}\n"),
+             "repositories.rec": plan.Plan(runner.REPOSITORIES + "".join(f"\nRepository: {a}\nFolder: {f}\n" for a, f in kept))}
+    return {"deneb": runner.host_read("madswan", "deneb", "4a3524e5" + "0" * 32, files, {})}
+
+
+class TestTheStartedBoltLands:
+    """Decision 7: once madswan's plan renames flywheel-cloud boomdrive-cloud and deneb's runner reports the renamed clone,
+    you-sign-in-to-staging is read and landed there under its kit's name now, with nothing launched again."""
+
+    @pytest.fixture(autouse=True)
+    def here(self, monkeypatch):
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "deneb")
+
+    def rows(self, w, run):
+        """The rail's land rows (plan.rail_rows) of madswan's plan as the write leaves it, the bolt's head green, read by
+        deneb in the renamed clone's folder: a survey of any other folder does not hold the kit."""
+        k = crew_read(bolts={STAGING: {"verdict": "passed (4 run)", "head_at": "2026-11-05T00:30:00Z"}})["deneb"]["kits"]["/crew/main"]
+        sv = {"deneb": {"ok": True, "kits": {NEW: k}}}
+        return [r for r in plan.rail_rows(RENAMED, [("madswan", "afterthought/crew-state", "tip", w.plan)], sv, [], {}, None,
+                                          {"madswan": run}) if r["group"] == "land"]
+
+    def test_one_seam_reads_merged_and_the_bolt_lands_in_the_renamed_clone_on_land_boomdrive_cloud(self):
+        """request 1, launched under flywheel-cloud, is read as boomdrive-cloud's (plan.launches_now), one-seam reads
+        merged at 84393d4 from deneb's place, the bolt is read and landed in the folder deneb's runner reports for
+        agentplot/boomdrive-cloud over the place's stale one, and it is a row of land/boomdrive-cloud; requests.rec is
+        as it was."""
+        w = written()
+        rename(w, "flywheel-cloud", "boomdrive-cloud")
+        assert w.files == {"requests.rec": REQUESTS}
+        requests = plan.launches_now(plan.Plan(REQUESTS).recs("Request"), w.renames())
+        run = (requests, deneb())
+        s = runner.piece_stage(requests, run[1], runner.launch_of(requests, f"unit/{SEAM}"))
+        assert (s["stage"], s["commit"]) == ("merged", COMMIT)
+        at = plan.bolt_at(RENAMED, "madswan", w.plan.bolt(STAGING), run)
+        assert (at["machine"], at["stream"], at["kit"]) == ("deneb", "madswan", {"name": "boomdrive-cloud", "repo": "boomdrive-cloud",
+                                                                                 "main": NEW, "dir": NEW})
+        rows = self.rows(w, run)
+        assert [(r["key"], r["bolts"]) for r in rows] == [("land/boomdrive-cloud", [{"bolt": STAGING, "host": "deneb", "can": True}])]
+        assert rows[0]["what"][1] == f"{STAGING}, on deneb, in Flume stream madswan: can land"
+
+    def test_before_the_rename_the_bolt_is_refused_naming_it_and_nothing_lands(self):
+        """Decision 7's last step: with the plan still naming flywheel-cloud, deneb's runner reports no repository by it, so
+        the bolt is refused naming deneb, what it keeps and crew kit rename, and no row offers it to land."""
+        w = written()
+        run = (plan.Plan(REQUESTS).recs("Request"), deneb())
+        with pytest.raises(plan.Refusal, match=f"^the runner on deneb took bolt {STAGING}'s work and keeps no flywheel-cloud: it keeps "
+                                               "agentplot/boomdrive-cloud, agentplot/timber, so crew can't tell where flywheel-cloud is "
+                                               "there; if flywheel-cloud was renamed on its host, crew kit rename flywheel-cloud <new>"):
+            plan.bolt_at(RENAMED, "madswan", w.plan.bolt(STAGING), run)
+        assert self.rows(w, run) == []
