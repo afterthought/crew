@@ -13,7 +13,6 @@ It lives in the kit:
 |---|---|---|
 | `docs/architecture/core.md` | The rules that bind wherever a change is made, and an index of the area pages | `CLAUDE.md` imports it, so every session in the kit has it |
 | `docs/architecture/<area>.md` | The rules that bind one area, with `paths:` frontmatter | A symlink in `.claude/rules/` loads it when the session reads a file under its paths |
-| `docs/architecture/_open.md` | Decisions waiting and code that stands against a rule | Read on demand; deleted when empty |
 | `docs/adr/NNNN-<title>.md` | One record (MADR) per decision a rule rests on | Named by the rule's source |
 | `openspec/specs/` | What each capability does | OpenSpec, unchanged |
 
@@ -31,7 +30,7 @@ Merge into one list: deduplicate, fold near-duplicates into the stronger wording
 
 ## 2. Curate with the user
 
-Work area by area. For each candidate: keep, rewrite until it is falsifiable, cut, or move to the area it binds. Settle the open questions with the user, at most two at a time, recommending an answer each time. A settled question whose reasoning would not be obvious later becomes an ADR. Where the code stands against a kept rule, note it in `_open.md`; the rule still stands.
+Work area by area. For each candidate: keep, rewrite until it is falsifiable, cut, or move to the area it binds. Settle the open questions with the user, at most two at a time, recommending an answer each time. A settled question whose reasoning would not be obvious later becomes an ADR. Where the code stands against a kept rule, the rule still stands.
 
 Keep `core.md` to rules that bind wherever an agent is working. A rule that only matters in one part of the tree belongs on that area's page, even if it is important. A rule tied to a topic rather than to paths (naming, process, how vendors are treated) stays in core.
 
@@ -66,7 +65,7 @@ ln -s ../../docs/architecture/<area>.md .claude/rules/<area>.md
 
 ADRs use MADR: frontmatter `number`, `title`, `status`, `date`, `decision-makers`; sections *Context and Problem Statement*, *Considered Options*, *Decision Outcome*. `0001-record-architecture-decisions.md` starts the folder.
 
-Delete `_candidates.md` once every candidate is placed, cut or carried into `_open.md`.
+Delete `_candidates.md` once every candidate is placed or cut.
 
 ## 4. Wire it in
 

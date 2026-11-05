@@ -220,8 +220,8 @@ class TestSites:
 
 class TestSitesOfAStartedBolt:
     """crew-sites "A started bolt's work shows no server": x, started, is listed with where its work runs and no
-    server, though one runs in a unit's place of crew's naming, since its places are Flume's (_open.md: the runner
-    reports a place's addresses)."""
+    server, though one runs in a unit's place of crew's naming, since its places are Flume's until the runner
+    reports a place's addresses."""
 
     def listed(self, monkeypatch):
         import crew
