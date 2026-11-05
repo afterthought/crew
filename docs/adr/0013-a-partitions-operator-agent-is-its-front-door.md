@@ -20,7 +20,7 @@ A session on the box, asked to send findings to swancloud's crew, offered to sen
 ## Considered options
 
 1. The partition's operator agent: it already works for the user and carries each request to whose job it is.
-2. The dispatcher, as in Flywheel.
+2. The dispatcher, as in Boomdrive.
 3. The design agent, since what crosses a partition is mostly findings and questions.
 4. The conductors, as the session offered.
 

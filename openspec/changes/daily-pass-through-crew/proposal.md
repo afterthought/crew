@@ -14,7 +14,7 @@ This change gives the daily pass crew's path. It is the last step of the finding
 - **Each landed capture and signal leaves a `capture` entry**, so a meeting signal's trace begins where an agent's does.
 - **Outside crew**, in each blueprints repo that runs a daily pass: the pass writes its captures in a scratch directory that git ignores, lands them with `crew signal land`, and pulls; it no longer commits `signals/` itself.
 
-Where meeting signals live is unchanged by this change: the blueprints. The user has an open question on whether they should follow an agent's signals into the flywheel's state; if so, the one thing that changes here is where `crew signal land` writes.
+Where meeting signals live is unchanged by this change: the blueprints. The user has an open question on whether they should follow an agent's signals into the drive's state; if so, the one thing that changes here is where `crew signal land` writes.
 
 ## Capabilities
 

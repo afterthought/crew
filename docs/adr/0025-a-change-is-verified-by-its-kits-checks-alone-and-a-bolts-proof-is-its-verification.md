@@ -28,7 +28,7 @@ OpenSpec's own schema says a task "MUST state how to verify completion (a test, 
 - What a change holds is each kit's own rule, said in its `openspec/config.yaml` and its rule pages, which OpenSpec hands its agents; crew reads of a change only what its machinery needs.
 - A change's verification should be what the kit itself can run: its checks, in its tiers, through its runner (moon, sluice, the flake check).
 - A hand list beside the checks is proof nobody can replay, and it has leaked into tasks.
-- crew and flywheel are generic over kits: swancloud deploys a fleet, switchboard a service; a revision may be deployed from main or from a bolt, and the design should not care.
+- crew and Boomdrive are generic over kits: swancloud deploys a fleet, switchboard a service; a revision may be deployed from main or from a bolt, and the design should not care.
 - What a live environment shows is observation, which crew already models as captures and signals.
 
 ## Decision outcome

@@ -39,7 +39,7 @@
 
 ## 7. Outside crew
 
-- [ ] 7.1 The blueprints repos' `signals/README.md` (willdan-blueprints first), as a reviewed commit: the six moves with `join` in place of `new-territory`; the two lanes and the agenda; that moves and items live on the flywheel's branch of the state repository and are written only through crew; that curation is a curator started with `crew curate`, on the user's word; that a decision record cites its agenda item and that item's signals. The `signal-capture` skill's sentence about "five curation moves" follows. Verify the README's move table matches `moves.rec`'s enum.
+- [ ] 7.1 The blueprints repos' `signals/README.md` (willdan-blueprints first), as a reviewed commit: the six moves with `join` in place of `new-territory`; the two lanes and the agenda; that moves and items live on the drive's branch of the state repository and are written only through crew; that curation is a curator started with `crew curate`, on the user's word; that a decision record cites its agenda item and that item's signals. The `signal-capture` skill's sentence about "five curation moves" follows. Verify the README's move table matches `moves.rec`'s enum.
 - [ ] 7.2 A decision for the user: when to curate wldn's 192 unmoved meeting signals, as one batch or by capture with `--only`. It is an operation, not part of this change's proof.
 
 ## 8. Proof on real work

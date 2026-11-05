@@ -33,14 +33,14 @@
 #                                      waits on its caller. <work> is the unit's or chore's name, or the fix's place
 #                                      (<bolt>--<name>)
 #
-# The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
+# The plan, the moves and the signals crew records, on the drive's branch <label>/main of the partition's state
 # repository, with requests.rec, crew's requests of the partition's runners for a started bolt's work, appended in the
 # commit of the plan write that occasions them, and for a role's run's work that lands; asks.rec, each ask of a role
 # that runs as its kind and each turn of its runs; and roles.rec, each such role's record, which its runner launches
 # its run from; each runner answers on <label>/runner/<host> of the same repository, which crew fetches with
 # <label>/main and never writes, a role's run there keyed by the role's address; a meeting's signals stay in the
 # partition's first blueprints repo:
-#   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
+#   crew state init <label>            create the drive's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit,
 #                                      or, in a started bolt, from the records of the runner that took it of Flume's
@@ -201,7 +201,7 @@
 #                                      <capture>/<NN>-<slug>, or its short one, <capture>/<NN>)
 #   crew signal land <capture-dir> --label L
 #                                      a program's capture, a deployer's or another adapter's, with its signals,
-#                                      landed on the flywheel's branch from the host that banked its raw record
+#                                      landed on the drive's branch from the host that banked its raw record
 #   (crew bolt|unit|chore|plan|signal --help says more)
 #
 # Each partition's main level, and its console in each operator session:
@@ -359,7 +359,7 @@
 #                                      session, with which commit, and what it led to
 #   crew page     <label> [--out <file>] [--since <time>]
 #                                      the partition's page, one HTML file that loads nothing: it opens on the board,
-#                                      its four lanes drawn as the flywheel mockup draws them, naming no team, and
+#                                      its four lanes drawn as the Boomdrive mockup draws them, naming no team, and
 #                                      its header linking the fleet page and
 #                                      each other partition's page in the layout of its own file (../page.html and
 #                                      ../<label>/page.html in crew's; index.html and <label>.html beside one written

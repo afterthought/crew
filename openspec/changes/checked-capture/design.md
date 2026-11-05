@@ -7,7 +7,7 @@ See proposal.md for why. The current state, after `state-repository`:
 - `crew signal <slug> "<what it asserts>" [--kind K] [--subject a,b] [--excerpt "<text>"]` (`plan.py signal`) writes, on main of the partition's first blueprints repo, `signals/<date>-<agent>/capture.md` and `signals/<date>-<agent>/NN-<slug>.md`: one capture per agent and day, `source: crew`, `status: read`, no pointer to any source, the excerpt optional and unchecked.
 - The shape of a capture and a signal is the blueprints' `signals/README.md` (read it in `WilldanGroup/willdan-blueprints`): a directory per capture with `capture.md` and one markdown file per signal; a signal has frontmatter (`signal`, `kind`, `who`, `subject`, `claims`), one or two sentences of assertion, and the excerpt as a blockquote with its position. Raw material is never committed (`.raw/` is gitignored); the capture cites its source so that anyone with access re-fetches it.
 - The daily pass (`signals/bin/sweep` and the `signal-capture` skill, in the blueprints repo) writes meeting captures and signals there, by committing in a checkout. It is not touched by this change.
-- A flywheel's state is the branch `<label>/main` of its state repository, written by `plan.py`'s `write`, several files in one commit, with the run record carried.
+- A drive's state is the branch `<label>/main` of its state repository, written by `plan.py`'s `write`, several files in one commit, with the run record carried.
 - crew can find an agent's Claude session from herdr and its transcript on the host, as `crew status` and `run-record` do: `~/.claude*/projects/*/<session id>.jsonl`. The glob matters: accounts keep their own directories (`~/.claude-sub-<name>/`).
 - `crew tell` and `greet` type their text into the agent's pane through herdr, so in the recipient's transcript they are indistinguishable from the user's typing.
 
@@ -72,7 +72,7 @@ This reads one fact of a format that crew already reads for `crew status`, with 
 
 ### The files
 
-`signals/<capture>/capture.md` on the flywheel's branch:
+`signals/<capture>/capture.md` on the drive's branch:
 
 ```markdown
 ---
@@ -120,7 +120,7 @@ The user wants a security check on Switchboard's CloudFormation templates beside
 
 `who` is the asserter: `user`; the capturing agent for a tool's output, since the agent is asserting what the output shows; the sending agent for a tell. The position after the quotation is the record's time, `line <n>` for `found`, and `unverified` when there is none. `--kind` keeps its five values and its default, `constraint`, for an agent; the user's note defaults to `ask`.
 
-The capture and the signal are one `write` on the flywheel's branch, one commit, subject `signals(<id>): <slug> (<agent>)`, entry `capture` with `On: signals/<id>`.
+The capture and the signal are one `write` on the drive's branch, one commit, subject `signals(<id>): <slug> (<agent>)`, entry `capture` with `On: signals/<id>`.
 
 ### The raw record
 
@@ -128,7 +128,7 @@ For `verified` and `found`, the source line is appended, byte for byte, to `~/.l
 
 ### Looking a signal up
 
-`signals/<id>` is resolved as `signals/<id>.md` on the flywheel's branch, then on main of the partition's first blueprints repo. `crew signal move`, `crew unit add --signal` and `crew signal show` use the one lookup. `crew signal show <id>` prints the signal file, its capture's frontmatter in plain lines, and its move when it has one.
+`signals/<id>` is resolved as `signals/<id>.md` on the drive's branch, then on main of the partition's first blueprints repo. `crew signal move`, `crew unit add --signal` and `crew signal show` use the one lookup. `crew signal show <id>` prints the signal file, its capture's frontmatter in plain lines, and its move when it has one.
 
 The two signals of 2026-10-03 and every meeting signal stay where they are and read as they stand; nothing is converted.
 

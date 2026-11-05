@@ -25,7 +25,7 @@ A bolt's units SHALL be ordered by the file: a bolt's launches SHALL take their 
 - **THEN** `crew bolts` lists it under the queue of its repo
 
 ### Requirement: Writes go through crew and are never merged
-Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Each write SHALL fetch the flywheel's branch of its state repository over https into crew's own bare cache of that repository, with no working tree, and apply the change to its tip. It SHALL then check the result with `recfix --check` and crew's own rules, commit it without touching any working tree, and push without force. A push that is rejected SHALL have its write applied again to the new tip, up to five times.
+Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Each write SHALL fetch the drive's branch of its state repository over https into crew's own bare cache of that repository, with no working tree, and apply the change to its tip. It SHALL then check the result with `recfix --check` and crew's own rules, commit it without touching any working tree, and push without force. A push that is rejected SHALL have its write applied again to the new tip, up to five times.
 
 #### Scenario: Two writes race
 - **WHEN** the planner moves a unit while a conductor narrows the same unit's intent, from different hosts
@@ -62,11 +62,11 @@ Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Ea
 - **THEN** its bolts are listed from the plan, with every stage shown as unknown and the host named
 
 ### Requirement: Work is queued from a signal
-`crew unit add … --signal <id>` SHALL queue the unit with the signal as its source, `signals/<id>`, and SHALL record the signal's one move, `route`, targeting the unit, in `moves.rec` on the flywheel's branch, in the same commit as the unit. A signal that is missing from the partition's first blueprints repo, already moved, or whose move would fail `recfix --check` SHALL be refused, and nothing written.
+`crew unit add … --signal <id>` SHALL queue the unit with the signal as its source, `signals/<id>`, and SHALL record the signal's one move, `route`, targeting the unit, in `moves.rec` on the drive's branch, in the same commit as the unit. A signal that is missing from the partition's first blueprints repo, already moved, or whose move would fail `recfix --check` SHALL be refused, and nothing written.
 
 #### Scenario: A signal routed to work
 - **WHEN** the planner queues a unit from a signal
-- **THEN** one commit on the flywheel's branch adds the unit with `Source: signals/<id>` and a `route` move for that signal
+- **THEN** one commit on the drive's branch adds the unit with `Source: signals/<id>` and a `route` move for that signal
 
 #### Scenario: A signal in another blueprints repo
 - **WHEN** madswan's planner queues a flywheel-next unit, whose design is in agentplot/blueprints, from a signal in afterthought/blueprints, the partition's first blueprints repo
@@ -76,8 +76,8 @@ Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Ea
 - **WHEN** the signal named already has its move
 - **THEN** the command is refused, naming the move it has, and the plan is unchanged
 
-### Requirement: A flywheel keeps one plan in its state repository
-Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal and sources. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`); a Unit record marked `Kind: chore` is a chore, whose intent is its words. The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got. A Bolt record that still carries a `Team` field, written before teams left, SHALL be read as any bolt, the field read by nothing; a new branch's schema SHALL allow no `Team`.
+### Requirement: A drive keeps one plan in its state repository
+Each drive SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal and sources. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`); a Unit record marked `Kind: chore` is a chore, whose intent is its words. The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got. A Bolt record that still carries a `Team` field, written before teams left, SHALL be read as any bolt, the field read by nothing; a new branch's schema SHALL allow no `Team`.
 
 #### Scenario: Business and agentplot work
 - **WHEN** the business partition (label `madswan`) builds kits whose design is in afterthought/blueprints and kits whose design is in agentplot/blueprints
@@ -100,7 +100,7 @@ Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of
 - **THEN** `recfix --check` passes, `crew bolts` shows the bolt with no team, and the next write leaves the field as it is
 
 #### Scenario: A new branch
-- **WHEN** `crew state init` starts a flywheel's branch
+- **WHEN** `crew state init` starts a drive's branch
 - **THEN** its `plan.rec` declares no `Team` field and its `proposals.rec` no `Agreed` field
 
 ### Requirement: A bolt on GitHub is read where it lives

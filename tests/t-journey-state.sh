@@ -1,6 +1,6 @@
-# A flywheel's state and its run record, through the crew command on the stubs (tests.11, record 0022): a plan command
+# A drive's state and its run record, through the crew command on the stubs (tests.11, record 0022): a plan command
 # names recutils when it is missing; crew state init starts a branch, adopts a partition's old plans with their history
-# and its moves, finishes a run stopped partway, and keeps two flywheels' branches apart; a record that can't be written
+# and its moves, finishes a run stopped partway, and keeps two drives' branches apart; a record that can't be written
 # changes nothing else; a write's commit changes its own files and names its entry, which follows as a commit of its
 # own, and every entry is on the branch when the command that wrote it returns; a push the branch refuses is said and
 # goes with the host's next entry, crew events --push pushes what is left, and an entry cut short stops the record's
@@ -38,7 +38,7 @@ eq "$(git --git-dir "$ws" show wldn/main:plan.rec | grep '^%allowed: Bolt ')" "%
 [[ $(git --git-dir "$ws" show wldn/main:proposals.rec) != *Agreed* ]] || fail "a new branch's proposals allow Agreed"
 expect_ok crew state init wldn; has "$out" "nothing to do"
 eq "$(commits)" "2"
-ok "a new flywheel gets an empty plan, moves and proposals, allowing no bolt's team or proposal's agreement, a record that can't be written is said once an entry and changes nothing else, and a second run writes nothing"
+ok "a new drive gets an empty plan, moves and proposals, allowing no bolt's team or proposal's agreement, a record that can't be written is said once an entry and changes nothing else, and a second run writes nothing"
 
 # planfile [<records>]: plan.rec as crew writes it, each record (recutils text, \n for a line break) in its own set
 planfile() {
@@ -63,7 +63,7 @@ old_plan() {
 }
 ab=$(blueprints afterthought/blueprints); gb=$(blueprints agentplot/blueprints); as=$(remote afterthought/crew-state)
 old_plan afterthought/blueprints madswan 'Bolt: site-refresh\nRepo: swancloud\nGoal: The site reads well.\n'
-old_plan agentplot/blueprints madswan 'Bolt: flywheel-loop\nRepo: flywheel-next\nGoal: The loop runs.\nSource: design/loop.md\n'
+old_plan agentplot/blueprints madswan 'Bolt: drive-loop\nRepo: flywheel-next\nGoal: The loop runs.\nSource: design/loop.md\n'
 first=$(git --git-dir "$ab" rev-list --max-parents=0 plan/madswan); joined=$(git --git-dir "$gb" rev-parse --short plan/madswan)
 w=$T/abm; clone afterthought/blueprints "$w"
 printf '\nSignal: 2026-10-01-standup/01-noise\nMove: drop\nReason: a greeting\nDate: 2026-10-01\nBy: madswan-design\n' >> "$w/signals/moves.rec"
@@ -91,7 +91,7 @@ eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" $'plan.rec\nruns'
 expect_ok crew state init swancloud
 has "$out" "added moves.rec"; lacks "$out" "started an empty plan"
 git --git-dir "$as" merge-base madswan/main swancloud/main >/dev/null 2>&1 && fail "madswan's and swancloud's branches share history"
-ok "state init adopts a partition's first old plan with its history, joins another naming where it came from, copies its moves, finishes a stopped run, and keeps two flywheels' branches apart"
+ok "state init adopts a partition's first old plan with its history, joins another naming where it came from, copies its moves, finishes a stopped run, and keeps two drives' branches apart"
 
 export CREW_LABEL=wldn
 crew bolt new tenants "Tenants." --repo switchboard-kit >/dev/null

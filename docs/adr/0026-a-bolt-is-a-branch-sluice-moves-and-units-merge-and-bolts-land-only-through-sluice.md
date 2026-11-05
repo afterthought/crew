@@ -24,7 +24,7 @@ Records 0019 (swancloud) and 0025 took the first and fourth reasons away: ops de
 ## Decision drivers
 
 - The user's direction in record 0023: "a design where we don't check out the bolt branch as a work tree".
-- One merge path, not two designs; crew becomes flywheel, which composes sluice's SDK.
+- One merge path, not two designs; crew becomes Boomdrive, which composes sluice's SDK.
 - Verification is the kit's and sluice's, never crew's own port of a test runner (record 0025).
 - Nothing of crew's moves a branch sluice guards.
 

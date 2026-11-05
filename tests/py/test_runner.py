@@ -1,5 +1,5 @@
 """crew's side of the runner's interface (the change teams-cross-to-flume-as-their-bolts-land, Decision 4): the requests
-crew appends to requests.rec on the flywheel's branch, numbered once and never changed or removed, each checked by
+crew appends to requests.rec on the drive's branch, numbered once and never changed or removed, each checked by
 crew's own rules (runner.request_refusal, runner.append_refusal) as well as recfix, and written by a plan write's change
 function (plan.request); each host's runner as crew reads it from its own branch (runner.host_read); and a crossed
 piece's stage from its launch, the runner's answer and Flume's status of its place (runner.stage_of, Decision 8), on

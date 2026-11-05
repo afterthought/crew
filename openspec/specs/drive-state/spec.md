@@ -1,26 +1,26 @@
-# flywheel-state Specification
+# drive-state Specification
 
 ## Purpose
-Keeps each flywheel's own records (its plan, its moves, its run record, and what later capabilities add) in a state repository apart from the design, on a branch of its own, written only through crew, so that several flywheels can share one repository without meeting.
+Keeps each drive's own records (its plan, its moves, its run record, and what later capabilities add) in a state repository apart from the design, on a branch of its own, written only through crew, so that several drives can share one repository without meeting.
 
 ## Requirements
 
-### Requirement: A flywheel's state is one branch of its state repository
-Each partition SHALL name one state repository in the teams file, as `state`. The partition's flywheel SHALL keep its state as files on the branch `<label>/main` of that repository. The branch SHALL hold no other flywheel's files and SHALL share no history with another flywheel's branch.
+### Requirement: A drive's state is one branch of its state repository
+Each partition SHALL name one state repository in the teams file, as `state`. The partition's drive SHALL keep its state as files on the branch `<label>/main` of that repository. The branch SHALL hold no other drive's files and SHALL share no history with another drive's branch.
 
-#### Scenario: Willdan's flywheel
+#### Scenario: Willdan's drive
 - **WHEN** the `wldn` partition names `WilldanGroup/crew-state` as its state repository
 - **THEN** its plan, moves and run record are files on the branch `wldn/main` of that repository
 
-#### Scenario: Two flywheels of one organisation
+#### Scenario: Two drives of one organisation
 - **WHEN** `madswan` and `swancloud` both name `afterthought/crew-state`
 - **THEN** each has its own branch, `madswan/main` and `swancloud/main`, and neither branch holds a commit of the other's
 
 ### Requirement: The state is written only through crew, one commit a write
-Every write to a flywheel's branch SHALL be made by a crew command. It SHALL fetch the branch over https into crew's own bare cache, apply itself to the tip, check each file it changed, commit without touching any working tree, and push without force. A rejected push SHALL have the write applied again to the new tip, up to five times. A write that changes several files SHALL be one commit.
+Every write to a drive's branch SHALL be made by a crew command. It SHALL fetch the branch over https into crew's own bare cache, apply itself to the tip, check each file it changed, commit without touching any working tree, and push without force. A rejected push SHALL have the write applied again to the new tip, up to five times. A write that changes several files SHALL be one commit.
 
 #### Scenario: Two hosts write at once
-- **WHEN** a write from the box and a write from mac-studio reach the same flywheel's branch together
+- **WHEN** a write from the box and a write from mac-studio reach the same drive's branch together
 - **THEN** both land, one after the other, and nothing is merged
 
 #### Scenario: A write of two files
@@ -32,7 +32,7 @@ Every write to a flywheel's branch SHALL be made by a crew command. It SHALL fet
 - **THEN** nothing is pushed, and the command says which file and why
 
 ### Requirement: A commit names its run-record entry
-Each commit crew makes on a flywheel's branch SHALL carry, in its message, the id of a run-record entry as a `Crew-Entry:` trailer. A commit that is an act's, such as a plan write, SHALL name the entry that describes it, and that entry SHALL name the commit. A commit that adds an entry to the run record SHALL name the entry it adds, and SHALL change nothing but that entry's day file.
+Each commit crew makes on a drive's branch SHALL carry, in its message, the id of a run-record entry as a `Crew-Entry:` trailer. A commit that is an act's, such as a plan write, SHALL name the entry that describes it, and that entry SHALL name the commit. A commit that adds an entry to the run record SHALL name the entry it adds, and SHALL change nothing but that entry's day file.
 
 #### Scenario: From a commit to its entry
 - **WHEN** a plan write's commit on `wldn/main` is read
@@ -42,18 +42,18 @@ Each commit crew makes on a flywheel's branch SHALL carry, in its message, the i
 - **WHEN** the commit that follows a plan write on `wldn/main` is read
 - **THEN** its `Crew-Entry` id is the `Id` of the entry it adds to `runs/<host>/<day>.rec`, its subject ends with ` (<agent>)`, and it changes no other file
 
-### Requirement: Flywheels in one repository never meet
-crew SHALL fetch and push only the branch of the flywheel a command acts for. A write to one flywheel SHALL never be refused, delayed or replayed because another flywheel wrote.
+### Requirement: Drives in one repository never meet
+crew SHALL fetch and push only the branch of the drive a command acts for. A write to one drive SHALL never be refused, delayed or replayed because another drive wrote.
 
-#### Scenario: Two flywheels write at the same moment
+#### Scenario: Two drives write at the same moment
 - **WHEN** `madswan` and `swancloud` each write their plan at the same moment
 - **THEN** each write's first push succeeds
 
-#### Scenario: Reading one flywheel
+#### Scenario: Reading one drive
 - **WHEN** a command reads wldn's plan
 - **THEN** crew fetches `wldn/main` and no other branch
 
-### Requirement: A flywheel's branch is created, and adopts what it had
+### Requirement: A drive's branch is created, and adopts what it had
 `crew state init <label>` SHALL create `<label>/main` in the partition's state repository with an empty plan and an empty moves file. Where a blueprints repo of the partition holds `plan/<label>`, the branch SHALL start from that plan's history, and the moves in the first blueprints repo's `signals/moves.rec` SHALL be copied with the commit they were read at. Run again, it SHALL change nothing.
 
 #### Scenario: Willdan's plan is adopted
@@ -72,15 +72,15 @@ crew SHALL fetch and push only the branch of the flywheel a command acts for. A 
 - **WHEN** `crew state init wldn` runs again
 - **THEN** nothing is written, and it says the branch exists and at which commit
 
-### Requirement: A flywheel's state is plain files anyone with access can read
-A clone of a flywheel's branch SHALL be recutils files that `recsel` and `recfix` read with no crew command, and each commit's subject SHALL say what the write did and who asked.
+### Requirement: A drive's state is plain files anyone with access can read
+A clone of a drive's branch SHALL be recutils files that `recsel` and `recfix` read with no crew command, and each commit's subject SHALL say what the write did and who asked.
 
 #### Scenario: Reading with recutils
 - **WHEN** the user clones the branch `wldn/main` and runs `recsel -t Unit plan.rec`
 - **THEN** the plan's units are printed
 
-### Requirement: crew asks a host's runner for work by requests on the flywheel's branch
-crew SHALL write every request for a host's runner as a record of `requests.rec` on the flywheel's branch: a launch of a place, or a retry, drop or priority of one it launched. Each SHALL be numbered once, appended by a crew command in the commit of the plan write that occasions it, checked by `recfix --check` and crew's own rules, and never changed or removed.
+### Requirement: crew asks a host's runner for work by requests on the drive's branch
+crew SHALL write every request for a host's runner as a record of `requests.rec` on the drive's branch: a launch of a place, or a retry, drop or priority of one it launched. Each SHALL be numbered once, appended by a crew command in the commit of the plan write that occasions it, checked by `recfix --check` and crew's own rules, and never changed or removed.
 
 #### Scenario: Never renumbered
 - **WHEN** `requests.rec` holds requests 1 to 7 and a drop is written

@@ -47,7 +47,7 @@ Each unit whose stage is review SHALL be a row under review, naming its team and
 
 #### Scenario: A read leaves no trace
 - **WHEN** `crew rail` runs
-- **THEN** the flywheel's branch, the kits and the run record are unchanged
+- **THEN** the drive's branch, the kits and the run record are unchanged
 
 ### Requirement: A host that does not answer is named
 When a team's host does not answer, `crew rail` SHALL print the rows it could read and name that host, saying that its units and bolts may also wait on the user. It SHALL exit zero. When a partition's plan cannot be read, it SHALL name it and exit non-zero.
@@ -133,7 +133,7 @@ Each kit with a bolt in flight whose units have all merged and not all landed SH
 - **THEN** the next `crew rail` names it on no row
 
 ### Requirement: An open proposal is a row until the user approves or drops it
-Each open proposal on the flywheel's branch SHALL be a row under proposals. The row SHALL name the command that prints it (`crew plan proposed <n> --label <label>`), the command that opens it in plannotator for the user to read and annotate (`crew plan proposed <n> --label <label> --open`), and the command that approves it (`crew plan approve <n> --label <label>`). It SHALL have begun to wait at its `plan.propose` entry in the run record, or at its `Opened` date when no entry is found.
+Each open proposal on the drive's branch SHALL be a row under proposals. The row SHALL name the command that prints it (`crew plan proposed <n> --label <label>`), the command that opens it in plannotator for the user to read and annotate (`crew plan proposed <n> --label <label> --open`), and the command that approves it (`crew plan approve <n> --label <label>`). It SHALL have begun to wait at its `plan.propose` entry in the run record, or at its `Opened` date when no entry is found.
 
 #### Scenario: An open proposal
 - **WHEN** proposal 3 is open and touches a bolt in flight

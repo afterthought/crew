@@ -7,7 +7,7 @@ Keeps the list of what curation and people have put before the planner and the u
 ## ADDED Requirements
 
 ### Requirement: The agenda is a list anyone can open at any time
-`crew agenda [--label <label>] [--lane plan|design] [--all] [--json]` SHALL list the flywheel's open items from any host: each one's number, lane, kind, kit, subject and weight, and any open proposal that would plan it. Items SHALL be records in `agenda.rec` on the flywheel's branch. An item's number SHALL be given once and never reused, and an item SHALL never be removed.
+`crew agenda [--label <label>] [--lane plan|design] [--all] [--json]` SHALL list the drive's open items from any host: each one's number, lane, kind, kit, subject and weight, and any open proposal that would plan it. Items SHALL be records in `agenda.rec` on the drive's branch. An item's number SHALL be given once and never reused, and an item SHALL never be removed.
 
 #### Scenario: The user opens the agenda
 - **WHEN** the user asks the operator agent what needs deciding

@@ -306,7 +306,7 @@ for brief in "wldn design" "wldn planner" "wldn main-ops" "wldn operator" "wldn 
 done
 ok "no brief pulls, fast-forwards or levels crew's checkout"
 
-# The plan and the moves live on the flywheel's branch of its state repository: no brief names a plan/<label>
+# The plan and the moves live on the drive's branch of its state repository: no brief names a plan/<label>
 # branch or a moves.rec in the blueprints, and the design agent and the planner name the state repository.
 for role in design planner main-ops operator reviewer; do
   expect_ok crewpy brief wldn $role; lacks "$out" "plan/wldn"; lacks "$out" "signals/moves.rec"
@@ -314,7 +314,7 @@ done
 expect_ok crewpy brief wldn design; has "$out" "\`moves.rec\` on \`wldn/main\` of WilldanGroup/crew-state"
 lacks "$out" "route moves straight to"
 expect_ok crewpy brief wldn planner; has "$out" "\`wldn/main\` of WilldanGroup/crew-state"
-ok "every brief names the flywheel's branch for the plan and the moves, and none names plan/<label>"
+ok "every brief names the drive's branch for the plan and the moves, and none names plan/<label>"
 
 # Test, check and proof results reach the user as a glyph list (briefs.7): the roles that report results carry one
 # section, built once in crew, word for word the same in each, which names no proof list (briefs.3).

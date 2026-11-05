@@ -482,8 +482,8 @@ def test_a_bolts_own_work_is_its_non_merge_commits_main_lacks_gained_and_lost_be
 
 def test_a_kit_no_runner_has_reported_reads_no_work_and_says_why(monkeypatch):
     monkeypatch.setattr(plan, "kit_git", lambda *a, **k: plan.fail("no git"))
-    assert plan.bolt_work(FLEET, "swancloud", "flywheel", {"z": ("abc1234", "d" * 40)}) == {"z": dict(
-        head="d" * 40, gained=[], lost=[], why="no runner has reported taking flywheel's work yet, so crew can't tell where it runs")}
+    assert plan.bolt_work(FLEET, "swancloud", "boomdrive", {"z": ("abc1234", "d" * 40)}) == {"z": dict(
+        head="d" * 40, gained=[], lost=[], why="no runner has reported taking boomdrive's work yet, so crew can't tell where it runs")}
 
 
 def test_a_fetch_refused_reads_no_work_in_gits_words(monkeypatch):

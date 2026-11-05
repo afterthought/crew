@@ -4,7 +4,7 @@
 
 See proposal.md for why, and for the user's ruling this implements. The current state, after `unit-amendments`, `checked-capture` and `curation-and-agenda`:
 
-- A finding is `crew signal <slug> "<assertion>" --excerpt "<words>"`: a capture and a signal written in one commit on the flywheel's branch, the capture naming the team, bolt and unit the agent was working in. The agent tells nobody.
+- A finding is `crew signal <slug> "<assertion>" --excerpt "<words>"`: a capture and a signal written in one commit on the drive's branch, the capture naming the team, bolt and unit the agent was working in. The agent tells nobody.
 - A signal is unmoved until a curator's delivery, or a person's hand (`crew signal move`, `crew agenda add`), gives it a standing move. `route` and `join` target an agenda item; `attach`, `challenge`, `answered` and `drop` lead nowhere. The user may replace or revive a move.
 - An item closes `planned` (a proposal that adds a unit from it was approved), `decided` with results (decision records, units) or `dropped`.
 - The planner changes the plan only by an approved proposal; the design agent queues units with `--item`. A unit added from an item carries `Source: agenda/<n>`.

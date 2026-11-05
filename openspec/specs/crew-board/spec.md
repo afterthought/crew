@@ -43,7 +43,7 @@ Main-level ops (`<label>-ops`) SHALL have a view among the agents' views, drawn 
 - **THEN** it prints one board per partition in the teams file, one after another
 
 ### Requirement: Inception shows the signals no move has taken and the explorations
-The Inception lane SHALL list every signal, on the flywheel's branch or on main of the partition's first blueprints repo, that has no move in `moves.rec`, grouped by who captured it, each group with how many it holds and how old its oldest is, each signal with its kind and its first words. It SHALL then list each exploration folder on main of each kit the partition's teams build, with the first line of its first file.
+The Inception lane SHALL list every signal, on the drive's branch or on main of the partition's first blueprints repo, that has no move in `moves.rec`, grouped by who captured it, each group with how many it holds and how old its oldest is, each signal with its kind and its first words. It SHALL then list each exploration folder on main of each kit the partition's teams build, with the first line of its first file.
 
 #### Scenario: A moved signal leaves
 - **WHEN** a signal captured by wldn-planner is routed to a unit
@@ -91,7 +91,7 @@ The board SHALL print no command that answers or moves anything, and SHALL write
 
 #### Scenario: Read only
 - **WHEN** `crew board` runs on a partition with a proposal open, a unit in review and a bolt to land
-- **THEN** its output holds no `crew plan approve`, `crew unit approve` or `crew tell`, the flywheel's branch has the same tip, and the run record has no new entry
+- **THEN** its output holds no `crew plan approve`, `crew unit approve` or `crew tell`, the drive's branch has the same tip, and the run record has no new entry
 
 ### Requirement: The attention line names what is wrong
 The board SHALL end with an attention line, each item marked !, naming each host that did not answer for its kits, never for its run record, which is read from the partition's branch; each plan or signals home it could not read, with why, the branch among them when its run record could not be read; and each bolt a team holds whose every unit has landed but which is still in the plan. A ledger whose bolt is in that state SHALL also carry ! on its head line. With nothing to name, the attention line SHALL say none.

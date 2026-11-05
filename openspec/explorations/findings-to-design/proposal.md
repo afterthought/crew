@@ -27,7 +27,7 @@ For the user's review. It answers `brief.md`, beside it, in the brief's order. T
 5. **A finding that blocks the unit it was found in** is the conductor's question to the user. A small change amends the unit. A big one becomes a signal like any other, and the unit cannot merge until what came of it has.
 6. **Every crew command that moves work adds an entry to the run record.** `crew trace <signal|unit|bolt>` prints what happened to it, in order, from those entries alone.
 
-The words are Flywheel Next's: capture, signal, kind, move (attach, challenge, join, answered, route, drop), curation, weight, proposal, run record, state repository. A **flywheel** here is one partition's loop, named by its label (`wldn`). Section 5 says where crew is simpler.
+The words are Flywheel Next's: capture, signal, kind, move (attach, challenge, join, answered, route, drop), curation, weight, proposal, run record, state repository. A **drive** here is one partition's loop, named by its label (`wldn`). Section 5 says where crew is simpler.
 
 ## 1. The invariants, and what makes each true
 
@@ -35,17 +35,17 @@ The words are Flywheel Next's: capture, signal, kind, move (attach, challenge, j
 
 | # | Mechanism |
 |---|---|
-| 1 | For an agent, a source event is **one record its session received**: a message the user typed, or one tool's output. `crew signal` asks herdr for the calling agent's Claude session (as `crew status` does today), finds the record that holds the excerpt, and writes `capture.md` with the host, session id, record id and time, the agent, and the team, bolt and unit it was working in. It copies that record to `~/.local/state/crew/<flywheel>/raw/` on the host, outside git. A second signal from the same record joins the same capture, so capturing twice yields one. Meetings and channels keep the daily pass in the blueprints repo. |
-| 2 | `--excerpt` is mandatory. crew looks for it in the session's transcript and records a grade on the capture: `verified`, `found` or `unverified`. It refuses the signal only when it can read the transcript and the words are not in it, which is the paraphrase case. Section 3 gives the grades and why a change in the transcript's format lowers a grade and never blocks a capture. When the user runs `crew signal` at a shell, the text is its own excerpt, as Flywheel's capture box is. |
+| 1 | For an agent, a source event is **one record its session received**: a message the user typed, or one tool's output. `crew signal` asks herdr for the calling agent's Claude session (as `crew status` does today), finds the record that holds the excerpt, and writes `capture.md` with the host, session id, record id and time, the agent, and the team, bolt and unit it was working in. It copies that record to `~/.local/state/crew/<drive>/raw/` on the host, outside git. A second signal from the same record joins the same capture, so capturing twice yields one. Meetings and channels keep the daily pass in the blueprints repo. |
+| 2 | `--excerpt` is mandatory. crew looks for it in the session's transcript and records a grade on the capture: `verified`, `found` or `unverified`. It refuses the signal only when it can read the transcript and the words are not in it, which is the paraphrase case. Section 3 gives the grades and why a change in the transcript's format lowers a grade and never blocks a capture. When the user runs `crew signal` at a shell, the text is its own excerpt, as Boomdrive's capture box is. |
 | 3 | `crew signal` is the only thing a noticing agent does about a finding outside its own unit. The briefs lose "and tell the planner in one line". Every signal, from a meeting or from a conductor, then waits unmoved for the same curation. |
-| 4 | The banked record and the transcript stay on the host. `capture.md` names them as `<host>:<path>`, so anyone who can reach the host reads the source again. Only the excerpt enters git: in the flywheel's state for an agent's capture, in the blueprints for a meeting's. The run record carries no text anyone typed. |
-| 5 | No crew command edits a signal. A move is appended to the flywheel's `moves.rec` and never changed. A signal's standing move is its latest, and crew accepts a second move for a signal only as the user's replacement: `crew signal move <id> <move> --replace "<why>"`, or `crew signal revive <id> "<why>"`, which leaves the signal unmoved for the next batch. The new record names the one it replaces. |
+| 4 | The banked record and the transcript stay on the host. `capture.md` names them as `<host>:<path>`, so anyone who can reach the host reads the source again. Only the excerpt enters git: in the drive's state for an agent's capture, in the blueprints for a meeting's. The run record carries no text anyone typed. |
+| 5 | No crew command edits a signal. A move is appended to the drive's `moves.rec` and never changed. A signal's standing move is its latest, and crew accepts a second move for a signal only as the user's replacement: `crew signal move <id> <move> --replace "<why>"`, or `crew signal revive <id> "<why>"`, which leaves the signal unmoved for the next batch. The new record names the one it replaces. |
 
 ### Curation and the two lanes
 
 | # | Mechanism |
 |---|---|
-| 6 | `crew curate <flywheel>`, run on the user's word, fixes the batch (every signal with no standing move at that tip), writes a work order and starts a curator session for it. `crew curate deliver <file>` accepts the delivery only when every signal of the batch has exactly one move, and writes all of them in one commit. A signal that arrives during the run waits for the next batch. |
+| 6 | `crew curate <drive>`, run on the user's word, fixes the batch (every signal with no standing move at that tip), writes a work order and starts a curator session for it. `crew curate deliver <file>` accepts the delivery only when every signal of the batch has exactly one move, and writes all of them in one commit. A signal that arrives during the run waits for the next batch. |
 | 7 | `route` targets a **plan** item and `join` a **design** item; both are records in `agenda.rec`, created by the same delivery. `attach`, `challenge`, `answered` and `drop` lead nowhere and name what they rest on. The curator's test for `route` is the brief's: the planner could write the unit's intent with no decision only the user can make. When in doubt, `join`. |
 | 8 | **The planner changes the plan only by a proposal the user approves** (`crew plan propose`, `crew plan approve`). A unit an agent adds names where it came from: `--item <n>`, an open plan item or a design item being decided; or, for the planner alone, `--signal <id>`, a signal it captured itself from what the user told it, whose `route` move the approval writes as the user's hand. The design agent queues the units of a session directly, with `--item`, and the planner places them by proposal. crew refuses an agent's `crew unit add` that names neither. The user at a shell writes the plan freely. |
 | 9 | The planner words the intent, and the user judges it twice. `crew plan proposed <n>` prints the proposal: the planner's case, and each change with the intent beside the excerpts it rests on and where the unit would go. The user approves it, drops it, or sends an item to design (`crew agenda lane <n> design "<the decision it needs>"`, which the planner also runs when it finds an intent needs one). The second judgment is the review of the unit's OpenSpec change. crew cannot detect a design decision in a sentence; it puts the sentence beside the words it came from before anything is built. |
@@ -83,7 +83,7 @@ The words are Flywheel Next's: capture, signal, kind, move (attach, challenge, j
 | # | Mechanism |
 |---|---|
 | 16 | Every crew command that moves work appends one entry to the run record: who (agent, Claude session, host), what, to what, when, on which host, and the commit it wrote. Shared-record writes pass through two functions in `plan.py` (`write` and `land`), so two hooks cover capture, curation, routing and every bolt and unit write. Stages, approval, tell, greet and restart are recorded where `plugin/bin/crew` runs them. A refusal is an entry too. |
-| 17 | The entry is appended to `~/.local/state/crew/<flywheel>/runs/<host>/<date>.rec` on the host where the command ran: a file on disk, never rewritten. `crew events` reads every host of the flywheel, one ssh call each, as `crew bolts` reads the kits. Each host's file is also carried to the same path in the state repository, so a host that is asleep or rebuilt loses nothing. |
+| 17 | The entry is appended to `~/.local/state/crew/<drive>/runs/<host>/<date>.rec` on the host where the command ran: a file on disk, never rewritten. `crew events` reads every host of the drive, one ssh call each, as `crew bolts` reads the kits. Each host's file is also carried to the same path in the state repository, so a host that is asleep or rebuilt loses nothing. |
 | 18 | Each entry names the objects it acted on (`On`) and the objects it came from (`From`). `crew trace <object>` follows those links in both directions and prints the chain in time order. |
 | 19 | `crew trace`, `crew events` and the lineage page are pure functions of the entries. Any other view reads the same files (section 4). |
 | 20 | Each entry carries the session, its host and the time. `zoe <session>` on that host opens the transcript, and the time finds the place in it, for as long as Claude Code keeps the transcript. |
@@ -91,7 +91,7 @@ The words are Flywheel Next's: capture, signal, kind, move (attach, challenge, j
 ### Where I would change an invariant
 
 - **3, a reading.** I take "deciding what it means" to be curation. The noticing agent still writes the signal's one-sentence assertion beside the checked excerpt, because it is the only reader that holds the source. Capture-only, with a reader writing the signals later, is the first alternative in section 7.
-- **5, reworded**: "A signal never changes. A move is append-only, and each signal has one standing move; only the user replaces it, with a new record that names the one it replaces." Flywheel has the same rule, and without it a wrong move could never be put right.
+- **5, reworded**: "A signal never changes. A move is append-only, and each signal has one standing move; only the user replaces it, with a new record that names the one it replaces." Boomdrive has the same rule, and without it a wrong move could never be put right.
 - **8, two edges.** Amending a unit's change in flight is not reaching the plan, so it needs no curation. And every unit an agent adds names an item, the design agent's included: a design talk the user starts unprompted becomes an item by the user's hand first (the design agent captures the user's words and runs `crew agenda add --lane design --signal <id>`), so every unit traces to words someone said.
 - **15, widened.** The user approves every change the planner makes to the plan, a bolt in flight or not, because where work goes is the judgment agents get wrong: a new bolt, a unit in an existing bolt, or a change to a unit already there.
 - **16, "ending a stage".** crew cannot watch an agent finish. A stage's end is recorded when `crew unit wait <unit>` returns (it wraps the `herdr agent wait` the conductor already runs), with the stage crew then reads from the kit and the unit branch's head. If the conductor never waits, the next crew command that reads the team records the end and marks it observed late.
@@ -103,7 +103,7 @@ The words are Flywheel Next's: capture, signal, kind, move (attach, challenge, j
 | Capture a finding or an aside | any agent crew started: conductor, ops, a stage agent, design agent, planner, main-level ops, operator agent | standing; one command | the agent's own host, where its transcript is |
 | Capture the user's own note | the user, `crew signal` at a shell | — | any |
 | Capture and read meetings and channels | the daily pass (`signals/bin/sweep`, the `signal-capture` skill) | a job, daily | the Mac that runs it today |
-| Start curation | the user's word, carried by any agent or typed at a shell: `crew curate <flywheel>` | — | forwarded to the main level's host, as `crew main` is |
+| Start curation | the user's word, carried by any agent or typed at a shell: `crew curate <drive>` | — | forwarded to the main level's host, as `crew main` is |
 | Curate | **the curator**, a new role (`plugin/roles/curator.md`, Fable 5.1 at high effort) | started for one batch, gone when it has delivered | the main level's host and session, as a `curator` tab of the `<label>` workspace |
 | Propose a change to the plan | the planner: `crew plan propose` | standing | main level |
 | Agree a proposal that touches a bolt in flight | that bolt's conductor: `crew plan agree` | standing | the team's host |
@@ -116,13 +116,13 @@ The words are Flywheel Next's: capture, signal, kind, move (attach, challenge, j
 **Curation is its own pass, not the design agent's.** Four reasons:
 
 1. Invariant 13. A batch is dozens of signals read against the books and the decision records. In the design agent's context it would crowd out the user's design work and be carried into every later conversation.
-2. Curation is better stateless. Flywheel's curator has a bounded job and reads only its work order. A fresh session judges each batch against the design as it stands today, not as a long-lived agent remembers it.
+2. Curation is better stateless. Boomdrive's curator has a bounded job and reads only its work order. A fresh session judges each batch against the design as it stands today, not as a long-lived agent remembers it.
 3. The curator decides which lane a signal takes. That judgment should not sit with the planner, which would then both admit work and place it (what happened on 2026-10-03), nor with the design agent, whose attention the user is steering in the moment.
 4. A bounded session with one validated delivery can be killed and started again with nothing half-written.
 
 The work order is a directory `crew curate` writes on the main level's host: the batch's signal and capture files exported from crew's git cache at the tip (so a lagging checkout does not matter), the open agenda items, the plan's bolts with their goals and its units with their intents, where the standing claims are, and the delivery format. The curator reads the design itself in the main checkouts, read-only. When the delivery lands, crew tells the planner which plan items are waiting. Nobody is interrupted for design items; they are on the agenda.
 
-Curation starts only when the user asks for it. That is enough to prime the flywheel, and running it by hand is what will show the threshold and cadence an automatic trigger should have.
+Curation starts only when the user asks for it. That is enough to prime the drive, and running it by hand is what will show the threshold and cadence an automatic trigger should have.
 
 ## 3. The records
 
@@ -130,22 +130,22 @@ Curation starts only when the user asks for it. That is enough to prime the flyw
 
 | Record | Home | Why there |
 |---|---|---|
-| Capture and signal from an agent's session, or the user's own note | **the state repository**, `signals/` on the flywheel's branch | The user's words to an agent stay out of the design repository, and a capture, its hold and its entry are one commit. |
-| Capture and signal from a meeting or a channel | the flywheel's first blueprints repo, `signals/` on main | Where the daily pass writes them, and where Flywheel Next keeps them. |
+| Capture and signal from an agent's session, or the user's own note | **the state repository**, `signals/` on the drive's branch | The user's words to an agent stay out of the design repository, and a capture, its hold and its entry are one commit. |
+| Capture and signal from a meeting or a channel | the drive's first blueprints repo, `signals/` on main | Where the daily pass writes them, and where Flywheel Next keeps them. |
 | Raw record, transcript | the capturing host, outside git | Invariant 4. |
-| Move, agenda item, proposal, plan | the state repository, on the flywheel's branch | One flywheel's judgment and intent, rewritten often, and no part of the design. |
+| Move, agenda item, proposal, plan | the state repository, on the drive's branch | One drive's judgment and intent, rewritten often, and no part of the design. |
 | Run record | the host's disk, carried to the state repository | Written with no network; central once carried. |
 
-crew then keeps nothing of its own in a blueprints repo: no plan branch, no moves, no agenda, no agent's signals, no run record. The one thing it writes there is the daily pass's captures, which it lands on the pass's behalf (`crew signal land`). A signal's id is the same wherever it lives, and crew looks for it on the flywheel's branch first and in the blueprints after.
+crew then keeps nothing of its own in a blueprints repo: no plan branch, no moves, no agenda, no agent's signals, no run record. The one thing it writes there is the daily pass's captures, which it lands on the pass's behalf (`crew signal land`). A signal's id is the same wherever it lives, and crew looks for it on the drive's branch first and in the blueprints after.
 
 ### The state repository
 
 Flywheel Next gives each instance, which its surfaces call a flywheel, three kinds of repository, each with one owner. The blueprints are the design, written by people and sessions. The built repositories are their owners'. The **state repository** (`<instance>/flywheel-state`) is the machinery's alone: one record file per object on `main`, the run record at `runs/<host>/<date>.rec`, every write a commit that carries its reason, and leases and heartbeats on branches of their own so that `main`'s history stays the audit record. One instance has one state repository, and a host runs several instances with nothing crossing between them.
 
-crew's interim version keeps that shape and puts several flywheels in one repository:
+crew's interim version keeps that shape and puts several drives in one repository:
 
 - **One state repository per organisation, named `crew-state`**: `WilldanGroup/crew-state` for wldn. A partition names it in the teams file (`state`), beside its `blueprints`.
-- **One branch per flywheel, `<flywheel>/main`**: an orphan line that holds that flywheel's files and no one else's.
+- **One branch per drive, `<drive>/main`**: an orphan line that holds that drive's files and no one else's.
 
   ```
   wldn/main
@@ -160,13 +160,13 @@ crew's interim version keeps that shape and puts several flywheels in one reposi
 - **Written only through crew**, by the path the plan uses today: fetch the branch, apply the write to the tip, check it with `recfix` and crew's rules, push without force, apply again when someone pushed first. Nothing is merged.
 - **One commit may change several files.** A curator's delivery writes its moves and its items together; an approval changes the plan and closes the proposal and its items; a blocking signal and the hold it places land together. No reader sees one without the other. Each commit's message names its run-record entry.
 
-**How flywheels stay separate.** A branch per flywheel gives each its own history, which is that flywheel's audit record and nobody else's. No flywheel's push can be refused because another wrote, crew's cache fetches one ref, and nothing in one flywheel's files names another's. Two people working for one client are two partitions: each has its own label, main level, teams and branch. They share the blueprints, with its meeting signals, and the kits. They keep separate moves, agendas, proposals, plans and run records, so each curates the same evidence in their own way.
+**How drives stay separate.** A branch per drive gives each its own history, which is that drive's audit record and nobody else's. No drive's push can be refused because another wrote, crew's cache fetches one ref, and nothing in one drive's files names another's. Two people working for one client are two partitions: each has its own label, main level, teams and branch. They share the blueprints, with its meeting signals, and the kits. They keep separate moves, agendas, proposals, plans and run records, so each curates the same evidence in their own way.
 
-**What a branch cannot do is hide.** GitHub grants read access per repository, so everyone who can read the state repository reads every flywheel in it, which is accepted. A flywheel that must one day be private gets a state repository of its own: push its branch there as `main`, history intact. That repository is then laid out as Flywheel Next's is, one instance to one state repository with `main` as the shared line. So the branch namespace is the interim, and the move to Flywheel's layout is one push per flywheel.
+**What a branch cannot do is hide.** GitHub grants read access per repository, so everyone who can read the state repository reads every drive in it, which is accepted. A drive that must one day be private gets a state repository of its own: push its branch there as `main`, history intact. That repository is then laid out as Flywheel Next's is, one instance to one state repository with `main` as the shared line. So the branch namespace is the interim, and the move to Boomdrive's layout is one push per drive.
 
 **Getting there.** `plan/<label>` holds only `plan.rec`, so pushing it to the state repository as `<label>/main` carries the plan with its history. `moves.rec` goes over with its records.
 
-crew differs from Flywheel's layout in four ways: one file per record set, not one per object, because crew applies a write to the new tip again where Flywheel rebases a one-file commit; no leases or heartbeats, because no engine holds anything; moves beside the plan, where Flywheel keeps them in the blueprints with the signals, because two flywheels may share one blueprints repo and a move is one flywheel's judgment; and an agent's signals in the state, where Flywheel puts every signal in the blueprints.
+crew differs from Boomdrive's layout in four ways: one file per record set, not one per object, because crew applies a write to the new tip again where Boomdrive rebases a one-file commit; no leases or heartbeats, because no engine holds anything; moves beside the plan, where Boomdrive keeps them in the blueprints with the signals, because two drives may share one blueprints repo and a move is one drive's judgment; and an agent's signals in the state, where Boomdrive puts every signal in the blueprints.
 
 ### What crew reads of a transcript
 
@@ -227,7 +227,7 @@ The user wants a security check on Switchboard's CloudFormation templates beside
 > "<the user's words, verbatim>" — 14:21:07Z
 ```
 
-**Move**: `moves.rec`. The six words are Flywheel's, so `join` stands where `signals/README.md` says `new-territory`; no record uses that word yet. `revive` is the user's "unmoved again". A `route` or `join` targets `agenda/<n>`.
+**Move**: `moves.rec`. The six words are Boomdrive's, so `join` stands where `signals/README.md` says `new-territory`; no record uses that word yet. `revive` is the user's "unmoved again". A `route` or `join` targets `agenda/<n>`.
 
 ```
 %rec: Move
@@ -261,7 +261,7 @@ Opened: 2026-10-06
 By: wldn-curator
 ```
 
-A design item's subject says what is unsettled, never the answer (Flywheel's rule for an intent proposal). A plan item's subject says what was asked for, in the asserter's terms. An item's signals are not stored on it: they are the standing moves that target it. `State`, `Closed`, `Result` and `Lane` are the only fields crew rewrites; the branch's history and the run record keep what they were.
+A design item's subject says what is unsettled, never the answer (Boomdrive's rule for an intent proposal). A plan item's subject says what was asked for, in the asserter's terms. An item's signals are not stored on it: they are the standing moves that target it. `State`, `Closed`, `Result` and `Lane` are the only fields crew rewrites; the branch's history and the run record keep what they were.
 
 **Proposal**: `proposals.rec`. A proposal is the planner's case and the plan commands it would run, in order. Approval runs them as one commit. Proposals are never removed.
 
@@ -293,13 +293,13 @@ By: wldn-planner
 ### Commands, new or changed
 
 ```
-crew state init <flywheel>
+crew state init <drive>
 crew signal <slug> "<what it asserts>" --excerpt "<verbatim>" [--kind K] [--subject a,b] [--blocks <unit>]
 crew signal show <id>
 crew signal move <id> <move> [--target T] [--reason R] [--replace "<why>"]
 crew signal revive <id> "<why>"
 crew signal land <capture-dir>
-crew curate <flywheel> [--only <capture>...]
+crew curate <drive> [--only <capture>...]
 crew curate deliver <file>
 crew agenda [<n>] [--lane plan|design] [--json]
 crew agenda add "<subject>" --lane plan|design --signal <id>... [--kind intent|question] [--repo <kit>]
@@ -312,10 +312,10 @@ crew unit amend <unit> "<new intent>"          (in a proposal)
 crew unit release <unit> "<why>"               crew unit wait <unit>
 crew events [--about <object>] [--since T] [--follow] [--push] [--json]
 crew trace <signals/id|agenda/n|proposal/n|unit/u|bolt/b>
-crew page <flywheel>
+crew page <drive>
 ```
 
-`crew agenda add`, `crew signal move` and `crew signal revive` are the user's hand: Flywheel counts a person writing curation's records as curation.
+`crew agenda add`, `crew signal move` and `crew signal revive` are the user's hand: Boomdrive counts a person writing curation's records as curation.
 
 ## 4. How events are seen
 
@@ -336,7 +336,7 @@ Commit: WilldanGroup/crew-state@4119bf25
 Why: plan(proposal 3): propose a new bolt cfn-checks with 2 units
 ```
 
-- The format and the path are Flywheel's run record: recutils, `runs/<host>/<date>.rec`. recutils is already on every host, so the record can be read with `recsel` and nothing else: `recsel -e "On = 'unit/cfn-nag-security-check'" runs/*/*.rec`.
+- The format and the path are Boomdrive's run record: recutils, `runs/<host>/<date>.rec`. recutils is already on every host, so the record can be read with `recsel` and nothing else: `recsel -e "On = 'unit/cfn-nag-security-check'" runs/*/*.rec`.
 - `Host` is where crew ran; `By` is who asked, and `Session` the host and Claude session herdr reports for that agent at that moment. When crew forwards a command over ssh it carries the session as it carries `CREW_AGENT` today. For the user at a shell, `By` is `<user>@<host>` and there is no session.
 - `On` and `From` hold typed names: `signals/`, `agenda/`, `proposal/`, `unit/`, `bolt/`, `queue/`, `team/`, `agent/`, `stage/<unit>/<stage>`.
 - `Why` is the subject crew itself composes. A `tell` entry records sender, recipient and length, never the text; the text is in both transcripts.
@@ -357,7 +357,7 @@ Why: plan(proposal 3): propose a new bolt cfn-checks with 2 units
 
 Written: one append to the host's own `runs/<host>/<date>.rec`, after the command has done its work, so the entry can name the commit. No network, no lock, and a failed append never fails the command it describes.
 
-Carried: every write crew makes to the flywheel's branch also brings `runs/<host>/` on the branch up to what that host has recorded. One file per host means two hosts never write the same file. An entry for a command that wrote no commit (a tell, a stage start) rides with the host's next write, or with `crew events --push`.
+Carried: every write crew makes to the drive's branch also brings `runs/<host>/` on the branch up to what that host has recorded. One file per host means two hosts never write the same file. An entry for a command that wrote no commit (a tell, a stage start) rides with the host's next write, or with `crew events --push`.
 
 Gathered: `crew events` reads the branch, then asks each host it can reach for the entries it has not yet carried, one ssh call each. A host that does not answer is named, as `crew bolts` names one, and the view is complete up to that host's last push. `--follow` holds a `tail -F` open on each host.
 
@@ -365,7 +365,7 @@ Gathered: `crew events` reads the branch, then asks each host it can reach for t
 
 | View | What it shows | Cost | Judgment |
 |---|---|---|---|
-| **`crew trace`, `crew events --follow`** (text) | Trace: one object's chain, signal to item to proposal to unit to bolt to landing, each line with who, when, commit and the `zoe` session to open. Follow: the flywheel's entries as they happen, in a `flow` tab of the operator workspace the user can leave open. | Small; Python in crew. | **First.** It answers invariant 18 as asked, by object, and it is the reference any richer view is checked against, as `zoe inspect` is for zoetrope. |
+| **`crew trace`, `crew events --follow`** (text) | Trace: one object's chain, signal to item to proposal to unit to bolt to landing, each line with who, when, commit and the `zoe` session to open. Follow: the drive's entries as they happen, in a `flow` tab of the operator workspace the user can leave open. | Small; Python in crew. | **First.** It answers invariant 18 as asked, by object, and it is the reference any richer view is checked against, as `zoe inspect` is for zoetrope. |
 | **The lineage page** (`crew page`) | Signals, items, units and bolts as columns with the links between them, a timeline under them, and each node opening its entries. One self-contained HTML file generated from the run record. | Moderate; no service. | **Second.** It draws the thing invariant 18 asks about. |
 | **zoetrope, unchanged, on Claude transcripts** | The detail behind one entry: that agent's session, scrubbed to the entry's time. Its herdr plugin already opens the focused pane's session. | Install only. | **Use from the first step**, for invariant 20. This is the job it was built for. |
 | **A zoetrope provider for the run record** | A live graph whose nodes are crew's agents, with a team or bolt as a group and each crew command as a tool chip, over zoetrope's scrubbable timeline. | A Rust provider directory (wire model, discovery, stream, golden fixtures), upstream or in a fork, and a line-per-entry export, since zoetrope tails JSON lines. | **Not planned.** zoetrope draws agents, "not messages". It would show who is working and who told whom. It would not show what a signal led to, because work objects are not nodes in its model. |
@@ -388,23 +388,23 @@ An OpenTelemetry trace viewer and Datasette would both read these entries too. E
 | A finding about the session's own bolt is a proposal on that thread, not a signal | A finding that blocks its own unit is the conductor's question to the user, and a small change amends the unit | same shape |
 | An intent is worked by typed elaborations, one awaiting approval at a time | A design item is settled in a session with the design agent | simpler: no intent object, no elaboration types |
 | The rail: decisions derived from active states, each with a number never reused | `crew agenda` and `crew plan proposed`: read from `agenda.rec`, `moves.rec` and `proposals.rec`; numbers never reused | simpler |
-| One state repository per instance, the machinery's alone; `main` the shared line; one file per object; leases on branches of their own | One state repository per organisation, written only through crew; one branch per flywheel; one file per record set; no leases | interim: a flywheel's branch pushed as `main` of its own repository is Flywheel's layout |
-| Captures, signals and moves in the blueprints, under the machinery's prefix | Meeting captures and signals in the blueprints' `signals/`; an agent's captures and signals, and every move, in the flywheel's state | differs: a move is one flywheel's judgment, and the user's words to an agent stay out of the design repository |
+| One state repository per instance, the machinery's alone; `main` the shared line; one file per object; leases on branches of their own | One state repository per organisation, written only through crew; one branch per drive; one file per record set; no leases | interim: a drive's branch pushed as `main` of its own repository is Boomdrive's layout |
+| Captures, signals and moves in the blueprints, under the machinery's prefix | Meeting captures and signals in the blueprints' `signals/`; an agent's captures and signals, and every move, in the drive's state | differs: a move is one drive's judgment, and the user's words to an agent stay out of the design repository |
 | The run record at `runs/<host>/<date>.rec`; every write a commit that carries its reason and evidence; refusals recorded | The same path and format; one entry per command, naming the commit when there is one; refusals recorded. Entries reach git with the host's next write, not one commit each | close: half of crew's acts (a tell, a stage start, a restart) write no commit of their own |
-| The status view is central and readable with nothing running | `crew bolts` for state; the run record on the flywheel's branch, readable with `recsel` from a clone | partial |
+| The status view is central and readable with nothing running | `crew bolts` for state; the run record on the drive's branch, readable with `recsel` from a clone | partial |
 | The tick, leases, host declarations, claims and verdicts, chores | None. Agents run crew's commands | not built |
 
-What running crew this way would show about Flywheel's model:
+What running crew this way would show about Boomdrive's model:
 
 1. **What the operator's yes on a plan proposal is worth, and on which part.** Count how often an approval changes anything, and what: an intent reworded, a unit put in a different bolt, a new bolt turned into a unit of an existing one, an item sent to design. That says where a planner's judgment needs a person and where the rail carries a decision it could do without.
-2. **What threshold and cadence should be.** crew curates only when asked. How many signals are waiting each time, how old the oldest is, and what share lands as `answered`, are the numbers Flywheel leaves to the manifest.
-3. **Where "small" ends.** How often a blocking finding amended in place should have gone to design, how long holds last, and how often a hold ends in a direct answer and how often in a new unit. That tests Flywheel's rule that a finding on its own thread never becomes a signal.
-4. **Whether an excerpt on a session's finding earns its cost.** Flywheel leaves it empty and points at a document. See how often the curator can judge from the excerpt and assertion alone, and how often it goes back to the raw record.
-5. **How often a move has to be replaced.** That says how much of Flywheel's revive and split machinery real work uses.
+2. **What threshold and cadence should be.** crew curates only when asked. How many signals are waiting each time, how old the oldest is, and what share lands as `answered`, are the numbers Boomdrive leaves to the manifest.
+3. **Where "small" ends.** How often a blocking finding amended in place should have gone to design, how long holds last, and how often a hold ends in a direct answer and how often in a new unit. That tests Boomdrive's rule that a finding on its own thread never becomes a signal.
+4. **Whether an excerpt on a session's finding earns its cost.** Boomdrive leaves it empty and points at a document. See how often the curator can judge from the excerpt and assertion alone, and how often it goes back to the raw record.
+5. **How often a move has to be replaced.** That says how much of Boomdrive's revive and split machinery real work uses.
 6. **Whether weight is what the user chooses by.** Which agenda items get taken up first, against their signal counts, sources and span.
-7. **What the run record must carry.** Whether the questions the user asks are by object or by actor, and how much of "what happened" lives in acts that are not writes. Flywheel records writes; crew will show what a write-only record would miss.
-8. **Whether a curator apart from the design session loses anything.** The design agent meets an item knowing only its subject and signals. If sessions keep reopening what the curator already read, Flywheel's hand-off from curation to elaboration needs more than the proposal.
-9. **Where signals and moves belong, and how much isolation a flywheel needs.** Whether signals in two homes cost the curator anything, whether two flywheels on one blueprints repo move the same meeting signal differently, and whether a branch is enough separation in practice or each flywheel ends up wanting its own repository, which is Flywheel's rule.
+7. **What the run record must carry.** Whether the questions the user asks are by object or by actor, and how much of "what happened" lives in acts that are not writes. Boomdrive records writes; crew will show what a write-only record would miss.
+8. **Whether a curator apart from the design session loses anything.** The design agent meets an item knowing only its subject and signals. If sessions keep reopening what the curator already read, Boomdrive's hand-off from curation to elaboration needs more than the proposal.
+9. **Where signals and moves belong, and how much isolation a drive needs.** Whether signals in two homes cost the curator anything, whether two drives on one blueprints repo move the same meeting signal differently, and whether a branch is enough separation in practice or each drive ends up wanting its own repository, which is Boomdrive's rule.
 
 ## 6. Steps
 
@@ -414,7 +414,7 @@ Nine OpenSpec changes in crew, built in this order after `bolt-teams` is archive
 2. **`state-repository`**: `crew state init`; every partition's plan and moves go to its branch of its organisation's `crew-state`, with their history; each write carries the host's run record with it.
 3. **`plan-proposals`**: the planner changes the plan only by a proposal the user approves, with the conductor's recorded agreement for a bolt in flight.
 4. **`unit-amendments`**: a unit in flight goes back through construct and the user's review, on the conductor's word for its change and by an approved proposal for its intent.
-5. **`checked-capture`**: `crew signal` requires the excerpt, grades it, writes the capture with its provenance on the flywheel's branch and banks the record.
+5. **`checked-capture`**: `crew signal` requires the excerpt, grades it, writes the capture with its provenance on the drive's branch and banks the record.
 6. **`curation-and-agenda`**, which proves the flow: the curator, `crew curate` and its delivery, the agenda with both lanes' ends, the replacement of a move, and the briefs.
 
    The proof is one run. A conductor captures an aside from the user and a finding from a tool's output. The user says "curate now". The curator routes one and joins the other. The planner proposes a unit from the first and where it goes, and the user approves it. The user and the design agent settle the second, and a decision record and a unit cite the item. Then `crew trace` on each signal prints the whole chain, each line naming a session and a time, with no agent asked. `--only` matters because wldn has 192 unmoved signals from meetings (194 in 15 captures, two moved); the proof should not be their first curation.
@@ -426,25 +426,25 @@ Two things in the roadmap are not changes: the first full batch over wldn's 192 
 
 ## 7. Alternatives considered
 
-- **Capture only, and a reader writes the signals later**, as Flywheel does for a transcript. It is the stricter reading of invariant 3. Set aside for agent sources: the raw record is on the capturing host, so a reader elsewhere needs a way to fetch it, and each finding would cost a second session to restate one sentence. Worth revisiting for a long exchange with the user, where one capture holds many signals.
+- **Capture only, and a reader writes the signals later**, as Boomdrive does for a transcript. It is the stricter reading of invariant 3. Set aside for agent sources: the raw record is on the capturing host, so a reader elsewhere needs a way to fetch it, and each finding would cost a second session to restate one sentence. Worth revisiting for a long exchange with the user, where one capture holds many signals.
 - **Refuse any excerpt crew cannot verify.** Simpler to state, and it would turn a change in Claude Code's transcript format into a day with no captures.
 - **Trust the agent's excerpt, with no check.** The paraphrase problem is that the agent's words stand in for the user's; only a look at the transcript closes it.
 - **The design agent curates**, as its brief says today. Against invariant 13, and for the reasons in section 2.
 - **The planner curates.** It would admit work and place it, with nobody between a finding and the queue. That is 2026-10-03.
-- **The curator adds the unit itself.** One step fewer, but Flywheel's curator judges and does not act, and the planner would stop being the only agent that shapes the plan.
+- **The curator adds the unit itself.** One step fewer, but Boomdrive's curator judges and does not act, and the planner would stop being the only agent that shapes the plan.
 - **A proposal as prose the planner writes, applied by the planner after a yes.** What the user approved and what was then run could differ. A proposal that is the commands themselves is applied by crew, exactly as read.
 - **Approval applies each change of a proposal as its own commit.** A refusal halfway would leave the plan half-changed, with a bolt created and its units not in it.
 - **Items and outcomes as two append-only record sets**, with a lane change as a new item pointing at the old. Purer, and three record sets to read where one does. `agenda.rec` is state, like `plan.rec`; history is the branch's and the run record's.
-- **The agenda as GitHub issues, or as a page the design agent keeps.** The first leaves the path crew writes by, and Flywheel's git-only profile never reads issues. The second is kept by hand.
-- **A state repository per flywheel from the first day**, Flywheel's exact layout. A repository to create and grant for every partition, and a second one the day a second person joins a client. The branch namespace gives the same files and the same history, and becomes this by one push.
-- **One branch for every flywheel, a directory each.** Every flywheel's pushes would contend for one ref, their histories would interleave, and taking one out later means rewriting history.
-- **State on branches of the blueprints repo**, as `plan/<label>` is today. It puts the machinery's frequent writes and its branches in the design repository, and ties a flywheel's state to one blueprints repo when a partition may have two.
-- **Every signal in the blueprints**, Flywheel's placement. The user's asides to agents would sit in the client's design repository, a blocking signal and its hold would be two commits in two repositories, and crew would go on writing to the design repository's main while people work in it.
-- **Each run-record entry as its own commit**, Flywheel's way. A push for every tell and every stage start is slow, and an entry cannot name the commit that carries it. Entries are written on the host and carried with its next write.
+- **The agenda as GitHub issues, or as a page the design agent keeps.** The first leaves the path crew writes by, and Boomdrive's git-only profile never reads issues. The second is kept by hand.
+- **A state repository per drive from the first day**, Boomdrive's exact layout. A repository to create and grant for every partition, and a second one the day a second person joins a client. The branch namespace gives the same files and the same history, and becomes this by one push.
+- **One branch for every drive, a directory each.** Every drive's pushes would contend for one ref, their histories would interleave, and taking one out later means rewriting history.
+- **State on branches of the blueprints repo**, as `plan/<label>` is today. It puts the machinery's frequent writes and its branches in the design repository, and ties a drive's state to one blueprints repo when a partition may have two.
+- **Every signal in the blueprints**, Boomdrive's placement. The user's asides to agents would sit in the client's design repository, a blocking signal and its hold would be two commits in two repositories, and crew would go on writing to the design repository's main while people work in it.
+- **Each run-record entry as its own commit**, Boomdrive's way. A push for every tell and every stage start is slow, and an entry cannot name the commit that carries it. Entries are written on the host and carried with its next write.
 - **No log: a tool reconstructs events from transcripts and git logs.** It automates what an agent does by hand today, on a transcript format nobody documents and files Claude Code cleans up.
 - **A Claude Code hook that logs every `crew` command.** A hook sees a command string. crew knows the act, the objects and the commit.
 
 ## 8. Open questions
 
-1. **Where meeting signals live.** An agent's signals are in the flywheel's state; a meeting's stay in the blueprints' `signals/`, where the daily pass writes them and decision records already cite them. The curator reads both. Should the daily pass follow, so that every signal has one home and crew never writes to a blueprints repo at all? `daily-pass-through-crew` is written for the blueprints and would change if so.
-2. **The state repository for madswan and swancloud.** `afterthought/crew-state` is proposed for both, as branches `madswan/main` and `swancloud/main`. madswan's work also reaches agentplot's blueprints and kits; one flywheel has one state repository, so its agentplot work would be planned in afterthought's.
+1. **Where meeting signals live.** An agent's signals are in the drive's state; a meeting's stay in the blueprints' `signals/`, where the daily pass writes them and decision records already cite them. The curator reads both. Should the daily pass follow, so that every signal has one home and crew never writes to a blueprints repo at all? `daily-pass-through-crew` is written for the blueprints and would change if so.
+2. **The state repository for madswan and swancloud.** `afterthought/crew-state` is proposed for both, as branches `madswan/main` and `swancloud/main`. madswan's work also reaches agentplot's blueprints and kits; one drive has one state repository, so its agentplot work would be planned in afterthought's.

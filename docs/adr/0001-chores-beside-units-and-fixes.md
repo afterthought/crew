@@ -34,9 +34,9 @@ What is a chore in crew and what is not, who may add one, how it is built, and h
 ## Considered options
 
 1. A chore is its own kind of record and command, beside unit and fix: a `Chore` record in the plan, `crew chore` commands mirroring `crew unit`, stages code, verify, merge.
-2. A chore is a unit with `Kind: chore`, run with the `crew unit` commands, construct and approve skipped for that kind (Flywheel's shape: a unit of the chore type).
+2. A chore is a unit with `Kind: chore`, run with the `crew unit` commands, construct and approve skipped for that kind (Boomdrive's shape: a unit of the chore type).
 3. A chore is a fix with a plan record: `crew fix` extended with a plan entry and a verify stage.
-4. Chores may also be made on main outside any bolt, their merge their landing (Flywheel's shared-line chore).
+4. Chores may also be made on main outside any bolt, their merge their landing (Boomdrive's shared-line chore).
 
 ## Decision outcome
 
@@ -63,7 +63,7 @@ A chore enters the plan as a unit does, by the same hands and no others:
 | the design agent | to a kit's queue only (`chore add … --repo <kit>`), never into a bolt |
 | the user at a shell | anywhere |
 
-The conductor adds none: what breaks on its bolt is a fix, and what its bolt needs planned it asks the planner for, in the words it already uses for a unit. A stage agent or ops that sees maintenance due outside its job records a signal with `crew signal`; the planner routes it. Flywheel's "offer a chore" is this signal and this route, and Flywheel's acceptance on the operator's rail is the user's approval of the proposal.
+The conductor adds none: what breaks on its bolt is a fix, and what its bolt needs planned it asks the planner for, in the words it already uses for a unit. A stage agent or ops that sees maintenance due outside its job records a signal with `crew signal`; the planner routes it. Boomdrive's "offer a chore" is this signal and this route, and Boomdrive's acceptance on the operator's rail is the user's approval of the proposal.
 
 ### How it is built
 
@@ -134,7 +134,7 @@ A chore is the object `chore/<name>` wherever a unit is `unit/<unit>`:
 
 ### Option 4: chores on main outside a bolt
 
-- Good: Flywheel's shared-line chore, and a bump that every bolt needs reaches main at once.
+- Good: Boomdrive's shared-line chore, and a bump that every bolt needs reaches main at once.
 - Bad: a second path to main beside landing, bypassing the bolt's proof and the user's word; the same need is met by a chore marked `--unblocks` in the bolt that needs it, or a chore in the next bolt.
 
 ## More information

@@ -245,7 +245,7 @@ has "$(grep "^wldn-planner " <<<"$out")" "wldn-1"
 ok "a role its partition names a session for comes up there, up refusing while it still runs where it stood and down ending it there"
 
 # wldn's planner and reviewer run as their kinds: main up opens no tab for either and starts and greets neither,
-# writes their role records to the flywheel's branch, and ends the standing planner left from before, idle; a second
+# writes their role records to the drive's branch, and ends the standing planner left from before, idle; a second
 # up does nothing of them; crew revive brings neither back; main status says each runs as its kind, in which stream,
 # and how many asks wait (design Decision 14).
 role_stream wldn planner wldn-main; role_stream wldn reviewer wldn-main

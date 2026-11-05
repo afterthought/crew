@@ -185,7 +185,7 @@ def load():
         blueprints = need(p, what, "blueprints", list)
         for b in blueprints:
             isinstance(b, str) and re.match(r"^[^/\s]+/[^/\s]+$", b) or fail(f"{what}: a blueprints repo is GitHub owner/name, not {json.dumps(b)}")
-        # Where the flywheel's plan, moves and run record live: a branch <label>/main of this repository. Never a
+        # Where the drive's plan, moves and run record live: a branch <label>/main of this repository. Never a
         # default: a file without it predates state repositories and is regenerated, not guessed at.
         p.get("state") not in (None, "") or fail(
             f"{what} in {TEAMS} names no state repository ('state'): regenerate {TEAMS} from the machine's configuration "
@@ -405,7 +405,7 @@ def asks_instead(run, status, unread):
 
 def tell_ask(fleet, run, text, frm, what="tell"):
     """A tell to a role that runs as its kind, run (label, role), written as an ask of the role on its partition's
-    flywheel branch (plan.ask_write), from frm, carrying the text, typed into no pane; `asked <label>-<role>` once it is
+    drive branch (plan.ask_write), from frm, carrying the text, typed into no pane; `asked <label>-<role>` once it is
     written. Whether it was written: an ask crew could not write is said, as a tell not typed is."""
     import plan  # plan imports this module
     name = f"{run[0]}-{run[1]}"

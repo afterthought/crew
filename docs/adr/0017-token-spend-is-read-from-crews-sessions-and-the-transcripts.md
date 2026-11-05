@@ -24,5 +24,5 @@ The user wants to know what the teams spend: tokens by partition, team, role (un
 ### Consequences
 
 - One unit in crew, `crew-usage-sums-tokens-by-team-role-and-agent`.
-- madswan's flywheel-web collector reads `crew usage --json` rather than the transcripts itself.
+- madswan's boomdrive-web collector reads `crew usage --json` rather than the transcripts itself.
 - The board's Operation lane may carry a spend line later; this record does not decide it.

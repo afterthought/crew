@@ -423,7 +423,7 @@ class TestStateInit:
 
     def test_two_plans_sharing_a_name_refuse_the_init_before_anything_is_pushed(self):
         a = self.plan_of(("site-refresh", "swancloud", None), ("the-home-page-loads-fast", "swancloud", "site-refresh", []))
-        b = self.plan_of(("flywheel-loop", "flywheel-next", None), ("the-home-page-loads-fast", "flywheel-next", None, []))
+        b = self.plan_of(("drive-loop", "flywheel-next", None), ("the-home-page-loads-fast", "flywheel-next", None, []))
         assert plan.shared_name("madswan", [("afterthought/blueprints", a), ("agentplot/blueprints", b)]) == (
             "plan/madswan of afterthought/blueprints and plan/madswan of agentplot/blueprints both hold unit the-home-page-loads-fast: "
             "rename one in its plan first; nothing was written")
@@ -431,12 +431,12 @@ class TestStateInit:
 
     def test_a_joined_plans_records_follow_the_branchs_their_sources_naming_where_they_came_from(self):
         have = plan.Plan(plan_text(bolts=[("site-refresh", "swancloud", None)]))
-        other = plan.Plan(plan_text(bolts=[("flywheel-loop", "flywheel-next", None)], units=[("the-loop-turns", "flywheel-next", None, [])])
-                          .replace("Goal of flywheel-loop.\n", "Goal of flywheel-loop.\nSource: design/loop.md\nSource: x/y:z.md\n"))
+        other = plan.Plan(plan_text(bolts=[("drive-loop", "flywheel-next", None)], units=[("the-loop-turns", "flywheel-next", None, [])])
+                          .replace("Goal of drive-loop.\n", "Goal of drive-loop.\nSource: design/loop.md\nSource: x/y:z.md\n"))
         plan.joined_into(have, other, "agentplot/blueprints", "madswan/main of afterthought/crew-state", "madswan")
-        assert [b.name() for b in have.bolts()] == ["site-refresh", "flywheel-loop"] and have.unit("the-loop-turns")
-        assert have.bolt("flywheel-loop").all("Source") == ["agentplot/blueprints:design/loop.md", "x/y:z.md"]
-        with pytest.raises(plan.Refusal, match="^madswan/main of afterthought/crew-state already holds bolt flywheel-loop, which plan/madswan of agentplot"):
+        assert [b.name() for b in have.bolts()] == ["site-refresh", "drive-loop"] and have.unit("the-loop-turns")
+        assert have.bolt("drive-loop").all("Source") == ["agentplot/blueprints:design/loop.md", "x/y:z.md"]
+        with pytest.raises(plan.Refusal, match="^madswan/main of afterthought/crew-state already holds bolt drive-loop, which plan/madswan of agentplot"):
             plan.joined_into(have, other, "agentplot/blueprints", "madswan/main of afterthought/crew-state", "madswan")
 
     def test_a_new_moves_file_starts_with_crews_descriptor_and_the_moves_it_adopts(self):

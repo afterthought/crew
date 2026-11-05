@@ -4,7 +4,7 @@ plain facts (code.7).
 
 A role its partition's `flume` names a stream for runs as its kind: no agent of it stands, and each of its runs is a
 place the host's runner launches while anything is pending for the role, one at a time. What is pending is each ask
-of the role on the partition's flywheel branch, asks.rec's Ask records, and each place the runner's records show
+of the role on the partition's drive branch, asks.rec's Ask records, and each place the runner's records show
 waiting on the role, that no ended turn took. A turn, asks.rec's Turn records, is a run's taking of everything pending
 at its start (crew role start), answered by its end (crew role end); a turn still open when the next run starts was a
 lost run's, superseded by the new turn, which takes its asks again, and answers nothing. roles.rec holds the record

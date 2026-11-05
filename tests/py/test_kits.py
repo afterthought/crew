@@ -57,7 +57,7 @@ class TestKitIn:
     def test_a_kit_is_named_by_its_name_or_its_forge_address_either_way_round(self):
         assert plan.kit_in("switchboard-kit", ["switchboard-kit"])
         assert plan.kit_in("WilldanGroup/switchboard-kit", ["switchboard-kit"])
-        assert plan.kit_in("flywheel-web", ["agentplot/flywheel-web"])
+        assert plan.kit_in("boomdrive-web", ["agentplot/boomdrive-web"])
         assert not plan.kit_in("atlas-kit", ["switchboard-kit"])
 
 
@@ -78,13 +78,13 @@ class TestKeys:
 
     def test_an_area_is_made_for_a_kit_the_partition_names_and_none_other(self):
         fleet = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha"}}, "hosts": {}}
-        kits = ["agentplot/flywheel-web", "switchboard-kit"]
+        kits = ["agentplot/boomdrive-web", "switchboard-kit"]
         refused = lambda key: plan.card_refusal(fleet, "wldn-ops", "wldn", "create_area", key, kits)
         assert refused("create-area:WilldanGroup/switchboard-kit") is None
-        assert refused("create-area:agentplot/flywheel-web") is None
+        assert refused("create-area:agentplot/boomdrive-web") is None
         assert refused("create-area:WilldanGroup/atlas-kit") == (
             "crew refuses an area under create-area:WilldanGroup/atlas-kit: wldn-ops makes a kit's area only under "
-            "create-area:agentplot/flywheel-web or create-area:<owner>/switchboard-kit.")
+            "create-area:agentplot/boomdrive-web or create-area:<owner>/switchboard-kit.")
         assert plan.card_refusal(fleet, "wldn-ops", "wldn", "create_area", "create-area:a/b", []) == (
             "crew refuses an area under create-area:a/b: no kit's area is wldn-ops's to make: wldn's plan and landings name no kit.")
 

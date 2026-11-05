@@ -7,7 +7,7 @@ Decides what each signal means, in batches and against the design as it stands, 
 ## ADDED Requirements
 
 ### Requirement: Curation is its own pass, run on the user's word
-`crew curate <label>` SHALL start a curator session for one batch, in a `curator` tab of the main level's workspace, on the main level's host. It SHALL be run only when the user asks for it. One curator SHALL run per flywheel at a time. The curator SHALL be a session of its own, never the design agent or the planner, and its tab SHALL be closed once its batch is delivered and its agent is no longer working.
+`crew curate <label>` SHALL start a curator session for one batch, in a `curator` tab of the main level's workspace, on the main level's host. It SHALL be run only when the user asks for it. One curator SHALL run per drive at a time. The curator SHALL be a session of its own, never the design agent or the planner, and its tab SHALL be closed once its batch is delivered and its agent is no longer working.
 
 #### Scenario: The user asks for curation
 - **WHEN** the user tells the operator agent to curate wldn's signals
@@ -22,7 +22,7 @@ Decides what each signal means, in batches and against the design as it stands, 
 - **THEN** it says so and starts nothing
 
 ### Requirement: A batch is fixed when curation starts
-A batch SHALL be every signal with no standing move, in the flywheel's state and in the partition's first blueprints repo, at the commits read when `crew curate` runs, or with `--only <capture>...` those of the named captures. A signal recorded after that SHALL wait for the next batch.
+A batch SHALL be every signal with no standing move, in the drive's state and in the partition's first blueprints repo, at the commits read when `crew curate` runs, or with `--only <capture>...` those of the named captures. A signal recorded after that SHALL wait for the next batch.
 
 #### Scenario: A signal arrives mid-run
 - **WHEN** a conductor records a signal while the curator is working
@@ -78,7 +78,7 @@ A delivery SHALL create the agenda items its `route` and `join` moves target, or
 - **THEN** the delivery is refused
 
 ### Requirement: A delivery covers its batch exactly, in one commit
-`crew curate deliver <file>` SHALL be accepted only when every signal of the batch has exactly one move, no other signal has one, and every move and item passes its checks. It SHALL then write every move and every new item in one commit on the flywheel's branch. Delivering again SHALL write nothing. A signal of the batch that gained a move by hand during the run SHALL be named, and the delivery refused until it leaves that signal out.
+`crew curate deliver <file>` SHALL be accepted only when every signal of the batch has exactly one move, no other signal has one, and every move and item passes its checks. It SHALL then write every move and every new item in one commit on the drive's branch. Delivering again SHALL write nothing. A signal of the batch that gained a move by hand during the run SHALL be named, and the delivery refused until it leaves that signal out.
 
 #### Scenario: Sixty signals
 - **WHEN** a curator delivers moves for a batch of sixty signals

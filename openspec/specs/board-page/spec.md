@@ -1,7 +1,7 @@
 # board-page Specification
 
 ## Purpose
-The board view of crew's page: one partition's flow, read by `crew board`, drawn as the flywheel mockup draws its phases view; and the page's deploys view, each environment's deploys as a timeline.
+The board view of crew's page: one partition's flow, read by `crew board`, drawn as the Boomdrive mockup draws its phases view; and the page's deploys view, each environment's deploys as a timeline.
 
 ## Requirements
 
@@ -134,7 +134,7 @@ A click on an item of the board view, or Enter on it, SHALL open that item's doc
 - **THEN** both open the same dock
 
 ### Requirement: The dock opens over the board and the board does not move
-The dock SHALL be one panel over the right of the board, as the flywheel mockup's dock is: opening and closing it SHALL move, reflow or scroll nothing in the lanes. Esc, the dock's × or a click outside it SHALL close it, and the focus SHALL return to the item it was opened from. Under 760 px the dock SHALL fill the screen with a back control.
+The dock SHALL be one panel over the right of the board, as the Boomdrive mockup's dock is: opening and closing it SHALL move, reflow or scroll nothing in the lanes. Esc, the dock's × or a click outside it SHALL close it, and the focus SHALL return to the item it was opened from. Under 760 px the dock SHALL fill the screen with a back control.
 
 #### Scenario: Opened while scrolled
 - **WHEN** the user has scrolled the Construction lane and opens a ledger's dock, then presses Esc

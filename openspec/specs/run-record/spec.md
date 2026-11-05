@@ -173,7 +173,7 @@ When an entry cannot be pushed, crew SHALL say so once on standard error, naming
 - **WHEN** an entry in the host's file is cut short, so the day's file would fail `recfix --check`
 - **THEN** nothing of the record is pushed, the command names the file and why on standard error, and the act it recorded stands
 
-### Requirement: Entries are read from the flywheel's branch alone
+### Requirement: Entries are read from the drive's branch alone
 `crew events [--label <label>] [--about <object>] [--since <time>] [--json]` and `crew trace <object>` SHALL read the run record from the partition's branch of its state repository, and SHALL ask no host for it. When the branch cannot be read they SHALL say so, naming the branch.
 
 #### Scenario: A host is asleep

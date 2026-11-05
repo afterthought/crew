@@ -22,11 +22,11 @@ Flywheel Next's model, as read: an **intent** is one long-lived thread of design
 
 crew has the parts around it and not the middle: signals and their moves (`attach` to an open intent, `new-territory` for a cluster no claim covers), the design agent's records (rules, decision records, specs), `openspec/explorations/<name>/` for readings and explorations (`docs.1`), units as OpenSpec changes, herdr workspaces, Pending You cards, plannotator sessions on a document. Record 0016 added a spike: a standing elaboration by another name, hard-coded to prototypes, and committed as accepted without the user.
 
-The question is the simple model that gives most of Flywheel's benefit: a question worked somewhere of its own, with its notes kept, concluded in one document the user approves, and nothing reaching main but through a unit.
+The question is the simple model that gives most of Boomdrive's benefit: a question worked somewhere of its own, with its notes kept, concluded in one document the user approves, and nothing reaching main but through a unit.
 
 ## Decision outcome
 
-1. **An intent is a question the design holds open**, in one sentence, named like a unit. crew records it on the flywheel's branch (`intents.rec`: the name, the question, who opened it and when, closed when) when the user opens one in their own words or the design agent proposes one from clustered signals, the `new-territory` move's target, and the user says yes. Signals `attach` to it as today. It closes only on the user's word, given on a conclusion card.
+1. **An intent is a question the design holds open**, in one sentence, named like a unit. crew records it on the drive's branch (`intents.rec`: the name, the question, who opened it and when, closed when) when the user opens one in their own words or the design agent proposes one from clustered signals, the `new-territory` move's target, and the user says yes. Signals `attach` to it as today. It closes only on the user's word, given on a conclusion card.
 
 2. **An elaboration is one run at that question**: one session, in one herdr workspace named for it, in one worktree of the kit the question is about, `<kit>/elaborations/<name>` on `elaboration/<name>` cut from main through the kit's worktree tool, so the kit's hooks run. Its prompt is the question, the intent's signals and the records that bear on it, and the design agent's name. Everything it makes stays in `openspec/explorations/<name>/` of that worktree: readings, notes, mockups, pages, prototype code. There is no type. A prototype that must keep running is kept running by its session, and the session stays until the user has answered.
 
@@ -36,7 +36,7 @@ The question is the simple model that gives most of Flywheel's benefit: a questi
 
 5. **crew's part is small**: `crew intent open <name> "<question>"` and `crew intent close`; `crew elaborate <intent> --repo <kit>`, which makes the worktree and the workspace and starts the session; the session's `crew elaborate <name> --conclude`, which ends its run and tells the design agent; the rail row `elaboration/<name>` from the conclusion's existence, whose card is the design agent's; the tidy. Nothing else is hard-coded: a spike is an elaboration whose conclusion keeps a prototype; research is one whose conclusion is its readings.
 
-What is left out of Flywheel's model, and why: elaboration types, since one ending serves every kind and the user's answer is the only finish; an elaboration covering several intents, since one question is one intent; the intent's own line and its archive, since main holds the conclusion as a record and the branch is kept; the book and claims, since crew's records are its rules, decision records and specs; the close offered by the machinery, since the user closes a question on a conclusion card.
+What is left out of Boomdrive's model, and why: elaboration types, since one ending serves every kind and the user's answer is the only finish; an elaboration covering several intents, since one question is one intent; the intent's own line and its archive, since main holds the conclusion as a record and the branch is kept; the book and claims, since crew's records are its rules, decision records and specs; the close offered by the machinery, since the user closes a question on a conclusion card.
 
 ### Consequences
 
@@ -48,4 +48,4 @@ What is left out of Flywheel's model, and why: elaboration types, since one endi
 
 1. Flywheel Next's model whole: intents with lines and archives, typed elaborations, a book and claims. More than crew needs and a second engine beside crew's files.
 2. Record 0016's spike alone: a prototype-only kind, hard-coded, with research and conversation left out.
-3. This record: one question, one workspace, one document, one card; what it keeps of Flywheel is the shape, what it drops is the machinery.
+3. This record: one question, one workspace, one document, one card; what it keeps of Boomdrive is the shape, what it drops is the machinery.

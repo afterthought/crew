@@ -1,6 +1,6 @@
 # A partition's main-level roles that run as their kinds, through the crew command on the stubs (tests.11, record
 # 0022; record 0047 move 6): with madswan's planner and operator named a stream, a tell to the planner with no
-# standing agent of it up is an ask of the role from its sender on madswan's flywheel branch, its role record written in
+# standing agent of it up is an ask of the role from its sender on madswan's drive branch, its role record written in
 # the same commit, nothing typed into any pane and one ask entry holding the words' length and never their text, which
 # crew trace of the run lists; a send to madswan is an ask of its operator carrying whom it was for; and a tell to wldn's
 # planner, which stands, is refused as today with nothing asked. The planner's run, named from its place: crew role start

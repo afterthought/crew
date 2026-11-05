@@ -434,7 +434,7 @@ ago() { python3 -c 'import datetime, sys; t = datetime.datetime.now(datetime.tim
 
 # herdr_state <host> <session> <jq>: what the stub herdr holds there
 herdr_state() { jq -r "$3" "$(home_of "$1")/.stub-herdr/$2.json"; }
-# bolt_world: the box's switchboard-kit and willdan-blueprints checkouts, and wldn's flywheel started, its plan
+# bolt_world: the box's switchboard-kit and willdan-blueprints checkouts, and wldn's drive started, its plan
 # empty, which a test's bolts and units fill as the planner's commands do
 bolt_world() {
   world

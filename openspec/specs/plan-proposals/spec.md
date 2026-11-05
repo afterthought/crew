@@ -1,7 +1,7 @@
 # plan-proposals Specification
 
 ## Purpose
-Makes every change the planner would make to a flywheel's plan a proposal the user reads and approves before it takes effect, with the agreement of any conductor whose bolt it touches, so that where work goes is the user's decision and what was approved is exactly what is applied.
+Makes every change the planner would make to a drive's plan a proposal the user reads and approves before it takes effect, with the agreement of any conductor whose bolt it touches, so that where work goes is the user's decision and what was approved is exactly what is applied.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ A command that would write the plan, run by a partition's planner, SHALL be refu
 - **THEN** it is refused in the same way
 
 ### Requirement: A proposal is a case and the commands it would run
-`crew plan propose <file>` SHALL write one Proposal record to `proposals.rec` on the flywheel's branch: its number, the planner's case, the plan commands it would run in order, who wrote it and when, and its state, `open`. The commands SHALL be among `bolt new`, `bolt order`, `bolt drop`, `unit add`, `unit amend`, `unit move`, `unit split`, `unit order`, `unit after`, `unit drop`, `chore add`, `chore move`, `chore order`, `chore after` and `chore drop`. A number SHALL be given once and never reused, and a proposal SHALL never be removed or its commands changed.
+`crew plan propose <file>` SHALL write one Proposal record to `proposals.rec` on the drive's branch: its number, the planner's case, the plan commands it would run in order, who wrote it and when, and its state, `open`. The commands SHALL be among `bolt new`, `bolt order`, `bolt drop`, `unit add`, `unit amend`, `unit move`, `unit split`, `unit order`, `unit after`, `unit drop`, `chore add`, `chore move`, `chore order`, `chore after` and `chore drop`. A number SHALL be given once and never reused, and a proposal SHALL never be removed or its commands changed.
 
 #### Scenario: A new bolt with two units
 - **WHEN** the planner proposes `bolt new cfn-checks …`, `unit add cfn-nag-security-check … --bolt cfn-checks` and `unit move retire-suite-cfn-lint cfn-checks`, with its case
@@ -145,7 +145,7 @@ For a `unit amend` command, `crew plan proposed <n>` SHALL show the unit's inten
 - **THEN** its card is open, titled "Plan change to <bolt>: 3 new", with the case, the change drawn and in text, a paragraph per unit, and one list of the three units ticked
 
 ### Requirement: A proposal can be opened in plannotator
-`crew plan proposed <n> [--label L] --open` SHALL write the proposal, exactly as `crew plan proposed <n>` prints it, to a file on the host it runs on, and open that file in plannotator for the user to read and annotate: beside the caller with `plannotator-tui herdr open` when it runs in herdr, inline with `plannotator-tui` otherwise. It SHALL read only the flywheel's branch, so it works from any host. It SHALL write nothing to the branch or the run record. `--open` SHALL be refused without `<n>` and with `--json`.
+`crew plan proposed <n> [--label L] --open` SHALL write the proposal, exactly as `crew plan proposed <n>` prints it, to a file on the host it runs on, and open that file in plannotator for the user to read and annotate: beside the caller with `plannotator-tui herdr open` when it runs in herdr, inline with `plannotator-tui` otherwise. It SHALL read only the drive's branch, so it works from any host. It SHALL write nothing to the branch or the run record. `--open` SHALL be refused without `<n>` and with `--json`.
 
 #### Scenario: Opened from the rail's shell
 - **WHEN** the user runs `crew plan proposed 3 --label wldn --open` in a herdr pane
@@ -156,7 +156,7 @@ For a `unit amend` command, `crew plan proposed <n>` SHALL show the unit's inten
 - **THEN** it is refused, saying `--open` needs a proposal's number
 
 ### Requirement: A proposal's card is drawn from the plan and the proposal
-When crew raises or changes a proposal's card it SHALL read only the flywheel's branch and build every part of the card: its title "Plan change to <bolt or queue>: <counts>", no question and no proposal number; its summary, a sentence of what the planner proposes and why from the case; a paragraph per new unit and per dropped unit as inline Markdown on its face, the intent and a "Direction" line from the proposal's `Do` line and case, a dropped unit's with its why; its background; its boxes and its artifacts; and SHALL draw the card's picture, a PNG 1560 pixels wide at twice a phone's pixel density so it is sharp on a Retina screen, itself, with no browser, no other program and no agent.
+When crew raises or changes a proposal's card it SHALL read only the drive's branch and build every part of the card: its title "Plan change to <bolt or queue>: <counts>", no question and no proposal number; its summary, a sentence of what the planner proposes and why from the case; a paragraph per new unit and per dropped unit as inline Markdown on its face, the intent and a "Direction" line from the proposal's `Do` line and case, a dropped unit's with its why; its background; its boxes and its artifacts; and SHALL draw the card's picture, a PNG 1560 pixels wide at twice a phone's pixel density so it is sharp on a Retina screen, itself, with no browser, no other program and no agent.
 
 #### Scenario: A proposal that drops, amends and adds
 - **WHEN** crew raises the card for a proposal that drops one unit of bolt `y`, amends one and adds two
