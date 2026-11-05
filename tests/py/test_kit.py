@@ -1,5 +1,5 @@
 """A kit's policy as sluice reads it, and what crew reads of a kit's main and its bolts (kit.py; plan.18, plan.19).
-crew readies no place (kit-toolchain spec)."""
+crew readies no place: Flume has sluice equip it (Flume record 0036; sluice 147)."""
 import base64
 import pathlib
 
@@ -9,7 +9,6 @@ import kit
 from crew import Refusal
 
 FULL = '[tests]\ntoolchain = ["devenv", "print-dev-env"]\nrunner = "moon"\n'
-SCRIPT = "/kit.git/worktrees/a/crew/toolchain.sh"
 
 
 class TestPreviewed:

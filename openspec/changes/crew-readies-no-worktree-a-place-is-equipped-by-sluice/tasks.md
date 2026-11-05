@@ -10,7 +10,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 
 ## 2. The spec
 
-- [ ] 2.1 The change removes every `kit-toolchain` requirement and retires the capability, and nothing of crew's outside the records and the archive cites the spec. That includes `tests/py/test_kit.py`, whose docstring cites Flume's record 0036 and whose unused `SCRIPT` is gone (design, Decision 2; Task notes 2.1). Verify that `openspec validate crew-readies-no-worktree-a-place-is-equipped-by-sluice --strict` passes, that `git grep -n kit-toolchain -- plugin tests README.md CLAUDE.md docs/architecture` prints nothing, and that `tests/suite logic` ends with "0 failed".
+- [x] 2.1 The change removes every `kit-toolchain` requirement and retires the capability, and nothing of crew's outside the records and the archive cites the spec. That includes `tests/py/test_kit.py`, whose docstring cites Flume's record 0036 and whose unused `SCRIPT` is gone (design, Decision 2; Task notes 2.1). Verify that `openspec validate crew-readies-no-worktree-a-place-is-equipped-by-sluice --strict` passes, that `git grep -n kit-toolchain -- plugin tests README.md CLAUDE.md docs/architecture` prints nothing, and that `tests/suite logic` ends with "0 failed".
 
 ## 3. The words
 
