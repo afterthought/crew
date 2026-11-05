@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""page.py: a flywheel's page, one HTML file: its board, its lineage and its deploys, drawn from its run record; and
+"""page.py: a drive's page, one HTML file: its board, its lineage and its deploys, drawn from its run record; and
 the fleet page, every partition at once.
 
   crew page <label> [--out <file>] [--since <time>]
                                      the partition's board, as crew board reads it, which the page opens on; the
-                                     flywheel's signals, agenda items, proposals, units and bolts as columns, a line for
+                                     drive's signals, agenda items, proposals, units and bolts as columns, a line for
                                      each link between two of them, a timeline of the entries beneath, and each
                                      object's history; and its deploys, a timeline by environment, each deploy with
                                      the commit it moved from and to, the user's word on it, its steps, checks and
@@ -111,7 +111,7 @@ def from_entries(node, entries):
 
 
 def describe(fleet, label, repo, tip, d, pl=None, sv=None):
-    """Each node's label and present status, read from the flywheel's state at tip: a signal's assertion and whether
+    """Each node's label and present status, read from the drive's state at tip: a signal's assertion and whether
     a move has taken it; an item's subject, lane and state; a proposal's first line of case and its state; a unit's
     intent and stage, read from its kit as crew bolts reads it; a bolt's goal, host and state. pl and sv, when given,
     are the plan at tip and the survey of its kits another read already made, so neither is read again. Returns the

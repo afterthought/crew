@@ -32,7 +32,7 @@ Sources: the user's words quoted below; sluice's `phase-2-git-state` branch as o
 | crew | mac-studio | yes | moon 2.6.1 from devenv (this branch) | none | `bolt-verify.sh`, on the target's revision |
 | swancloud | mac-studio | yes | none | none | `flake-gate verify`, on the worktree's own branch |
 | sluice | mac-studio | yes | proto 0.63.1; moon and Rust in `.prototools` | none | none |
-| flywheel-next, flywheel-web | mac-studio | yes | none | none | none |
+| flywheel-next, boomdrive-web | mac-studio | yes | none | none | none |
 | paymaster, strategy | mac-studio | no | none | none | none |
 | switchboard-kit (f6c0dbfd) | box | yes | moon and proto from nixpkgs-unstable; bun and node from nix | `bun install --frozen-lockfile` | `post-merge-verify`, in the target's worktree |
 | breadboard-kit, aws-bootstrap | box | yes | none | none | none |
@@ -50,21 +50,21 @@ switchboard is the one kit with a `crew-prepare`, and each of its suite scripts 
 ## Decision drivers
 
 - crew assumes neither moon nor devenv, and names no kit's script.
-- A kit says once how its tools are set up and its checks run, and crew and sluice read the same words. sluice stands on its own; flywheel will use sluice's SDK, and then takes over crew's steps on the same declaration, with no kit changing anything.
+- A kit says once how its tools are set up and its checks run, and crew and sluice read the same words. sluice stands on its own; Boomdrive will use sluice's SDK, and then takes over crew's steps on the same declaration, with no kit changing anything.
 - crew's tests run on what crew runs on.
 
 ## Decision outcome
 
 1. **The split, as sluice has it.** devenv holds the system tools, proto among them. proto holds the application tools a kit pins in `.prototools`, moon among them, and `.moon/toolchains.yml` reads the pins moon runs tasks with. devenv's shell runs `proto install` and activates the pins, with `PROTO_HOME` and `MOON_HOME` of the kit's own under its git common dir. `MOON_TOOLCHAIN_FORCE_GLOBALS` goes.
 
-2. **One declaration, sluice's file for now.** A kit declares its toolchain and its test runner once, in the `[tests]` table of `.config/sluice.toml`, with sluice's keys and meanings: `toolchain`, the command that prints the kit's toolchain as shell code; and `runner`, `"moon"`, or `"command"` with `command`. crew reads that table from the worktree in hand and nothing else of the file. A kit that does not merge through sluice writes the same table; whether its merges go through sluice is still crew's `sluice = true` flag in `.config/crew.toml` (`teams.5`). A kit with no file, or none of these keys, declares nothing, and crew does nothing for it. A file crew cannot read refuses, naming the file and the key (`read.1`). The user: "use sluice.toml. but really should this all be flywheel.toml? i want sluice to stand on its own and i want flywheel to use the sluice sdk. maybe we use sluice.toml now and then eventually it just becomes flywheel.toml when we have it". So sluice stays a tool of its own, flywheel will use sluice's SDK, and the file becomes `flywheel.toml` then; crew reads it in one place, `plugin/lib/kit.py`'s `DECLARATION`, so the rename is one edit.
+2. **One declaration, sluice's file for now.** A kit declares its toolchain and its test runner once, in the `[tests]` table of `.config/sluice.toml`, with sluice's keys and meanings: `toolchain`, the command that prints the kit's toolchain as shell code; and `runner`, `"moon"`, or `"command"` with `command`. crew reads that table from the worktree in hand and nothing else of the file. A kit that does not merge through sluice writes the same table; whether its merges go through sluice is still crew's `sluice = true` flag in `.config/crew.toml` (`teams.5`). A kit with no file, or none of these keys, declares nothing, and crew does nothing for it. A file crew cannot read refuses, naming the file and the key (`read.1`). The user: "use sluice.toml. but really should this all be flywheel.toml? i want sluice to stand on its own and i want flywheel to use the sluice sdk. maybe we use sluice.toml now and then eventually it just becomes flywheel.toml when we have it". So sluice stays a tool of its own, Boomdrive will use sluice's SDK, and the file becomes `boomdrive.toml` then; crew reads it in one place, `plugin/lib/kit.py`'s `DECLARATION`, so the rename is one edit.
 
 3. **Two adapters in crew, shaped as sluice's.** crew's toolchain adapter and test adapter are a port of the steps sluice's check profile runs before and around a run, in one module, `plugin/lib/kit.py`, with the decisions there and the acts in `plan.py`:
    - **toolchain**: run `toolchain` in the worktree, on the team's host, with stdin closed and an environment cleaned as sluice cleans it (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`, `LANG`, `TERM`, `PROTO_HOME`, `MOON_HOME` and `LC_*`; nothing of `GIT_*`, `MOON_*`, `DEVENV_*`, `DIRENV_*`, `CREW_*` or a Claude session's), and keep what it prints in the worktree's git directory, outside its tree;
    - **in the toolchain**: run any later command in the worktree as `bash -c 'source "$0" >&2; exec "$@"' <script> <command>`, by the `bash` on PATH;
    - **setup**, the test adapter's: `moon --version`, refusing only a moon whose version crew cannot read, then `moon setup`, both in the toolchain, for `runner = "moon"`; nothing for `"command"`. crew enforces no moon floor, and a kit's moon is its own but for sluice's moon runner's floor, 2.6, which sluice checks at its run, so a kit runs 2.6 or later before it goes onto sluice (amended 2026-10-13 on the user's words, recorded as their decision: "The version of Moon is decided by every kit repo. It's not enforced by Sluice and it's not enforced by crew. It has to do with certain features the project may or may not want to take advantage of, but Sluice does not require Moon 2.6"; then, told that sluice's moon runner refuses a moon below 2.6 at its run, `crates/sluice/src/profiles/moon.rs`, its `FLOOR` and `check_version`, read in sluice 0.2.2 on 2026-10-13: "Keep sluice's floor");
    - **run and read**, the test adapter's, sluice's too (the required tasks by tag through `moon query tasks`, `moon exec` of them with `--on-failure continue`, each task's outcome from `.moon/cache/runReport.json`; or `sh -c <command>` as one check): crew ports them when it first needs to run a kit's checks itself, which waits on the held bolt question below.
-   When flywheel uses sluice's SDK, it calls sluice for these steps on the same declaration; crew's module is what it replaces.
+   When Boomdrive uses sluice's SDK, it calls sluice for these steps on the same declaration; crew's module is what it replaces.
 
 4. **A worktree is made ready by the kit's declaration.** When crew makes a bolt's, unit's or fix's worktree, it runs the toolchain step and then the test adapter's setup there, on the team's host, before any agent starts: sluice's steps in sluice's order, which for sluice's own declaration are `devenv print-dev-env` (whose shell entry runs `proto install`, moon among the pins) and then `moon setup`. It runs them again when it finds the worktree already there, so a command run again after a failure sets it up. Dependencies install as the kit's moon config says, before the first task that needs them. `crew-prepare` goes. switchboard-kit, the one kit that had it, keeps working until it writes its declaration: each of its suite scripts runs `bun install --frozen-lockfile` before it starts.
 
@@ -79,7 +79,7 @@ Held for an elaboration, and not decided here:
 ### Consequences
 
 - crew names no kit script and reads no kit's profile. A kit gets nothing from crew until it declares its toolchain or its runner, and moves to devenv, proto and moon when it chooses.
-- A kit's declaration is sluice's policy file even before the kit merges through sluice, and becomes `flywheel.toml` with one edit in crew when flywheel has it.
+- A kit's declaration is sluice's policy file even before the kit merges through sluice, and becomes `boomdrive.toml` with one edit in crew when Boomdrive has it.
 - A new worktree costs the kit's toolchain step in crew's command: for a devenv toolchain, about 20 s cold, which sluice plans to cache per revision of the toolchain's files (its piece 11).
 - crew's tests run on Python 3.13.15, the hosts' minor, from proto; pytest comes from a lock file, synced per worktree by moon, which needs the network once per host.
 - moon 2.6.1 calls its Python toolchains `unstable_`: a moon upgrade may rename them in crew's config.
@@ -87,10 +87,10 @@ Held for an elaboration, and not decided here:
 ## Considered options
 
 For where the declaration lives:
-- **crew reads sluice's file** (chosen, until flywheel has `flywheel.toml`): one declaration, read by both, in sluice's schema; crew follows sluice's keys as they change.
+- **crew reads sluice's file** (chosen, until Boomdrive has `boomdrive.toml`): one declaration, read by both, in sluice's schema; crew follows sluice's keys as they change.
 - **A file of its own both read** (`.config/toolchain.toml`): neutral, but sluice reads its whole policy from one file at the target branch's revision (sluice ADR 0007), so this changes sluice.
 - **The same keys in crew's `.config/crew.toml`**: no coupling, and two declarations that drift in every kit on sluice.
-- **crew calls sluice** for the steps: one implementation, once sluice is installed on every host crew runs on, which it is not yet; flywheel, using sluice's SDK, is where this lands.
+- **crew calls sluice** for the steps: one implementation, once sluice is installed on every host crew runs on, which it is not yet; Boomdrive, using sluice's SDK, is where this lands.
 
 For making a worktree ready:
 - Keep `crew-prepare`: the user's "bad design".

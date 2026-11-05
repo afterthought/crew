@@ -2,8 +2,8 @@
 
 A kit says what gates its branches, where each branch lives and whether it declares a preview once, in sluice's words:
 the policy file DECLARATION, read at the revision in hand. crew readies no place: a unit's, chore's and fix's places
-are Flume's, readied by its kind and the kit's own files. sluice stands on its own, and flywheel will use sluice's SDK
-for these same reads; the file becomes flywheel.toml then, and DECLARATION is the one name that changes.
+are Flume's, readied by its kind and the kit's own files. sluice stands on its own, and Boomdrive will use sluice's SDK
+for these same reads; the file becomes boomdrive.toml then, and DECLARATION is the one name that changes.
 
 These are the decisions, each a function of plain facts (code.7); plan.py runs their reads on the team's host."""
 import base64

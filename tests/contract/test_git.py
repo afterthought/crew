@@ -961,7 +961,7 @@ def runner_files(host, answers="", places=""):
             "answers.rec": runner.ANSWERS + answers, "places.rec": runner.PLACES + places}
 
 
-def test_the_runners_branches_come_with_the_flywheels_branch_in_one_fetch_and_each_hosts_is_read_at_its_tip(state, monkeypatch):
+def test_the_runners_branches_come_with_the_drives_branch_in_one_fetch_and_each_hosts_is_read_at_its_tip(state, monkeypatch):
     """plan.tip_of's fetch of <label>/main brings <label>/runner/* with it (plan.beside, plan.12), and plan.runners reads
     each host's three files at its tip in crew's cache with no fetch of its own, checked by recfix (Decision 4 of
     teams-cross-to-flume-as-their-bolts-land): deneb's answer and place for request 3 are read; alpha, which has no

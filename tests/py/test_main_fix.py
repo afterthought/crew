@@ -54,7 +54,7 @@ class TestLaunch:
     def test_no_runner_answering_for_the_partition_is_refused_naming_state_3s_way(self):
         w = write(runners={})
         with pytest.raises(plan.Refusal, match="^no runner answers for madswan: its state repository holds no madswan/runner/<host>, so "
-                                               "nothing would take the fix; until a runner \\(flywheel-runner\\) serves madswan, a fix of "
+                                               "nothing would take the fix; until a runner \\(Boomdrive\\) serves madswan, a fix of "
                                                "crew's red main is a bolt of one chore, proposed first among the planned \\(state.3\\); "
                                                "tell madswan-planner, who proposes it$"):
             plan.main_fix_change(madswan_fleet(), w, "crew", "red", "start", WORDS)

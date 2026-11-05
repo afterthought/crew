@@ -59,7 +59,7 @@ MADSWAN = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "b
 
 
 def an_asks_write():
-    """A write of the flywheel holding no asks.rec or roles.rec yet, as a branch before its first ask."""
+    """A write of the drive holding no asks.rec or roles.rec yet, as a branch before its first ask."""
     class W(plan.Write):
         def text(self, path):
             return self.files.get(path)

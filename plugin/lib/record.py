@@ -18,7 +18,7 @@ A team's crossing to Flume (record 0050 part 3), which an older crew recorded as
 the Flume stream the team's work then ran in, is read by crew trace team/<team> as written; crew writes it no more
 (Decision 8 of the-team-machinery-leaves).
 
-Each entry reaches the flywheel's branch of its state repository as it is written: the command that appended it
+Each entry reaches the drive's branch of its state repository as it is written: the command that appended it
 pushes it there, to the same path under runs/<host>/, as a commit of its own from this host, before it goes on. The
 branch's file becomes the union by Id of what it had and what the host has, so a host only ever adds to its own files
 and a host that is asleep or rebuilt loses nothing it pushed. A push that is refused is said once and changes nothing

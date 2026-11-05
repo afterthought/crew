@@ -18,7 +18,7 @@ Sources: the user's message of 2026-10-06; `plugin/roles/conductor.md` (review),
 
 The user said three things. At a unit's review the conductor opens only the change's proposal in plannotator, and the user wants to see all of its files. Agents mention the planner's proposals to the user by number, sometimes with a summary, rarely with the proposal itself, where earlier the user saw the sequence of adds and drops. And decisions reach the user from several panes with nothing listing them: "if I could have one place that showed me the list and I could work down through that, it would make it a lot easier", asking for "the simplest thing we can do with our current implementation", noting that such a list "needs to have them go stale".
 
-What is built: a unit in review has its change in `<kit>/places/<unit>/openspec/changes/<unit>/`, and plannotator-tui opens a file or a folder. A proposal is a record on the flywheel's branch that `crew plan proposed <n>` renders in plain words, without the commands it holds. Units' stages are read from the kits, proposals from the branch, and verify reports are files on the team's host. The findings-to-design proposal already decided that Flywheel Next's rail, decisions derived from active states, is in crew `crew plan proposed` and, once built, `crew agenda`.
+What is built: a unit in review has its change in `<kit>/places/<unit>/openspec/changes/<unit>/`, and plannotator-tui opens a file or a folder. A proposal is a record on the drive's branch that `crew plan proposed <n>` renders in plain words, without the commands it holds. Units' stages are read from the kits, proposals from the branch, and verify reports are files on the team's host. The findings-to-design proposal already decided that Flywheel Next's rail, decisions derived from active states, is in crew `crew plan proposed` and, once built, `crew agenda`.
 
 ## Decision drivers
 
@@ -31,7 +31,7 @@ What is built: a unit in review has its change in `<kit>/places/<unit>/openspec/
 For the list:
 
 1. A read command that derives what waits on the user from the plan, the proposals, the kits and the team's host, nothing written to make or clear an item.
-2. A kept list: a record on the flywheel's branch that agents write to when they wait on the user and clear when answered, numbered as Flywheel's rail is.
+2. A kept list: a record on the drive's branch that agents write to when they wait on the user and clear when answered, numbered as Boomdrive's rail is.
 3. The operator agent as the one place, answering in chat.
 
 ## Decision outcome
@@ -49,7 +49,7 @@ Option 1. `crew rail [--label <label>]`, named as Flywheel Next names it, prints
 
 | what | read from | it began to wait at | it leaves the list when |
 |---|---|---|---|
-| an open proposal, with whose agreement it still needs | `proposals.rec` on the flywheel's branch | its `plan.propose` entry in the run record, else its `Opened` date | it is approved or dropped |
+| an open proposal, with whose agreement it still needs | `proposals.rec` on the drive's branch | its `plan.propose` entry in the run record, else its `Opened` date | it is approved or dropped |
 | a unit in review, with the plannotator command that opens its whole change | the unit's stage, from the kit | the time of the unit branch's head, construct's last commit | it is approved, or construct runs again |
 | a unit in verify whose report is newer than its branch's head, with the report's path and its conductor | the team's host: the unit's stage, the reports folder, the branch | the report file's time | code commits again, or the unit merges (amended 2026-10-13 by record 0027: a verify report waits on no one, and is no row) |
 | a bolt whose every unit has merged and that has not landed, with its team and the main-level ops that lands it | the plan and the kit | the time of the bolt branch's head, the last merge into it | it lands |
@@ -73,7 +73,7 @@ The rail is built on what crew already reads and stores, not on new records: ope
 
 ### Option 1: derived from state
 
-- Good: nothing to write or clear, so nothing goes stale; it is `crew bolts` and `crew plan proposed` read with one question in mind; it is Flywheel's rule for its rail, decisions derived from active states.
+- Good: nothing to write or clear, so nothing goes stale; it is `crew bolts` and `crew plan proposed` read with one question in mind; it is Boomdrive's rule for its rail, decisions derived from active states.
 - Bad: a decision with no state behind it, such as a question in a pane, cannot be listed.
 
 ### Option 2: a kept list

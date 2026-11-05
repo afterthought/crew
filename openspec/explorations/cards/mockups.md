@@ -6,7 +6,7 @@ An exploration, for the card elaboration of 2026-10-14, each mockup redrawn on 2
 
 ## 1. The process, and where the user's word is in it
 
-crew's flywheel, from an idea to a machine running it. At each point: who acts, what is the user's, and whether a card is how it reaches them.
+crew's drive, from an idea to a machine running it. At each point: who acts, what is the user's, and whether a card is how it reaches them.
 
 | # | Point in the process | Who acts | The user's part | Card |
 |---|---|---|---|---|

@@ -259,8 +259,8 @@ commit_all "$w" "signals: a capture"; git -C "$w" push -q origin main
 printf '#!/usr/bin/env bash\nwhile read -r old new ref; do echo "$ref" >> "$CREW_TEST_ROOT/pushes"; done\n' > "$as/hooks/post-receive"
 chmod +x "$as/hooks/post-receive"; : > "$T/pushes"
 race afterthought/crew-state chuck-herdr-alpha swancloud-design signal move "$greeting" drop --reason "a greeting" --label swancloud
-expect_ok crew bolt new flywheel-loop "The loop runs." --repo flywheel-next --label madswan
+expect_ok crew bolt new drive-loop "The loop runs." --repo flywheel-next --label madswan
 [[ ! -f $T/race ]] || fail "swancloud's write never ran"
 eq "$(sort "$T/pushes" | uniq -c | awk '{print $1, $2}')" $'2 refs/heads/madswan/main\n2 refs/heads/swancloud/main'
 eq "$(git -C "$(home_of mac-studio)/.cache/crew/git/afterthought/crew-state.git" for-each-ref --format='%(refname)' refs/crew/)" "refs/crew/madswan/main"
-ok "two flywheels in one repository write at the same moment, each pushing its write and then its entry, neither replayed for the other nor fetching its branch"
+ok "two drives in one repository write at the same moment, each pushing its write and then its entry, neither replayed for the other nor fetching its branch"

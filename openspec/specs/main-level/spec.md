@@ -153,7 +153,7 @@ Signals SHALL stay in the partition's first blueprints repo, in the signals mode
 - **THEN** it records a signal in willdan-blueprints, and the planner decides whether to route it
 
 ### Requirement: Every move is written through crew and never merged
-Every move SHALL be appended to `moves.rec` on the flywheel's branch of its state repository, through crew: `route` by `crew unit add --signal`, and `attach`, `challenge`, `new-territory`, `answered` and `drop` by `crew signal move <id> <move>`. Each SHALL be fetched over https, applied to the tip of the branch, checked with `recfix --check`, committed, and pushed without force, applied again to the new tip when the push is refused. A signal SHALL have one move; a second is refused.
+Every move SHALL be appended to `moves.rec` on the drive's branch of its state repository, through crew: `route` by `crew unit add --signal`, and `attach`, `challenge`, `new-territory`, `answered` and `drop` by `crew signal move <id> <move>`. Each SHALL be fetched over https, applied to the tip of the branch, checked with `recfix --check`, committed, and pushed without force, applied again to the new tip when the push is refused. A signal SHALL have one move; a second is refused.
 
 #### Scenario: Moves from two hosts
 - **WHEN** a route is written on the box while curation writes a drop on mac-studio, both through crew

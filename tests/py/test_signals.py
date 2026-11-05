@@ -2,7 +2,7 @@
 landed through crew signal land (signals.6): the capture a signal goes in, named and quoted by its excerpt's verdict;
 the number it takes in its capture; its file; what crew says; where its agent was working; a curation move's record and
 refusals; a route's; a short id's signal; crew signal show's text; and what a program's capture must hold to land and what its landing
-writes. That a capture and its signal are one commit on the flywheel's branch, the raw record banked on the host, a
+writes. That a capture and its signal are one commit on the drive's branch, the raw record banked on the host, a
 route and its unit one commit, any host answers show from the branches alone, and a program's capture lands in one
 commit and once, is the signal journey's (t-journey-signals)."""
 import datetime

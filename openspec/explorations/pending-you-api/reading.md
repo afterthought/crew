@@ -123,7 +123,7 @@ The user said yes to three test cards (2026-10-12). Readying them showed somethi
 
 - **Since 2026-10-10.** `~/.config/pendingyou/credentials.json` has held no sign-in since 09:05Z that day. `pendingyou status` says "Sign-in: not signed in", the headers helper exits 1 ("this computer isn't signed in to Pending You"), and `pendingyou mcp --app claude-code` answers every request with -32001.
 - **Sessions fall back to Claude Code's own sign-in.** Every session's MCP log since shows "headersHelper for MCP server 'pendingyou' did not return a valid value", then Claude Code's own OAuth tokens for the server, one sign-in per account's settings folder. That is what minted the connection of 2026-10-11 that ADR 0005 calls "minted by something unread".
-- **Some accounts have no tools at all.** Sessions of an account never signed in that way show "Authentication required": on 2026-10-12, sluice, willdan and flywheel-web.
+- **Some accounts have no tools at all.** Sessions of an account never signed in that way show "Authentication required": on 2026-10-12, sluice, willdan and boomdrive-web.
 
 So a card crew posts under the host's sign-in and the agents' sessions are on different connections. Two things follow, read in the wake mod's code (`~/.config/pendingyou/mod/hooks/`) and the CLI's (`dist/herdr.js`):
 

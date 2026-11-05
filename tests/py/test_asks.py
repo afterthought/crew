@@ -172,7 +172,7 @@ FALSE = dict.fromkeys(("design", "planner", "reviewer", "ops", "operator"), Fals
 
 
 def madswan(**flume):
-    return {"label": "madswan", "machine": "deneb", "blueprints": ["afterthought/blueprints", "afterthought/flywheel-web"], "roles": {},
+    return {"label": "madswan", "machine": "deneb", "blueprints": ["afterthought/blueprints", "afterthought/boomdrive-web"], "roles": {},
             "flume": dict(FALSE, **flume)}
 
 
@@ -420,7 +420,7 @@ Began: 2026-10-31T10:01:00Z
 
 
 class Branch:
-    """madswan's flywheel branch as a role command sees it: its files, each write applied to them, and the entries each
+    """madswan's drive branch as a role command sees it: its files, each write applied to them, and the entries each
     write emitted."""
 
     def __init__(self, files):
@@ -428,7 +428,7 @@ class Branch:
 
 
 def on_branch(monkeypatch, fleet, files):
-    """madswan's flywheel branch in memory holding files, each write of a command on deneb applied to it and each
+    """madswan's drive branch in memory holding files, each write of a command on deneb applied to it and each
     entry it emitted kept (Branch)."""
     import crew
     import plan
@@ -898,16 +898,16 @@ class TestLand:
     def test_a_blueprints_repository_or_one_the_plan_names_is_named_and_requests_follow_those_held(self, landing, monkeypatch):
         import plan
         monkeypatch.setattr(plan, "read", lambda repo, ref, tip: plan.Plan(
-            plan.HEADER.replace("%rec: Unit", "Bolt: b\nRepo: agentplot/flywheel-web\nGoal: g\n\n%rec: Unit")))
+            plan.HEADER.replace("%rec: Unit", "Bolt: b\nRepo: agentplot/boomdrive-web\nGoal: g\n\n%rec: Unit")))
         land(landing, "afterthought/blueprints", "record-0054")
-        land(landing, "agentplot/flywheel-web", "diagram-the-method")
+        land(landing, "agentplot/boomdrive-web", "diagram-the-method")
         assert [(r["Request"], r["Repo"], r["Work"]) for r in requested(landing)] == [
-            ("1", "afterthought/blueprints", "role/design/record-0054"), ("2", "agentplot/flywheel-web", "role/design/diagram-the-method")]
+            ("1", "afterthought/blueprints", "role/design/record-0054"), ("2", "agentplot/boomdrive-web", "role/design/diagram-the-method")]
 
     @pytest.mark.parametrize("repo, why", [
         ("afterthought/crew-state", "^crew names no repository afterthought/crew-state: a role's work lands in a blueprints repository "
                                     "the teams file names or a kit the partition's plan or landings name, and it names "
-                                    "afterthought/blueprints, afterthought/crew, afterthought/flywheel-web$"),
+                                    "afterthought/blueprints, afterthought/boomdrive-web, afterthought/crew$"),
         ("crew", "^a repository is named by its forge address, <owner>/<name>, which the runner resolves to its clone, not crew$")])
     def test_a_repository_crew_does_not_name_is_refused_writing_nothing_and_the_refusal_is_recorded(self, landing, repo, why):
         """role-runs, A role's work that lands: "A repository neither the teams file nor the plan names SHALL be refused"."""

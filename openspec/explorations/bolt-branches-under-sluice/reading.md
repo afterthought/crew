@@ -65,7 +65,7 @@ The bolt is a branch only, as flywheel-next has it: "the bolt's line is a branch
 
 - **Costs:** a place per proof (a cold toolchain, about 20 s for a devenv kit, until sluice's caching lands); the conductor and ops start in the kit's main checkout.
 - **Breaks:** ops's long-lived checkout, where a deployed bolt's dev servers run today; `bolt_place` and the briefs; the post-merge hooks, as in B.
-- **Fits:** flywheel's own model, which crew is meant to become.
+- **Fits:** Boomdrive's own model, which crew is meant to become.
 
 ### E. The bolt lands through sluice too
 
@@ -86,4 +86,4 @@ main-level ops submits the bolt to main (`wt submit main`), and sluice lands it 
 1. For a kit on sluice: keep the bolt's branch checked out and level it (A), or hold no checkout of it (B, C or D).
 2. How a bolt in such a kit lands: rebased by crew from a branch sluice does not guard (B, C, D), or through sluice (E).
 3. That bolt verification is sluice's in a kit on sluice and stays the kit's post-merge hook elsewhere, so crew verifies nothing itself; or that crew verifies every kit's bolts the same way.
-4. Whether crew moves towards flywheel's lines and places now (D), or keeps its bolt checkout until flywheel takes over.
+4. Whether crew moves towards Boomdrive's lines and places now (D), or keeps its bolt checkout until Boomdrive takes over.

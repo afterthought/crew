@@ -1,7 +1,7 @@
 # lineage-page Specification
 
 ## Purpose
-Draws a flywheel's signals, agenda items, proposals, units and bolts with the links between them, from the run record, on one page a person can open without asking an agent, as a view that can be replaced without changing what crew records.
+Draws a drive's signals, agenda items, proposals, units and bolts with the links between them, from the run record, on one page a person can open without asking an agent, as a view that can be replaced without changing what crew records.
 
 ## Requirements
 
@@ -13,11 +13,11 @@ Draws a flywheel's signals, agenda items, proposals, units and bolts with the li
 - **THEN** it prints the path of an HTML file there, which opens in a browser with the network off
 
 #### Scenario: Nothing recorded yet
-- **WHEN** the flywheel's run record is empty
+- **WHEN** the drive's run record is empty
 - **THEN** the page is written and says nothing has been recorded
 
 ### Requirement: The page draws what led to what
-The page SHALL show the flywheel's signals, agenda items, proposals, units and bolts as columns in that order, each object once, with a line for every link between two objects. Selecting an object SHALL mark everything it came from and everything that came from it. An object with no link SHALL still be shown.
+The page SHALL show the drive's signals, agenda items, proposals, units and bolts as columns in that order, each object once, with a line for every link between two objects. Selecting an object SHALL mark everything it came from and everything that came from it. An object with no link SHALL still be shown.
 
 #### Scenario: From a signal to a bolt
 - **WHEN** a signal was routed to a plan item, a proposal added a unit from the item to a bolt, and the bolt landed
@@ -28,7 +28,7 @@ The page SHALL show the flywheel's signals, agenda items, proposals, units and b
 - **THEN** it is shown in the signals column with no line
 
 ### Requirement: The page's objects and links come from the run record alone
-Which objects exist, how they are linked and in what order things happened SHALL be read only from the run record's entries, by the same walk `crew trace` makes. Labels that describe an object, such as a signal's assertion, an item's subject, a unit's intent or a bolt's goal, MAY be read from the flywheel's state. For every object, the history the page shows SHALL be the entries `crew trace` prints for it.
+Which objects exist, how they are linked and in what order things happened SHALL be read only from the run record's entries, by the same walk `crew trace` makes. Labels that describe an object, such as a signal's assertion, an item's subject, a unit's intent or a bolt's goal, MAY be read from the drive's state. For every object, the history the page shows SHALL be the entries `crew trace` prints for it.
 
 #### Scenario: The page and the trace agree
 - **WHEN** an object's history on the page is compared with `crew trace` for that object
@@ -39,14 +39,14 @@ Which objects exist, how they are linked and in what order things happened SHALL
 - **THEN** it reads the same entries, and nothing crew records has to change for it
 
 ### Requirement: Each object opens to its history
-Selecting an object SHALL list its entries in time order: the time, the act, who asked, the host, the commit, a refusal's reason, and the session to open for the detail, as text that can be copied. A timeline beneath the columns SHALL show when the flywheel's entries happened, and selecting an object SHALL mark its entries there.
+Selecting an object SHALL list its entries in time order: the time, the act, who asked, the host, the commit, a refusal's reason, and the session to open for the detail, as text that can be copied. A timeline beneath the columns SHALL show when the drive's entries happened, and selecting an object SHALL mark its entries there.
 
 #### Scenario: Who approved a unit
 - **WHEN** the user selects a unit
 - **THEN** its entries include the approval, with who ran it, on which host, and that agent's session to open
 
 ### Requirement: The page says what it was made from
-The page SHALL state the time it was made and the commit of the flywheel's branch it read, its run record read from that commit alone. It SHALL NOT change after it is written; running the command again writes it anew. When the flywheel's branch cannot be read, the command SHALL write no page and SHALL say which branch it could not read.
+The page SHALL state the time it was made and the commit of the drive's branch it read, its run record read from that commit alone. It SHALL NOT change after it is written; running the command again writes it anew. When the drive's branch cannot be read, the command SHALL write no page and SHALL say which branch it could not read.
 
 #### Scenario: A host was asleep
 - **WHEN** the page is made while a Mac that wrote entries of the partition does not answer

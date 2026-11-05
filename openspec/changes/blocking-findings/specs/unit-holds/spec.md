@@ -22,7 +22,7 @@ When a stage or the conductor finds something that stops a unit of its bolt, the
 
 #### Scenario: The conductor blocks its unit
 - **WHEN** swb-2's conductor runs `crew signal design-undecided "<what it asserts>" --excerpt "<the words>" --kind question --blocks cfn-lint-treefmt`
-- **THEN** one commit on the flywheel's branch holds the capture, the signal, and `Hold: signals/<id>` on the unit
+- **THEN** one commit on the drive's branch holds the capture, the signal, and `Hold: signals/<id>` on the unit
 
 #### Scenario: Another team's unit
 - **WHEN** swb-1's conductor names a unit of the bolt swb-2 holds

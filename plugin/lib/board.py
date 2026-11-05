@@ -111,7 +111,7 @@ def signals_at(repo, tip, home, moved):
 
 
 def signals(fleet, label, tip):
-    """The label's signals no move has taken, in both homes: the flywheel's branch at the tip the plan was read from
+    """The label's signals no move has taken, in both homes: the drive's branch at the tip the plan was read from
     (None when the branch is not started, so nothing is moved), and main of the partition's first blueprints repo;
     and each home that could not be read, {what: why}. When the branch's signals and moves can't be read, which
     signals are moved can't be known, and none is listed (read.1)."""

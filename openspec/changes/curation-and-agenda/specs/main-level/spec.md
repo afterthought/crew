@@ -29,7 +29,7 @@ The planner SHALL be the only agent that proposes bolts, the placing of units in
 - **THEN** the planner sends it to the design lane with the decision it needs, and proposes nothing from it
 
 ### Requirement: Signals reach the plan only through a route
-A signal recorded through crew SHALL live on the flywheel's branch of its state repository, and a signal read from a meeting or a channel in the partition's first blueprints repo, both in the signals model that repo's `signals/README.md` gives. An agent that notices something outside its own unit SHALL record it as a signal with `crew signal`, quoting the words that show it, and SHALL tell no other agent about it. A signal SHALL reach the plan only after it has been curated: through a plan item the planner proposes a unit from, or a design item a session decides. The one exception SHALL be what the user tells the planner directly.
+A signal recorded through crew SHALL live on the drive's branch of its state repository, and a signal read from a meeting or a channel in the partition's first blueprints repo, both in the signals model that repo's `signals/README.md` gives. An agent that notices something outside its own unit SHALL record it as a signal with `crew signal`, quoting the words that show it, and SHALL tell no other agent about it. A signal SHALL reach the plan only after it has been curated: through a plan item the planner proposes a unit from, or a design item a session decides. The one exception SHALL be what the user tells the planner directly.
 
 #### Scenario: A finding from a bolt
 - **WHEN** ops on swb-1 finds a defect in a shared service the bolt does not own
@@ -44,7 +44,7 @@ A signal recorded through crew SHALL live on the flywheel's branch of its state 
 - **THEN** the planner records the user's words as a signal and proposes the unit from it, and the user's approval routes that signal to the unit
 
 ### Requirement: Every move is written through crew and never merged
-Every move SHALL be appended to `moves.rec` on the flywheel's branch of its state repository, through crew: by a curator's delivery, by `crew signal move`, by `crew agenda add`, or by the approval of a unit the planner proposed from the user's direct word. The moves SHALL be `attach`, `challenge`, `join`, `answered`, `route` and `drop`, and `revive`, which leaves a signal unmoved. Each write SHALL be fetched over https, applied to the tip of the branch, checked with `recfix --check`, committed, and pushed without force, applied again to the new tip when the push is refused. A signal SHALL have one standing move; a second is refused unless it is the user's replacement, which names the move it replaces.
+Every move SHALL be appended to `moves.rec` on the drive's branch of its state repository, through crew: by a curator's delivery, by `crew signal move`, by `crew agenda add`, or by the approval of a unit the planner proposed from the user's direct word. The moves SHALL be `attach`, `challenge`, `join`, `answered`, `route` and `drop`, and `revive`, which leaves a signal unmoved. Each write SHALL be fetched over https, applied to the tip of the branch, checked with `recfix --check`, committed, and pushed without force, applied again to the new tip when the push is refused. A signal SHALL have one standing move; a second is refused unless it is the user's replacement, which names the move it replaces.
 
 #### Scenario: Moves from two hosts
 - **WHEN** a delivery is written on the box while the user's drop of another signal is written on mac-studio, both through crew

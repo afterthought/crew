@@ -8,11 +8,11 @@ This change adds the missing middle of the flow, and proves the flow end to end.
 
 ## What Changes
 
-- **Curation is its own pass.** `crew curate <label>` starts a **curator**, a new role on Fable 5.1 at high effort, for one batch: every signal with no standing move, in the flywheel's state and in the blueprints. It runs only on the user's word. The design agent no longer curates.
+- **Curation is its own pass.** `crew curate <label>` starts a **curator**, a new role on Fable 5.1 at high effort, for one batch: every signal with no standing move, in the drive's state and in the blueprints. It runs only on the user's word. The design agent no longer curates.
 - **A work order** holds everything the curator reads: the batch's signals, the open agenda items, the plan, where the design is, and the delivery's format.
 - **One delivery, one commit.** `crew curate deliver <file>` accepts the curator's moves and new agenda items only when they cover the batch exactly and every target resolves, and writes them all at once.
-- **BREAKING** The six moves are Flywheel's words: `attach`, `challenge`, `join`, `answered`, `route`, `drop`. `join` replaces `new-territory`, which no record uses. Every move carries a reason.
-- **Two lanes, as agenda items.** `route` puts a signal on a **plan** item, which goes to the planner; `join` puts it on a **design** item, which waits for the user. Items are records in `agenda.rec` on the flywheel's branch, numbered, never removed.
+- **BREAKING** The six moves are Boomdrive's words: `attach`, `challenge`, `join`, `answered`, `route`, `drop`. `join` replaces `new-territory`, which no record uses. Every move carries a reason.
+- **Two lanes, as agenda items.** `route` puts a signal on a **plan** item, which goes to the planner; `join` puts it on a **design** item, which waits for the user. Items are records in `agenda.rec` on the drive's branch, numbered, never removed.
 - **`crew agenda`** lists the open items from any host, each with its signals' weight; `crew agenda <n>` shows one with its signals, excerpts and grades. `crew agenda add`, `lane` and `close` are how a person, the planner and the design agent change it.
 - **BREAKING** A unit an agent adds names the item it came from (`--item <n>`). The planner turns a plan item into a unit inside a proposal, and approval closes the item. The design agent queues the units a session decides, and closes the item with the decision records and units that cite it. `--signal` remains only for what the user tells the planner directly.
 - **BREAKING** A noticing agent captures and tells nobody. The conductor's, ops' and main-level ops' briefs lose "tell the planner in one line".
@@ -40,10 +40,10 @@ This change adds the missing middle of the flow, and proves the flow end to end.
 - `plugin/bin/crew`: `curate` (a tab in the main level's workspace, as a role is started), `agenda`.
 - `plugin/roles/`: a new `curator.md`; `design.md`, `planner.md`, `conductor.md`, `ops.md`, `main-ops.md`, `operator.md` and `construct.md` changed.
 - `README.md`, `plugin/skills/crew/SKILL.md`, the usage header, `tests/`.
-- The state repositories: `agenda.rec` on each flywheel's branch; `moves.rec` re-keyed.
+- The state repositories: `agenda.rec` on each drive's branch; `moves.rec` re-keyed.
 - The blueprints repos' `signals/README.md`: the six words, the lanes, where moves and items live.
 - Depends on `checked-capture`, `plan-proposals`, `state-repository` and `run-record`.
 
 ## Touches
 
-`plugin/lib/plan.py`, `plugin/lib/crew.py`, `plugin/bin/crew`, `plugin/bin/crew-role`, `plugin/roles/`, `plugin/skills/crew/SKILL.md`, `README.md`, `tests/`; `agenda.rec` and `moves.rec` on each flywheel's branch; each blueprints repo's `signals/README.md`.
+`plugin/lib/plan.py`, `plugin/lib/crew.py`, `plugin/bin/crew`, `plugin/bin/crew-role`, `plugin/roles/`, `plugin/skills/crew/SKILL.md`, `README.md`, `tests/`; `agenda.rec` and `moves.rec` on each drive's branch; each blueprints repo's `signals/README.md`.

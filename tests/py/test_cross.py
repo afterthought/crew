@@ -105,7 +105,7 @@ class TestStart:
         """The state repository holds no madswan/runner/<host> at all: nothing would take the bolt's work."""
         assert runner.runnerless("madswan", {}) == (
             "no runner answers for madswan: its state repository holds no madswan/runner/<host>, so nothing would take the bolt's "
-            "work; a start waits for a runner (flywheel-runner) to serve the partition")
+            "work; a start waits for a runner (Boomdrive) to serve the partition")
         assert runner.runnerless("madswan", {"alpha": "a" * 40}) is None
 
     def test_what_the_start_says_names_each_launch_and_that_no_agent_starts(self):

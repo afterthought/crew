@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""plan.py: the bolt plan, one recutils plan.rec per flywheel, on the flywheel's branch of its state repository.
+"""plan.py: the bolt plan, one recutils plan.rec per drive, on the drive's branch of its state repository.
 
-A flywheel is a partition's loop, named by its label. Its state is the files on the branch <label>/main of the
+A drive is a partition's loop, named by its label. Its state is the files on the branch <label>/main of the
 state repository the teams file names for it (`state`): plan.rec, moves.rec, proposals.rec, the signals agents record
 under signals/, and the run record under runs/<host>/.
 The plan holds only intent: Bolt and Unit records, a Unit record marked Kind: chore being a chore (plan.11). Every
@@ -95,14 +95,14 @@ five times. A write that changes several files is one commit; its run-record ent
                                              applied with its boxes as they stand once every question is answered
   crew plan drop <n> "<reason>"              the proposal closed unapplied
   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>"|--excerpt-file <path> [--kind K] [--subject a,b]
-                                             a finding, as a capture and its signal on the flywheel's branch: an
+                                             a finding, as a capture and its signal on the drive's branch: an
                                              agent's excerpt checked against its own Claude transcript and graded, the
                                              user's note at a shell its own excerpt
   crew signal show <id>                      a signal with its capture's provenance and its move, from either home
   crew signal move <id> attach|challenge|new-territory|answered|drop [--target T] [--reason R]
-                                             curation's move for a signal, in moves.rec on the flywheel's branch
+                                             curation's move for a signal, in moves.rec on the drive's branch
 
-A signal recorded through crew is on the flywheel's branch, under signals/; one the daily pass read from a meeting or
+A signal recorded through crew is on the drive's branch, under signals/; one the daily pass read from a meeting or
 a channel is in the partition's first blueprints repo. An id is looked up in that order. Every command that takes a
 signal's id takes its full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>, such as
 2026-10-20-swancloud-planner-72efd8ec/01: the one signal of that capture numbered NN, written by its full id.
@@ -145,7 +145,7 @@ HEADER = """\
 # which bolt, in what order. Nothing here says how far anything has got: `crew
 # bolts` reads that from the kits. Written only by `crew bolt`, `crew unit` and
 # `crew chore`.
-# A Source is a path in the flywheel's first blueprints repo, or
+# A Source is a path in the drive's first blueprints repo, or
 # <owner>/<name>:<path> in another.
 
 %rec: Bolt
@@ -168,9 +168,9 @@ HEADER = """\
 %unique: Repo Bolt Kind Intent
 """
 MOVES = """\
-# The flywheel's curation moves: one per signal, appended through crew and
+# The drive's curation moves: one per signal, appended through crew and
 # never merged. A Signal is a signal's id: signals/<id>.md on this branch, or
-# in the flywheel's first blueprints repo.
+# in the drive's first blueprints repo.
 
 %rec: Move
 %doc: A curation move over one signal, stored with its inputs.
@@ -683,7 +683,7 @@ def entry_paths(eid):
 
 
 def decision_at(commits, texts):
-    """The commit a decision reads a flywheel's branch at (read.5, plan.2), from facts alone (code.7): commits, the
+    """The commit a decision reads a drive's branch at (read.5, plan.2), from facts alone (code.7): commits, the
     branch's newest first, each (sha, its first parent, the entries its Crew-Entry trailer names); texts, {path: text}
     of the run-record files at the tip those entries' ids name (entry_paths), None for one the tip lacks. A commit
     whose entry the tip lacks is in flight, its write on the branch and its entry not yet; the branch is read at the
@@ -745,7 +745,7 @@ def tip_of(repo, ref, fresh=False):
 
 
 def beside(ref):
-    """What a fetch of a branch brings with it, in the same fetch (plan.12): for a flywheel's branch, <label>/main, its
+    """What a fetch of a branch brings with it, in the same fetch (plan.12): for a drive's branch, <label>/main, its
     runners' branches, <label>/runner/*, which crew reads and never writes (state.5), pruned of a host's branch gone
     from the repository; nothing for any other branch (Decision 4 of teams-cross-to-flume-as-their-bolts-land)."""
     m = re.fullmatch(r"([a-z0-9][a-z0-9-]*)/main", ref)
@@ -890,7 +890,7 @@ def agent():
 # ---------------------------------------------------------------------------------------------------- the plan
 
 def state_of(fleet, label):
-    """A flywheel's state repository and its branch there: <owner>/<name> and <label>/main."""
+    """A drive's state repository and its branch there: <owner>/<name> and <label>/main."""
     return crew.partition_of(fleet, label)["state"], f"{label}/main"
 
 
@@ -917,7 +917,7 @@ def removed_by(repo, tip, kind, name):
 
 
 class Write:
-    """What a change sees: the flywheel's state at the tip it is applied to (the plan, and any other file it reads or
+    """What a change sees: the drive's state at the tip it is applied to (the plan, and any other file it reads or
     replaces), and how to refuse with the commit that removed something."""
 
     def __init__(self, repo, label, tip, plan):
@@ -985,7 +985,7 @@ def message(subject, body, eid):
 
 
 def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None, by=None, why=None):
-    """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
+    """Apply change(Write) to the tip of the drive's branch, its plan's record descriptors first brought in step
     with crew's, commit every file it changed, each checked first, and push, replaying on a refused push. change returns the bolts it touched.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
     the change added to them, with the act's own fields, and reaches the branch as the commit after it (read.5); by, the
@@ -1020,7 +1020,7 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
 
 
 def requests_of(w):
-    """requests.rec of the flywheel as the write has it, its descriptor in step with crew's (runner.REQUESTS), or a new
+    """requests.rec of the drive as the write has it, its descriptor in step with crew's (runner.REQUESTS), or a new
     one when the branch has none yet (Decision 4 of teams-cross-to-flume-as-their-bolts-land)."""
     text = w.text("requests.rec")
     rq = Plan(text if text is not None else runner.REQUESTS)
@@ -1069,7 +1069,7 @@ def push_now(fleet, label):
 # --------------------------------------------------------------------------------------------- crew state init
 
 def state_init(fleet, a):
-    """Create the flywheel's branch, adopting what the partition had: the first blueprints repo's plan/<label> is
+    """Create the drive's branch, adopting what the partition had: the first blueprints repo's plan/<label> is
     pushed as the branch, so the plan's history is the branch's, else the branch starts with an empty plan; each other
     blueprints repo's plan/<label> is joined in one commit naming where it came from; the plan's record descriptors are
     brought in step with crew's; then moves.rec, with the first blueprints repo's moves. Every step is its own push and first checks whether the branch already shows it, so a
@@ -1099,7 +1099,7 @@ def state_init(fleet, a):
             did.append(f"adopted plan/{label} of {bp} at {t[:7]}, with its history")
             record.emit(label, "state.init", [f"plan/{label}"], commit=[f"{repo}@{tip}"], why=f"state({label}): adopt plan/{label} of {bp}")
         else:
-            tip = init_step(repo, ref, label, f"state({label}): start the flywheel's plan",
+            tip = init_step(repo, ref, label, f"state({label}): start the drive's plan",
                             lambda w_tip, files: files.update({"plan.rec": HEADER}) if w_tip is None else fail(f"{repo} has {ref} since {w_tip[:7]}"))
             did.append("started an empty plan")
     for bp, t, plan in joins:
@@ -1465,7 +1465,7 @@ def default_label(fleet, a):
 
 
 def plans(fleet, labels, errors=None):
-    """(label, repo, tip, plan) for each flywheel's one plan, on its branch of its state repository, with tip and
+    """(label, repo, tip, plan) for each drive's one plan, on its branch of its state repository, with tip and
     plan None where the branch is not started. A plan that can't be read is left out and its reason put in errors
     when that is given, else refused."""
     out = []
@@ -2037,7 +2037,7 @@ def partition_kits(plan, landings):
 
 
 def landings_at(repo, tip):
-    """Every bolt.land entry the run record holds at a tip of a flywheel's branch, from each of its files under runs/,
+    """Every bolt.land entry the run record holds at a tip of a drive's branch, from each of its files under runs/,
     found by their act (record.acts_in), read once for the command by the tip."""
     name = f"landings-{tip}"
     held = READ.held(name)
@@ -5807,7 +5807,7 @@ class AskHeld(Exception):
 
 
 def rec_file(w, path, header):
-    """One of crew's recutils files on the flywheel as the write has it, its record descriptors in step with crew's
+    """One of crew's recutils files on the drive as the write has it, its record descriptors in step with crew's
     (in_step), or a new one when the branch has none yet."""
     pl = Plan(w.text(path) or header)
     in_step(pl, header)
@@ -5846,7 +5846,7 @@ def ask_lines(w, fleet, label, role, what, frm, names=None, key=None, words=None
 
 
 def ask_write(fleet, label, role, what, frm, names=None, key=None, words=None):
-    """An ask of the role in a commit of its own, where the act that makes it writes nothing to the flywheel's branch:
+    """An ask of the role in a commit of its own, where the act that makes it writes nothing to the drive's branch:
     its own write, its entry the ask's; or nothing, said, when asks.rec holds an ask with its key at the tip the write is
     applied to (ask_rec). Returns the commit, or None when nothing was written."""
     run, e = f"{label}-{role}", record.ask_entry(f"{label}-{role}", what, names, words)
@@ -5884,7 +5884,7 @@ def landed_asks(w, fleet, label, bolt, words):
 
 
 def unlanded_ask(fleet, label, bolt, kit_name, n, words):
-    """A landing that did not land (landing_not_landed), which writes nothing to the flywheel's branch, asks the
+    """A landing that did not land (landing_not_landed), which writes nothing to the drive's branch, asks the
     partition's main-level ops where it runs as its kind, in a commit of its own (design Decisions 5 and 12, role-runs
     "Main-level ops's landing from a run does not wait"): a `landed` ask from crew naming the bolt with sluice's words,
     keyed by the submission, submission/<kit>/<n>, so its outcome read twice asks once; a landing stopped with no
@@ -6277,7 +6277,7 @@ def do_args(label, do):
 
 
 def proposals(w):
-    """proposals.rec of the flywheel as the write has it, or a new one when the branch has none yet."""
+    """proposals.rec of the drive as the write has it, or a new one when the branch has none yet."""
     text = w.text("proposals.rec")
     return Plan(text if text is not None else PROPOSALS)
 
@@ -6432,7 +6432,7 @@ def proposal_label(fleet, a, n=None):
 
 
 def at_tip(fleet, label, n):
-    """The flywheel's branch at its tip, with proposal n: (repo, tip, plan, proposals, the proposal, its commands)."""
+    """The drive's branch at its tip, with proposal n: (repo, tip, plan, proposals, the proposal, its commands)."""
     repo, ref = state_of(fleet, label)
     tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
     w = Write(repo, label, tip, read(repo, ref, tip))
@@ -6880,7 +6880,7 @@ def page(d, label):
 
 
 def open_proposals(fleet, labels, found=None):
-    """Each open proposal of the labels' flywheels, as describe() gives it, with its label and its chain's first
+    """Each open proposal of the labels' drives, as describe() gives it, with its label and its chain's first
     (proposal_chain), whose key its card is under. found, when given, is the plans already read, as plans() gives
     them: their tips are used, and a label it lacks is skipped."""
     rows = []
@@ -6902,7 +6902,7 @@ def open_proposals(fleet, labels, found=None):
 
 def plan_proposed(fleet, a):
     """crew plan proposed [<n>] [--label L] [--json] [--open]: the open proposals, or one as the user would read it.
-    Reads the flywheels' branches only, so any host can answer. With --open, one proposal's page is written to
+    Reads the drives' branches only, so any host can answer. With --open, one proposal's page is written to
     ~/.local/state/crew/proposals/<label>-<n>.md on this host, replacing any earlier copy, and opened in plannotator:
     beside the caller in herdr, inline in the terminal otherwise. The file is a copy for reading; nothing reads it back."""
     why = open_refusal(a.n, a.open, a.json)
@@ -7200,7 +7200,7 @@ def chain_closed(pl, first):
 
 
 def tip_write(fleet, label, fresh=False):
-    """The flywheel's branch at its tip, as a write; with fresh, the tip fetched anew, the plan as it stands and not
+    """The drive's branch at its tip, as a write; with fresh, the tip fetched anew, the plan as it stands and not
     as this command first read it (fetch). None when the branch has no tip."""
     repo, ref = state_of(fleet, label)
     tip = fetch(repo, ref, fresh)
@@ -7303,7 +7303,7 @@ SHORT_ID = re.compile(r"^[^/]+/[0-9]{2}$")  # a signal's short id, <capture>/<NN
 
 
 def signal_at(fleet, label, sig, w=None):
-    """Where a signal is: signals/<id>.md on the flywheel's branch (as the write w has it, else at the branch's tip),
+    """Where a signal is: signals/<id>.md on the drive's branch (as the write w has it, else at the branch's tip),
     else on main of the partition's first blueprints repo, where the daily pass writes meetings' and channels'. sig is
     its full id, <capture>/<NN>-<slug>, or its short form, <capture>/<NN>, which names the one signal of that capture
     numbered NN. (where, repo, tip, the signal's text, its full id), or None when it is in neither."""
@@ -7376,7 +7376,7 @@ def capture_of(sig):
 
 
 def move(fleet, label, w, sig, rec):
-    """A signal's one move, appended to the flywheel's moves.rec in the write w: refused when the signal is in
+    """A signal's one move, appended to the drive's moves.rec in the write w: refused when the signal is in
     neither of its homes, or already has its move. recfix checks the file before the commit, so a move the file's
     schema refuses writes nothing."""
     signal_at(fleet, label, sig, w) or no_signal(fleet, label, sig)
@@ -7403,7 +7403,7 @@ KINDS = ("constraint", "ask", "question", "commitment", "reaction")
 
 def signal_move(fleet, a):
     """Curation's five moves, each written through crew the way the route is: one move per signal, appended to
-    moves.rec on the flywheel's branch of its state repository, never merged. A short id is moved by its full one."""
+    moves.rec on the drive's branch of its state repository, never merged. A short id is moved by its full one."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
     a.signal = signal_id(fleet, label, a.signal)
     rec, on = curation_move(a.signal, a.move, a.target, a.reason, datetime.date.today().isoformat(), agent())
@@ -7461,7 +7461,7 @@ def bank(path, line):
 
 
 def signal(fleet, a):
-    """A finding, as a capture and its signal under signals/ on the flywheel's branch, in the shape the blueprints'
+    """A finding, as a capture and its signal under signals/ on the drive's branch, in the shape the blueprints'
     signals/README.md gives. An agent quotes the words that show it, which are looked for in its own Claude transcript
     and graded (transcript.py), and a paraphrase is refused. Its capture is the one record that holds the excerpt,
     copied to this host's raw/ outside git; a second signal from that record joins the capture, and the same signal
@@ -7655,7 +7655,7 @@ def raw_of(cap_text):
 
 
 def capture_refusal(cap, files, here, banked):
-    """Why a program's capture does not land on the flywheel's branch (signals.6), or None. cap is its folder's name,
+    """Why a program's capture does not land on the drive's branch (signals.6), or None. cap is its folder's name,
     files the folder's files ({name: text}, None for anything that is not a readable file), here this host and banked
     whether the raw record its capture.md names is there on it. A capture is a name crew takes (code.4) holding
     capture.md and its signals, NN-<slug>.md, and nothing else, since raw material stays on its host (signals.3);
@@ -7709,7 +7709,7 @@ def capture_refusal(cap, files, here, banked):
 
 
 def capture_landing(cap, files, have, label):
-    """What a capture's landing writes on the flywheel's branch, {path: text}, from the folder's files and what the
+    """What a capture's landing writes on the drive's branch, {path: text}, from the folder's files and what the
     branch holds at each of their paths (have, {name: text or None}): each file the branch lacks; one it holds the same
     is passed over; one it holds otherwise refuses the landing, since captures and signals are never changed (signals.4).
     Already when there is nothing to write."""
@@ -7726,10 +7726,10 @@ def capture_landing(cap, files, have, label):
 
 def signal_land(fleet, a):
     """crew signal land <capture-dir>: a program's capture, a release adapter's or a deployer's, landed on the
-    flywheel's branch of the partition named, as recorded on this host and never forwarded (signals.2, signals.6): the
+    drive's branch of the partition named, as recorded on this host and never forwarded (signals.2, signals.6): the
     folder checked whole (capture_refusal), then its capture and signals written in one commit, the files the branch holds
     already passed over, and nothing written when it holds them all. Its raw record stays where the program banked it."""
-    label = default_label(fleet, a) or fail("which partition's flywheel? add --label " + "|".join(fleet["partitions"]))
+    label = default_label(fleet, a) or fail("which partition's drive? add --label " + "|".join(fleet["partitions"]))
     d = pathlib.Path(a.dir)
     d.is_dir() or fail(f"{a.dir} is no capture's folder")
     cap = d.resolve().name
@@ -7767,7 +7767,7 @@ def signal_land(fleet, a):
 
 def signal_show(fleet, a):
     """crew signal show <id>: the signal, by its full id or its short one, its capture's provenance in plain lines (the
-    excerpt's grade among them), and its move in each flywheel that reads it. Reads only the branches, so any host can
+    excerpt's grade among them), and its move in each drive that reads it. Reads only the branches, so any host can
     answer."""
     label = default_label(fleet, a)
     labels, errors, hit = [label] if label else list(fleet["partitions"]), {}, None
@@ -7785,7 +7785,7 @@ def signal_show(fleet, a):
     hit or fail(f"no signal {a.signal} on the branches of " + ", ".join(f"{l}/main" for l in labels)
                 + " or on main of their first blueprints repos" + "".join(f"; {l} could not be read: {e}" for l, e in errors.items()))
     found_in, (where, repo, tip, text, sig) = hit
-    # A signal in the state is its flywheel's alone; one in a blueprints repo is read by each flywheel it is first for.
+    # A signal in the state is its drive's alone; one in a blueprints repo is read by each drive it is first for.
     readers = [found_in] if where != "main" else [l for l in labels if crew.partition_of(fleet, l)["blueprints"][0] == repo]
     moves = []
     for l in readers:
@@ -7798,7 +7798,7 @@ def signal_show(fleet, a):
 
 def shown_signal(sig, where, repo, text, cap, moves):
     """crew signal show: where the signal is, its text, its capture's fields in plain lines (cap, its capture.md, None
-    when it has none), and its move in each flywheel that reads it (moves, [(label, its Move record or None)])."""
+    when it has none), and its move in each drive that reads it (moves, [(label, its Move record or None)])."""
     out = [f"signals/{sig}, on {where} of {repo}", "", text.rstrip(), ""]
     if cap is None:
         out.append(f"No capture.md beside it in {repo}.")
@@ -8883,7 +8883,7 @@ def moved_role(fleet, label, ms):
 
 def kinds_up(fleet, label, ms):
     """What crew main up does for the roles its partition runs as its kind, none of which it starts or greets (design
-    Decision 14, main-level "The main level is one herdr workspace"): roles.rec on the flywheel's branch written to
+    Decision 14, main-level "The main level is one herdr workspace"): roles.rec on the drive's branch written to
     match the teams file where anything is due (asks.roles_due), in a commit of its own, the record of a role that
     stands again removed though none runs as its kind now (role-runs "The planner stands again"); and a standing agent
     of such a role still up ended and its tab closed, or, while it works, left and said so. With none running as its
@@ -8945,7 +8945,7 @@ def kind_said(stream, waiting, run, now):
 
 def kinds_said(fleet, label):
     """What crew main status says of each role the partition runs as its kind, {role: words} (kind_said): read from
-    asks.rec on the flywheel's branch (asks.pending) and the runner's records on the main level's host
+    asks.rec on the drive's branch (asks.pending) and the runner's records on the main level's host
     (runner_facts, runner.role_run), a host whose runner can't be read named for each role and the rest still said
     (read.3)."""
     p = crew.partition_of(fleet, label)

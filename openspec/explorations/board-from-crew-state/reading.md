@@ -14,7 +14,7 @@ Whether flywheel-next's rail-and-board design (agentplot/blueprints `design/flyw
 - The board is the status view drawn by phase; four lanes: Inception, Bolt plan (a narrow gate), Construction, Operation (read-only). `surfaces.md` S10, S12.
 - Every decision is a marker on its object (✓ ? ✎ !); nothing is answered on the board. S17. The phases view never shows a decision as a card, nor the count. S18.
 - The status view is a projection of the state the engine reads, never written by hand. `requirements.md` 141, 142. One form per object kind: ledger, sheet, slip, record, quote, row. 209.
-- One board per flywheel; sinks are per member. 235, 236.
+- One board per drive; sinks are per member. 235, 236.
 
 **crew's state, lane by lane (swancloud, read live at ~20:00).**
 - Inception: 24 signal files on `refs/crew/swancloud/main` (`~/.cache/crew/git/afterthought/crew-state.git`), 14 moved (`moves.rec`: 11 route, 3 answered), so 10 unmoved: planner 6, crw-1-ops 2, swc-1-conductor 1, operator 1. `openspec list` on swancloud main shows elaboration in progress (dev-urls 24/45, roamgate-srv 27/28, herdr-partitions 12/15, workspace-boxes-as-clan-machines 27/28). Explorations are folders (`crew/main/openspec/explorations/`: command-cost, findings-to-design, testing-strategy; swancloud `openspec/explorations/rollout`). crew has no intent or elaboration object; agenda items arrive with `curation-and-agenda` (`crew/main/openspec/changes/curation-and-agenda/proposal.md`).
@@ -48,7 +48,7 @@ The user settled nothing beyond sending this on. Their words: "new idea. look at
 
 1. Terminal tab first, or straight to the page? (My recommendation: text first, `--json` for the page.)
 2. Planned bolts with no team: in Bolt plan (the transition) or in Construction?
-3. Operation window: how many days a landed bolt stays on the board (flywheel 186 bounds it).
+3. Operation window: how many days a landed bolt stays on the board (Flywheel Next 186 bounds it).
 4. One tab (board above rail, one read) or a third tab beside `rail`?
 5. Ordering against `a-command-reads-the-kits-once` and `page-of-the-flow`.
 6. Whether the all-landed-bolt gap is a fix on the rail unit or part of the board unit.

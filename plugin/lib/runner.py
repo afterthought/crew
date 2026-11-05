@@ -1,11 +1,11 @@
-"""crew's side of the runner's interface (flywheel-runner core.2), and the decisions over a bolt's work given through
+"""crew's side of the runner's interface (boomdrive core.2), and the decisions over a bolt's work given through
 Flume: crew records a kit's work against its repository, and a runner whose configuration names that repository
 takes it under a lease, while its host's stream has room, and launches it in Flume places on its host, in the stream
 the host's Flume configuration maps the repository to (settled with the user 2026-11-01; Decision 4 of
 the-team-machinery-leaves); crew names no stream, looks up no kit's host and models no account, and where it must say
 or act where a kit's work runs, it reads what the runner reported for the work it took (taken, where).
 
-crew asks the runners for work by requests on the flywheel's branch, requests.rec (REQUESTS), each appended in the
+crew asks the runners for work by requests on the drive's branch, requests.rec (REQUESTS), each appended in the
 commit of the plan write that occasions it and checked by crew's own rules (request_refusal, append_refusal) as well as
 recfix; each runner answers on a branch of its own, <label>/runner/<host>, which crew fetches with <label>/main and
 reads (host_read) and never writes (state.5). A started piece's stage is read from its launch, the answer of the
@@ -43,7 +43,7 @@ def runnerless(label, tips):
     if tips:
         return None
     return (f"no runner answers for {label}: its state repository holds no {runner_branch(label, '<host>')}, so nothing "
-            "would take the bolt's work; a start waits for a runner (flywheel-runner) to serve the partition")
+            "would take the bolt's work; a start waits for a runner (Boomdrive) to serve the partition")
 
 
 REQUESTS = """\
@@ -185,13 +185,13 @@ def runner_branch(label, host):
 
 
 # A runner's branch as crew reads it: each file and the record set it holds, written by the host's runner alone with
-# these descriptors (flywheel-runner core.2), and never by crew (state.5). runner.rec names the host and the runner
+# these descriptors (boomdrive core.2), and never by crew (state.5). runner.rec names the host and the runner
 # serving the partition there, so a branch that exists says a runner answers; answers.rec where each request it has
 # read stands; places.rec Flume's status of each place it launched, `flume status --json <place>`'s answer on one line
-# as Flume gave it (flywheel-runner core.1), kept after Flume tidies the place until its work has left crew's plan,
+# as Flume gave it (boomdrive core.1), kept after Flume tidies the place until its work has left crew's plan,
 # and after those each role's latest run on the host, a Run record keyed by the role's address (R4 of
 # roles-run-as-flume-kinds), with Flume's status of its place, or the runner's words where no run could be launched
-# (flywheel-runner's the-runner-carries-crews-work-into-flume, Decision 14).
+# (boomdrive's the-runner-carries-crews-work-into-flume, Decision 14).
 RUNNER = """\
 %rec: Runner
 %key: Host
@@ -867,7 +867,7 @@ def main_fix_launch(plan, requests, label, repo, name, words, served):
     kit = repo.split("/")[-1]
     if not served:
         return None, (f"no runner answers for {label}: its state repository holds no {runner_branch(label, '<host>')}, so nothing "
-                      f"would take the fix; until a runner (flywheel-runner) serves {label}, a fix of {kit}'s red main is a bolt "
+                      f"would take the fix; until a runner (Boomdrive) serves {label}, a fix of {kit}'s red main is a bolt "
                       f"of one chore, proposed first among the planned (state.3); tell {label}-planner, who proposes it")
     work = f"fix/main/{kit}/{name}"
     l = launch_of(requests, work)

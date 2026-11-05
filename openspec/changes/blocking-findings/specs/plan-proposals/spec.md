@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: A proposal is a case and the commands it would run
-`crew plan propose <file>` SHALL write one Proposal record to `proposals.rec` on the flywheel's branch: its number, the planner's case, the plan commands it would run in order, who wrote it and when, and its state, `open`. The commands SHALL be among `bolt new`, `bolt order`, `bolt drop`, `unit add`, `unit amend`, `unit move`, `unit split`, `unit order`, `unit after`, `unit release` and `unit drop`. A number SHALL be given once and never reused, and a proposal SHALL never be removed or its commands changed.
+`crew plan propose <file>` SHALL write one Proposal record to `proposals.rec` on the drive's branch: its number, the planner's case, the plan commands it would run in order, who wrote it and when, and its state, `open`. The commands SHALL be among `bolt new`, `bolt order`, `bolt drop`, `unit add`, `unit amend`, `unit move`, `unit split`, `unit order`, `unit after`, `unit release` and `unit drop`. A number SHALL be given once and never reused, and a proposal SHALL never be removed or its commands changed.
 
 #### Scenario: A new bolt with two units
 - **WHEN** the planner proposes `bolt new cfn-checks …`, `unit add cfn-nag-security-check … --bolt cfn-checks` and `unit move retire-suite-cfn-lint cfn-checks`, with its case

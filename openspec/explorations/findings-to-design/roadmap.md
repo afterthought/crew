@@ -1,4 +1,4 @@
-> An exploration's plan (2026-10-03): the build order of the findings-to-design changes only; the partition's plan orders every change. Dropped by the user on 2026-10-19: change 9, the daily pass through crew (the Wispr Flow pass is to be rebuilt with the flywheel tools), and any curation cadence (`signals.7` as amended that day). Steps 0 to 5 are built; later ADR-driven changes are not listed here.
+> An exploration's plan (2026-10-03): the build order of the findings-to-design changes only; the partition's plan orders every change. Dropped by the user on 2026-10-19: change 9, the daily pass through crew (the Wispr Flow pass is to be rebuilt with the Boomdrive tools), and any curation cadence (`signals.7` as amended that day). Steps 0 to 5 are built; later ADR-driven changes are not listed here.
 
 # Findings to design: the roadmap
 
@@ -10,7 +10,7 @@ Every change that builds `proposal.md`, in build order. Each is an OpenSpec chan
 |---|---|---|---|
 | 0 | archive `bolt-teams` | its tasks 7.2 and 7.3 | crew's specs exist in `openspec/specs/` for the changes below to modify |
 | 1 | `run-record` | 0 | what happened to a bolt, unit or signal can be read without asking an agent |
-| 2 | `state-repository` | 1 | the plan, the moves and the run record live in `crew-state`, a branch per flywheel, and no checkout of the blueprints lags because of crew |
+| 2 | `state-repository` | 1 | the plan, the moves and the run record live in `crew-state`, a branch per drive, and no checkout of the blueprints lags because of crew |
 | 3 | `plan-proposals` | 2 | the planner changes nothing in the plan until the user approves it |
 | 4 | `unit-amendments` | 3 | a unit already in a bolt can be changed, and comes back to the user's review |
 | 5 | `checked-capture` | 2 | a signal carries the words actually said, checked, and the user's asides stay out of the design repository |
@@ -57,7 +57,7 @@ Two things the steps named are not changes. They are at the end of this document
 
 ## 2. `state-repository`
 
-- **What it is.** `crew state init`; each partition names a `state` repository; its flywheel's plan, moves and run record are files on `<label>/main` there; one write may change several files in one commit; the run record is carried with every write.
+- **What it is.** `crew state init`; each partition names a `state` repository; its drive's plan, moves and run record are files on `<label>/main` there; one write may change several files in one commit; the run record is carried with every write.
 - **Outside crew.**
   - GitHub, with the user's go: create `WilldanGroup/crew-state` and `afterthought/crew-state`, private and empty; afterwards delete `plan/wldn`, `plan/madswan` and `plan/swancloud` from the blueprints repos.
   - swancloud: `state` for every partition in `lib/crew-teams.nix`, carried in the teams file published to each host (`lib/herdr-published.nix`); the box's GitHub token helper must reach the state repositories.
@@ -82,7 +82,7 @@ Two things the steps named are not changes. They are at the end of this document
 
 ## 5. `checked-capture`
 
-- **What it is.** `crew signal` requires the excerpt, looks for it in the agent's transcript, and grades it `verified`, `found` or `unverified`; it refuses only a paraphrase. A capture is one record the session received, with its host, session, time and where the agent was working; the record is banked on the host. An agent's signals are written to the flywheel's branch. `crew signal show`; `crew tell` marks what it sends.
+- **What it is.** `crew signal` requires the excerpt, looks for it in the agent's transcript, and grades it `verified`, `found` or `unverified`; it refuses only a paraphrase. A capture is one record the session received, with its host, session, time and where the agent was working; the record is banked on the host. An agent's signals are written to the drive's branch. `crew signal show`; `crew tell` marks what it sends.
 - **Outside crew.** The blueprints repos' `signals/README.md` says where an agent's signals live and documents the capture fields crew writes.
 - **The user reviews** the change.
 - **Proof.** An aside to a conductor is recorded with the user's exact words, `verified`, on `wldn/main`, with willdan-blueprints untouched; a finding "in its own words" is refused; the raw record on the box is the one transcript line.
@@ -90,7 +90,7 @@ Two things the steps named are not changes. They are at the end of this document
 
 ## 6. `curation-and-agenda`
 
-- **What it is.** The curator role (Fable 5.1, high effort) and `crew curate`, on the user's word, with its work order and one-commit delivery. Flywheel's six moves, each with a reason. Agenda items in two lanes; `crew agenda` with weight; `add`, `lane`, `close`. Units name their item with `--item`; a plan item becomes a unit inside a proposal; a design item is closed with the decision records and units that cite it. A noticing agent captures and tells nobody. The user replaces or revives a move.
+- **What it is.** The curator role (Fable 5.1, high effort) and `crew curate`, on the user's word, with its work order and one-commit delivery. Boomdrive's six moves, each with a reason. Agenda items in two lanes; `crew agenda` with weight; `add`, `lane`, `close`. Units name their item with `--item`; a plan item becomes a unit inside a proposal; a design item is closed with the decision records and units that cite it. A noticing agent captures and tells nobody. The user replaces or revives a move.
 - **Outside crew.** The blueprints repos' `signals/README.md`: `join` in place of `new-territory`, the lanes, where moves and items live, how curation runs. The `signal-capture` skill's sentence about curation's moves follows.
 - **The user reviews** the change, and decides when to run the backlog batch (below).
 - **Proof, which proves the flow.** A conductor captures a plan-ready aside, a design question and a tool finding. The user says to curate those captures. The curator routes one and joins another, in one commit, and only the planner is told. The planner proposes a unit from the plan item, with the user's words on the proposal's page, and the approval closes the item. The user and the design agent settle the design item, with a decision record and a queued unit that cite it. `crew trace` of each signal prints the whole chain, with no agent asked.

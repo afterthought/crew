@@ -4,9 +4,9 @@
 
 See proposal.md for why. What exists:
 
-- The run record: recutils entries with `Id`, `At`, `Host`, `By`, `Session`, `Act`, `On`, `From`, `Commit`, `Why`, `Refused` and a few act-specific fields, on each host and carried to `runs/<host>/<date>.rec` on the flywheel's branch. `On` and `From` hold typed names: `signals/<id>`, `agenda/<n>`, `proposal/<n>`, `unit/<unit>`, `bolt/<bolt>`, `queue/<kit>`, `team/<team>`, `agent/<name>`, `stage/<unit>/<stage>`, `fix/<bolt>/<name>`, `batch/<id>`.
+- The run record: recutils entries with `Id`, `At`, `Host`, `By`, `Session`, `Act`, `On`, `From`, `Commit`, `Why`, `Refused` and a few act-specific fields, on each host and carried to `runs/<host>/<date>.rec` on the drive's branch. `On` and `From` hold typed names: `signals/<id>`, `agenda/<n>`, `proposal/<n>`, `unit/<unit>`, `bolt/<bolt>`, `queue/<kit>`, `team/<team>`, `agent/<name>`, `stage/<unit>/<stage>`, `fix/<bolt>/<name>`, `batch/<id>`.
 - `plugin/lib/record.py` gathers entries (the branch first, then each reachable host's uncarried tail) for `crew events`, and walks `On` and `From` for `crew trace`: start from an object, add entries naming an object in the set, add the objects those entries came from and the objects that came from them, and never follow `agent/`, `team/`, `queue/` or `plan/` names.
-- The flywheel's state on its branch: `plan.rec` (bolts with goals, units with intents), `agenda.rec` (items with subjects, lanes and states), `proposals.rec` (cases, states), and signals in the state and in the blueprints, read through crew's git caches.
+- The drive's state on its branch: `plan.rec` (bolts with goals, units with intents), `agenda.rec` (items with subjects, lanes and states), `proposals.rec` (cases, states), and signals in the state and in the blueprints, read through crew's git caches.
 - The operator agent opens pages in terminal-browser beside its pane (the operator brief, for dev servers).
 
 The findings-to-design proposal compared views (its section 4): text first; this page second; a zoetrope provider not planned, because zoetrope's nodes are agents; entries written as Claude-format transcripts rejected.
@@ -28,7 +28,7 @@ The findings-to-design proposal compared views (its section 4): text first; this
 
 ### Data: entries decide, state labels
 
-`page.py` asks `record.py` for the flywheel's entries (all, or from `--since`) and builds:
+`page.py` asks `record.py` for the drive's entries (all, or from `--since`) and builds:
 
 - **nodes**: every object named in an `On` or `From` whose kind is `signals`, `agenda`, `proposal`, `unit` or `bolt`;
 - **edges**: for each entry, from each `From` object to each `On` object of those kinds, and between the `On` objects of one entry where one contains the other in the flow's order (a `signal.move` joins its signal to its item; a `unit.add` joins its unit to its bolt). An edge is kept once, with the entries that made it;
@@ -80,7 +80,7 @@ A test builds the page's data for a fixture run record and asserts, for every no
 
 ## Risks / Trade-offs
 
-- [A long-lived flywheel has thousands of nodes] → `--since`, the hide-closed filter and the name box; the data is embedded once, and histories are lists of entry ids into one table.
+- [A long-lived drive has thousands of nodes] → `--since`, the hide-closed filter and the name box; the data is embedded once, and histories are lists of entry ids into one table.
 - [The page goes stale the moment it is written] → it says when it was made; making it again is one command.
 - [Labels read from the state show typed text (intents, assertions)] → the file is local and uncommitted; the same text is already in the state repository.
 - [Layout code in hand-written JavaScript is fiddly] → columns and straight or single-bend lines only; no force layout, no library.

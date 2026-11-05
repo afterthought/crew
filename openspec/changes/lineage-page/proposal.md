@@ -8,8 +8,8 @@ The view must stay replaceable: it reads the run record and adds nothing to it.
 
 ## What Changes
 
-- **`crew page <label>`** writes one self-contained HTML file from the flywheel's run record: signals, agenda items, proposals, units and bolts as columns, with the links between them, a timeline of the entries beneath, and each object opening to its own history: who did what, when, on which host, with which commit, and the session to open for the detail.
-- The page's objects and links come from the run record alone, by the same walk `crew trace` uses, so the page and the trace cannot disagree. Its labels (a signal's assertion, an item's subject, a unit's intent, a bolt's goal) are read from the flywheel's state.
+- **`crew page <label>`** writes one self-contained HTML file from the drive's run record: signals, agenda items, proposals, units and bolts as columns, with the links between them, a timeline of the entries beneath, and each object opening to its own history: who did what, when, on which host, with which commit, and the session to open for the detail.
+- The page's objects and links come from the run record alone, by the same walk `crew trace` uses, so the page and the trace cannot disagree. Its labels (a signal's assertion, an item's subject, a unit's intent, a bolt's goal) are read from the drive's state.
 - The file needs no network and no server: its data, style and script are inside it. It says the time and the state commit it was made from, and names any host whose newest entries it could not read.
 - It is written under `~/.local/state/crew/<label>/` on the host where the command runs, or where `--out` says. It is never committed.
 - The operator agent makes and opens it on request, in terminal-browser beside its pane.
@@ -18,7 +18,7 @@ The view must stay replaceable: it reads the run record and adds nothing to it.
 
 ### New Capabilities
 
-- `lineage-page`: the page that draws a flywheel's objects and the links between them from the run record, and what it must and must not depend on.
+- `lineage-page`: the page that draws a drive's objects and the links between them from the run record, and what it must and must not depend on.
 
 ### Modified Capabilities
 

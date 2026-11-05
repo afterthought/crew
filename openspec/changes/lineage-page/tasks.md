@@ -5,7 +5,7 @@
 - [ ] 1.1 `record.py` exports the lineage walk `crew trace` uses as one function, and `crew trace` calls it. Verify the existing trace tests pass unchanged.
 - [ ] 1.2 `plugin/lib/page.py` builds nodes, edges and per-node histories from the gathered entries as design.md describes, for the kinds `signals`, `agenda`, `proposal`, `unit` and `bolt`, with `--since`. Verify with a fixture run record of a signal routed to an item, proposed, approved into a bolt and landed: five nodes, four edges, and an unmoved signal as a node with no edge.
 - [ ] 1.3 For every node of the fixture, the page's history equals `crew trace <object>`'s entries in order. Verify with a test that compares them for every node.
-- [ ] 1.4 Labels and present status from the flywheel's state (assertion, subject and lane, case and state, intent and stage, goal and team), a node the state no longer holds labelled from its entries, and unit stages left blank when a host does not answer. Verify against the state test remote, with a landed bolt whose records are gone from the plan.
+- [ ] 1.4 Labels and present status from the drive's state (assertion, subject and lane, case and state, intent and stage, goal and team), a node the state no longer holds labelled from its entries, and unit stages left blank when a host does not answer. Verify against the state test remote, with a landed bolt whose records are gone from the plan.
 
 ## 2. The page
 

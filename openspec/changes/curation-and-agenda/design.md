@@ -4,12 +4,12 @@
 
 See proposal.md for why. The current state, after the changes this one depends on:
 
-- **Signals.** An agent's capture and signals are files under `signals/<capture>/` on the flywheel's branch (`<label>/main` of its state repository), each signal with a checked excerpt and a grade (`checked-capture`). Meeting and channel signals are in the partition's first blueprints repo's `signals/`, written by the daily pass. crew looks a signal up in the state first, then the blueprints. wldn has 194 signals, 192 with no move, nearly all from meetings.
-- **Moves.** `moves.rec` on the flywheel's branch, `%key: Signal`, one move per signal, the enum `attach challenge new-territory answered drop route`. `crew signal move <id> <move>` writes curation's five; `crew unit add --signal` writes `route` with the unit (`state-repository`). Only two moves exist, both `route`, By `wldn-planner`.
+- **Signals.** An agent's capture and signals are files under `signals/<capture>/` on the drive's branch (`<label>/main` of its state repository), each signal with a checked excerpt and a grade (`checked-capture`). Meeting and channel signals are in the partition's first blueprints repo's `signals/`, written by the daily pass. crew looks a signal up in the state first, then the blueprints. wldn has 194 signals, 192 with no move, nearly all from meetings.
+- **Moves.** `moves.rec` on the drive's branch, `%key: Signal`, one move per signal, the enum `attach challenge new-territory answered drop route`. `crew signal move <id> <move>` writes curation's five; `crew unit add --signal` writes `route` with the unit (`state-repository`). Only two moves exist, both `route`, By `wldn-planner`.
 - **Briefs.** The design agent's brief has a "Curating signals" section. The conductor's and main-level ops' briefs say to record a finding as a signal "and tell the planner in one line". The planner's says "a signal becomes work only through you, with `--signal`".
 - **The plan.** The planner changes it only by a proposal the user approves (`plan-proposals`); each plan command is `checks`, `change`, `after`. The design agent may add a unit to a kit's queue directly.
 - **Roles** are agent definitions in `plugin/roles/`, started by `crew-role`; the main level is a herdr workspace `<label>` with `design`, `planner` and `ops` tabs on the host and session the teams file names; `crew main` is forwarded to that host.
-- **The run record** has an entry for every act, carried to the flywheel's branch.
+- **The run record** has an entry for every act, carried to the drive's branch.
 
 The vocabulary and shapes are Flywheel Next's. Its rules this design keeps: a signal is immutable; every signal has exactly one standing move, and only the operator's response replaces one; curation is a bounded session that judges and does not act, reads only its work order, and delivers in one commit; a person writing the same records by hand is curation; a proposed intent's subject is what is unsettled, not the answer, and it rests on at least one signal; weight counts by event date.
 
@@ -24,7 +24,7 @@ The vocabulary and shapes are Flywheel Next's. Its rules this design keeps: a si
 **Non-Goals:**
 - Running curation without being asked. The user starts it; a threshold or cadence waits for the numbers that doing so by hand will show.
 - A design session ritual. A session is the user and the design agent talking; crew provides the item and records the close.
-- Intents as objects with elaborations, as Flywheel has. An item is settled in a session.
+- Intents as objects with elaborations, as Boomdrive has. An item is settled in a session.
 - A finding that blocks the unit it was found in (`blocking-findings`).
 - Landing the daily pass through crew (`daily-pass-through-crew`).
 
@@ -42,7 +42,7 @@ The vocabulary and shapes are Flywheel Next's. Its rules this design keeps: a si
 %allowed: Id Signal Move Target Reason Date By Replaces
 ```
 
-The first write under this change rewrites the descriptor and gives the existing records `Id` 1 and 2 in file order, in the same commit. `new-territory` leaves the enum: no record uses it, and `join` is Flywheel's word, so its signals-folder adapter reads every move crew writes.
+The first write under this change rewrites the descriptor and gives the existing records `Id` 1 and 2 in file order, in the same commit. `new-territory` leaves the enum: no record uses it, and `join` is Boomdrive's word, so its signals-folder adapter reads every move crew writes.
 
 A signal's **standing move** is its record that no other record's `Replaces` names. A signal is **unmoved** when it has no record or its standing move is `revive`. crew enforces one standing move, since `recfix` no longer can: a write that would give a signal a second is refused unless it carries `Replaces`.
 
@@ -61,7 +61,7 @@ Every move carries `Reason`. A path target is `<path>` in the first blueprints r
 
 ### The agenda
 
-`agenda.rec` on the flywheel's branch:
+`agenda.rec` on the drive's branch:
 
 ```
 %rec: Item
@@ -136,7 +136,7 @@ The construct stage is given the unit's sources as today. `construct.md` gains: 
 `crew curate <label> [--only <capture>...]` is forwarded to the main level's host, like `crew main`.
 
 1. Refuse when the label's curator is up (its pane has an agent), naming its batch.
-2. Fetch the flywheel's branch and the first blueprints repo's main. The batch is every unmoved signal at those two commits, narrowed by `--only`. Empty: say so and stop.
+2. Fetch the drive's branch and the first blueprints repo's main. The batch is every unmoved signal at those two commits, narrowed by `--only`. Empty: say so and stop.
 3. Write the work order to `~/.local/state/crew/<label>/curate/<batch>/`, the batch id being `<UTC date>-<n>`:
    - `order.md`: the job in a paragraph, the batch's signals listed by id, the paths below, the checkouts to read the design in (the main level's blueprints and kit checkouts, and that each repository's CLAUDE.md says where its design is written), the delivery's format with an example, and the command to deliver;
    - `signals/<capture>/…`: each batch signal and its capture, exported from crew's git caches at the fixed commits, from either home;

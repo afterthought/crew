@@ -1,6 +1,6 @@
 # A finding, from its capture to the unit that takes it, through the crew command on the stubs (tests.11, record
 # 0022): an agent's crew signal on the box checks its excerpt in its own transcript and writes the capture and its
-# signal as one commit on the flywheel's branch, the source record banked on the host and nothing in the blueprints; a
+# signal as one commit on the drive's branch, the source record banked on the host and nothing in the blueprints; a
 # second signal joins the capture, the same one again writes nothing, and a paraphrase is refused with a refused
 # entry; the session is herdr's for the agent; the user's note at a shell is its own excerpt; crew signal show answers
 # from a host with no team, by a signal's full id or its short one; curation's move and a route are written to
@@ -113,7 +113,7 @@ HOST=laptop expect_ok crew signal show "$msig"
 has "$out" "signals/$msig, on main of WilldanGroup/willdan-blueprints"
 has "$out" "Its move in wldn: drop, by wldn-design on $today: fixed by the tile cache"
 eq "$(git --git-dir "$wb" for-each-ref)" "$blueprints_refs"
-ok "a meeting's signal in the blueprints is moved on the flywheel's branch and shown as it stands"
+ok "a meeting's signal in the blueprints is moved on the drive's branch and shown as it stands"
 
 asked=$(id_of "$(crew signal deploys-are-dry-run "Deploys should be dry-run first.")")
 printf 'Case: The user asked for it.\nDo: unit add deploys-dry-run-first "A deploy is dry-run before it runs." --repo switchboard-kit --signal %s\n' "$asked" > "$T/p.rec"
@@ -149,7 +149,7 @@ has "$(runs mac-studio)" "By: swancloud-deployer"$'\n'"Act: capture"$'\n'"On: si
 CREW_AGENT=swancloud-deployer expect_ok crew signal land "$d" --label wldn
 eq "$out $(tip)" "$dep is already landed on wldn/main; nothing was written $t1"
 HOST=$box expect_fail "$dep/capture.md's raw record is on mac-studio, and a program's capture lands from the host that banked it, not $box" crew signal land "$d" --label wldn
-ok "a program's capture lands from the host that banked its raw record, in one commit on the flywheel's branch, and once"
+ok "a program's capture lands from the host that banked its raw record, in one commit on the drive's branch, and once"
 
 # Once wldn's design agent runs as its kind, a capture asks it, in the capture's own commit; none did while it stood.
 at asks.rec >/dev/null 2>&1 && fail "a capture asked a design agent that stands"

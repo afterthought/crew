@@ -1,7 +1,7 @@
 # role-runs Specification
 
 ## Purpose
-Runs a main-level role its partition names a Flume stream for as a kind crew's release carries, on demand rather than standing all day: whatever names the role is an ask on the flywheel's branch, the host's runner keeps one run of it while anything is pending, and the run takes everything pending at its start, acts on it, and ends its turn with a report, its work that lands a place it launches.
+Runs a main-level role its partition names a Flume stream for as a kind crew's release carries, on demand rather than standing all day: whatever names the role is an ask on the drive's branch, the host's runner keeps one run of it while anything is pending, and the run takes everything pending at its start, acts on it, and ends its turn with a report, its work that lands a place it launches.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ crew's plugin SHALL carry a Flume declaration, `plugin/flume/kinds.toml`, of fiv
 - **THEN** every part in double braces is one Flume fills for a stage with a report deliverable and no `makes`, `{{needs}}` among them, and `{{brief}}` is not among them
 
 ### Requirement: An ask is a record naming a role
-An ask SHALL be a record of `asks.rec` on the partition's flywheel branch, written through crew as every write there is: its number, the role it asks, who or what asks, what kind of ask it is, the record it names where it names one, its key where it must be written once, the words it carries where it carries any, and when it was written.
+An ask SHALL be a record of `asks.rec` on the partition's drive branch, written through crew as every write there is: its number, the role it asks, who or what asks, what kind of ask it is, the record it names where it names one, its key where it must be written once, the words it carries where it carries any, and when it was written.
 
 #### Scenario: A malformed ask
 - **WHEN** a write would add an ask with no role
@@ -34,7 +34,7 @@ An ask whose key `asks.rec` already holds SHALL write nothing and say so, on the
 - **THEN** `asks.rec` on `madswan/main` holds one ask of the planner keyed by that card's request and version 3, and the second write says the ask is there
 
 ### Requirement: An ask is written with the act that makes it
-An ask SHALL be written in the same commit as the act that makes it, where that act writes to the flywheel's branch, and in a commit of its own where it does not.
+An ask SHALL be written in the same commit as the act that makes it, where that act writes to the drive's branch, and in a commit of its own where it does not.
 
 #### Scenario: A capture
 - **WHEN** an agent captures a signal through crew in madswan, whose design agent runs as its kind
@@ -113,7 +113,7 @@ A place `crew role land` launched for a role SHALL be pending for that role once
 - **THEN** the design agent's next run takes it, and records the record's status with `crew record`
 
 ### Requirement: A role record names its run
-`roles.rec` on the partition's flywheel branch SHALL hold one record for each role its partition runs as its kind, naming its address, `<label>/<role>`; its run's name, `<label>-<role>`; the main level's host; the partition's first blueprints repository as the teams file names it; crew's kinds and the kind `crew-<role>`; the place's name, `<label>`; the stream the partition's `flume` names for the role; the priority 0; the intent `<label>-<role>`; and the role's model and effort.
+`roles.rec` on the partition's drive branch SHALL hold one record for each role its partition runs as its kind, naming its address, `<label>/<role>`; its run's name, `<label>-<role>`; the main level's host; the partition's first blueprints repository as the teams file names it; crew's kinds and the kind `crew-<role>`; the place's name, `<label>`; the stream the partition's `flume` names for the role; the priority 0; the intent `<label>-<role>`; and the role's model and effort.
 
 #### Scenario: The planner's record
 - **WHEN** madswan runs its planner as its kind and its record is written

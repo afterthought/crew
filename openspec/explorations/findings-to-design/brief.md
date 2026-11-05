@@ -6,7 +6,7 @@ A brief for a clean-room design pass. This brief and the files it names are ever
 
 **The problem.** Agents and people notice things all the time: a conductor while building, the user in an aside to an agent, a meeting, a Discord channel. crew has to carry each one either straight into the plan, when it is clear enough, or into a design session with the user, when it needs a decision first. It also has to record what happened, so that the user can see the flow for themselves instead of asking an agent to piece it together from transcripts and git logs on two hosts.
 
-**Flywheel Next is the model to align with.** It is the long-run design of this same loop: capture adapters, a capture reader, signals, one standing move per signal, curation as a bounded judgment, intent proposals put to the operator, elaborations that work them, findings from sessions offered on the operator's rail, and a run record of every write. Don't rebuild Flywheel Next in crew. Build the simplest version that keeps Flywheel's shapes and vocabulary wherever they fit, so that running crew this way tests Flywheel's ideas on real work. Where crew needs to differ, say how and why.
+**Flywheel Next is the model to align with.** It is the long-run design of this same loop: capture adapters, a capture reader, signals, one standing move per signal, curation as a bounded judgment, intent proposals put to the operator, elaborations that work them, findings from sessions offered on the operator's rail, and a run record of every write. Don't rebuild Flywheel Next in crew. Build the simplest version that keeps Boomdrive's shapes and vocabulary wherever they fit, so that running crew this way tests Boomdrive's ideas on real work. Where crew needs to differ, say how and why.
 
 ## Read first
 
@@ -62,7 +62,7 @@ These must be true. Where you think one is wrong, say so and why. Don't drop it 
 
 ### Seeing what happened
 
-Flywheel's run record (`observability/run-record`) is the model for these.
+Boomdrive's run record (`observability/run-record`) is the model for these.
 
 16. Every crew action that moves work leaves an event: who did it (agent and session), what, to what, when, on which host, and the commit it wrote, if any. Such actions include:
     - capturing, curating, routing;
@@ -104,6 +104,6 @@ A design proposal for the user to review. Write it to `openspec/explorations/fin
    - the event schema;
    - where events are written, and how they are gathered;
    - how a view reads them. Compare a zoetrope provider for crew's events, events emitted as Claude-format transcripts so zoetrope reads them unchanged, and any better view you know of.
-5. Where the design matches Flywheel Next and where it simplifies, and what running crew this way would show about Flywheel's model.
+5. Where the design matches Flywheel Next and where it simplifies, and what running crew this way would show about Boomdrive's model.
 6. The smallest first step that proves the flow end to end, and the order of the steps after it.
 7. The alternatives you considered, and the open questions only the user can answer.
