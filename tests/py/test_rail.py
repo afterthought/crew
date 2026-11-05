@@ -859,6 +859,34 @@ class TestSweepJudged:
         assert j["gone"] == [(y, None, "y is now a row of crew's landings card")]
         assert plan.row_gone("land/y", [{"Act": "bolt.land", "On": ["bolt/y"]}], ("crew",), {"y": "crew"}) == ("its bolt landed", None)
 
+    def test_a_renamed_kits_landings_card_closes_saying_so_and_its_new_card_is_raised_for_its_rows(self):
+        """rail-cards, The landings card of a renamed kit (Decision 5 of
+        a-kit-renamed-on-its-host-is-renamed-across-the-plan): land/flywheel-cloud, open when the user renamed
+        flywheel-cloud boomdrive-cloud, is withdrawn saying so, never as a gone bolt's card, and land/boomdrive-cloud,
+        holding you-sign-in-to-staging's row and no card, is raised in ops's name."""
+        old = card("land/flywheel-cloud", "req_l9", "wldn-ops")
+        renamed = did("kit.rename", 20, Id="r1", On=["kit/boomdrive-cloud"], From=["kit/flywheel-cloud"], Repo="boomdrive-cloud",
+                      Count="2", By="chuck@mac-studio")
+        new = dict(row("land/boomdrive-cloud", "land"), bolts=[{"bolt": "you-sign-in-to-staging"}])
+        j = plan.sweep_judged("mac-studio", [new], [old], [renamed], {"land/boomdrive-cloud": ("wldn-ops", "mac-studio")}, set(), set(),
+                              NOW, kits=("boomdrive-cloud",), kit_of={"you-sign-in-to-staging": "boomdrive-cloud"})
+        said = "flywheel-cloud is renamed boomdrive-cloud: its landings are rows of land/boomdrive-cloud"
+        assert (j["gone"], j["none"]) == ([(old, None, said)], [new])
+        assert plan.row_gone("land/flywheel-cloud", [], ("boomdrive-cloud",), {}, [("flywheel-cloud", "agentplot/boomdrive-cloud")]) == (None, said)
+        assert plan.row_gone("land/flywheel-cloud", [], ("boomdrive-cloud",), {}) == (None, "its bolt no longer waits to land")
+
+    def test_a_records_card_under_a_renamed_kit_is_settled_by_the_record_under_its_new_name(self):
+        """rail-cards, A record's card of a renamed kit: wldn-design's card under record/tailrace/0017, open when tailrace
+        was renamed timber, closes at crew record timber 17 --accepted."""
+        c = card("record/tailrace/0017", "req_r7", "wldn-design")
+        status = [did("record.proposed", 60, Id="p1", On=["record/tailrace/0017"], By="wldn-design"),
+                  did("kit.rename", 40, Id="r1", On=["kit/timber"], From=["kit/tailrace"], Repo="timber", Count="21"),
+                  did("record.accepted", 10, Id="a1", On=["record/timber/0017"], Commit=["agentplot/timber@0123456789"], By="wldn-design")]
+        assert self.judged(cards_=[c], entries=status)["gone"] == [(c, "Accepted at 0123456", None)]
+        assert plan.record_settled("record/tailrace/0017", status[:2]) is None
+        assert plan.record_settled("record/tailrace/0017", [status[0], status[2]]) is None  # no rename, no record of tailrace's
+        assert plan.record_proposed("record/timber/0017", status) is status[0]
+
     def test_a_kits_card_whose_row_is_gone_is_withdrawn_saying_nothing_waits_on_its_main(self):
         assert plan.row_gone("land/crew", [], ("crew",), {}) == (None, "nothing waits to land on crew's main")
 
