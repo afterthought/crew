@@ -3,7 +3,7 @@
 
 For each of a partition's hosts, its main level's and each its runners answer on (plan.partition_hosts), each started
 bolt whose work runs there, as the runner that took it reported (plan.bolt_at), with no dev server, saying so, since its
-work runs in Flume's places, until the runner reports a place's addresses (crew-sites, _open.md). Each host is read
+work runs in Flume's places, until the runner reports a place's addresses (crew-sites). Each host is read
 once, for whether it answers (read.3).
 A server is found among the host's portless routes and matched to its worktree by the name devurl gives that
 worktree: swancloud's naming, never crew's own. The URL is the one to open from where crew runs: the server's local
@@ -18,7 +18,7 @@ from crew import Refusal, fail  # noqa: E402
 
 
 # What crew sites says of a started bolt: its places are Flume's, where crew finds no server, until the runner reports
-# a place's addresses from Flume's run record (record 0043; _open.md).
+# a place's addresses from Flume's run record (record 0043).
 FLUME_PLACES = "its work runs in Flume's places, whose servers crew does not show yet"
 
 

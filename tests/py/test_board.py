@@ -1860,8 +1860,8 @@ class TestStarted:
 
     def test_a_started_bolts_ledger_shows_no_server(self, monkeypatch):
         """crew-board "A started bolt's work shows no server": a server running in x's own worktree, as a bolt given before
-        record 0026 had one, is drawn for no part of x, its places being Flume's (_open.md: the runner reports a place's
-        addresses)."""
+        record 0026 had one, is drawn for no part of x, its places being Flume's until the runner reports a place's
+        addresses."""
         from facts import ran
         monkeypatch.setattr(crew, "this_host", lambda: "deneb")
         site = {"here": "https://bolt--crew.local"}

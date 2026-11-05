@@ -284,7 +284,7 @@ def board_data(fleet, labels, read, now):
                 recorded = landing_of(logs, b.name())
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "host": t["machine"] if t else None,
                           "head": (k.get("bolts", {}).get(b.name()) or {}).get("head"),
-                          "stream": t["stream"] if t else None, "state": state, "url": None,  # its places are Flume's (crew-board, _open.md)
+                          "stream": t["stream"] if t else None, "state": state, "url": None,  # its places are Flume's (crew-board)
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "units": [], "fixes": [],
                           "landing": landing, "submissions_error": unread, "record": recorded,
                           "time": plan.held_time(fleet, logs, read["unread"].get(l, {}), pl, b, k, now)}
