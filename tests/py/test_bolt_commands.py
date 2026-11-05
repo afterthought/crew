@@ -191,7 +191,8 @@ class TestStart:
         fleet = dict(FLEET, hosts={self.HOST: keeping("/w", f"WilldanGroup/{BOARD}")})
         with pytest.raises(plan.Refusal) as e:
             apply(w, "bolt start console-pages", ctx=known(w, fleet=fleet))
-        assert str(e.value) == f"wldn's main level runs on {self.HOST}, and no space there keeps {KIT}, so crew can't make bolt/console-pages"
+        assert str(e.value) == (f"wldn's main level runs on {self.HOST}, and no space there keeps {KIT}, so crew can't make bolt/console-pages"
+                                f"; if it was renamed on its host, crew kit rename {KIT} <new> names it so in the plan")
         assert not plan.started(w.plan.bolt("console-pages"))
 
     def test_a_held_host_is_refused_before_anything_else_is_read(self, reads):
@@ -351,7 +352,7 @@ class TestLand:
         assert plan.unheld_refusal(FLEET, "console-pages", ["a-console-page"], KIT, t, "wldn") is None
         assert plan.unheld_refusal(FLEET, "console-pages", ["a-console-page"], "rocs-kit", None, "wldn") == (
             "bolt console-pages was never started, and wldn's main level runs on mac-studio, and no space there keeps rocs-kit, "
-            "so crew can't read its main")
+            "so crew can't read its main; if it was renamed on its host, crew kit rename rocs-kit <new> names it so in the plan")
         assert plan.unheld_refusal(FLEET, "console-pages", [], KIT, t, "wldn") == (
             "bolt console-pages was never started and holds no units or chores, so nothing of it has landed")
 

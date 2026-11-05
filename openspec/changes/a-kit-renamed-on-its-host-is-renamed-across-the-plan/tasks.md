@@ -11,17 +11,17 @@ Each check is a moon task of the `tests` project, run through `tests/suite`: `lo
 
 ## 2. The rename
 
-- [ ] 2.1 `crew kit rename <old> <new>` is a plan command a proposal may hold, parsed by the command line's own grammar, with its act `kit.rename` (design Decision 2; Task notes 2.1). Passes `tests/py/test_parser.py` (`tests/suite logic`).
-- [ ] 2.2 The rename does three things (design Decision 2; Task notes 2.2). Passes `tests/py/test_kit_rename.py` (`tests/suite logic`).
+- [x] 2.1 `crew kit rename <old> <new>` is a plan command a proposal may hold, parsed by the command line's own grammar, with its act `kit.rename` (design Decision 2; Task notes 2.1). Passes `tests/py/test_parser.py` (`tests/suite logic`).
+- [x] 2.2 The rename does three things (design Decision 2; Task notes 2.2). Passes `tests/py/test_kit_rename.py` (`tests/suite logic`).
   - It rewrites the `Repo` of every Bolt and Unit record naming `<old>` to `<new>`, and nothing else.
   - It is refused, with nothing written, where the old name is no kit of the partition, where the main-level host still keeps the old name or keeps no repository by the new one, where the new name is a bolt's, or where the hosts file can't be read.
   - It appends no request and leaves a started bolt as it was.
-- [ ] 2.3 The user runs the rename at a shell, and a proposal holding it applies on the user's approval. The planner's direct run is refused naming `crew plan propose`, and any other agent's naming the planner (design Decision 2; `roles.1`; Task notes 2.3). Passes `tests/py/test_plan_roles.py` (`tests/suite logic`).
+- [x] 2.3 The user runs the rename at a shell, and a proposal holding it applies on the user's approval. The planner's direct run is refused naming `crew plan propose`, and any other agent's naming the planner (design Decision 2; `roles.1`; Task notes 2.3). Passes `tests/py/test_plan_roles.py` (`tests/suite logic`).
 - [ ] 2.4 The rename is one commit. Its run-record entry is `kit.rename`, naming `kit/<new>`, `kit/<old>`, `Repo` and `Count`, and the plan it leaves passes a real `recfix --check`, while one breaking `%unique: Repo Goal` is refused before any commit (design Decision 2; Task notes 2.4). Passes `tests/contract/test_recfix.py` (`tests/suite contract`).
-- [ ] 2.5 A plan command given a kit's former name writes the name now and says so, a proposal approved after a rename among them, its `Do` unchanged. A repository kept again under a former name is refused, naming the rename (design Decision 4; Task notes 2.5). Passes `tests/py/test_kit_rename.py` (`tests/suite logic`).
+- [x] 2.5 A plan command given a kit's former name writes the name now and says so, a proposal approved after a rename among them, its `Do` unchanged. A repository kept again under a former name is refused, naming the rename (design Decision 4; Task notes 2.5). Passes `tests/py/test_kit_rename.py` (`tests/suite logic`).
 - [ ] 2.6 A proposal's card draws a rename as its own block, the old name, the new, the bolts and units it renames and which bolts are started, and is a plain approval when it adds no unit (design Decision 2; Task notes 2.6). Passes `tests/py/test_proposal_card.py` (`tests/suite logic`).
 - [ ] 2.7 A card open under `land/<old>` closes saying the kit is renamed, and `land/<new>` is raised for its rows. A decision record's card under `record/<old>/<n>` is settled by the record under its new kit (design Decision 5; Task notes 2.7). Passes `tests/py/test_rail.py` (`tests/suite logic`).
-- [ ] 2.8 The refusal for a kit the main-level host does not keep names `crew kit rename` as the way on (design Decision 2; Task notes 2.8). Passes `tests/py/test_kits.py` (`tests/suite logic`).
+- [x] 2.8 The refusal for a kit the main-level host does not keep names `crew kit rename` as the way on (design Decision 2; Task notes 2.8). Passes `tests/py/test_kits.py` (`tests/suite logic`).
 
 ## 3. Where a runner keeps a kit
 

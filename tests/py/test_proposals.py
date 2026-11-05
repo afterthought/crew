@@ -232,7 +232,7 @@ class TestRestsOnAccepted:
     def test_work_of_a_kit_its_main_level_host_keeps_no_checkout_of_naming_a_record_is_refused(self):
         said, _ = refused(self.items, 'unit add n "N." --repo breadboard-kit --source docs/adr/0001')
         assert said == ("unit n names a decision record, and wldn's main level runs on mac-studio, and no space there keeps "
-                        "breadboard-kit, so crew can't tell whose it is")
+                        "breadboard-kit, so crew can't tell whose it is; if it was renamed on its host, crew kit rename breadboard-kit <new> names it so in the plan")
         assert self.items('unit add m "M." --repo breadboard-kit --source docs/architecture/core.md') == []
 
 

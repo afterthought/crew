@@ -318,7 +318,8 @@ class TestBeforeARunnerTookIt:
         assert plan.main_kit(self.FLEET, "madswan", "switchboard-kit") is None
         assert plan.main_kit(self.FLEET, "madswan", "agentplot/crew") is None
         assert plan.main_kit_said(self.FLEET, "madswan", "switchboard-kit", "make bolt/b") == (
-            "madswan's main level runs on deneb, and no space there keeps switchboard-kit, so crew can't make bolt/b")
+            "madswan's main level runs on deneb, and no space there keeps switchboard-kit, so crew can't make bolt/b; if it was "
+            "renamed on its host, crew kit rename switchboard-kit <new> names it so in the plan")
 
     def test_two_repositories_by_a_kits_name_are_refused_unless_its_owner_tells_them_apart(self):
         spaces = dict(self.SPACES, deneb={"sessions": {"x": {"dir": "/x", "repos": ["afterthought/blueprints", "agentplot/blueprints"]}}})

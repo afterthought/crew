@@ -926,6 +926,7 @@ class Write:
         self.on, self.frm = [], []  # objects only the change can name, for the write's run-record entry
         self.asked, self.held = [], []  # the asks the change wrote in its commit (ask_lines), and the keys it found held
         self.why, self.fields = None, {}  # the entry's Why and fields where only the tip the change is applied to says them
+        self.renamed = []  # the kits a rename in this write renamed, (old, new), whose entry the run record holds once it lands
 
     def text(self, path):
         """A file of the branch as the change has left it: replaced, else at the tip, else None."""
@@ -958,8 +959,14 @@ class Write:
 
     def renames(self):
         """The partition's renames of its kits as the run record holds them at the tip the change is applied to
-        (renames_at), whole, since a launch made under a former name stands in requests.rec however old it is."""
-        return renames_at(self.repo, self.tip)
+        (renames_at), whole, since a launch made under a former name stands in requests.rec however old it is, then
+        each a rename earlier in this write made (renamed), so a command after it in a proposal reads it too."""
+        return renames_at(self.repo, self.tip) + self.renamed
+
+    def kits(self):
+        """The partition's kits by their names now (partition_kits), in the plan as the change has left it so far, with
+        the landings the run record holds at the tip it is applied to, read through its renames (renames)."""
+        return partition_kits(self.plan, landings_at(self.repo, self.tip) if self.tip else [], self.renames())
 
     def bolt(self, name):
         return self.plan.bolt(name) or self.gone("Bolt", name)
@@ -1500,9 +1507,10 @@ def locate(fleet, kind, name, label, word=None):
 
 def kit_labels(fleet, kit):
     """The partitions whose kits (partition_kits, the repositories their plans and landings name) name a kit, by its
-    name or forge address (kit_in), sorted; each branch read once for the command, and refused naming one that can't
-    be read (read.1), since crew can't tell then whether it names the kit."""
-    return [l for l in sorted(fleet["partitions"]) if kit_in(kit, kits_read(fleet, l))]
+    name or forge address (kit_in), a former name by the kit's name now (kit_now, the partition's renames), sorted; each
+    branch read once for the command, and refused naming one that can't be read (read.1), since crew can't tell then
+    whether it names the kit."""
+    return [l for l in sorted(fleet["partitions"]) if kit_in(kit_now(kit, renames_read(fleet, l)), kits_read(fleet, l))]
 
 
 def main_kit(fleet, label, kit):
@@ -1526,14 +1534,84 @@ def main_kit_read(fleet, label, kit):
 
 
 def main_kit_said(fleet, label, kit, what):
-    """Why crew can't act on a kit on its partition's main-level host (main_kit): that host keeps no checkout of it."""
+    """Why crew can't act on a kit on its partition's main-level host (main_kit): that host keeps no checkout of it,
+    and, since a kit renamed on its host is kept there by its new name alone, the way on when it was (Decision 2 of
+    a-kit-renamed-on-its-host-is-renamed-across-the-plan)."""
     host = crew.partition_of(fleet, label)["machine"]
-    return f"{label}'s main level runs on {host}, and no space there keeps {kit}, so crew can't {what}"
+    return (f"{label}'s main level runs on {host}, and no space there keeps {kit}, so crew can't {what}; if it was "
+            f"renamed on its host, crew kit rename {kit} <new> names it so in the plan")
 
 
 def kit_in(kit, kits):
     """Whether kits (partition_kits) name a kit, by its name or its forge address, <owner>/<name>, either way round."""
     return kit.split("/")[-1] in {k.split("/")[-1] for k in kits}
+
+
+# A kit as a command names it (code.4): its name, lowercase words with dashes, or its forge address, <owner>/<name>, as
+# the hosts file lists it, the owner as GitHub has it.
+KIT = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9_.-]*/)?[a-z0-9][a-z0-9-]*$")
+
+
+def kit_name(text):
+    """A kit's name as crew's parser takes it (KIT), refused otherwise, as the parser refuses any argument it can't
+    read."""
+    if not KIT.match(text):
+        raise argparse.ArgumentTypeError(f"a kit is named by its name, lowercase words with dashes, or <owner>/<name>, not {text}")
+    return text
+
+
+def former_said(given, now):
+    """What a command given a kit's former name says of the name it wrote (Decision 4 of
+    a-kit-renamed-on-its-host-is-renamed-across-the-plan), or None for a name no rename renamed."""
+    return None if now == given else f"{given} is {now} since its rename; written as {now}"
+
+
+def former_kept_said(given, now, host, kept):
+    """Why a command given a kit's former name is refused, or None (Decision 4 of
+    a-kit-renamed-on-its-host-is-renamed-across-the-plan): the partition's main-level host keeps a repository by that
+    name again (kept, crew.kit_kept's, or None), made after the rename, whose records crew could not tell from the
+    renamed kit's (read.1)."""
+    if now == given or kept is None:
+        return None
+    return (f"{given} is {now} since its rename, and {host}'s spaces keep {kept['repo']} again: crew can't tell its "
+            f"records from {now}'s, so that repository needs another name in crew")
+
+
+def rename_refusal(label, old, new, kits, renames, bolts, host, spaces):
+    """Why crew kit rename <old> <new> is refused, or None (Decision 2 of
+    a-kit-renamed-on-its-host-is-renamed-across-the-plan), from plain facts (code.7): the partition's kits by their names
+    now (partition_kits), its renames (renames_in), its bolts' names, and its main-level host with what its spaces keep,
+    spaces None where the hosts file lists no such host, else (the repositories they keep, crew.kit_kept's of old, of
+    new). Refused for two names of one kit; for an old name a rename already renamed, or no kit of the partition; for a
+    new name a bolt of the partition holds, since land/<new> would name the bolt; and unless the host keeps a repository
+    by the new name and none by the old, the fleet's word that the rename has happened."""
+    name = new.split("/")[-1]
+    if old.split("/")[-1] == name:
+        return f"{old} and {new} name one kit: a rename gives it another name"
+    now = kit_now(old, renames)
+    if now != old:
+        return f"{old} is {now} since its rename: crew kit rename {now} {new} renames it again"
+    if not kit_in(old, kits):
+        return f"{label}'s plan names no kit {old}: neither its plan nor its landings name it"
+    if name in bolts:
+        return (f"{name} is the name of bolt {name} of {label}, so land/{name} would name the bolt and not the kit: "
+                "a kit and a bolt of one partition take different names")
+    if spaces is None:
+        return f"{crew.HOSTS} lists no {host}, {label}'s main level's host, so crew can't read whether its spaces keep {new}"
+    repos, kept_old, kept_new = spaces
+    if kept_old is not None:
+        return f"{host}'s spaces still keep {kept_old['repo']}, so it is not renamed there"
+    if kept_new is None:
+        return f"{host}'s spaces keep no {new}, so it is not renamed there: they keep " + (", ".join(repos) or "nothing")
+    return None
+
+
+def renamed_in(plan, old):
+    """The plan's records a rename of old renames (Decision 2 of a-kit-renamed-on-its-host-is-renamed-across-the-plan):
+    its bolts and its units and chores whose Repo names old, by its name or forge address (kit_in), as (bolts, work),
+    each in the plan's order."""
+    of = lambda r: bool(r.get("Repo")) and kit_in(r.get("Repo"), [old])
+    return [b for b in plan.bolts() if of(b)], [u for u in plan.work() if of(u)]
 
 
 def kit_now(kit, renames):
@@ -2121,6 +2199,13 @@ def kits_read(fleet, label, fresh=True):
         tip = tip_here(repo, ref)
         tip is not None or fail(f"crew's cache of {repo} can't be read for {ref}")
     return kits_at(repo, tip, read(repo, ref, tip) if tip else None)
+
+
+def renames_read(fleet, label):
+    """A partition's renames of its kits (renames_at) read from its branch at the tip this command fetched once
+    (plan.12), as kits_read reads its kits; none for a branch not started."""
+    repo, ref = state_of(fleet, label)
+    return renames_at(repo, fetch(repo, ref))
 
 
 def land_key(key, kits):
@@ -5154,7 +5239,7 @@ def bolts_local_said(fleet, t, plan):
 # The commands that write the plan directly, and the one role each agent crew started may use them in.
 PLAN_WRITES = {("bolt", "new"), ("bolt", "start"), ("bolt", "order"), ("bolt", "drop"), ("bolt", "land"), ("unit", "add"),
                ("unit", "split"), ("unit", "amend"), ("unit", "order"), ("unit", "after"), ("unit", "move"), ("unit", "drop"),
-               ("chore", "add"), ("chore", "order"), ("chore", "after"), ("chore", "move"), ("chore", "drop")}
+               ("chore", "add"), ("chore", "order"), ("chore", "after"), ("chore", "move"), ("chore", "drop"), ("kit", "rename")}
 
 
 def role(fleet, name):
@@ -5231,11 +5316,12 @@ class Op:
     the subject and run-record entry of its write, what to prepare before the push with its undo (a unit's rebase),
     and what follows the push."""
 
-    def __init__(self, label, change, subject, act, on=(), frm=(), body="", prepare=None, after=None):
+    def __init__(self, label, change, subject, act, on=(), frm=(), body="", prepare=None, after=None, fields=None):
         self.label, self.change, self.subject, self.act, self.body = label, change, subject, act, body
         self.on, self.frm = list(on), list(frm)
         self.prepare, self.after = prepare, after
         self.added_on, self.added_frm = [], []
+        self.fields = fields if fields is not None else {}  # its entry's own fields, which its change may fill at the tip it is applied to
 
 
 class Reads:
@@ -5283,6 +5369,10 @@ class Direct(Reads):
         """The partition's kits (partition_kits) as its branch holds them now."""
         return kits_read(self.fleet, label)
 
+    def renames(self, label):
+        """The partition's renames of its kits (renames_read) as its branch holds them now."""
+        return renames_read(self.fleet, label)
+
 
 class Proposed(Reads):
     """What a command inside a proposal sees: the proposal's partition and number, in the plan as the commands before
@@ -5303,6 +5393,10 @@ class Proposed(Reads):
         """The partition's kits (partition_kits) in the plan as the commands before this one leave it, with the landings
         its branch holds at the write's tip."""
         return kits_at(self.w.repo, self.w.tip, self.w.plan)
+
+    def renames(self, label):
+        """The partition's renames of its kits as the run record holds them at the write's tip (Write.renames)."""
+        return self.w.renames()
 
 
 class Drawn(Proposed):
@@ -5379,18 +5473,40 @@ def called(a):
     return f"chore {a.unit}" if a.cmd == "chore" else a.unit
 
 
+def kit_given(ctx, label, kit):
+    """The kit a plan command names by --repo as it writes it (Decision 4 of
+    a-kit-renamed-on-its-host-is-renamed-across-the-plan): by its name now through the partition's renames (kit_now),
+    a proposal approved after a rename among them, its Do unchanged (plan.4); refused where the partition's main-level
+    host keeps a repository by the former name again (former_kept_said). Its change writes the name now at the tip it
+    is applied to (Write.renames)."""
+    now = kit_now(kit, ctx.renames(label))
+    if now != kit:
+        host = crew.partition_of(ctx.fleet, label)["machine"]
+        why = former_kept_said(kit, now, host, crew.kit_kept(ctx.fleet, host, kit))
+        not why or fail(why)
+    return now
+
+
 def op_bolt_new(ctx, a):
     label = ctx.kit(a.repo)
     crew.NAME.match(a.bolt) or fail(f"a bolt's name is lowercase words with dashes, not {a.bolt}")
+    kit_given(ctx, label, a.repo)
     why = kit_named(a.bolt, ctx.kits(label), label)
     not why or fail(why)
+    seen = {}
 
     def change(w):
         w.plan.bolt(a.bolt) is None or fail(f"{label}/main already has bolt {a.bolt}")
-        r = Rec("Bolt", [("Bolt", a.bolt), ("Repo", a.repo), ("Goal", a.goal)] + [("Source", x) for x in a.source])
+        seen["repo"] = kit_now(a.repo, w.renames())
+        r = Rec("Bolt", [("Bolt", a.bolt), ("Repo", seen["repo"]), ("Goal", a.goal)] + [("Source", x) for x in a.source])
         w.plan.insert(r, before=w.bolt(a.before) if a.before else None)
         return [a.bolt]
-    return Op(label, change, f"plan({a.bolt}): add the bolt", "bolt.new", on=[f"bolt/{a.bolt}"])
+
+    def after(repo, sha):
+        said = former_said(a.repo, seen.get("repo", a.repo))
+        if said:
+            print(said)
+    return Op(label, change, f"plan({a.bolt}): add the bolt", "bolt.new", on=[f"bolt/{a.bolt}"], after=after)
 
 
 # The commit sluice made each started bolt's branch at in this process, and whether crew took it as it found it
@@ -5547,13 +5663,14 @@ def op_unit_add(ctx, a):
     if a.bolt:
         label, plan = ctx.locate("Bolt", a.bolt)
         kit = plan.bolt(a.bolt).get("Repo")
-        a.repo in (None, kit) or fail(f"bolt {a.bolt} is in {kit}, not {a.repo}")
+        a.repo in (None, kit) or kit_given(ctx, label, a.repo) == kit or fail(f"bolt {a.bolt} is in {kit}, not {a.repo}")
     else:
         a.repo or fail(f"a {k} goes in a bolt (--bolt) or in a repo's queue (--repo)")
-        label, kit, plan = ctx.kit(a.repo), a.repo, None
+        label = ctx.kit(a.repo)
+        kit, plan = kit_given(ctx, label, a.repo), None
     ahead = unblocking(ctx, plan, label, a, a.bolt) if getattr(a, "unblocks", None) else None
     ctx.free(label, kit, [a.unit])
-    sources = list(a.source)
+    sources, seen = list(a.source), {}
     if a.signal:
         a.signal = signal_id(ctx.fleet, label, a.signal, ctx.w)  # a short id is routed, and sourced, by its full one
         sources.insert(0, f"signals/{a.signal}")
@@ -5567,13 +5684,14 @@ def op_unit_add(ctx, a):
             not why or fail(why)
         if a.signal:  # its one move, route, in the same commit, checked again on each replay
             move(ctx.fleet, label, w, a.signal, route_move(a.signal, f"{k}/{a.unit}"))
-        r = Rec("Unit", [("Unit", a.unit), ("Repo", kit)] + ([("Bolt", a.bolt)] if a.bolt else []) + ([("Kind", "chore")] if k == "chore" else [])
+        repo = seen["repo"] = w.bolt(a.bolt).get("Repo") if a.bolt else kit_now(a.repo, w.renames())
+        r = Rec("Unit", [("Unit", a.unit), ("Repo", repo)] + ([("Bolt", a.bolt)] if a.bolt else []) + ([("Kind", "chore")] if k == "chore" else [])
                 + [("Intent", a.intent)] + [("After", x) for x in a.after] + [("Source", x) for x in sources])
         before = a.before or ahead
         o = w.plan.item(before) if before else None
         if a.before:
             o = w.item(a.before)
-            o.get("Bolt") == a.bolt and o.get("Repo") == kit or fail(f"{kind_of(o)} {a.before} is not in {a.bolt or 'the queue of ' + kit}")
+            o.get("Bolt") == a.bolt and o.get("Repo") == repo or fail(f"{kind_of(o)} {a.before} is not in {a.bolt or 'the queue of ' + repo}")
         if o is not None:
             w.plan.insert(r, before=o)
         else:
@@ -5583,6 +5701,9 @@ def op_unit_add(ctx, a):
         return [a.bolt] if a.bolt else []
 
     def after(repo, sha):
+        said = former_said(a.repo, seen.get("repo", a.repo)) if a.repo else None
+        if said:
+            print(said)
         if a.signal:
             print(f"signal {a.signal} routed to {k}/{a.unit}, in the same commit")
             record.emit(label, "signal.move", [f"signals/{a.signal}", f"{k}/{a.unit}"], commit=[f"{repo}@{sha}"],
@@ -5784,14 +5905,47 @@ def op_unit_drop(ctx, a):
               body=a.reason, after=after)
 
 
-# The fifteen commands a proposal may hold, each built the same way whether run directly or inside a proposal. A chore's
-# five are a unit's, the kind read from the command (plan.11).
+def op_kit_rename(ctx, a):
+    """crew kit rename <old> <new> (Decision 2 of a-kit-renamed-on-its-host-is-renamed-across-the-plan): the Repo of
+    every Bolt and Unit record naming old, by its name or forge address, set to new as given, in one commit, and nothing
+    else of the plan or of any other file: no record moved, no request appended, a started bolt left as it was. Its
+    entry, kit.rename, names the kit by its new name (On: kit/<name>) and the one it had (From: kit/<old>), with Repo
+    the new and Count the records renamed, the partition's record of the rename that crew reads what it never rewrites
+    through (kit_now); a rename of a kit only the landings name renames no record and still writes it. Refused, with
+    nothing written, by rename_refusal at the tip it is applied to (plan.1), against what the partition's main-level
+    host's spaces keep (crew.kit_kept), a hosts file crew can't read among them (read.1). A proposal may hold it, and the
+    user runs it directly (roles.1, may_write)."""
+    label, fleet = ctx.kit(a.old), ctx.fleet
+    host = crew.partition_of(fleet, label)["machine"]
+    listed = host in fleet["hosts"]
+    spaces = ([r for s in fleet["hosts"][host].get("sessions", {}).values() for r in s.get("repos") or []],
+              crew.kit_kept(fleet, host, a.old), crew.kit_kept(fleet, host, a.new)) if listed else None
+    fields = {}
+
+    def change(w):
+        why = rename_refusal(label, a.old, a.new, w.kits(), w.renames(), [b.name() for b in w.plan.bolts()], host, spaces)
+        not why or fail(why)
+        bolts, work = renamed_in(w.plan, a.old)
+        for r in bolts + work:
+            r.set("Repo", a.new)
+        w.renamed.append((a.old, a.new))
+        fields.update(Repo=a.new, Count=str(len(bolts) + len(work)))
+        return [b.name() for b in bolts]
+
+    def after(repo, sha):
+        print(f"{a.old} is {a.new} in {label}'s plan: {cards.plural(int(fields.get('Count') or 0), 'record')} renamed")
+    return Op(label, change, f"plan(kit): rename {a.old} {a.new}", "kit.rename", on=[f"kit/{a.new.split('/')[-1]}"],
+              frm=[f"kit/{a.old}"], after=after, fields=fields)
+
+
+# The commands a proposal may hold, each built the same way whether run directly or inside a proposal. A chore's five are
+# a unit's, the kind read from the command (plan.11).
 OPS = {
     ("bolt", "new"): op_bolt_new, ("bolt", "start"): op_bolt_start, ("bolt", "order"): op_bolt_order, ("bolt", "drop"): op_bolt_drop,
     ("unit", "add"): op_unit_add, ("unit", "split"): op_unit_split, ("unit", "amend"): op_unit_amend, ("unit", "order"): op_unit_order,
     ("unit", "after"): op_unit_after, ("unit", "move"): op_unit_move, ("unit", "drop"): op_unit_drop,
     ("chore", "add"): op_unit_add, ("chore", "order"): op_unit_order, ("chore", "after"): op_unit_after, ("chore", "move"): op_unit_move,
-    ("chore", "drop"): op_unit_drop,
+    ("chore", "drop"): op_unit_drop, ("kit", "rename"): op_kit_rename,
 }
 
 
@@ -5801,7 +5955,7 @@ def direct(key):
         op = OPS[key](Direct(fleet, a), a)
         undo = op.prepare() if op.prepare else None
         try:
-            sha = write(fleet, op.label, op.change, op.subject, op.body, act=op.act, on=op.on, frm=op.frm)
+            sha = write(fleet, op.label, op.change, op.subject, op.body, act=op.act, on=op.on, frm=op.frm, fields=op.fields)
         except Refusal:
             if undo:
                 undo()
@@ -6308,7 +6462,7 @@ def refuse(said, recorded):
 
 def do_named(a):
     """A proposal's command as the run record holds it: the command and what it acts on, never its intent or reason."""
-    return f"{a.cmd} {a.sub} {a.bolt if a.cmd == 'bolt' else a.unit}"
+    return f"{a.cmd} {a.sub} " + (a.bolt if a.cmd == "bolt" else f"{a.old} {a.new}" if a.cmd == "kit" else a.unit)
 
 
 def do_args(label, do):
@@ -6347,6 +6501,8 @@ def objects(argvs):
     for a in argvs:
         if a.cmd == "bolt":
             out.append(f"bolt/{a.bolt}")
+        elif a.cmd == "kit":
+            out += [f"kit/{a.new.split('/')[-1]}", f"kit/{a.old}"]
         else:
             out.append(f"{a.cmd}/{a.unit}")
             out += [f"unit/{n}" for n, _ in getattr(a, "into", None) or []]
@@ -6367,7 +6523,7 @@ def summary(argvs):
              ("unit", "order"): lambda a: f"order {a.unit}",
              ("unit", "after"): lambda a: f"set what {a.unit} comes after",
              ("unit", "move"): lambda a: f"move {a.unit} to " + ("the queue" if a.bolt == "queue" else a.bolt),
-             ("unit", "drop"): lambda a: f"drop {a.unit}"}
+             ("unit", "drop"): lambda a: f"drop {a.unit}", ("kit", "rename"): lambda a: f"rename kit {a.old} {a.new}"}
     # A chore's command is said as the unit's, its name as `chore <name>`.
     return ", ".join(words[("unit", a.sub)](argparse.Namespace(**dict(vars(a), unit=called(a)))) if a.cmd == "chore"
                      else words[(a.cmd, a.sub)](a) for a in argvs)
@@ -6389,6 +6545,8 @@ def touched_by(plan, argvs):
                     where[u] = None
         elif key == ("unit", "add"):
             t, where[a.unit] = [a.bolt], a.bolt
+        elif key == ("kit", "rename"):
+            t = [b.name() for b in renamed_in(plan, a.old)[0]]
         elif key == ("unit", "move"):
             to = None if a.bolt == "queue" else a.bolt
             t, where[a.unit] = [where.get(a.unit), to], to
@@ -6747,7 +6905,7 @@ def plan_approve(fleet, a):
         raise
     for op in seen["ops"]:
         record.emit(label, op.act, op.on + op.added_on, op.frm + op.added_frm + [f"proposal/{a.n}"], [f"{repo}@{sha}"],
-                    record.subject(op.subject))
+                    record.subject(op.subject), **op.fields)
         if op.after:
             op.after(repo, sha)
     print(f"proposal {a.n} is approved and applied" + (f", without {joined(cleared)}" if cleared else ""))
@@ -6903,6 +7061,12 @@ def describe(fleet, label, plan, p, alone=False, signal_of=None):
             lines = [f"**{noun.capitalize()} `{a.unit}` comes after** " + ("nothing" if a.none else ", ".join(f"`{d}`" for d in a.deps))]
         elif key == ("unit", "drop"):
             lines = [f"**Drop {noun} `{a.unit}`**", f"{says}: {intent_of(a.unit)}", f"Reason: {a.reason}"]
+        elif key == ("kit", "rename"):
+            bolts, work = renamed_in(plan, a.old)
+            lines = [f"**Rename kit `{a.old}`** to `{a.new}`, as its host renamed it",
+                     "Bolts: " + (", ".join(f"`{b.name()}`" + (" (started)" if started(b) else "") for b in bolts) or "none"),
+                     "Units and chores: " + (", ".join(f"`{u.name()}`" for u in work) or "none"),
+                     "On approval: each names the kit by its new name; nothing is dropped, added or launched again."]
         changes.append({"do": a.do, "lines": lines, "bolts": per[i]})
     return {"proposal": int(p.get("Proposal")), "state": p.get("State"), "by": p.get("By"), "opened": p.get("Opened"),
             "closed": p.get("Closed"), "reason": p.get("Reason"), "replaces": p.get("Replaces"), "case": p.get("Case"),
@@ -7007,13 +7171,13 @@ def open_refusal(n, open_, as_json):
 # ------------------------------------------------------------------------------------------- a proposal's card
 
 def concerns(a):
-    """The unit a proposal's command concerns, its subject, or None for a bolt's command."""
-    return None if a.cmd == "bolt" else a.unit
+    """The unit a proposal's command concerns, its subject, or None for a bolt's or a kit's command."""
+    return None if a.cmd in ("bolt", "kit") else a.unit
 
 
 def names_units(a):
     """Every unit a proposal's command names: its subject and each unit it refers to."""
-    if a.cmd == "bolt":
+    if a.cmd in ("bolt", "kit"):
         return []
     out = [a.unit] + list(getattr(a, "after", None) or []) + ([a.before] if getattr(a, "before", None) else [])
     out += [n for n, _ in getattr(a, "into", None) or []] + list(getattr(a, "deps", None) or [])
@@ -7189,12 +7353,14 @@ def proposal_facts(fleet, label, w, n):
 
 def named_kit(plan, argvs):
     """The kit of the first bolt or unit a proposal's commands name, in whose area its card is filed (briefs.11): a new
-    bolt's, or a unit's added to the queue, as the command gives it, else the plan's for the bolt or unit it names; None
-    when the plan names none of them."""
+    bolt's, or a unit's added to the queue, as the command gives it, a kit's rename's new name, else the plan's for the
+    bolt or unit it names; None when the plan names none of them."""
     for a in argvs:
         if a.cmd == "bolt":
             b = plan.bolt(a.bolt)
             repo = a.repo if a.sub == "new" else b.get("Repo") if b else None
+        elif a.cmd == "kit":
+            repo = a.new
         elif a.sub == "add":
             repo = a.repo or (plan.bolt(a.bolt).get("Repo") if a.bolt and plan.bolt(a.bolt) else None)
         else:
@@ -15150,6 +15316,11 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("reason")
     x.add_argument("--label")
 
+    x = sub.add_parser("kit").add_subparsers(dest="sub", required=True).add_parser("rename")
+    x.add_argument("old", type=kit_name)
+    x.add_argument("new", type=kit_name)
+    x.add_argument("--label")
+
     pp = sub.add_parser("plan").add_subparsers(dest="sub", required=True)
     x = pp.add_parser("propose")
     x.add_argument("file")
@@ -15275,6 +15446,7 @@ COMMANDS = {
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("chore", "add"): direct(("chore", "add")), ("chore", "order"): direct(("chore", "order")), ("chore", "after"): direct(("chore", "after")),
     ("chore", "move"): direct(("chore", "move")), ("chore", "drop"): direct(("chore", "drop")),
+    ("kit", "rename"): direct(("kit", "rename")),
     ("_preview", None): preview_handed,
     ("_preview-release", None): preview_release_cmd, ("_card-preview", None): card_preview_cmd,
     ("_land-row", None): land_row_cmd, ("_land-card", None): land_card_cmd, ("_landing-read", None): landing_read_cmd,
@@ -15297,7 +15469,7 @@ ACTS = {
     ("unit", "amend"): "unit.amend",
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
     ("chore", "add"): "chore.add", ("chore", "order"): "chore.order", ("chore", "after"): "chore.after", ("chore", "move"): "chore.move",
-    ("chore", "drop"): "chore.drop",
+    ("chore", "drop"): "chore.drop", ("kit", "rename"): "kit.rename",
     ("signal", None): "capture", ("signal-move", None): "signal.move", ("signal-land", None): "capture",
     ("plan", "propose"): "plan.propose", ("plan", "approve"): "plan.approve",
     ("plan", "drop"): "plan.drop", ("answer", None): "stage.answer",
@@ -15318,6 +15490,8 @@ def named(a):
         out.append(f"signals/{pathlib.Path(a.dir).name}")
     if a.cmd == "state":
         out.append(f"plan/{a.label}")
+    if a.cmd == "kit":
+        out.append(f"kit/{a.old}")
     if a.cmd == "plan" and getattr(a, "n", None) is not None:
         out.append(f"proposal/{a.n}")
     if a.cmd == "answer" and CONTEXT.get("work"):  # the work as requests name it, once its launch was found
