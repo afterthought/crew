@@ -22,4 +22,4 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 
 ## 5. The change's tests
 
-- [ ] 5.1 Every test the change affects passes (Task notes 5.1). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 5.1 Every test the change affects passes (Task notes 5.1). Verify `tests/suite --affected` ends with "0 failed".
