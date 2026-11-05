@@ -96,6 +96,8 @@ done
 for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it" "plan agree" \
   "bolt give" "it no longer waits on that conductor"; do lacks "$out" "$gone"; done
 has "$out" "and with \`--source\` what the signal points at"
+for want in "| rename a kit renamed on its host | \`kit rename <old> <new>\` |" \
+  "**A kit renamed on its host** is renamed by proposing it, never by dropping and adding its work again"; do has "$out" "$want"; done
 for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "why the unit changes rather than being replaced" \
   "A unit that has merged is not amended"; do has "$out" "$want"; done
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
