@@ -7,7 +7,7 @@ Each check is a moon task of the `tests` project, run through `tests/suite`: `lo
 - [x] 1.1 `plan.kit_now` reads a kit's name through the partition's renames in the order they were written, by name or forge address. A name no rename names reads as written, and a rename and its undoing read back (design Decision 3; Task notes 1.1). Passes `tests/py/test_kits.py` (`tests/suite logic`).
 - [x] 1.2 A partition's renames are read from its run record in the same read of `runs/` as its landings, once per tip, and `partition_kits` names each kit once, by its name now (design Decision 3; `plan.12`; Task notes 1.2). Passes `tests/py/test_kits.py` (`tests/suite logic`).
 - [x] 1.3 Every read in Decision 3's table, of what crew never rewrites, reads a kit through `kit_now`: a kit's launches, a bolt's kit from its launches, a fix of main's kit, a kit's landings and deploys, and a source's repository (design Decision 3; Task notes 1.3). Passes `tests/py/test_kits.py`, `test_main_fix.py`, `test_ops.py`, `test_page.py` and `test_proposals.py` (`tests/suite logic`).
-- [ ] 1.4 The board and the agents' views name a kit whose landings were recorded under a former name by its name now, and leave the views' keys unchanged, so the mod is untouched (design Decision 3; `code.8`; Task notes 1.4). Passes `tests/py/test_board.py` (`tests/suite logic`).
+- [x] 1.4 The board and the agents' views name a kit whose landings were recorded under a former name by its name now, and leave the views' keys unchanged, so the mod is untouched (design Decision 3; `code.8`; Task notes 1.4). Passes `tests/py/test_board.py` (`tests/suite logic`).
 
 ## 2. The rename
 
