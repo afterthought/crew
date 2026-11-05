@@ -2,6 +2,10 @@
 
 crew keeps each partition's plan of bolts, runs its main level of Claude agents in herdr, and reads its bolts' work as Flume runs it. `README.md` says how it works; `openspec/` holds its changes, and the partition's plan their order.
 
+## The family
+
+**The family.** This tool works with the others of the Boomdrive family: sluice (the merge queue), Flume (places and their agents), crew (teams), Boomdrive (the runner), timber, weir and boom. Each tool's statement is in agentplot/blueprints, `design/<tool>/requirements.md`. Before designing or fixing a behavior here, look at how the related tools do the same thing, in their code and their statements: readiness, configuration, credentials, retries, what a place is. Where two tools do one thing, reconcile them into one design with one owner the others call or cite, and say so in the design. Never fix one tool alone when the cause is that the tools differ.
+
 ## Rules
 
 The rules every change holds to are in `docs/architecture/`: `core.md`, imported below, binds all of crew, and an area's page beside it binds that area, loaded when a file under its paths is read. A design or commit that relies on a rule cites its id (`state.1`); one that departs from a rule says which and why. Where `docs/architecture/` and README or a spec disagree, `docs/architecture/` wins. The reasoning behind a rule is in `docs/adr/`.
