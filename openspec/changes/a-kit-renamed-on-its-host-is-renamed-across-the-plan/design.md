@@ -117,7 +117,7 @@ Alternatives considered:
 
 **Its checks.** The change function re-checks each one against the tip it is applied to (`plan.1`). It also runs them when a proposal holding it is checked and when it is approved (`plan.3`). Each refusal names what failed and writes nothing:
 
-- `<old>` is one of the partition's kits: its plan's or its landings' names, read through the renames before this one (`partition_kits`, Decision 3). If not, the refusal says the plan names no such kit.
+- `<old>` is one of the partition's kits: its plan's or its landings' names, read through the renames before this one (`partition_kits`, Decision 3). If not, the refusal says the plan names no such kit. A name an earlier rename renamed is refused naming its name now, "tailrace is timber since its rename: crew kit rename timber <new> renames it again".
 - The partition's main-level host keeps a repository by `<new>` in its spaces (`crew.kit_kept`) and keeps none by `<old>`. This is the fleet's word that the rename has happened. The refusal names the host and what its spaces keep, say "deneb's spaces still keep agentplot/tailrace, so it is not renamed there", or "deneb's spaces keep no timber". The hosts file is read as `main_kit` reads it; one crew cannot read is a refusal (`read.1`).
 - `<new>` is not the name of a bolt of the partition, since `land/<new>` would then name a bolt and not the kit (`kit_named`).
 - `<old>` and `<new>` differ by name.
@@ -164,6 +164,7 @@ Everything else of crew's reads a kit from the plan, which after the act names i
 
 A plan command that names a kit is read through the partition's renames before it writes: `bolt new --repo`, `unit add --repo` and `chore add --repo`. The kit's name now is what it writes, and its answer says so: "tailrace is timber since its rename; written as timber".
 - This also covers a proposal approved after a rename. Its `Do` lines stay as written (`plan.4`), and applying them, which runs the same functions as a direct run (`plan.3`), writes the new name. An agent that remembers the old name writes the new name the same way.
+- A command after a rename in the same proposal reads that rename too, though its entry is written only once the approval lands: the write carries the renames its own commands made.
 - **A former name kept again.** The main-level host might keep a repository by a former name again, made after the rename. A command naming that name is then refused, naming the rename and saying the new repository needs another name in crew. crew could not tell the two kits' records apart (`read.1`).
 
 ### 5. A kit's landings card, and a record's card, follow the rename
