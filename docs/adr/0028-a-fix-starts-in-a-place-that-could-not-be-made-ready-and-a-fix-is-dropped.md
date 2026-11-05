@@ -9,6 +9,8 @@ decision-makers:
 
 # A fix starts in a place that could not be made ready, and a fix is dropped
 
+Superseded in part 2026-11-05 by the amendment below: point 1, and the drivers and consequences that rest on crew readying a fix's or a unit's place. Points 2 and 3 are not readiness and are not amended here.
+
 Status: accepted by the user on 2026-10-13, in the recovery session ("Yes, accept"), on the plain explanation quoted under *Decision outcome* (`briefs.15`). Proposed by swancloud-design the same day, from two readings wldn's planner recorded.
 
 Deciders: the user. Written by swancloud-design.
@@ -51,3 +53,9 @@ The user, on reading this record: "I'm reading the ADR for this and I'm going to
 - **A refused fix keeps its slot, and the same command runs it again.** Subsumed by point 1: with it, readying refuses no fix. It would also hold a slot on every refusal, with no agent working.
 - **Closing a refused fix by dropping its bolt.** Rejected: it drops the bolt's units with it.
 - **Tidy removing a fix's place once no slot holds it.** Rejected: a fix whose slot was freed with commits in its place would lose them (`read.4`, `plan.10`); the drop is a conductor's word, and the branch with commits beyond the bolt is kept.
+
+## Amendment, 2026-11-05: crew readies no worktree; a place is equipped by sluice at Flume's asking
+
+Accepted as record 0023's amendment of the same day, on the same approval and the same words. Built by crew's change `crew-readies-no-worktree-a-place-is-equipped-by-sluice` on `teamless/deneb`.
+
+crew readies no worktree. A fix's, unit's and chore's place is Flume's, equipped by sluice at Flume's launch (sluice 147; Flume record 0036). So point 1 is not crew's to decide. Whether a stage starts in a place whose equipping failed is Flume's: a first stage waits, or a fix starts with the failed step and its words in its prompt (Flume 12, S16). Point 1's appeal to record 0023's point 4 goes with that point (record 0023's amendment).

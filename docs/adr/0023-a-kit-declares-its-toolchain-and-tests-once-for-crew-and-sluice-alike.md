@@ -9,6 +9,8 @@ decision-makers:
 
 # A kit declares its toolchain and tests once, for crew and sluice alike
 
+Superseded in part 2026-11-05 by the amendment below: crew readies no worktree, and a place is equipped by sluice at Flume's asking (Flume record 0036). Point 2's reading of `[tests]` by crew, point 3's adapters, point 4, point 5's words on crew's own worktrees, point 1's install on the shell's entry, and the consequence on what a new worktree costs, stand only as that amendment says. The rest stands.
+
 Deciders: the user, whose rulings in sluice's session 37713ae2 (2026-10-11 and 12) set the split this record applies to crew, and who ruled on this record's drafts the same day, through the main session; written by the toolchain workstream. Two questions it raised are held for an elaboration, below.
 Amends: the `bolt-teams` design (2026-10-05), whose new worktrees run the kit's `crew-prepare`; record 0008, on crew's moon, for point 5.
 Sources: the user's words quoted below; sluice's `phase-2-git-state` branch as of 2c0db91 (`crates/sluice/src/profiles/checks.rs` and `moon.rs`, `crates/sluice-core/src/policy.rs`, `.prototools`, `.moon/toolchains.yml`, `devenv.nix`, `docs/plans/phase-1-integrations.md` section 4 and `phase-1-pass-2.md`); crew's `plan.py` `PLACE` (5142add); the kit survey and the probes below.
@@ -100,3 +102,20 @@ For making a worktree ready:
 For crew's Python:
 - devenv's Python pinned to 3.13, the first draft: the user ruled for proto ("Add proto now").
 - proto's Python with pytest installed into it by pip: a shared interpreter changed outside any lock.
+
+## Amendment, 2026-11-05: crew readies no worktree; a place is equipped by sluice at Flume's asking
+
+Accepted by the user on 2026-11-05 in the Plannotator Inbox ("Approve: start its code"). The user was approving the design of Flume's change `a-places-readiness-is-one-design-across-the-tools`, with Flume's record 0036. That design's decision 7 names this amendment as crew's part: "Records 0023, 0024 (point 4) and 0028 gain an amendment: crew readies no worktree; a place is equipped by sluice at flume's asking (flume record 0036). Their readiness text is superseded." Built by crew's change `crew-readies-no-worktree-a-place-is-equipped-by-sluice` on `teamless/deneb`.
+
+1. **Who readies a working copy.**
+   - The kit declares which tools a working copy needs: `[tests] toolchain` and `[tests] runner` in `.config/sluice.toml`, the pins in `.prototools`, and moon's toolchains in `.moon/toolchains.yml`.
+   - sluice owns how a working copy is equipped. It equips every working copy it runs in by one sequence, and a working copy it did not make by the same sequence as `sluice equip`. The sequence is the toolchain, then the runner's install of the pins, its check of its own version (refusing a moon below 2.6), and its setup, each outside its executor (sluice 147, agentplot/blueprints 9f1f0fd).
+   - Flume owns when a place is equipped: at its launch, at the revision the launch read, and at the retry of a first stage whose readiness failed. It also owns what a failure does (Flume 11, 12, S16).
+   - crew readies no worktree, and runs nothing of a kit's toolchain or runner.
+2. **What this supersedes.**
+   - Point 2's "crew reads that table from the worktree in hand". crew reads no `[tests]`. Of a kit's policy it reads only what gates its bolt branches, where they live and whether it declares a preview (`plugin/lib/kit.py`). The declaration stays one, in sluice's file, as point 2 decided, and sluice alone reads its `[tests]`.
+   - Point 3's adapters. crew has none, and it never ported their run and read.
+   - Point 4, whole. A unit's, chore's and fix's place is Flume's, equipped by sluice. crew's one worktree, a landing's, is a submitter's, which sluice's submission equips up to the runner's check of its version (sluice 147).
+   - Point 5's "so crew's own worktrees are made ready through crew's adapters". crew's declaration is what sluice equips crew's working copies with.
+   - Point 1's "devenv's shell runs `proto install` and activates the pins". The toolchain a kit's policy names only activates, and sourcing it installs nothing. crew's shell installs a missing pin by a devenv task that runs before its entry (the kit standard's toolchain.8; record 0024's amendment).
+   - The consequence "A new worktree costs the kit's toolchain step in crew's command". A place's equipping is sluice's, at Flume's launch.
