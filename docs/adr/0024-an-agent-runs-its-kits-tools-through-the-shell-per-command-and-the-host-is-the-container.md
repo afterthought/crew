@@ -9,6 +9,8 @@ decision-makers:
 
 # An agent runs its kit's tools through the kit's shell per command, and the host is the container
 
+Superseded in part 2026-11-05 by the amendment below: point 4's readying by crew, point 5's "crew's adapters do the same at readying and for the test runner's setup", and the question left open under *Not decided here*, whether a devenv kit's `enterShell` should keep running `proto install`. The rest stands.
+
 Status: accepted by the user on 2026-10-13, in the elaboration session ("Yes, accept"), on the words quoted under *Decision outcome*.
 
 Deciders: the user, in the elaboration session of 2026-10-12, whose words below are the decision; written by the elaboration session. It closes the first point record 0023 held for an elaboration.
@@ -56,3 +58,13 @@ Not decided here: a kit-neutral per-command runner in crew, which this deliberat
 - **A hook committed in each kit** (what crew and swancloud have today): a copy per kit; a session stale until restart when the shell's files change; a kit without one leaves its agents on the host's tools.
 - **The fleet's `claude` shim enters the shell before starting Claude:** covers every start including herdr's bare resume, but makes crew's correctness rest on the fleet's wrapper, where crew and Boomdrive are meant to launch Claude themselves.
 - **Per command, with the host as the container** (chosen): the agent's loop matches the gate's shape; a changed shell file reaches the next command; a forgotten wrap fails loudly; nothing new in crew but the removal.
+
+## Amendment, 2026-11-05: crew readies no worktree; a place is equipped by sluice at Flume's asking
+
+Accepted as record 0023's amendment of the same day, on the same approval and the same words. Built by crew's change `crew-readies-no-worktree-a-place-is-equipped-by-sluice` on `teamless/deneb`.
+
+1. **Point 4.** No crew command readies a worktree. A place's toolchain is run before any agent starts in it by sluice's equip at Flume's launch (sluice 147; Flume record 0036). So the evaluation cache is still warm, and an agent's first wrapped command still costs what a warm entry costs: the cold evaluation stays before the agent, and is sluice's.
+2. **Point 5.** sluice and the gate are unchanged. sluice prints a kit's toolchain, and sources it for each step of its equip and for every command of a run, outside any session. crew has no adapters.
+3. **The question left open is closed.** A devenv kit's `enterShell` installs nothing on any entry. It only activates, so the script `devenv print-dev-env` prints, which sluice and Flume source, installs nothing (the kit standard's toolchain.8). What `.prototools` pins is installed by sluice's equip in a working copy sluice or Flume readies, and by a devenv task before the shell's entry for a person's or an agent's command.
+
+   crew's task, `crew:proto:install`, runs `proto install` only while a pin is missing from crew's proto home. An install that found every pin installed took 2.8 of a warm entry's 3.2 seconds (mac-studio, 2026-10-13), and an agent enters the shell for every command it runs (point 2). That status is the build's choice. Not taken: an install on every entry, as flume's task has it, and devenv's `execIfModified`, which is kept per checkout and so cannot see the home every worktree shares.

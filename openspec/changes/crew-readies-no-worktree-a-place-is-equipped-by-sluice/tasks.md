@@ -4,9 +4,9 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 
 ## 1. The records
 
-- [ ] 1.1 Record 0023 carries the line "Superseded in part 2026-11-05" under its title and the amendment "crew readies no worktree; a place is equipped by sluice at Flume's asking" at its end, as Task notes 1.1 word them (design, Decision 1; Task notes 1.1). Verify that its two greps after Task notes 1.3 each print 1.
-- [ ] 1.2 Record 0024 carries its line and its amendment, which close the question it left open of `enterShell`'s install (design, Decisions 1 and 3; Task notes 1.2). Verify that its two greps after Task notes 1.3 each print 1.
-- [ ] 1.3 Record 0028 carries its line and its amendment, which give point 1 to Flume (design, Decision 1; Task notes 1.3). Verify that its two greps after Task notes 1.3 each print 1.
+- [x] 1.1 Record 0023 carries the line "Superseded in part 2026-11-05" under its title and the amendment "crew readies no worktree; a place is equipped by sluice at Flume's asking" at its end, as Task notes 1.1 word them (design, Decision 1; Task notes 1.1). Verify that its two greps after Task notes 1.3 each print 1.
+- [x] 1.2 Record 0024 carries its line and its amendment, which close the question it left open of `enterShell`'s install (design, Decisions 1 and 3; Task notes 1.2). Verify that its two greps after Task notes 1.3 each print 1.
+- [x] 1.3 Record 0028 carries its line and its amendment, which give point 1 to Flume (design, Decision 1; Task notes 1.3). Verify that its two greps after Task notes 1.3 each print 1.
 
 ## 2. The spec
 
