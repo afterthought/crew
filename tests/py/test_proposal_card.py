@@ -8,7 +8,7 @@ import zlib
 
 import pytest
 
-from facts import FLEET, FactsWrite, apply, plan_text
+from facts import FLEET, STANDING, FactsWrite, apply, keeping, known, plan_text
 
 import cards
 import plan
@@ -129,6 +129,58 @@ def test_a_proposal_of_drops_alone_is_a_hold_to_approve_declined_with_a_note_to_
     text = "\n".join(md["lines"])
     for u, why in (("a-first", "Superseded."), ("b-second", "Done elsewhere."), ("c-third", "Not needed now.")):
         assert f"**Drop {u}**\n\nUnit {u}.\n\nWhy: {why}" in text
+
+
+STAGING, SEAM = "you-sign-in-to-staging", "one-seam-turns-every-credential-into-a-principal"
+
+
+def madswan():
+    """madswan's plan before its renames: the started bolt you-sign-in-to-staging and its unit in flywheel-cloud, and a
+    bolt and a queued unit in tailrace."""
+    return FactsWrite(plan_text(bolts=[(STAGING, "flywheel-cloud", True), ("trc-1", "tailrace", False)],
+                                units=[(SEAM, "flywheel-cloud", STAGING, []), ("moons", "tailrace", "trc-1", []),
+                                       ("ledger", "tailrace", None, [])]), label="madswan")
+
+
+def test_a_kits_rename_is_a_block_of_its_own_naming_what_it_renames_and_the_card_a_plain_approval():
+    """plan-proposals, madswan's renames proposed (Decision 2 of a-kit-renamed-on-its-host-is-renamed-across-the-plan):
+    each rename is a RENAME KIT block, its old name and its new, the bolts it renames with the started one marked so, and
+    its units; the picture draws each renamed bolt, and the renamed queue, under its new kit; it adds no unit, so the
+    card is a hold to approve of low risk."""
+    dos = ("kit rename flywheel-cloud boomdrive-cloud", "kit rename tailrace timber")
+    fleet = {"partitions": {"madswan": {"label": "madswan", "machine": "deneb", "flume": STANDING}},
+             "hosts": {"deneb": keeping("/d/agentplot", "agentplot/boomdrive-cloud", "agentplot/timber")}}
+    w = madswan()
+    apply(w, *dos, ctx=known(w, fleet=fleet, n=1))
+    argvs = [plan.do_args("madswan", d) for d in dos]
+    b = cards.proposal_card(dict(n=5, state="open", case="Two kits were renamed on their host. The plan follows.",
+                                 before=madswan().plan, after=w.plan, argvs=argvs, session=None))
+    c = b["card"]
+    assert (c["kind"], c["approve"]["risk"], b["boxes"]) == ("approve", "low", []) and "options" not in c
+    assert c["summary"] == "Two kits were renamed on their host. Hold to apply it whole."
+    assert [a["kind"] for a in c["artifacts"]] == ["image", "code"]
+    text = "\n".join(c["artifacts"][-1]["lines"])
+    assert ("RENAME KIT\n       flywheel-cloud → boomdrive-cloud\n       bolts: you-sign-in-to-staging\n       (started)\n"
+            "       units:\n       one-seam-turns-every-credential-\n       into-a-principal\n") in text
+    assert "RENAME KIT\n       tailrace → timber\n       bolts: trc-1\n       units: moons, ledger\n" in text
+    assert text.index("flywheel-cloud → boomdrive-cloud") < text.index("tailrace → timber")
+    d = cards.drawn(madswan().plan, w.plan, argvs)
+    assert [(s["heading"], s["line"], [r["name"] for r in s["rows"]], s["counts"]) for s in d["sections"]] == [
+        (STAGING, "In boomdrive-cloud, renamed from flywheel-cloud. 1 unit now; 1 once approved", [SEAM], []),
+        ("trc-1", "In timber, renamed from tailrace. 1 unit now; 1 once approved", ["moons"], []),
+        ("the timber queue", "In timber, renamed from tailrace. 1 queued now; 1 once approved", ["ledger"], [])]
+    assert png(b["picture"])[0] == 1560
+
+
+def test_a_kits_rename_reads_on_the_proposals_page_with_what_it_renames():
+    """crew plan proposed <n>: a rename's change names its old and new names, the bolts it renames with the started one
+    marked, its units and chores, and that approval drops, adds and launches nothing (plan.describe)."""
+    p = plan.Rec("Proposal", [("Proposal", "5"), ("Case", "Renamed on its host."), ("Do", "kit rename flywheel-cloud boomdrive-cloud"),
+                              ("State", "open"), ("Opened", "2026-11-05"), ("By", "madswan-planner")])
+    c, = plan.describe(FLEET, "madswan", madswan().plan, p, alone=True)["changes"]
+    assert c["bolts"] == [STAGING] and c["lines"] == [
+        "**Rename kit `flywheel-cloud`** to `boomdrive-cloud`, as its host renamed it", f"Bolts: `{STAGING}` (started)",
+        f"Units and chores: `{SEAM}`", "On approval: each names the kit by its new name; nothing is dropped, added or launched again."]
 
 
 def test_a_lone_row_is_the_choice_of_its_two_sides_since_a_list_holds_two_at_least():

@@ -368,6 +368,29 @@ def block(head, name, says):
     return [f"{head:<7}{names[0]}"] + ["       " + x for x in names[1:] + says]
 
 
+def renamed_drawn(a, before, kits, repo, where, renamed):
+    """A kit's rename as a proposal's card draws it (Decision 2 of a-kit-renamed-on-its-host-is-renamed-across-the-plan),
+    from what the card has read of the plan so far (kits, {bolt: its kit}; repo, {unit: its kit}; where, {unit: its
+    bolt}), which it renames: its RENAME KIT block, the old name and the new, the bolts it renames, the started ones
+    among them marked so, and its units and chores; and its sections, each renamed bolt, and the new kit's queue where it
+    renames queued work or nothing at all, which the picture draws under the new kit (renamed, {section: (old, new, the
+    queued units it renames)}). It makes nothing new, so it asks no question of its own."""
+    same = lambda k: bool(k) and k.split("/")[-1] == a.old.split("/")[-1]
+    bolts, units = [b for b, k in kits.items() if same(k)], [u for u, k in repo.items() if same(k)]
+    begun = {b for b in bolts if before.bolt(b) is not None and before.bolt(b).get("Path") == "flume"}
+    queued = [u for u in units if not where.get(u)]
+    for b in bolts:
+        kits[b], renamed[("bolt", b)] = a.new, (a.old, a.new, [])
+    for u in units:
+        repo[u] = a.new
+    if queued or not bolts:
+        renamed[("queue", a.new)] = (a.old, a.new, queued)
+    says = (["bolts: " + ", ".join(b + (" (started)" if b in begun else "") for b in bolts)] if bolts else ["no bolt"])
+    says += ["units: " + ", ".join(units)] if units else []
+    secs = [("bolt", b) for b in bolts] + ([("queue", a.new)] if queued or not bolts else [])
+    return secs, block("RENAME KIT", f"{a.old} → {a.new}", [x for l in says for x in wrap(l, SAYS)])
+
+
 def drawn(before, after, argvs):
     """A proposal's change, from the plan at the tip, the plan its commands leave and its commands, parsed: each bolt
     they touch and each kit's queue a unit goes to, before and after, as the picture's sections; the change as the
@@ -381,7 +404,7 @@ def drawn(before, after, argvs):
     kits = {b.name(): b.get("Repo") for b in before.bolts()}
     goals = {b.name(): b.get("Goal") for b in before.bolts()}
     dropped, out, came_from, amended, split, parts, ordered, queued = {}, {}, {}, {}, {}, {}, set(), set()
-    counts, bolt_moves, touched, order, blocks = dict.fromkeys(dict(COUNTS), 0), {}, set(), [], []
+    counts, bolt_moves, touched, order, blocks, renamed = dict.fromkeys(dict(COUNTS), 0), {}, set(), [], [], {}
 
     def group(u):
         return ("bolt", where[u]) if where.get(u) else ("queue", repo[u])
@@ -442,6 +465,8 @@ def drawn(before, after, argvs):
             amended.setdefault(a.unit, intent[a.unit])
             intent[a.unit] = a.intent
             secs, b = [group(a.unit)], block("AMEND", a.unit, wrap(a.intent, SAYS, 3))
+        elif key == ("kit", "rename"):
+            secs, b = renamed_drawn(a, before, kits, repo, where, renamed)
         elif key in (("unit", "order"), ("unit", "after")):
             counts["moved"] += 1
             ordered.add(a.unit)
@@ -466,10 +491,13 @@ def drawn(before, after, argvs):
             line = (f"A new bolt; {plural(len(now), 'unit')} once approved" if not before.bolt(name) else
                     f"{plural(len(was), 'unit')} now; " + (f"{len(now)} once approved" if after.bolt(name) else "dropped once approved"))
         else:
-            was_all, numbered = [u.name() for u in before.queue(name)], [u.name() for u in after.queue(name)]
-            was, now = [u for u in was_all if u in touched], [u for u in numbered if u in touched]
+            moved_in = (renamed.get((kind, name)) or (None, None, []))[2]
+            was_all, numbered = [u.name() for u in before.queue(name)] + moved_in, [u.name() for u in after.queue(name)]
+            was, now = [u for u in was_all if u in touched | set(moved_in)], [u for u in numbered if u in touched | set(moved_in)]
             heading, said = f"the {name} queue", f"{len(was_all)} queued → {len(numbered)}"
             line = f"{len(was_all)} queued now; {len(numbered)} once approved"
+        if (kind, name) in renamed:
+            line = f"In {renamed[(kind, name)][1]}, renamed from {renamed[(kind, name)][0]}. {line}"
         rows = []
         for u in put_back(now, was):
             r = {"n": str(numbered.index(u) + 1) if u in now else "–", "name": u, "tag": None, "intent": intent.get(u)}
