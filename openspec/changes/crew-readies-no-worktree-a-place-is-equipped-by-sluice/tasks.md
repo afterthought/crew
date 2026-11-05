@@ -14,7 +14,7 @@ Each check is a moon task of the `tests` project run through `tests/suite`. `log
 
 ## 3. The words
 
-- [ ] 3.1 `.config/sluice.toml`'s opening comment, `README.md`'s line on places and `kit.py`'s docstring say crew readies no worktree and that sluice equips a place at Flume's asking. `t-docs` fails unless the README and the policy's comment say so, and `tests/moon.yml` is in step with its `# Reads:` line (design, Decision 5; Task notes 3.1). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 3.1 `.config/sluice.toml`'s opening comment, `README.md`'s line on places and `kit.py`'s docstring say crew readies no worktree and that sluice equips a place at Flume's asking. `t-docs` fails unless the README and the policy's comment say so, and `tests/moon.yml` is in step with its `# Reads:` line (design, Decision 5; Task notes 3.1). Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 4. The shell
 

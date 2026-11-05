@@ -7,8 +7,10 @@
 # which nobody pulls or levels (plan.18, plan.19); a checkout carries the .envrc a person's direnv enters the shell
 # with, and ignores devenv's and direnv's working files and the tests' .venv. crew's openspec/config.yaml hands crew's
 # construct and coder crew's conventions for its changes (docs.6): each task names its check, no proof list, tick a
-# task once its check passes.
-# Reads: README.md CLAUDE.md plugin/roles/ plugin/skills/ .envrc .gitignore openspec/config.yaml
+# task once its check passes. The README and the opening comment of crew's .config/sluice.toml say crew readies no
+# worktree, sluice equipping a place at Flume's asking, `sluice equip` (Flume's record 0036), and the comment cites no
+# plan.17, which is retired.
+# Reads: README.md CLAUDE.md plugin/roles/ plugin/skills/ .envrc .gitignore openspec/config.yaml .config/sluice.toml
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 usage=$(crew 2>&1 || true)
@@ -145,6 +147,11 @@ ok "CLAUDE.md says crew/main is an anchor, a host loads crew live from crew/live
 grep -qxF 'use devenv' "$CREW/.envrc" || fail ".envrc does not enter devenv"
 for line in .devenv/ .direnv/ '!.envrc' tests/.venv/; do grep -qxF -- "$line" "$CREW/.gitignore" || fail ".gitignore lacks $line"; done
 ok "a checkout carries the .envrc and ignores devenv's and direnv's working files and the tests' .venv"
+
+has "$readme" "crew readies no worktree"; has "$readme" '`sluice equip`'
+policy=$(awk '/^\[/ { exit } { print }' "$CREW/.config/sluice.toml")
+has "$policy" "sluice equip"; lacks "$policy" "plan.17"
+ok "the README says crew readies no worktree and names sluice equip, and the policy's opening comment names sluice equip and no plan.17"
 
 config=$(cat "$CREW/openspec/config.yaml")
 for want in "the check in crew's tiers that proves it" "tests/suite --affected" "*Task notes*" "no proof list of any name" \
