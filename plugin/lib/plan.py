@@ -8170,7 +8170,7 @@ def bolt_taken(fleet, label, b, run=None):
     own work and every runner was read, so nothing of it has merged through Flume to land; or (None, why) when crew
     can't tell (read.1)."""
     requests, reads = run or runner_facts(fleet, label)
-    if runner.where(reads, bolt_launches(requests, b.name()), f"bolt {b.name()}") == (None, None):
+    if runner.where(reads, bolt_launches(requests, b.name()), f"bolt {b.name()}", b.get("Repo") or "") == (None, None):
         return None, None
     try:
         return bolt_at(fleet, label, b, (requests, reads)), None
@@ -8184,7 +8184,7 @@ def launched_at(fleet, label, bolt, repo, run=None):
     while no runner has taken any of the bolt's own work, where the runner that took its kit's work reported the kit
     (kit_at), since the bolt is read and landed in the kit's folder there."""
     requests, reads = run or runner_facts(fleet, label)
-    at, why = runner.where(reads, bolt_launches(requests, bolt), f"bolt {bolt}")
+    at, why = runner.where(reads, bolt_launches(requests, bolt), f"bolt {bolt}", repo)
     not why or fail(why)
     if at is None:
         return kit_at(fleet, label, repo, (requests, reads))
@@ -8225,7 +8225,7 @@ def kit_at(fleet, label, kit, run=None):
     requests, reads = run or runner_facts(fleet, label)
     mine = [r for r in requests if r.get("Act") == "launch" and not (r.get("Work") or "").startswith("role/")
             and kit_in(kit, [r.get("Repo") or ""])]
-    at, why = runner.where(reads, mine, kit)
+    at, why = runner.where(reads, mine, kit, kit)
     not why or fail(why)
     at or fail(f"no runner has reported taking {kit}'s work yet, so crew can't tell where it runs")
     at["dir"] or fail(f"the runner on {at['host']} took {kit}'s work and has carried no place of it yet, so crew can't tell "

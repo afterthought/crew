@@ -191,7 +191,9 @@ def runner_branch(label, host):
 # as Flume gave it (boomdrive core.1), kept after Flume tidies the place until its work has left crew's plan,
 # and after those each role's latest run on the host, a Run record keyed by the role's address (R4 of
 # roles-run-as-flume-kinds), with Flume's status of its place, or the runner's words where no run could be launched
-# (boomdrive's the-runner-carries-crews-work-into-flume, Decision 14).
+# (boomdrive's the-runner-carries-crews-work-into-flume, Decision 14); and repositories.rec each repository its
+# configuration keeps on the host, by its forge address with the folder of its clone, where Flume cuts its places
+# (Decision 6 of a-kit-renamed-on-its-host-is-renamed-across-the-plan), a branch with none reporting no repositories.
 RUNNER = """\
 %rec: Runner
 %key: Host
@@ -223,7 +225,14 @@ RUNS = """\
 %mandatory: Address At
 %allowed: Address Place At Status Words
 """
-FILES = {"runner.rec": "Runner", "answers.rec": "Answer", "places.rec": "Place"}
+REPOSITORIES = """\
+%rec: Repository
+%doc: A repository the runner keeps on its host: its forge address as its configuration names it, and the folder of its clone, where Flume cuts its places.
+%key: Repository
+%mandatory: Repository Folder
+%allowed: Repository Folder
+"""
+FILES = {"runner.rec": "Runner", "answers.rec": "Answer", "places.rec": "Place", "repositories.rec": "Repository"}
 
 
 def host_read(label, host, tip, files, refused):
@@ -232,8 +241,10 @@ def host_read(label, host, tip, files, refused):
     for one the tip lacks, answers and places then none; refused, recfix's words for each file it refused. Returns
     the reading, its host, branch and tip, with either why it could not be read, which hides this host's work alone
     (read.1, read.3), or the runner's record, each answer by its request's number and each place by its launch's: the
-    place's path, when the runner carried it, and its Status parsed, or with why it could not be; and each role's run
-    by its address, likewise, with the runner's words where it could launch none."""
+    place's path, when the runner carried it, and its Status parsed, or with why it could not be; each role's run
+    by its address, likewise, with the runner's words where it could launch none; and the repositories it keeps, each
+    one's folder by its forge address, None where the tip holds no repositories.rec, a runner that reports none
+    (Decision 6 of a-kit-renamed-on-its-host-is-renamed-across-the-plan)."""
     branch = runner_branch(label, host)
     out = {"host": host, "branch": branch, "tip": tip, "why": None}
     if tip is None:
@@ -275,7 +286,15 @@ def host_read(label, host, tip, files, refused):
         except ValueError as e:
             status, why = None, f"{at}: places.rec's status of the run of {a} is no JSON ({e})"
         runs[a] = {"place": r.get("Place"), "at": r.get("At"), "status": status, "words": r.get("Words"), "why": why}
-    return dict(out, runner=run[0], answers=answers, places=places, runs=runs)
+    kept = {}
+    for r in files["repositories.rec"].recs("Repository") if files.get("repositories.rec") is not None else []:
+        a = r.get("Repository")
+        if not a or a in kept or not r.get("Folder"):
+            return dict(out, why=f"{host}'s runner can't be read: {at}: repositories.rec holds " + (
+                "a record with no repository's address" if not a else f"{a} twice" if a in kept else f"{a} with no folder"))
+        kept[a] = r.get("Folder")
+    return dict(out, runner=run[0], answers=answers, places=places, runs=runs,
+                repositories=kept if files.get("repositories.rec") is not None else None)
 
 
 def role_run(reading, address):
@@ -340,14 +359,38 @@ def taken(reads, n):
     return None, None
 
 
-def where(reads, launches, what):
+def kept_folder(reading, kit, what):
+    """The folder a host's runner keeps a kit's clone in, as its repositories.rec reports it (Decision 6 of
+    a-kit-renamed-on-its-host-is-renamed-across-the-plan), from host_read's reading and the kit's name now (kit,
+    plan.kit_now's, by its name or forge address): (folder, None); (None, None) for a runner that reports no
+    repositories, whose folder Flume's status of a place names (where); or (None, why) where it reports none by the
+    kit's name, naming the host, what it keeps and the rename that may be why, or two by it (read.1). A kit named by
+    its forge address is the repository of that address before any other of its name."""
+    kept = reading.get("repositories")
+    if kept is None:
+        return None, None
+    named = [a for a in kept if a.split("/")[-1] == kit.split("/")[-1]]
+    found = [a for a in named if a == kit] or named
+    if len(found) > 1:
+        return None, (f"the runner on {reading['host']} keeps {' and '.join(found)} by the name {kit}, so crew can't tell "
+                      f"which holds {what}'s work")
+    if not found:
+        return None, (f"the runner on {reading['host']} took {what}'s work and keeps no {kit}: it keeps "
+                      + (", ".join(sorted(kept)) or "no repository") + f", so crew can't tell where {kit} is there; if "
+                      f"{kit} was renamed on its host, crew kit rename {kit} <new> names it so in the plan")
+    return kept[found[0]], None
+
+
+def where(reads, launches, what, kit):
     """Where a runner reported taking work (the user's ruling of 2026-11-01; Decision 4), from the partition's runners as
-    crew read them (reads) and the launches of the work (launches, requests.rec's records, a bolt's on its branch or a
-    kit's): the host whose runner took the newest of them taken (takers), and the kit's folder there and the stream its
-    work runs in, as Flume's status of the newest place that runner carries of them names them, None where it carries
-    none naming them yet; as ({"host", "dir", "stream"}, None); (None, None) while no runner has taken any of them and
-    every runner was read; or (None, why) when none has and one could not be read, naming what (what) and that runner,
-    or two runners took the newest (read.1)."""
+    crew read them (reads), the launches of the work (launches, requests.rec's records, a bolt's on its branch or a
+    kit's) and the kit's name now (kit, plan.kit_now's): the host whose runner took the newest of them taken (takers);
+    the kit's folder there as that runner's repositories.rec reports it (kept_folder), or, where it reports none, as
+    Flume's status of the newest place it carries of them names it; and the stream its work runs in, as that status
+    names it (Decision 6 of a-kit-renamed-on-its-host-is-renamed-across-the-plan); each None where it carries no place
+    naming it yet; as ({"host", "dir", "stream"}, None); (None, None) while no runner has taken any of them and every
+    runner was read; or (None, why) when none has and one could not be read, naming what (what) and that runner, two
+    runners took the newest, or the one that did keeps no repository by the kit's name (read.1)."""
     unread = sorted({r["host"]: r["why"] for _, r in reads.items() if r["why"]}.items())
     for l in sorted(launches, key=lambda l: -(number(l.get("Request")) or 0)):
         hits, _ = takers(reads, number(l.get("Request")))
@@ -357,9 +400,12 @@ def where(reads, launches, what):
         if not hits:
             continue
         reading = hits[0]
+        folder, why = kept_folder(reading, kit, what)
+        if why:
+            return None, why
         mine = sorted((number(x.get("Request")) for x in launches if number(x.get("Request")) in reading["places"]), reverse=True)
         facts = [f for n in mine for p in [reading["places"][n]] if not p["why"] for f in [flume_facts(p["status"], p["place"])] if f]
-        return {"host": reading["host"], "dir": next((f["repository"] for f in facts if f["repository"]), None),
+        return {"host": reading["host"], "dir": folder or next((f["repository"] for f in facts if f["repository"]), None),
                 "stream": next((f["stream"] for f in facts if f["stream"]), None)}, None
     return None, (f"no runner has reported taking {what}'s work yet, so crew can't tell where it runs"
                   + "".join(f"; {why}" for _, why in unread)) if unread else None

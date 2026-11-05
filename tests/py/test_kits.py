@@ -196,9 +196,10 @@ def launch(n, work, base, repo="crew"):
     return plan.Rec("Request", [("Request", str(n)), ("Act", "launch"), ("Work", work), ("Repo", repo), ("Base", base)])
 
 
-def took(host, *ns, repository="/w/crew", stream="madswan"):
+def took(host, *ns, repository="/w/crew", stream="madswan", kept=None):
     """A host's runner as crew reads it, having taken each launch numbered ns, its place's status naming the kit's folder
-    on host (repository) and its stream."""
+    on host (repository) and its stream; and, where kept is given, reporting the repositories it keeps, each (address,
+    folder), in its repositories.rec."""
     status = json.loads((FLUME / "code.json").read_text())
     p = status["status"]["places"][0]
     p.update(repository=repository, stream={"name": stream, "from": "intent"})
@@ -206,6 +207,8 @@ def took(host, *ns, repository="/w/crew", stream="madswan"):
     places = "".join(f"\nRequest: {n}\nPlace: {p['place']}\nAt: 2026-10-31T12:02:00Z\nStatus: {json.dumps(status)}\n" for n in ns)
     files = {"runner.rec": plan.Plan(runner.RUNNER + f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n"),
              "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)}
+    if kept is not None:
+        files["repositories.rec"] = plan.Plan(runner.REPOSITORIES + "".join(f"\nRepository: {a}\nFolder: {f}\n" for a, f in kept))
     return runner.host_read("madswan", host, TIP, files, {})
 
 
@@ -214,7 +217,8 @@ class TestWhereABoltRuns:
     LAUNCHES = [launch(1, "unit/a", "bolt/x"), launch(2, "unit/b", "bolt/x"), launch(3, "unit/c", "bolt/z")]
 
     def test_its_host_folder_and_stream_are_the_runners_that_took_its_work(self):
-        """x's work taken by deneb's runner, the main level's host, which reported crew in /w/crew."""
+        """drive-state "The runner that took the work": x's work taken by deneb's runner, the main level's host, which
+        carries Flume's status of its place naming crew's folder /w/crew and reports no repositories."""
         at = plan.bolt_at(FLEET, "madswan", self.BOLT, (self.LAUNCHES, {"deneb": took("deneb", 1, 2)}))
         assert at == {"label": "madswan", "machine": "deneb", "stream": "madswan",
                       "kit": {"name": "crew", "repo": "crew", "main": "/w/crew", "dir": "/w/crew"}}
@@ -248,6 +252,29 @@ class TestWhereABoltRuns:
         read["places"] = {}
         with pytest.raises(plan.Refusal, match="^the runner on deneb took bolt x's work and has carried no place of it yet"):
             plan.bolt_at(FLEET, "madswan", self.BOLT, (self.LAUNCHES, {"deneb": read}))
+
+    def test_the_folder_the_runner_reports_wins_over_a_places_stale_status(self):
+        """drive-state "A kit renamed under its place" (Decision 6 of a-kit-renamed-on-its-host-is-renamed-across-the-plan):
+        deneb's place of x's work names /w/crew-old, from before its clone moved, and its runner reports crew at
+        /r/crew: x and crew are read and landed in /r/crew, by the kit's forge address or its name."""
+        reads = {"deneb": took("deneb", 1, 3, repository="/w/crew-old", kept=[("afterthought/crew", "/r/crew"), ("agentplot/timber", "/r/timber")])}
+        at = plan.bolt_at(FLEET, "madswan", self.BOLT, (self.LAUNCHES, reads))
+        assert (at["machine"], at["stream"], at["kit"]) == ("deneb", "madswan", {"name": "crew", "repo": "crew", "main": "/r/crew", "dir": "/r/crew"})
+        assert plan.kit_at(FLEET, "madswan", "afterthought/crew", (self.LAUNCHES, reads))["kit"]["main"] == "/r/crew"
+
+    def test_a_runner_that_reports_repositories_but_not_the_kit_leaves_it_unread(self):
+        """drive-state "A runner that does not keep the kit": deneb took x's work and reports agentplot/timber alone; x
+        and crew are refused naming deneb, crew, what deneb keeps and crew kit rename, and its place's folder is not
+        taken for it (read.1); bolt_taken says why."""
+        reads = {"deneb": took("deneb", 1, 3, kept=[("agentplot/timber", "/r/timber")])}
+        why = ("the runner on deneb took bolt x's work and keeps no crew: it keeps agentplot/timber, so crew can't tell where "
+               "crew is there; if crew was renamed on its host, crew kit rename crew <new> names it so in the plan")
+        with pytest.raises(plan.Refusal) as e:
+            plan.bolt_at(FLEET, "madswan", self.BOLT, (self.LAUNCHES, reads))
+        assert str(e.value) == why
+        with pytest.raises(plan.Refusal, match="^the runner on deneb took crew's work and keeps no crew: it keeps agentplot/timber"):
+            plan.kit_at(FLEET, "madswan", "crew", (self.LAUNCHES, reads))
+        assert plan.bolt_taken(FLEET, "madswan", self.BOLT, (self.LAUNCHES, reads)) == (None, why)
 
     def test_a_bolt_not_started_runs_nowhere(self):
         assert plan.bolt_at(FLEET, "madswan", plan.Plan(flume_plan([("y", None, None)])).bolt("y"), ([], {})) is None

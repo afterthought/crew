@@ -173,10 +173,17 @@ TIP = "5e1f0c2a" + "0" * 32
 STATUS = {"status": {"places": [{"place": "/crew/places/change--a", "phase": "live"}], "host": {}}}
 
 
-def branch(host="deneb", runner_rec=None, answers="", places=""):
-    """A runner's branch's files parsed as plan.runners parses them, each given as the records after its descriptor."""
+def branch(host="deneb", runner_rec=None, answers="", places="", repositories=None):
+    """A runner's branch's files parsed as plan.runners parses them, each given as the records after its descriptor;
+    repositories.rec only where repositories are given, a branch without it reporting none."""
     run = runner.RUNNER + (f"\nHost: {host}\nVersion: 0.1.0\nSince: 2026-10-31T11:00:00Z\n" if runner_rec is None else runner_rec)
-    return {"runner.rec": plan.Plan(run), "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)}
+    return dict({"runner.rec": plan.Plan(run), "answers.rec": plan.Plan(runner.ANSWERS + answers), "places.rec": plan.Plan(runner.PLACES + places)},
+                **({"repositories.rec": plan.Plan(runner.REPOSITORIES + repositories)} if repositories is not None else {}))
+
+
+def kept(*repos):
+    """repositories.rec's records after its descriptor, each repository (address, folder) its runner keeps."""
+    return "".join(f"\nRepository: {a}\nFolder: {f}\n" for a, f in repos)
 
 
 def answer(n, outcome, place=None, words=None):
@@ -204,6 +211,23 @@ class TestHostRead:
         r = runner.host_read("madswan", "deneb", TIP, files, {})
         assert (r["why"], r["answers"], r["places"]) == (None, {}, {})
 
+    def test_the_repositories_a_runner_keeps_are_read_by_their_forge_addresses(self):
+        """drive-state "The repositories a runner keeps" (Decision 6 of a-kit-renamed-on-its-host-is-renamed-across-the-plan):
+        madswan/runner/deneb's repositories.rec names agentplot/boomdrive-cloud at /r/boomdrive-cloud; a branch with no
+        repositories.rec reports none, and one whose file holds no record reports that it keeps none."""
+        r = runner.host_read("madswan", "deneb", TIP, branch(repositories=kept(("agentplot/boomdrive-cloud", "/r/boomdrive-cloud"),
+                                                                              ("afterthought/crew", "/r/crew"))), {})
+        assert (r["why"], r["repositories"]) == (None, {"agentplot/boomdrive-cloud": "/r/boomdrive-cloud", "afterthought/crew": "/r/crew"})
+        assert runner.host_read("madswan", "deneb", TIP, branch(), {})["repositories"] is None
+        assert runner.host_read("madswan", "deneb", TIP, branch(repositories=""), {})["repositories"] == {}
+
+    def test_a_repositories_file_recfix_refused_hides_the_host_naming_the_file(self):
+        r = runner.host_read("madswan", "deneb", TIP, dict(branch(), **{"repositories.rec": None}),
+                             {"repositories.rec": "repositories.rec fails recfix --check: repositories.rec: 7: error: duplicated key value in field 'Repository'"})
+        assert r["why"] == ("deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: repositories.rec fails recfix --check: "
+                            "repositories.rec: 7: error: duplicated key value in field 'Repository'")
+        assert "repositories" not in r
+
     def test_a_host_with_no_branch_is_named(self):
         assert runner.of_host({}, "madswan", "alpha") == {
             "host": "alpha", "branch": "madswan/runner/alpha", "tip": None, "why": "no runner answers on alpha: madswan/runner/alpha does not exist"}
@@ -220,7 +244,13 @@ class TestHostRead:
         (branch(runner_rec=""), "runner.rec holds 0 Runner records, and names one"),
         (dict(branch(), **{"answers.rec": plan.Plan("Request: 3\nOutcome: launched\n")}), "answers.rec holds a record before its %rec: Answer"),
         (branch(answers=answer(3, "held") + answer(3, "launched")), "answers.rec holds request 3 twice"),
-        (branch(places=placed("x", STATUS)), "places.rec holds a record with no request's number")])
+        (branch(places=placed("x", STATUS)), "places.rec holds a record with no request's number"),
+        (branch(repositories=kept(("agentplot/boomdrive-cloud", "/r/a"), ("agentplot/boomdrive-cloud", "/r/b"))),
+         "repositories.rec holds agentplot/boomdrive-cloud twice"),
+        (branch(repositories="\nFolder: /r/a\n"), "repositories.rec holds a record with no repository's address"),
+        (branch(repositories="\nRepository: agentplot/timber\n"), "repositories.rec holds agentplot/timber with no folder"),
+        (dict(branch(), **{"repositories.rec": plan.Plan("Repository: agentplot/timber\nFolder: /r/timber\n")}),
+         "repositories.rec holds a record before its %rec: Repository")])
     def test_a_branch_crew_cant_read_names_what(self, files, why):
         assert runner.host_read("madswan", "deneb", TIP, files, {})["why"] == f"deneb's runner can't be read: madswan/runner/deneb at 5e1f0c2: {why}"
 
@@ -368,27 +398,75 @@ class TestStageOf:
 
 class TestWhere:
     """Where a bolt's or a kit's work runs is what the runner that took it reported (the user's ruling of 2026-11-01;
-    runner.where): the host whose runner took its newest launch taken, the kit's folder and stream as Flume's status of
-    its place there names them."""
+    runner.where): the host whose runner took its newest launch taken, the kit's folder as that runner's
+    repositories.rec reports it, or as Flume's status of its place there names it where it reports none, and the
+    stream as that status names it (Decision 6 of a-kit-renamed-on-its-host-is-renamed-across-the-plan)."""
 
     def test_the_host_folder_and_stream_of_the_newest_launch_taken(self):
+        """A runner that reports no repositories: the folder is the one Flume's status of its place names."""
         code = json.loads(fixture("code"))
         deneb = runner.host_read("madswan", "deneb", TIP, branch(answers=answer(3, "launched", CODE), places=placed(3, code, CODE)), {})
         alpha = runner.host_read("madswan", "alpha", TIP, branch("alpha", answers=answer(1, "launched", "/old")), {})
         launches = held(rec(1, "launch"), rec(2, "launch", "unit/b"), rec(3, "launch", "unit/c"))
-        assert runner.where({"deneb": deneb, "alpha": alpha}, launches, "bolt b") == (
+        assert runner.where({"deneb": deneb, "alpha": alpha}, launches, "bolt b", "afterthought/crew") == (
             {"host": "deneb", "dir": "/Users/chuck/Code/github_afterthought/crew", "stream": "default"}, None)
-        assert runner.where({"alpha": alpha}, launches, "bolt b") == ({"host": "alpha", "dir": None, "stream": None}, None)
+        assert runner.where({"alpha": alpha}, launches, "bolt b", "afterthought/crew") == ({"host": "alpha", "dir": None, "stream": None}, None)
 
     def test_work_no_runner_has_taken_is_nowhere_and_two_runners_are_told_apart_by_none(self):
         silent = runner.host_read("madswan", "alpha", TIP, {}, {"runner.rec": "recfix refused it"})
-        assert runner.where({"alpha": silent}, held(rec(1, "launch")), "bolt b") == (None, (
+        assert runner.where({"alpha": silent}, held(rec(1, "launch")), "bolt b", "crew") == (None, (
             "no runner has reported taking bolt b's work yet, so crew can't tell where it runs; alpha's runner can't be read: "
             "madswan/runner/alpha at 5e1f0c2: recfix refused it"))
         two = {h: runner.host_read("madswan", h, TIP, branch(h, answers=answer(1, "launched", CODE)), {}) for h in ("alpha", "deneb")}
-        assert runner.where(two, held(rec(1, "launch")), "bolt b") == (None, (
+        assert runner.where(two, held(rec(1, "launch")), "bolt b", "crew") == (None, (
             "crew can't tell where bolt b's work runs: request 1 was taken by the runners on alpha and deneb, whose "
             "configurations each name its repository"))
+
+    def test_the_folder_a_runner_reports_wins_over_a_places_stale_status(self):
+        """drive-state "A kit renamed under its place": deneb carries request 1's place, Flume's status naming its
+        repository /r/flywheel-cloud, its repositories.rec names agentplot/boomdrive-cloud at /r/boomdrive-cloud, and the
+        bolt's kit reads boomdrive-cloud: the bolt is read in /r/boomdrive-cloud, its stream still the place's; with the
+        place not carried yet, the folder is still the reported one."""
+        code = json.loads(fixture("code"))
+        code["status"]["places"][0]["repository"] = "/r/flywheel-cloud"
+        report = kept(("agentplot/boomdrive-cloud", "/r/boomdrive-cloud"), ("agentplot/timber", "/r/timber"))
+        deneb = runner.host_read("madswan", "deneb", TIP, branch(answers=answer(1, "launched", CODE), places=placed(1, code, CODE),
+                                                                repositories=report), {})
+        launches = held(rec(1, "launch", Repo="flywheel-cloud"))
+        assert runner.where({"deneb": deneb}, launches, "bolt you-sign-in-to-staging", "boomdrive-cloud") == (
+            {"host": "deneb", "dir": "/r/boomdrive-cloud", "stream": "default"}, None)
+        assert runner.where({"deneb": deneb}, launches, "boomdrive-cloud", "agentplot/boomdrive-cloud")[0]["dir"] == "/r/boomdrive-cloud"
+        bare = runner.host_read("madswan", "deneb", TIP, branch(answers=answer(1, "launched", CODE), repositories=report), {})
+        assert runner.where({"deneb": bare}, launches, "bolt you-sign-in-to-staging", "boomdrive-cloud") == (
+            {"host": "deneb", "dir": "/r/boomdrive-cloud", "stream": None}, None)
+
+    def test_a_runner_that_does_not_keep_the_kit_leaves_it_unread_naming_what_it_keeps_and_the_rename(self):
+        """drive-state "A runner that does not keep the kit": deneb's repositories.rec names only
+        agentplot/boomdrive-cloud, and the bolt's kit reads flywheel-cloud with no rename; a runner whose file holds
+        no record keeps no repository; nothing is read from the place's status (read.1)."""
+        code = json.loads(fixture("code"))
+        code["status"]["places"][0]["repository"] = "/r/flywheel-cloud"
+        launches = held(rec(1, "launch", Repo="flywheel-cloud"))
+
+        def of(report):
+            deneb = runner.host_read("madswan", "deneb", TIP, branch(answers=answer(1, "launched", CODE), places=placed(1, code, CODE),
+                                                                    repositories=report), {})
+            return runner.where({"deneb": deneb}, launches, "bolt you-sign-in-to-staging", "flywheel-cloud")
+        assert of(kept(("agentplot/boomdrive-cloud", "/r/boomdrive-cloud"))) == (None, (
+            "the runner on deneb took bolt you-sign-in-to-staging's work and keeps no flywheel-cloud: it keeps "
+            "agentplot/boomdrive-cloud, so crew can't tell where flywheel-cloud is there; if flywheel-cloud was renamed on "
+            "its host, crew kit rename flywheel-cloud <new> names it so in the plan"))
+        assert of("")[1].startswith("the runner on deneb took bolt you-sign-in-to-staging's work and keeps no flywheel-cloud: "
+                                    "it keeps no repository, so")
+
+    def test_two_repositories_by_the_kits_name_are_told_apart_by_its_forge_address_or_refused(self):
+        report = kept(("afterthought/crew", "/r/crew"), ("someone/crew", "/r/someone-crew"))
+        deneb = runner.host_read("madswan", "deneb", TIP, branch(answers=answer(1, "launched", CODE), repositories=report), {})
+        launches = held(rec(1, "launch"))
+        assert runner.where({"deneb": deneb}, launches, "bolt b", "afterthought/crew")[0]["dir"] == "/r/crew"
+        assert runner.where({"deneb": deneb}, launches, "bolt b", "crew") == (None, (
+            "the runner on deneb keeps afterthought/crew and someone/crew by the name crew, so crew can't tell which holds "
+            "bolt b's work"))
 
 
 class TestLaunchOf:

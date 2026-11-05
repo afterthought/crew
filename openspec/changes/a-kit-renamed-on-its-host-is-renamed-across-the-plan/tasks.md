@@ -25,8 +25,8 @@ Each check is a moon task of the `tests` project, run through `tests/suite`: `lo
 
 ## 3. Where a runner keeps a kit
 
-- [ ] 3.1 crew reads `repositories.rec` on a runner's branch, each repository the runner keeps by its forge address with its folder. A file it can't read makes that host's runner unreadable, and a missing file is no report (design Decision 6; Task notes 3.1). Passes `tests/py/test_runner.py` (`tests/suite logic`).
-- [ ] 3.2 A started bolt's and a kit's folder are read from the reporting runner's `repositories.rec`, by the kit's name now, over a place's stale status. A runner that reports repositories but not the kit leaves it unread, naming what it keeps and the rename. A runner that reports none is read from Flume's status as before (design Decision 6; Task notes 3.2). Passes `tests/py/test_runner.py` and `tests/py/test_kits.py` (`tests/suite logic`).
+- [x] 3.1 crew reads `repositories.rec` on a runner's branch, each repository the runner keeps by its forge address with its folder. A file it can't read makes that host's runner unreadable, and a missing file is no report (design Decision 6; Task notes 3.1). Passes `tests/py/test_runner.py` (`tests/suite logic`).
+- [x] 3.2 A started bolt's and a kit's folder are read from the reporting runner's `repositories.rec`, by the kit's name now, over a place's stale status. A runner that reports repositories but not the kit leaves it unread, naming what it keeps and the rename. A runner that reports none is read from Flume's status as before (design Decision 6; Task notes 3.2). Passes `tests/py/test_runner.py` and `tests/py/test_kits.py` (`tests/suite logic`).
 - [ ] 3.3 With madswan's facts and the rename to `boomdrive-cloud`, `you-sign-in-to-staging` reads one-seam merged, is read and landed in the renamed clone's folder, and sits on `land/boomdrive-cloud`, and no request was appended (design Decision 7; Task notes 3.3). Passes `tests/py/test_kit_rename.py` (`tests/suite logic`).
 
 ## 4. The command, its docs and its brief
