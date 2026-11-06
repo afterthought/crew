@@ -111,8 +111,8 @@ class TestGiveRefusal:
     GREEN = "passed (3 run, 1 replayed)"
     HEAD = "abc1234def5678"
 
-    def held(self, *stages, name="tenant-environments", verdict=GREEN, unread=None, kind="unit"):
-        return (name, [(f"u{i}", kind, s) for i, s in enumerate(stages)], self.HEAD, verdict, unread)
+    def held(self, *stages, name="tenant-environments", verdict=GREEN, unread=None, kind="unit", head=None, beside=None):
+        return (name, [(f"u{i}", kind, s) for i, s in enumerate(stages)], head or self.HEAD, verdict, unread, beside)
 
     def test_a_team_holding_no_bolt_is_given_one(self):
         assert plan.give_refusal("swb-1", []) is None
@@ -130,6 +130,19 @@ class TestGiveRefusal:
     def test_merged_with_a_head_that_is_no_landing_of_sluices_refuses_with_the_verifications_words(self):
         assert plan.give_refusal("swb-1", [self.held("merged", verdict="")]) == (
             "bolt tenant-environments's verification is not green: its head abc1234 is no landing of sluice's, so it has no verdict")
+
+    def test_a_head_landed_beside_the_queue_is_proven_on_the_verdict_that_covers_it(self):
+        """merge-gate "A landing beside reads as the verdict that covers it": the box's b01e966, landed beside sluice's
+        queue, is proven where sluice 0.69.0's record names a covering verdict that passed, and not where sluice
+        0.68.1's names none."""
+        from facts import BESIDE_HEAD, BESIDE_NEW, BESIDE_OLD, landed_beside
+        covered = self.held("merged", "merged", verdict=BESIDE_NEW, head=BESIDE_HEAD, beside=landed_beside("0.69.0"))
+        assert plan.give_refusal("swb-1", [covered]) is None
+        named = self.held("merged", verdict=BESIDE_OLD, head=BESIDE_HEAD, beside=landed_beside("0.68.1"))
+        assert plan.give_refusal("swb-1", [named]) == (
+            "bolt tenant-environments's verification is not green: its head b01e966 landed beside sluice's queue with "
+            "nothing run (#1319), and sluice's record of it names no verdict that covers it, as sluice records none before "
+            "0.69.0: the bolt reads proven once a landing on it carries a verdict of its own or names the one that covers it")
 
     def test_merged_and_green_with_a_fix_in_flight_is_proven_since_fixes_are_no_input(self):
         """A carrying fix is what the proven bolt keeps of the team, so it refuses nothing (teams.16)."""

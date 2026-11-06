@@ -416,19 +416,59 @@ def delete_ran(said):
         crew.fail(f"crew can't read what sluice's branch delete said from: {(said or '').strip()[-200:] or 'nothing'}")
 
 
-def verification(head, result):
+def verification(head, result, beside=None):
     """A bolt's verification (tests.5, record 0025): sluice's verdict on the bolt's last landing, read from its head's
     VERDICT trailer, as (state, words): "green" when the head is a landing sluice made, which it makes only on a pass;
     "none" when its head is no landing of sluice's (nothing has landed on the bolt since it was cut, or a commit came
-    another way); "unknown" when there is no head to read. Never green on anything but sluice's own trailer."""
+    another way); "unknown" when there is no head to read. A head sluice landed beside its queue with nothing run
+    (beside, sluice's record of its submission as gather.landing_read gives it) is read as the verdict that covers it
+    (covering). Never green on anything but sluice's own trailer or, for a landing beside, sluice's own record."""
     if not head:
         return "unknown", "no head crew can read"
     result = (result or "").strip()
     if not result:
         return "none", f"its head {head[:7]} is no landing of sluice's, so it has no verdict"
+    covered = covering(head, beside) if beside is not None else None
+    if covered:
+        return covered
     if result.split()[0] == "passed":
         return "green", f"sluice's verdict on its last landing, {head[:7]}: {result}"
     return "unknown", f"its head {head[:7]} carries a verdict crew does not read as a pass: {result}"
+
+
+def covering(head, beside):
+    """The verification of a head sluice landed beside its queue, with nothing run because no required check reads its
+    changes (sluice clause 140, core.39), as (state, words), from sluice's record of the submission that landed it
+    (beside: {"submission", "record", "why"}, gather.landing_read), never from its trailer's words (read.2): "green"
+    when the record has it landed beside the queue as the head and names, as covered_by, a verdict that passed, which is
+    read with its own run and replay counts and the revision it landed as, never the landing's nothing run (sluice
+    record 0083); "unknown", saying why, when the record can't be read, has the submission landed as another commit or
+    not landed, or names no covering verdict, as sluice before 0.69.0 records none, or one crew can't read or that did
+    not pass (read.1). None when the record has the submission landed as the head through the queue, whose verdict is
+    the head's own trailer."""
+    n, rec = beside.get("submission"), beside.get("record")
+    landed = f"its head {head[:7]} landed beside sluice's queue with nothing run (#{n})"
+    if not isinstance(rec, dict):
+        return "unknown", (f"{landed}, and crew can't read sluice's record of it, which names the verdict that covers "
+                           f"it: {beside.get('why') or 'sluice said nothing'}")
+    if rec.get("state") != "landed" or rec.get("landed_as") != head:
+        return "unknown", f"{landed}, and sluice's record of #{n} does not have it landed as {head[:7]}"
+    if rec.get("beside") is not True:
+        return None
+    c = rec.get("covered_by")
+    if c is None:
+        return "unknown", (f"{landed}, and sluice's record of it names no verdict that covers it, as sluice records none "
+                           "before 0.69.0: the bolt reads proven once a landing on it carries a verdict of its own or "
+                           "names the one that covers it")
+    count = lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0
+    if not (isinstance(c, dict) and isinstance(c.get("at"), str) and re.fullmatch(r"[0-9a-f]{7,64}", c["at"])
+            and isinstance(c.get("result"), str) and c["result"] and count(c.get("ran")) and count(c.get("replayed"))):
+        return "unknown", f"{landed}, and crew can't read the verdict sluice's record of it names as covering it: {c!r}"
+    words = f"{c['result']} ({c['ran']} run, {c['replayed']} replayed)"
+    if c["result"] != "passed":
+        return "unknown", f"{landed}, covered by sluice's verdict at {c['at'][:7]}, which crew does not read as a pass: {words}"
+    return "green", (f"sluice's verdict covering its last landing, {head[:7]}, which landed beside the queue with "
+                     f"nothing run (#{n}): {words}, at {c['at'][:7]}")
 
 
 def said_of(out):

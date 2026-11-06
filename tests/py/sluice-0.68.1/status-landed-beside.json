@@ -1,0 +1,22 @@
+{
+  "after": [],
+  "attempt": 1,
+  "beside": true,
+  "branch": "bolt/the-shared-applications-landing-sends-a-person-where-they-were-invited",
+  "delivered": "2026-11-05T22:16:19Z",
+  "delivered_to": "",
+  "from": {
+    "agent": "swb-3-unit-1",
+    "host": "chuck-herdr-alpha",
+    "path": "/workspace/switchboard-kit/places/fix-the-shared-applications-landing-sends-a-person-where-they-were-invited--take-main-f1e3610",
+    "session": "",
+    "worktree": "fix/the-shared-applications-landing-sends-a-person-where-they-were-invited/take-main-f1e3610"
+  },
+  "head": "26a66748ed4e9d1d8c09ca07e7fe5f5bb7a5356e",
+  "id": 1319,
+  "landed_as": "b01e9661211039a0682829dac1e4b7346d5d5828",
+  "priority": 0,
+  "schema": "sluice/submission@1",
+  "state": "landed",
+  "submitted": "2026-11-05T22:15:22Z"
+}

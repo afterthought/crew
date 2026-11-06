@@ -1,0 +1,16 @@
+sluice 0.69.0's record of a submission it landed beside its queue, with nothing run, naming the verdict that covers it
+(sluice record 0083, clause 140), as crew's gather reads it for a bolt whose head is that landing (gather.landing_read,
+kit.covering; tests/py/test_kit.py, tests/py/test_landing.py, tests/py/test_rail.py, tests/contract/test_gather.py).
+
+status-landed-beside.json	exit 0	sluice status 1319 --json
+
+No host runs sluice 0.69.0 yet (the fleet's pin is 0.68.1, read 2026-11-06), so this is not a recording: it is
+sluice-0.68.1/status-landed-beside.json with the one field 0.69.0 adds to a submission landed beside, `covered_by`,
+{at, result, ran, replayed}, as sluice writes it at v0.69.0 (crates/sluice-core/src/records.rs, Submission's
+covered_by, and its test a_branch_and_an_outcome_from_before_covered_by_still_read; crates/sluice-seams/src/lib.rs,
+CoveringVerdict; `sluice status <n> --json` prints the record through serde_json, keys sorted). Its values are those
+0.69.0 names for #1319's landing: the revision the covering verdict landed as, e25fea4, #1316's landing through the
+queue on the same bolt, and that landing's own words, passed (141 run, 0 replayed), as its Sluice-Result says. The
+landing commit 0.69.0 writes for it says "passed (0 run, 0 replayed) beside the queue: no required check reads its
+changes; covered by the result at e25fea4057459d9964dd6d422816115ecd1207fa, passed (141 run, 0 replayed)"
+(crates/sluice-core/src/text.rs, beside_message).

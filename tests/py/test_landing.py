@@ -2642,14 +2642,15 @@ class TestACrossedBoltLands:
     def writer(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "madswan-ops")
 
-    def stages(self, at, main=(), verdict=GREEN):
+    def stages(self, at, main=(), verdict=GREEN, **head):
         """crossed crw-4's x, holding a, b after a, and chore c, launched as requests 1 to 3, each at the flume fixture at
-        names; crew's kit as read on deneb, its main holding main's changes, x's head d…d carrying verdict."""
+        names; crew's kit as read on deneb, its main holding main's changes, x's head d…d carrying verdict, or the head
+        and what gather.landing_read gives of it (beside) as head names them."""
         from facts import crew_read, crossed_fleet_read, launched, ran
         fleet = crossed_fleet_read()
         p, requests = launched(["x"], work=[("a", "x", [], "unit", []), ("b", "x", ["a"], "unit", []), ("c", "x", [], "chore", [])],
                                fleet=fleet)
-        return plan.Stages(fleet, p, crew_read(main, bolts={"x": {"verdict": verdict}}), runs={"madswan": (requests, ran(at))})
+        return plan.Stages(fleet, p, crew_read(main, bolts={"x": {"verdict": verdict, **head}}), runs={"madswan": (requests, ran(at))})
 
     def test_every_piece_merged_and_green_at_its_head_reads_proven(self):
         """crew-rail "A crossed bolt proven": a, b and c merged by the runner's records, sluice green at x's head."""
@@ -2658,7 +2659,25 @@ class TestACrossedBoltLands:
         assert work == [("a", "unit", "merged"), ("b", "unit", "merged"), ("c", "chore", "merged")]
         assert plan.landing_unready(work, "d" * 40, self.GREEN, []) is None
         assert st.bolt_state(st.plan.bolt("x")) == "waits"
-        assert [w for w, _, _, _, unread in plan.proven_facts(st, st.plan, [st.plan.bolt("x")])] == ["x"]
+        assert [w for w, *_ in plan.proven_facts(st, st.plan, [st.plan.bolt("x")])] == ["x"]
+
+    def test_a_head_landed_beside_the_queue_and_covered_by_a_passed_verdict_reads_proven(self):
+        """merge-gate "A landing beside reads as the verdict that covers it": x's head is a take-main fix sluice 0.69.0
+        landed beside its queue, its record naming the verdict that covers it, which passed: x reads proven and waits to
+        land, so its row reaches crew's landings card; sluice 0.68.1's record, naming none, keeps it unproven."""
+        from facts import BESIDE_HEAD, BESIDE_NEW, BESIDE_OLD, landed_beside
+        work = [("a", "unit", "merged"), ("b", "unit", "merged"), ("c", "chore", "merged")]
+        assert plan.landing_unready(work, BESIDE_HEAD, BESIDE_NEW, [], landed_beside("0.69.0")) is None
+        assert plan.landing_unready(work, BESIDE_HEAD, BESIDE_OLD, [], landed_beside("0.68.1")).startswith(
+            "its verification is not green: its head b01e966 landed beside sluice's queue with nothing run (#1319), and "
+            "sluice's record of it names no verdict that covers it")
+        st = self.stages({1: "landed", 2: "landed", 3: "landed"}, verdict=BESIDE_NEW, head=BESIDE_HEAD, beside=landed_beside("0.69.0"))
+        assert st.bolt_state(st.plan.bolt("x")) == "waits"
+        (name, _, head, verdict, unread, beside), = plan.proven_facts(st, st.plan, [st.plan.bolt("x")])
+        assert (name, head, verdict, unread, beside) == ("x", BESIDE_HEAD, BESIDE_NEW, None, landed_beside("0.69.0"))
+        assert plan.give_refusal("crw-4", plan.proven_facts(st, st.plan, [st.plan.bolt("x")])) is None
+        st = self.stages({1: "landed", 2: "landed", 3: "landed"}, verdict=BESIDE_OLD, head=BESIDE_HEAD, beside=landed_beside("0.68.1"))
+        assert st.bolt_state(st.plan.bolt("x")) == "active"
 
     def test_a_piece_still_in_code_keeps_it_unproven(self):
         st = self.stages({1: "landed", 2: "code", 3: "landed"})

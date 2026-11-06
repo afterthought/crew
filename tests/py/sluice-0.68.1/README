@@ -1,0 +1,12 @@
+sluice 0.68.1's record of a submission it landed beside its queue, with nothing run, as crew's gather reads it for a
+bolt whose head is that landing (gather.landing_read, kit.covering; tests/py/test_kit.py, tests/py/test_landing.py,
+tests/py/test_rail.py, tests/contract/test_gather.py).
+
+status-landed-beside.json	exit 0	sluice status 1319 --json
+
+Recorded on chuck-herdr-alpha on 2026-11-06, running sluice 0.68.1 for real in switchboard-kit's main checkout, its
+sessions emptied; otherwise verbatim. #1319 is the take-main fix of switchboard-kit's bolt
+the-shared-applications-landing-sends-a-person-where-they-were-invited, landed beside the queue as b01e966 on
+2026-11-05, whose commit's Sluice-Result reads "landed beside the queue (no required check reads its changes)" and
+names no Sluice-Tested; its parent, e25fea4, is #1316's landing through the queue, "passed (141 run, 0 replayed)".
+The record says `beside: true` and names no verdict that covers it: sluice records none before 0.69.0 (record 0083).
