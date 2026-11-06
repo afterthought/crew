@@ -112,7 +112,8 @@ for want in "Your bolt's row links its reading, keyed \`land/<bolt>\`" \
   "read from sluice's own queue, so a restart loses none of them" "\`#41 under test\`" "\`landing #355 queued\`"; do
   has "$out" "$want"
 done
-for gone in "answeredHere" "plannotator" "card wait land/" "the wait starts one first" "what the wait named" "which crew asks sluice for"; do lacks "$out" "$gone"; done
+# The brief names crew's command by this checkout's path, which a place's name can fill with any word: read it without.
+for gone in "answeredHere" "plannotator" "card wait land/" "the wait starts one first" "what the wait named" "which crew asks sluice for"; do lacks "${out//"$CREW"/}" "$gone"; done
 ok "a conductor opens nothing, raises and passes no landing card, tells main-level ops its bolt is proven, starts no batch's session, and starts no wait on its bolt's reading, reading it with crew card read once crew tells it the user sent it, whose notes are its row's and whose approval lands nothing, and whose preview comes up only on the user's ask, main-level ops's to act on; it reads each merge's and the landing's number from the rows, and a merge's agent waits on its own"
 # The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
 # You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
