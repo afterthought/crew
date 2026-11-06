@@ -2036,6 +2036,59 @@ class TestStep:
         assert c["title"] == "After srv's deploy: Open https://example.com and rotate the key"
         assert c["action"] == {"steps": [{"text": "Open https://example.com and rotate the key"}]}
 
+    LONG = ("Sign Herdr in to Pending You again on this host, so it holds the scope 0.41.0 asks for (`presence:focus`): "
+            "run `pendingyou app login herdr` there, on the box over ssh (`ssh chuck-herdr-alpha pendingyou app login "
+            "herdr`), and approve it in the browser or by code on the phone. Then `pendingyou herdr doctor` says "
+            "\"Holding cards:\", not \"Sign Herdr in again to hold cards\".")
+
+    def users(self, **f):
+        return built.step_card(dict(dict(env="deneb", n=20, text=self.LONG, doer="user", held=False, commands=[]), **f))["card"]
+
+    def test_a_users_step_longer_than_a_step_holds_does_its_first_sentences_its_words_whole_on_the_face(self):
+        """deneb's op/deneb/20 of 2026-11-06, which Pending You refused: "Keep each step’s words under 300 characters."."""
+        c = self.users(why="The scope is granted only by a sign-in you approve.")
+        first = built.SENTENCE.split(self.LONG)[0].replace("`", "")
+        assert len(self.LONG) == 370 and c["action"]["steps"] == [{"text": first}] and len(first) <= built.STEP
+        assert c["artifacts"] == [{"kind": "code", "lang": "markdown", "title": "The step", "ref": "op-deneb-20.md", "lines": [self.LONG]}]
+        assert c["title"].startswith("After deneb's deploy: Sign Herdr in") and c["title"].endswith("…") and len(c["title"]) <= built.TITLE
+        assert c["summary"] == "The scope is granted only by a sign-in you approve."
+
+    def test_a_long_step_whose_summary_holds_its_words_whole_carries_no_face(self):
+        c = self.users()
+        assert c["summary"] == self.LONG.replace("`", "") and "artifacts" not in c and len(c["action"]["steps"][0]["text"]) <= built.STEP
+
+    def test_a_long_first_sentence_is_cut_at_whole_words_in_its_step_and_a_step_past_any_summary_is_whole_on_the_face(self):
+        words = " ".join(["word"] * 120) + "."
+        c = self.users(text=words)
+        assert c["action"]["steps"][0]["text"].endswith("…") and len(c["action"]["steps"][0]["text"]) <= built.STEP
+        assert c["artifacts"][0]["lines"] == [words]
+
+    def test_a_command_longer_than_a_step_holds_is_run_whole_its_words_short(self):
+        long = "clan machines update " + " ".join(f"swancloud-host-{i}" for i in range(20))
+        c = self.users(text="update every host", commands=[long, "clan machines update swancloud-srv"])
+        assert c["action"]["steps"] == [{"text": "Run this command.", "command": long},
+                                        {"text": "clan machines update swancloud-srv", "command": "clan machines update swancloud-srv"}]
+        assert "artifacts" not in c and c["title"] == "After deneb's deploy: update every host"
+
+    def test_a_short_step_with_commands_and_a_why_is_whole_in_its_title_and_carries_no_face(self):
+        c = self.users(text="rotate the key", why="Only you hold it.", commands=["rotate-key"])
+        assert c["title"] == "After deneb's deploy: rotate the key" and "artifacts" not in c
+
+    def test_a_gates_link_longer_than_a_step_holds_is_its_where_its_step_saying_to_open_it(self):
+        run = self.RUN + "?" + "x" * 300
+        c = self.gate(gate=run, text=run)["card"]
+        assert c["action"]["steps"] == [{"text": "Open the gate at this card's link and approve the deploy there."}] and c["action"]["where"] == run
+
+    def test_a_held_steps_long_words_keep_its_question_in_the_title_and_ride_the_face_whole(self):
+        c = built.step_card(dict(env="deneb", n=20, text=self.LONG, doer="swancloud-ops", held=True))["card"]
+        assert c["title"].endswith("…, now or when the host is quiet?") and len(c["title"]) <= built.TITLE
+        assert c["artifacts"][0]["lines"] == [self.LONG]
+
+    def test_a_step_card_changed_to_words_its_title_holds_empties_its_face(self):
+        assert built.change_args(self.users(text="rotate the key"), "Recorded again: its words changed")["artifacts"] == []
+        long = self.users(why="Only you can.")
+        assert built.change_args(long, "Recorded again: its words changed")["artifacts"] == long["artifacts"] != []
+
     def test_a_held_step_is_a_choice_of_when_quiet_recommended(self):
         c = built.step_card(dict(env="mac-studio", n=2, text="restart crew's teams", doer="swancloud-ops", held=True,
                                  why="It ends swc-1's code stage mid-unit.", consequences={"now": "swc-1's stage starts again"}))["card"]

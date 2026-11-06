@@ -226,8 +226,9 @@ FACTS = dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches=
 
 
 class Py:
-    """A stand-in for one session with Pending You: each tool answered from answers, a (got, words) pair, a Refusal
-    raised when it is one; a session that can't open raises its refusal on entry."""
+    """A stand-in for one session with Pending You: each tool answered from answers, a (got, words) pair, or a function
+    of the tool's arguments giving one, as Pending You judges what it is sent, a Refusal raised when it is one; a
+    session that can't open raises its refusal on entry."""
 
     def __init__(self, acts, answers, opening=None):
         self.acts, self.answers, self.opening = acts, answers, opening
@@ -243,6 +244,7 @@ class Py:
     def answer(self, tool, args):
         self.acts.calls.append((tool, args))
         got = self.answers.get(tool, ({"ok": True}, None))
+        got = got(args) if callable(got) else got
         if isinstance(got, crew.Refusal):
             raise got
         return got
@@ -591,6 +593,46 @@ def test_a_post_following_a_card_given_back_as_already_recorded_reads_nothing():
                                                 if any(t == "post_request" for t, _ in acts.calls) else [])
     plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, dict(STEP, follows="req_d1"), WHERE, acts)
     assert [t for t, _ in acts.calls] == ["match_area", "post_request"] and acts.emitted == []
+
+
+# swancloud's after-deploy step of the-fleets-pendingyou-is-0-41-0, the Herdr re-sign-in, as deneb's op/deneb/20 held
+# it on 2026-11-06: 370 characters and no command fields (signal 2026-11-06-swancloud-ops-bbe53808/01).
+HERDR = ("Sign Herdr in to Pending You again on this host, so it holds the scope 0.41.0 asks for (`presence:focus`): run "
+         "`pendingyou app login herdr` there, on the box over ssh (`ssh chuck-herdr-alpha pendingyou app login herdr`), and "
+         "approve it in the browser or by code on the phone. Then `pendingyou herdr doctor` says \"Holding cards:\", not "
+         "\"Sign Herdr in again to hold cards\".")
+STEP_WORDS = "Keep each step’s words under 300 characters."  # post_request's refusal on deneb, 2026-11-06
+
+
+def strict_post(args):
+    """Pending You's post_request as deneb met it: a card whose action has a step of 300 characters or more refused in
+    its words, any other posted."""
+    if any(len(s["text"]) >= 300 for s in (args.get("action") or {}).get("steps") or []):
+        return None, STEP_WORDS
+    return dict(POSTED, requestId="req_s20"), None
+
+
+def test_a_users_step_of_370_characters_with_no_commands_gets_its_card_its_words_whole():
+    assert len(HERDR) == 370 and strict_post({"action": {"steps": [{"text": HERDR}]}}) == (None, STEP_WORDS)
+    facts = dict(env="deneb", n=20, text=HERDR, doer="user", held=False, commands=[],
+                 why="the scope is granted only by a sign-in the user approves (`agents.9`); no configuration makes it and no check can do it.")
+    acts = Acts({"match_area": (MATCHED, None), "post_request": strict_post}, caller="swancloud-ops")
+    assert plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, facts, WHERE, acts) == "req_s20"
+    assert [(e["Act"], e.get("refused"), e.get("Card")) for e in acts.emitted] == [("card.post", None, "req_s20")]
+    sent = next(a for t, a in acts.calls if t == "post_request")
+    assert len(sent["title"]) <= cards.TITLE and all(len(s["text"]) <= cards.STEP for s in sent["action"]["steps"])
+    assert sent["action"]["steps"] == [{"text": cards.prose(HERDR, cards.STEP)}]
+    assert [(a["lang"], a["title"], a["lines"]) for a in sent["artifacts"]] == [("markdown", "The step", [HERDR])]
+
+
+def test_a_steps_card_pending_you_still_refuses_is_recorded_refused_in_its_words_and_named_on_its_row():
+    """A card refused for a bound crew does not know yet stays owed on the rail with Pending You's words (rail-cards "A
+    row's card that Pending You refused is owed until it posts")."""
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (None, STEP_WORDS)}, caller="swancloud-ops")
+    facts = dict(env="deneb", n=20, text="Sign Herdr in again", doer="user", held=False, commands=[])
+    assert plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, facts, WHERE, acts) is None
+    refused = [dict(e, Refused=e["refused"]) for e in acts.emitted]  # as the run record writes it
+    assert plan.last_refusal(refused, "op/deneb/20") == f"Pending You refused post_request: {STEP_WORDS}"
 
 
 POST, CLOSE = (lambda card, by="wldn-ops", key="land/b1": dict(Act="card.post", Key=key, By=by, Card=card),

@@ -20,11 +20,12 @@ never given twice. A test signs the host in again by moving cards.json aside: ev
 Tools: whoami, match_area (use for a remote an area was made for, else create), create_area (one area a key),
 post_request (a key gives its card back, and one under eight characters is refused in Pending You's words, as its
 schema refuses it in pendingyou 0.35.1; one that follows an answered card picks that card up, resolving it, as Pending
-You's guide says a post does), get_request, update_request and ack_answer (at the card's version), cancel_request (a
-card already resolved, cancelled or expired refused in Pending You's words), and list_pending (the open cards posted in
-the name given, each as Pending You's wake mod reads the list in pendingyou 0.39.0, mod/hooks/wake.js handedOf: its id,
-title, status, turn, version and when it changed, an answer steered to it taken as get_request takes it). Any other is
-a JSON-RPC error."""
+You's guide says a post does), get_request, update_request and ack_answer (at the card's version; a post or an update
+whose action has a step of 300 characters or more refused in Pending You's words, as deneb's was on 2026-11-06),
+cancel_request (a card already resolved, cancelled or expired refused in Pending You's words), and list_pending (the
+open cards posted in the name given, each as Pending You's wake mod reads the list in pendingyou 0.39.0,
+mod/hooks/wake.js handedOf: its id, title, status, turn, version and when it changed, an answer steered to it taken as
+get_request takes it). Any other is a JSON-RPC error."""
 import json, os, pathlib, sys
 
 if sys.argv[1:] != ["mcp", "--app", "claude-code"]:
@@ -32,6 +33,7 @@ if sys.argv[1:] != ["mcp", "--app", "claude-code"]:
 home = pathlib.Path(os.environ["HOME"]) / ".stub-pendingyou"
 home.mkdir(exist_ok=True)
 host = os.environ.get("CREW_TEST_HOST", "stub-host")
+STEP_WORDS = "Keep each step’s words under 300 characters."  # post_request's refusal on deneb, 2026-11-06
 SIGNED_OUT = ("Claude Code on this computer isn’t signed in to Pending You (https://www.pendingyou.com). "
               "Run: npx -y pendingyou@latest init")
 
@@ -94,6 +96,8 @@ def tool(name, args):
             save("areas.json", areas)
             return said({"areaId": areas[key]["areaId"], "name": args["name"], "created": True})
         return said({"areaId": areas[key]["areaId"], "name": areas[key]["name"], "created": False})
+    if name in ("post_request", "update_request") and any(len(x.get("text") or "") >= 300 for x in (args.get("action") or {}).get("steps") or []):
+        return refused(STEP_WORDS)
     if name == "post_request":
         if len(args.get("idempotencyKey") or "") < 8:
             return refused("Some fields need fixing. idempotencyKey: Too small: expected string to have >=8 characters.")
