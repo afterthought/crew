@@ -2,9 +2,11 @@
 # record 0022), a part of the units journey (t-journey-units): with a sluice that can't forecast a branch no worktree
 # holds, the wait says so once for the bolt's head; with one that can, a conflict with what main has landed is said once,
 # with the take-main fix to start now, and one with a submission queued on main as one to wait out (teams.21, record
-# 0036); a legacy bolt whose tip names origin is forecast from a place on it, never by its branch name (plan.19). What
-# each forecast says, when it is said again and which way a bolt is forecast are logic cases (tests/py/test_forecast.py),
-# and the place's git a contract case (tests/contract/test_git.py); this checks the command's wiring once.
+# 0036), each naming the bolt's head it is of, and the wait's answer says a forecast of a head the bolt has left is not
+# the bolt's now; a legacy bolt whose tip names origin is forecast from a place on it, never by its branch name
+# (plan.19). What each forecast says, when it is said again and which way a bolt is forecast are logic cases
+# (tests/py/test_forecast.py), and the place's git a contract case (tests/contract/test_git.py); this checks the
+# command's wiring once.
 # Reads: plugin/hooks/ tests/units.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/units.sh"
@@ -27,7 +29,7 @@ ok "a wait whose sluice can't forecast the bolt against main says so once for th
 main=$(git -C "$k" rev-parse main)
 printf '{"conflict":{"paths":["shared.txt"],"with":[]},"head":"%s","onto":"%s","ahead":[]}\n' "$bolt" "$main" > "$check"
 expect_ok crew unit wait a --timeout 0
-has "$out" "bolt/tenant-environments is forecast to conflict with main on shared.txt: main has landed work on them since the bolt took it. Take main into the bolt now, while the conflict is small, by a fix as when wldn-ops says a landing conflicts: crew fix swb-1 take-main-${main:0:7} \"Take main into the bolt: it is forecast to conflict on shared.txt\""
+has "$out" "bolt/tenant-environments at ${bolt:0:7} is forecast to conflict with main on shared.txt: main has landed work on them since the bolt took it. Take main into the bolt now, while the conflict is small, by a fix as when wldn-ops says a landing conflicts: crew fix swb-1 take-main-${main:0:7} \"Take main into the bolt: it is forecast to conflict on shared.txt\""
 eq "$(field $box forecast Heads bolt/tenant-environments)" "bolt/tenant-environments@${bolt:0:7} main@${main:0:7}"
 eq "$(field $box forecast Reached bolt/tenant-environments)" "wait"
 expect_ok crew unit wait a --timeout 0
@@ -36,11 +38,22 @@ ok "a conflict with what main has landed is said to the conductor once, with the
 
 printf '{"conflict":{"paths":["shared.txt"],"with":[{"id":7,"from":{"agent":"wldn-design","worktree":"design/x"}}]},"head":"%s","onto":"%s","ahead":[7]}\n' "$bolt" "$main" > "$check"
 expect_ok crew unit wait a --timeout 0
-has "$out" "bolt/tenant-environments is forecast to conflict on shared.txt with #7 (design/x), queued on main ahead of it. Take nothing in for it"
+has "$out" "bolt/tenant-environments at ${bolt:0:7} is forecast to conflict on shared.txt with #7 (design/x), queued on main ahead of it. Take nothing in for it"
 printf '{"conflict":null,"head":"%s","onto":"%s","ahead":[7]}\n' "$bolt" "$main" > "$check"
 expect_ok crew unit wait a --timeout 0
 lacks "$out" "forecast to conflict"
 ok "a conflict with a submission queued on main is said as one to wait out, and a clean forecast says nothing"
+
+# sluice forecast the bolt at a head it has since left, as wldn's swb-3 was forecast at 75016a0 as its wait began and
+# stood at 2722779 when the wait answered (2026-11-02): the wait's answer says the forecast is not the bolt's now.
+old=$(git -C "$k" rev-parse "$bolt~1")
+printf '{"conflict":{"paths":["shared.txt"],"with":[]},"head":"%s","onto":"%s","ahead":[]}\n' "$old" "$main" > "$check"
+expect_ok crew unit wait a --timeout 0
+has "$out" "bolt/tenant-environments at ${old:0:7} is forecast to conflict with main on shared.txt"
+has "$out" "bolt/tenant-environments moved from ${old:0:7} to ${bolt:0:7} while this wait waited, so the forecast against main it said as it began is of ${old:0:7}, not of the bolt now: take nothing in for it."
+expect_ok crew unit wait a --timeout 0
+lacks "$out" "moved from"
+ok "a forecast of a head the bolt has left is said as no longer the bolt's when the wait answers"
 
 # A legacy bolt whose tip names origin for its branch while origin holds none of it, as crw-4's did once its policy
 # chore merged: sluice by its branch name says it has no branch, so crew forecasts it from a place it makes on it with
@@ -59,7 +72,7 @@ eq "$(jq -r .error.message "$T/by-name.json")" "no branch bolt/tenant-environmen
 printf '{"conflict":{"paths":["shared.txt"],"with":[]},"head":"%s","onto":"%s","ahead":[]}\n' "$bolt" "$main" > "$check"
 : > "$CREW_TEST_LOG"
 expect_ok crew unit wait a --timeout 0
-has "$out" "bolt/tenant-environments is forecast to conflict with main on shared.txt: main has landed work on them since the bolt took it."
+has "$out" "bolt/tenant-environments at ${bolt:0:7} is forecast to conflict with main on shared.txt: main has landed work on them since the bolt took it."
 lacks "$out" "no forecast of bolt/tenant-environments"
 place=$kd/places/forecast-tenant-environments
 has "$(calls)" "$box sluice submit main --check --worktree $place --json in $(cd "$k" && pwd -P)"
