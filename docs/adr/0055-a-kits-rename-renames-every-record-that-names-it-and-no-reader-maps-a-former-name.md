@@ -18,7 +18,7 @@ Amends the change `a-kit-renamed-on-its-host-is-renamed-across-the-plan` (archiv
 
 ## Decision
 
-1. **The user's: a rename renames the data, and no reader maps a former name.** After `crew kit rename <old> <new>`, every record any reader matches a kit by names it `<new>`, and no reader, crew's or another tool's, is taught `<old>`. Each tool renames what is its own: crew its records, Flume a place's stored repository (`flume relocate`), the fleet its clones and their views on each host. crew asks Boomdrive's runner for no former addresses (the change's R1 is withdrawn).
+1. **The user's: a rename renames the data, and no reader maps a former name.** After `crew kit rename <old> <new>`, every record any reader matches a kit by names it `<new>`, and no reader, crew's or another tool's, is taught `<old>`. Each tool renames what is its own: crew its records, the fleet its clones and their views on each host, and Flume a place's stored repository, for which Flume 0.13.0 has no command yet (Flume's to design). crew asks Boomdrive's runner for no former addresses (the change's R1 is withdrawn). It does ask the runner where it keeps each clone, its R2: `repositories.rec` on `<label>/runner/<host>`, one `Repository` per repository its configuration keeps, with the `Folder` of its clone, under crew's descriptor in `runner.py` (`REPOSITORIES`). That is the runner's own fact, read under the name now, so crew never reads a clone's folder from a place Flume stored before the rename.
 
 2. **What crew renames.** In the one commit of the act, on the drive's branch, crew renames `<old>` to `<new>` wherever a field holds the kit's name, its forge address, or an object built on it:
    - the `Repo` of the plan's Bolt and Unit records;
