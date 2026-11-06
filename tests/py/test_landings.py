@@ -499,11 +499,11 @@ def hold(bolt, why="held for a fix: one zone is missing (fix/y/gap)", head=H1):
 
 
 def waiting(*heads):
-    return {"status": "waiting", "heads": plan.card_heads(" ".join(heads))}
+    return {"status": "waiting", "heads": plan.card_heads(" ".join(heads)), "taking": plan.heads_taking(" ".join(heads))}
 
 
 def answered(*heads):
-    return {"status": "answered", "heads": plan.card_heads(" ".join(heads))}
+    return {"status": "answered", "heads": plan.card_heads(" ".join(heads)), "taking": plan.heads_taking(" ".join(heads))}
 
 
 def work(gained=(), lost=(), why=None, head=H2):
@@ -668,6 +668,42 @@ def test_a_send_holding_only_a_held_bolt_closes_keeping_it_and_one_whose_work_ch
 
 def taking_main(bolt):
     return dict(hold(bolt, MAIN_FIRST), takes_main=True)
+
+
+def test_a_row_taking_main_first_beside_one_that_can_land_is_a_row_of_the_card():
+    """rail-cards "A row taking main first stays on the card": shown beside a row that can land, marked so, and held off
+    the card with the rest while none can, or while an earlier send lands it."""
+    rows = [box("y"), taking_main("z"), hold("w")]
+    assert [r["bolt"] for r in plan.card_rows(rows)] == ["y", "z"]
+    assert plan.card_rows([taking_main("z"), hold("w")]) == []
+    assert [r["bolt"] for r in plan.card_rows([box("y"), dict(taking_main("z"), sent=True)])] == ["y"]
+
+
+def test_a_row_coming_to_take_main_first_and_back_changes_the_card_in_place():
+    """rail-cards "One of two" and "Taking main in and back, one card": the card's count stands, so its form does."""
+    assert plan.landings_step([box("y"), taking_main("z")], waiting("y@abc1234", "z@abc1234"), None, {"y", "z"}) == (
+        "change", f"z {MAIN_FIRST}", False, [])
+    assert plan.landings_step([box("y"), taking_main("z")], waiting("y@abc1234", "z@abc1234:main"), None, {"y", "z"}) == ("leave",)
+    assert plan.landings_step([box("y"), box("z", H2)], waiting("y@abc1234", "z@abc1234:main"), None, {"y", "z"}) == (
+        "change", "z's head is now def5678; z can land again", False, [])
+    # a bolt taking main first joins a card of one: its form changes, so it is followed
+    assert plan.landings_step([box("y"), taking_main("z")], waiting("y@abc1234"), None, {"y", "z"}) == (
+        "change", f"z joins the card and {MAIN_FIRST}", True, [])
+
+
+def test_a_row_shown_taking_main_first_and_left_unticked_is_no_bolt_the_user_left():
+    """rail-cards "A row taking main first stays on the card": crew unticked it, not they."""
+    card = answered("y@abc1234", "z@abc1234:main")
+    assert plan.landings_step([box("y"), taking_main("z")], card, ["y"], {"y", "z"}) == ("leave",)
+    step = plan.landings_step([taking_main("z")], card, ["y"], {"z"}, landed={"y": "1" * 40})
+    assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER}", None, [])
+    # back from taking main in while y still lands: a card follows asking for it
+    step = plan.landings_step([box("y"), box("z")], card, ["y"], {"y", "z"})
+    assert step == ("follow", "Landing as you ticked: y. Since your send, z reads proven, and the card that follows asks for it.",
+                    [], [("y", "abc1234")])
+    assert plan.left_now(card, ["y"], {"y": H1, "z": H1}, {}, []) == {}
+    # ticked while it took main in: their send stands for it
+    assert plan.landings_step([box("y"), box("z")], card, ["y", "z"], {"y", "z"}) == ("leave",)
 
 
 def test_a_ticked_bolt_then_taking_main_first_leaves_the_card_its_send_standing():
@@ -1425,17 +1461,17 @@ WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 2}, N
 MAIN_FIRST ="takes main first: forecast to conflict with main on README.md at e4f5a6b; crw-1-conductor takes main in by a fix"
 
 
-def test_main_moving_so_one_of_two_conflicts_follows_the_card_with_the_other_as_its_one_box(monkeypatch):
-    """rail-cards "One of two": every row forecast against main first; a list of two becomes an approval of one."""
+def test_main_moving_so_one_of_two_conflicts_changes_the_card_in_place_the_other_keeping_its_box_unticked(monkeypatch):
+    """rail-cards "One of two": every row forecast against main first; z stays on the list, unticked, saying why."""
     held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
     acts = LandActs({"y": row("y"), "z": row("z")}, held, answers=dict(POSTED, **WAITING), against_main={"z": [("main", ["README.md"])]})
     assert raised(monkeypatch, acts) == "req_k1"
     assert acts.forecasts == [(["y", "z"], [])] and acts.kept == {"crew": MAIN}
-    assert next(a for t, a in acts.calls if t == "cancel_request")["reason"] == f"z {MAIN_FIRST}"
-    post = next(a for t, a in acts.calls if t == "post_request")
-    assert (post["kind"], post["follows"]) == ("approve", "req_k1")
-    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
-    assert acts.emitted[-1]["Heads"] == "y@abc1234"
+    assert [t for t, _ in acts.calls] == ["get_request", "get_request", "update_request"]
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert (change["requestId"], change["changeNote"], change["recommendedIds"]) == ("req_k1", f"z {MAIN_FIRST}", ["land:y"])
+    assert change["options"][1]["detail"].startswith(MAIN_FIRST[0].upper() + MAIN_FIRST[1:])
+    assert acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234:main"
 
 
 def test_main_moving_so_one_of_three_conflicts_changes_the_card_in_place_saying_why(monkeypatch):
@@ -1446,7 +1482,38 @@ def test_main_moving_so_one_of_three_conflicts_changes_the_card_in_place_saying_
     assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
     change = next(a for t, a in acts.calls if t == "update_request")
     assert change["changeNote"] == f"w {MAIN_FIRST}"
-    assert acts.emitted[-1]["Heads"] == "y@abc1234 z@abc1234"
+    assert acts.emitted[-1]["Heads"] == "y@abc1234 w@abc1234:main z@abc1234"
+
+
+TAKE_MAIN_FIX = 'takes main first: take-main-e4f5a6b taking main in: "Take main into the bolt: it is forecast to conflict on README.md"'
+
+
+def test_a_forecast_that_flips_between_raises_holds_the_card_to_one_request_changed_in_place(monkeypatch):
+    """rail-cards "Taking main in and back, one card": wldn's switchboard-kit on 2026-11-06, whose land/switchboard-kit
+    was withdrawn and posted six times from 03:11Z to 04:10Z as identity-and-access-reads-as-the-locked-mockups took
+    main in beside a-deploy-row-follows-its-stack-to-the-end, each time it came to take main first or came back from it
+    (signal 2026-11-06-swancloud-operator-1e1b6c68/01). Here main moves under z, z's take-main fix runs and merges, and
+    main moves under it again: the card is posted once and changed in place, never withdrawn."""
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=dict(POSTED, **WAITING))
+    assert raised(monkeypatch, acts) == "req_k1"  # both can land: posted
+    acts.against_main = {"z": [("main", ["README.md"])]}  # main moves: z is forecast to conflict with it
+    assert raised(monkeypatch, acts) == "req_k1"
+    fixing = dict(row("z"), box=False, why=TAKE_MAIN_FIX, takes_main=True)
+    acts.rows, acts.against_main = {"y": row("y"), "z": fixing}, {}  # its take-main fix in flight: nothing to say
+    assert raised(monkeypatch, acts) == "req_k1"
+    acts.rows = {"y": row("y"), "z": row("z", H2)}  # the fix merged: z reads proven at its new head
+    assert raised(monkeypatch, acts) == "req_k1"
+    acts.main, acts.against_main = "9" * 40, {"z": [("main", ["README.md"])]}  # main moves under it again
+    assert raised(monkeypatch, acts) == "req_k1"
+    tools = [t for t, _ in acts.calls]
+    assert tools.count("post_request") == 1 and "cancel_request" not in tools
+    assert [a["changeNote"] for t, a in acts.calls if t == "update_request"] == [
+        f"z {MAIN_FIRST}", "z's head is now def5678; z can land again",
+        "z takes main first: forecast to conflict with main on README.md at 9999999; crw-1-conductor takes main in by a fix"]
+    assert [a["recommendedIds"] for t, a in acts.calls if t == "update_request"] == [["land:y"], ["land:y", "land:z"], ["land:y"]]
+    assert [(e["Act"], e["Card"], e["Heads"]) for e in acts.emitted if e["Act"].startswith("card.")] == [
+        ("card.post", "req_k1", "y@abc1234 z@abc1234"), ("card.update", "req_k1", "y@abc1234 z@abc1234:main"),
+        ("card.update", "req_k1", "y@abc1234 z@def5678"), ("card.update", "req_k1", "y@abc1234 z@def5678:main")]
 
 
 def test_a_conflict_the_record_holds_at_the_rows_head_holds_it_with_no_forecast_against_it(monkeypatch):
@@ -1457,9 +1524,10 @@ def test_a_conflict_the_record_holds_at_the_rows_head_holds_it_with_no_forecast_
     assert raised(monkeypatch, acts) == "req_k1"
     assert acts.forecasts == [(["y", "z"], ["y"])] and acts.kept == {}
     post = next(a for t, a in acts.calls if t == "post_request")
-    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [
-        "**y**: takes main first: forecast to conflict with main on docs/a.md at 2222222; crw-1-conductor takes main in by a fix"]
-    assert acts.emitted[-1]["Heads"] == "z@abc1234"
+    assert (post["kind"], post["recommendedIds"]) == ("multi", ["land:z"])
+    assert post["options"][0]["detail"].startswith(
+        "Takes main first: forecast to conflict with main on docs/a.md at 2222222; crw-1-conductor takes main in by a fix")
+    assert acts.emitted[-1]["Heads"] == "y@abc1234:main z@abc1234"
 
 
 FIX = ('crew fix crw-1 take-main-e4f5a6b "Take main into the bolt: it is forecast to conflict on README.md"')
@@ -1504,7 +1572,7 @@ def test_a_conductor_that_cannot_be_told_has_nothing_recorded_and_its_row_stays_
     assert not [e for e in acts.emitted if e["Act"] == "forecast"]
     assert "crw-1-conductor was not told z takes main first, so it is told at the next raise" in capsys.readouterr().err
     post = next(a for t, a in acts.calls if t == "post_request")
-    assert next(a for a in post["artifacts"] if a["ref"] == "held-crew.md")["lines"] == [f"**z**: {MAIN_FIRST}"]
+    assert post["recommendedIds"] == ["land:y"] and post["options"][1]["detail"].startswith(MAIN_FIRST[0].upper() + MAIN_FIRST[1:])
 
 
 WOULD = "z, which you left, would take main first: forecast to conflict with main on README.md at e4f5a6b"
