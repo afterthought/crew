@@ -1502,6 +1502,53 @@ class TestTheLandingsRead:
         assert plan.landing_read(self.F, "wldn", "b") == (True, "bolt/b landed on k's main at bbbbbbb")
         assert self.closed == [] and self.ran == []
 
+    def test_a_close_whose_tidy_reads_the_team_finishes_while_the_read_holds_the_bolts_lock(self, monkeypatch):
+        """"A landing's close never waits on its own lock" (wldn, 2026-11-06, landings #1394 and #1395): the read holds
+        landings/b.lock while crew bolt land's code closes b, and the close has the team's tidy run on its host, crew
+        _tidy swb-1 --landed b, waiting on it as on any command there. The tidy runs here in a thread of its own, as the
+        process of its own it is, the lock's file opened afresh in it as in that process, and reads the plan below the
+        close, still holding b with every unit landed, as a read does while the close's bolt.land entry has not reached
+        the branch (read.5). The read finishes within a bound, its tidy reading no landing, and records the outcome
+        once and closes b once."""
+        import threading
+        import types
+        monkeypatch.setattr(plan.crew, "crew_argv", lambda fleet, host, *args: ["crew", *args])
+        ran, tidied, read = plan.crew.on_machine, [], []
+
+        def on_machine(fleet, host, argv):  # crew _tidy as its own process on the team's host, waited on to its end
+            if argv[:2] != ["crew", "_tidy"]:
+                return ran(fleet, host, argv)
+            child = threading.Thread(target=lambda: plan.team_tidy(fleet, plan.parser().parse_args(argv[1:])), daemon=True)
+            child.start()
+            child.join()
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        monkeypatch.setattr(plan.crew, "on_machine", on_machine)
+
+        def close(fleet, a, **k):  # crew bolt land's code: its write, then its tidy, which reads the plan below the write
+            self.closed.append((a.bolt, k))
+            plan.tidy_after(fleet, self.T, f"bolt {a.bolt}", (a.bolt, "landed", None, False))
+            self.plan.bolts_.discard(a.bolt)
+        monkeypatch.setattr(plan, "bolt_land", close)
+        team = types.SimpleNamespace(t=dict(self.T, label="wldn", flume=False), owes=lambda: False, hint_standing=lambda bolt: [])
+        monkeypatch.setattr(plan, "at_work", lambda fleet, name: team.t)
+        monkeypatch.setattr(plan, "on_team_host", lambda fleet, t, force=False: team)
+        monkeypatch.setattr(plan, "slot_stages", lambda fleet, t: [])
+        monkeypatch.setattr(plan.crew, "team_bolt", lambda t: None)
+        monkeypatch.setattr(plan, "held_by", lambda pl, name: [types.SimpleNamespace(name=lambda: b, get=lambda key, b=b: pl.bolt(b).get(key))
+                                                               for b in sorted(pl.bolts_)])
+        monkeypatch.setattr(plan, "stages_for", lambda fleet, pl, bolts: types.SimpleNamespace(of=lambda u: {"stage": "landed"}))
+        monkeypatch.setattr(plan, "landing_now", lambda t, b: (f"/k/places/land-{b}", False, False))
+        self.plan.work_of = lambda b: [types.SimpleNamespace(name=lambda: f"{b}-unit")]
+        monkeypatch.setattr(plan, "rebase_and_tidy", lambda fleet, t, landed=None: tidied.append(landed) or [])
+        monkeypatch.setattr(plan, "landing_cards_closed", lambda fleet, t, bolt, outcome, said=None, here=False: None)
+        self.outs = [self.record_of("landed", landed_as=NEW), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]
+        reading = threading.Thread(target=lambda: read.append(plan.landing_read(self.F, "wldn", "b")), daemon=True)
+        reading.start()
+        reading.join(60)  # milliseconds of work: a read still running after a minute waits on its own lock
+        assert not reading.is_alive(), "the landing's read waits on its own lock, held while its close's tidy runs"
+        assert read == [(True, "bolt/b landed on k's main at bbbbbbb: now crew bolt land b.")] and tidied == ["b"]
+        assert [a for a, _, f in self.emitted if a == "bolt.submit"] == ["bolt.submit"] and [b for b, _ in self.closed] == ["b"]
+
 
 class TestWhoReads:
     """Decision 3: the team's read runs the landing's read of a bolt whose landing worktree stands with no waiter alive,

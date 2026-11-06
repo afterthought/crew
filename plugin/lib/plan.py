@@ -5244,7 +5244,10 @@ def landing_read(fleet, label, bolt):
     lock = team_state(t) / "landings" / f"{bolt}.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)
     with open(lock, "w") as held:
-        fcntl.flock(held, fcntl.LOCK_EX)  # one read of a bolt at a time on its team's host, so an outcome is recorded once
+        # One read of a bolt at a time on its team's host, so an outcome is recorded once. Nothing run under it waits on
+        # a command that reads a landing, so no holder waits on itself: the close's tidy, crew _tidy --landed, reads none
+        # (reap).
+        fcntl.flock(held, fcntl.LOCK_EX)
         fetch(*state_of(fleet, label), fresh=True)  # what a read before this one recorded and closed, which it waited on
         pl = plan_of(fleet, label)
         pl is not None or fail(f"crew can't read bolt {bolt}'s landing: {label}/main could not be read")
@@ -12296,9 +12299,13 @@ def reap(fleet, team, landed=None, freed=None):
     """A team's read on its host (teams.1, record.5): the end of each stage that delivered with nobody waiting recorded,
     late; each slot freed whose unit or fix has merged into its bolt, been dropped from the plan or left the team's
     bolt, once its agent is not working, a slot lent to a fix given back to the work it was lent from (crew.reaped);
-    the landing of each bolt the team holds that may have an outcome or a close nothing recorded read (reap_landings);
-    then each dependent whose After unit has merged rebased, and the worktrees whose work is over removed, at a landing
-    (landed, the bolt) the bolt's branch deleted by sluice after them (rebase_and_tidy). Each slot.free, the read's
+    the landing of each bolt the team holds that may have an outcome or a close nothing recorded read (reap_landings),
+    but by the tidy a landing's close asks for (landed, the bolt), which reads none: crew bolt land waits on that tidy,
+    and a read's close of a bolt runs under the bolt's landing lock (landing_read), so a landing read there would wait
+    on a lock its own caller holds, its bolt's when the plan is read below the close or another bolt's whose read
+    waits on its own tidy in turn; that bolt was read by the act that closed it, and the team's next read reads the
+    rest; then each dependent whose After unit has merged rebased, and the worktrees whose work is over removed, at a
+    landing the bolt's branch deleted by sluice after them (rebase_and_tidy). Each slot.free, the read's
     own and those its command held back (freed), is written once the tidy has run, naming the place it removed of the
     slot's work (freed_recorded, plan.9)."""
     t, freed, removed = team.t, [] if freed is None else freed, []
@@ -12320,7 +12327,8 @@ def reap(fleet, team, landed=None, freed=None):
                     continue
             if said:
                 print(said)
-        reap_landings(fleet, t)
+        if not landed:  # a landing's tidy reads no landing: its caller may hold a landing's lock (landing_read)
+            reap_landings(fleet, t)
         removed = rebase_and_tidy(fleet, t, landed)
     finally:
         freed_recorded(freed, removed)
@@ -12897,7 +12905,8 @@ def carried_units(fleet, t, slotted):
 def team_tidy(fleet, a):
     """crew _tidy <team> [--landed <bolt> --outcome <words> [--said <words>] [--here]], on the team's host: the team's
     read (reap), which a plan
-    write that ends work asks for there, and crew rebuild runs once its agents are ended; the conductor's and ops's
+    write that ends work asks for there, and crew rebuild runs once its agents are ended, reading no landing after a
+    landing (--landed), whose close may hold a landing's lock while it waits on this; the conductor's and ops's
     panes told the branch they work for now, none once the bolt has landed or been dropped, and each whose session
     carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing, the bolt's branch
     deleted by sluice once the landing's place is gone (land_delete, plan.19), and its card closed there with the words
