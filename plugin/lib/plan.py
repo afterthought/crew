@@ -16254,9 +16254,10 @@ def landing_write(fleet, f, folder):
     """Write a landing's reading afresh into folder, its head's, on the host of the team holding the bolt, from the
     landing's facts (land_facts): each unit's change as the kit holds it at the bolt's head, open or archived
     (change_held), and the bolt's diff against main from where it last met main (base) to its head, less
-    openspec/changes/, whose Markdown the units' files show whole, named and ordered by landing_reading. Every file is
-    read before any is written: what crew can't read refuses, naming it, and nothing is written (read.1). Returns the
-    files' paths, in order."""
+    openspec/changes/, whose Markdown the units' files show whole, named and ordered by landing_reading, the diff in as
+    many files as plannotator's limit for one file asks (diff_parts), each written as the UTF-8 it was measured in.
+    Every file is read before any is written: what crew can't read refuses, naming it, and nothing is written (read.1).
+    Returns the files' paths, in order."""
     t = crew.with_kit(fleet["teams"][f["team"]], f["kit"])
     main, head = t["kit"]["main"], f["head"]
     changes = []
@@ -16266,13 +16267,14 @@ def landing_write(fleet, f, folder):
         held or fail(f"unit {u}'s change on bolt {f['bolt']} at {head[:7]} holds no Markdown file to read")
         changes.append((u, held))
     _, diff = kit_git(fleet, t, main, "diff", "--no-color", "--no-ext-diff", f["base"], head, "--", ".", ":(exclude)openspec/changes")
-    out = landing_reading(f["bolt"], f["kit"], head, f["units"], f.get("chores") or [], changes, diff + "\n" if diff else "")
+    whole = dict(repo=t["kit"]["repo"], base=f["base"], main=main, host=t["machine"])
+    out = landing_reading(f["bolt"], f["kit"], head, f["units"], f.get("chores") or [], changes, diff + "\n" if diff else "", whole)
     folder.mkdir(parents=True, exist_ok=True)
     for old in folder.iterdir():
         if old.is_file():
             old.unlink()
     for name, text in out:
-        (folder / name).write_text(text)
+        (folder / name).write_text(text, encoding="utf-8")
     return [str(folder / name) for name, _ in out]
 
 
@@ -16355,29 +16357,98 @@ def batch_folder_write(fleet, label, n, units):
     return [str(folder / name) for name, _ in out]
 
 
-def landing_reading(bolt, kit, head, units, chores, changes, diff):
+def landing_reading(bolt, kit, head, units, chores, changes, diff, whole):
     """A landing's reading, the files its one session opens as one review, in order, each (name, text) (card-sessions,
     briefs.9): 00-<bolt>.md, a page naming the bolt, its kit and its head, the units and chores that land, one a line,
     and saying that the reading lands nothing, approving the card being the word to land, and that what the user sends
     from it reaches the bolt's conductor as notes on the card, a note naming a defect holding the landing for a fix;
     then for the k-th unit each Markdown file of its change as the head holds it, named <kk>-<unit>-<its path under the
-    change, / as ->, in a change's reading order (change_order), as a batch's folder names them; then
-    <nn>-<bolt>-diff.txt, the bolt's diff against main, numbered after the last unit, as text, which plannotator opens
-    beside Markdown in one review where it refuses a .diff (plannotator 0.28.23). changes: [(unit, [(path under the
-    change, text)])] in the plan's order; diff: the diff's text."""
-    cover = "\n".join([f"# Bolt {bolt}, landing on {kit}'s main", "", f"What lands, at its head {head[:7]}:", ""]
-                      + [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores]
-                      + ["", "This reading lands nothing: approving the landing card is the word to land, and its Approve "
-                             "here lands nothing.", "",
-                         "What you send from it reaches the bolt's conductor as notes on the landing card, and a note "
-                         "naming a defect holds the landing for a fix.", "",
-                         "After this page come each unit's change as the bolt holds it, then what the bolt changes against "
-                         "main, from where it last met main to its head, less its change folders, shown whole before it."])
-    out = [(f"00-{bolt}.md", cover + "\n")]
+    change, / as ->, in a change's reading order (change_order), as a batch's folder names them; then the bolt's diff
+    against main, numbered after the last unit, as text, which plannotator opens beside Markdown in one review where it
+    refuses a .diff (plannotator 0.28.23): <nn>-<bolt>-diff.txt, or, when it passes the most plannotator opens in one
+    file, its parts (diff_parts), <nn>-<bolt>-diff-<k>-of-<m>.txt, the page saying how many. A file whose own change
+    passes that most is in no part: the page names each such file with its size, how many there are, and where to read
+    them whole, GitHub's compare view of the bolt's base against its head and the git command on the team's host
+    (sluice core.43's shape for a request's commits past the forge's limit). changes: [(unit, [(path under the change,
+    text)])] in the plan's order; diff: the diff's text; whole: where the diff is read whole, the kit's GitHub repo
+    (owner/name), the commit the diff is from (base), and the kit's main checkout and host."""
+    parts, past = diff_parts(diff) if diff.strip() else (["The bolt changes nothing against main outside its change folders.\n"], [])
+    lines = [f"# Bolt {bolt}, landing on {kit}'s main", "", f"What lands, at its head {head[:7]}:", ""]
+    lines += [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores]
+    lines += ["", "This reading lands nothing: approving the landing card is the word to land, and its Approve here lands "
+                  "nothing.", "",
+              "What you send from it reaches the bolt's conductor as notes on the landing card, and a note naming a "
+              "defect holds the landing for a fix.", "",
+              "After this page come each unit's change as the bolt holds it, then what the bolt changes against main, "
+              "from where it last met main to its head, less its change folders, shown whole before it."]
+    if len(parts) > 1:
+        lines += ["", f"That diff comes in {len(parts)} files, each holding whole files' changes in git's order, since "
+                      f"plannotator opens no file over {megabytes(PLANNOTATOR_MOST)}."]
+    if past:
+        url = f"https://github.com/{whole['repo']}/compare/{whole['base']}...{head}"
+        lines += ["", f"Left out of this reading, {plural_of(len(past), 'file', 'files')} whose change alone passes the "
+                      f"{megabytes(PLANNOTATOR_MOST)} plannotator opens in one file, each named in its place in the diff:", ""]
+        lines += [f"- `{p}`, {megabytes(n)}" for p, n in past]
+        lines += ["", f"Read {'it' if len(past) == 1 else 'them'} whole in GitHub's compare view of the bolt against main, "
+                      f"{url}, or on {whole['host']} with `git -C {whole['main']} diff {whole['base']} {head} -- <path>`."]
+    out = [(f"00-{bolt}.md", "\n".join(lines) + "\n")]
     for k, (u, files) in enumerate(changes, 1):
         out += [(f"{k:02d}-{u}-{p.replace('/', '-')}", text) for p, text in sorted(files, key=lambda f: change_order(f[0]))]
-    said = diff if diff.strip() else "The bolt changes nothing against main outside its change folders.\n"
-    return out + [(f"{len(changes) + 1:02d}-{bolt}-diff.txt", said)]
+    n = len(changes) + 1
+    if len(parts) == 1:
+        return out + [(f"{n:02d}-{bolt}-diff.txt", parts[0])]
+    return out + [(f"{n:02d}-{bolt}-diff-{k}-of-{len(parts)}.txt", text) for k, text in enumerate(parts, 1)]
+
+
+# The most bytes plannotator opens in one file: a file one byte longer, by its size on disk, is refused with "File too
+# large to annotate (max 2MB)", and with it the whole review that names it, while a review of several files has no cap
+# on them together (plannotator 0.28.48, MAX_ANNOTATABLE_FILE_BYTES in resolveAnnotateBundleFiles; read 2026-11-05 on
+# deneb, a file of exactly this many bytes opening, one of a byte more refused, and five of 7.8 MB together opening,
+# each served whole).
+PLANNOTATOR_MOST = 2 * 1024 * 1024
+
+
+def megabytes(n):
+    """A count of bytes in MB as plannotator counts them, 2**20 to one, rounded up to a tenth, so a size past its 2 MB
+    never reads 2.0; a whole count with no tenth."""
+    tenths = -(-n * 10 // 2**20)
+    return f"{tenths // 10} MB" if tenths % 10 == 0 else f"{tenths / 10:.1f} MB"
+
+
+def diff_path(section):
+    """The file a section of git's diff is of, from its header, `diff --git a/<path> b/<path>`: the path when both
+    sides name it alike, else the two sides as git wrote them, as for a rename or a path git quotes."""
+    sides = section.split("\n", 1)[0].removeprefix("diff --git ")
+    p = sides[2:2 + (len(sides) - 5) // 2]
+    return p if sides == f"a/{p} b/{p}" else sides
+
+
+def diff_parts(diff, most=PLANNOTATOR_MOST):
+    """A bolt's diff as its landing's reading holds it, so plannotator opens every file of it: (parts, past). parts, the
+    texts of its files, git's sections, one to a file changed, each whole and in git's order, as many to a part as keep
+    it within most bytes as UTF-8, a new part begun where the next section would pass it. past, [(path, bytes)] in git's
+    order, each file whose own section passes most, which no part can hold whole and none holds cut (sluice core.43: an
+    item is never cut within itself to fit a limit): a line in its place says so, naming it and its size, and the
+    reading's first page says where to read it whole (landing_reading)."""
+    parts, past, part, size = [], [], [], 0
+    for section in re.split(r"(?m)^(?=diff --git )", diff):
+        if not section:
+            continue
+        n = len(section.encode())
+        if n > most:
+            path = diff_path(section)
+            past.append((path, n))
+            section = (f"{path}: its change, {megabytes(n)}, passes the {megabytes(most)} plannotator opens in one file, "
+                       "so it is not in this reading; its first page says where to read it whole.\n")
+            n = len(section.encode())
+        if part and size + n > most:
+            parts.append("".join(part))
+            part, size = [], 0
+        part.append(section)
+        size += n
+    if part:
+        parts.append("".join(part))
+    return parts, past
 
 
 def forward_card(fleet, t, a, label):
