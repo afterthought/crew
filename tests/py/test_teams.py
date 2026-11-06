@@ -417,6 +417,69 @@ class TestTeamGreetings:
         assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 255, "") == (
             "swc-1's host did not answer: swc-1-conductor and swc-1-ops carry bolt/ssh-fix once next started")
 
+    def test_the_team_host_says_the_conductor_is_told_once_idle_or_that_it_is_not_up(self):
+        """A give's notice is handed to its team's host whatever the conductor is doing (teams.7, bolt-teams "A give's
+        notice reaches its conductor whatever it is doing"); one herdr reads not up is said and recorded refused."""
+        assert plan.notice_handed_said("swb-2-conductor", "swb-2", "b", "idle", None) == (
+            "swb-2-conductor is told of b once it is idle: at once if it is, else at the end of its turn")
+        assert plan.notice_handed_said("swb-2-conductor", "swb-2", "b", "working", None).startswith("swb-2-conductor is told of b once")
+        assert plan.notice_handed_said("swb-2-conductor", "swb-2", "b", None, None) == (
+            "swb-2-conductor is not up, so it was not told of b: crew up swb-2 starts and greets it")
+        assert plan.notice_handed_said("swb-2-conductor", "swb-2", "b", None, "herdr did not answer").endswith(
+            "at the end of its turn (crew can't read it now: herdr did not answer)")
+
+    def test_a_give_whose_team_host_could_not_take_the_notice_says_so_and_how_the_conductor_is_told(self):
+        assert plan.notice_unhanded("swb-2", "b", 0, "swb-2-conductor is told of b once it is idle") is None
+        assert plan.notice_unhanded("swb-2", "b", 255, "") == (
+            "swb-2-conductor was not told of b, since swb-2's host did not answer; "
+            "crew tell swb-2-conductor \"Your team now holds the bolt b.\" tells it")
+        assert "since swb-2's host could not take it: crew: unknown command _notice;" in plan.notice_unhanded(
+            "swb-2", "b", 2, "usage: crew ...\ncrew: unknown command _notice")
+        assert "since swb-2's host could not take it: exit 1;" in plan.notice_unhanded("swb-2", "b", 1, "")
+
+    GIVE = {"Act": "bolt.give", "On": ["bolt/b", "team/swb-2"], "At": "2026-11-06T21:02:24Z"}
+    NOT_UP = {"Act": "bolt.notice", "On": plan.notice_on("swb-2", "b"), "At": "2026-11-06T21:02:30Z",
+              "Refused": "swb-2-conductor is not up, so it was not told of b: crew up swb-2 starts and greets it"}
+
+    def test_a_conductor_is_untold_from_a_refused_notice_until_a_notice_or_a_greeting_tells_it(self):
+        assert plan.notice_on("swb-2", "b") == ["bolt/b", "team/swb-2", "agent/swb-2-conductor"]
+        assert plan.notice_unsent([self.GIVE], "b", "swb-2") is None
+        assert plan.notice_unsent([self.GIVE, self.NOT_UP], "b", "swb-2") == {"words": self.NOT_UP["Refused"], "at": "2026-11-06T21:02:30Z"}
+        told = {"Act": "bolt.notice", "On": plan.notice_on("swb-2", "b"), "At": "2026-11-06T21:05:00Z"}
+        assert plan.notice_unsent([self.GIVE, self.NOT_UP, told], "b", "swb-2") is None
+        greeted = {"Act": "greet", "On": ["agent/swb-2-conductor", "team/swb-2"], "At": "2026-11-06T21:10:00Z"}
+        assert plan.notice_unsent([self.GIVE, self.NOT_UP, greeted], "b", "swb-2") is None
+        other = {"Act": "greet", "On": ["agent/swb-1-conductor", "team/swb-1"], "At": "2026-11-06T21:10:00Z"}
+        assert plan.notice_unsent([self.GIVE, self.NOT_UP, other], "b", "swb-2")["words"] == self.NOT_UP["Refused"]
+        assert plan.notice_unsent([self.NOT_UP, self.GIVE], "b", "swb-2") is None  # a give again starts afresh
+        assert plan.notice_unsent([self.GIVE, self.NOT_UP], "c", "swb-2") is None
+
+    def test_the_rail_names_each_bolt_whose_conductor_was_not_told_and_none_given_through_flume(self):
+        class Bolt(dict):
+            def name(self):
+                return self["name"]
+
+        class Plan:
+            def __init__(self, *bolts):
+                self.bs = [Bolt(b) for b in bolts]
+
+            def bolts(self):
+                return self.bs
+        found = [("wldn", None, None, Plan({"name": "b", "Team": "swb-2"}, {"name": "c", "Team": "swb-1", "Path": "flume"},
+                                           {"name": "d"})), ("other", None, None, None)]
+        assert plan.untold_gives(found, {"wldn": [self.GIVE, self.NOT_UP]}) == [
+            ("wldn", "b", "swb-2", {"words": self.NOT_UP["Refused"], "at": "2026-11-06T21:02:30Z"})]
+        assert plan.untold_gives(found, {}) == []
+
+    def test_a_bolts_head_line_says_its_conductor_was_not_told_and_draws_the_eye(self):
+        import board
+        b = {"state": "active", "record": {"untold": "swb-2-conductor is not up"}}
+        assert board.head_said(b) == "its conductor was not told of its give: swb-2-conductor is not up"
+        assert board.head_said(dict(b, state="waits")) == "waits to land; its conductor was not told of its give: swb-2-conductor is not up"
+        assert board.needs_eye(b) and not board.needs_eye({"state": "active", "record": None})
+        assert board.attention_text({"what": "untold", "name": "kept-work", "why": "swb-2-conductor was not told of its give: x"}) == (
+            "bolt kept-work: swb-2-conductor was not told of its give: x")
+
     def test_ops_of_a_team_holding_two_bolts_is_told_the_one_it_builds_and_the_one_waiting(self):
         assert crew.ops_greeting("swc-1", "ssh-fix", waiting="doctor-rows").startswith(
             "You are swc-1's ops; your team builds the bolt ssh-fix. Bolt doctor-rows waits to land. Nothing is asked of you now")

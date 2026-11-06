@@ -126,7 +126,7 @@ A bolt the user left on its kit's landings card, or stopped in their words to ma
 - **THEN** `z`'s line says it takes main first, until its team's take-main fix moves its head
 
 ### Requirement: A bolt's land line shows its age and who held its time
-Each bolt's line on its kit's landings row SHALL end with the bolt's age since its newest give, the minutes of it each holder held, and who holds it now and since when. It SHALL read them as the board's head line does, by the same rule and from the same read, so the rail and the board never differ for one bolt. A bolt still being built has no line on the rail and is read on the board. The rail SHALL raise no card and add no row because of a bolt's age.
+Each bolt's line on its kit's landings row SHALL end with the bolt's age since its newest give, the minutes of it each holder held, and who holds it now and since when. It SHALL read them as the board's head line does, by the same rule and from the same read, so the rail and the board never differ for one bolt. A bolt still being built has no line on the rail, but the one that says its conductor was not told of its give, and is read on the board. The rail SHALL raise no card and add no row because of a bolt's age.
 
 #### Scenario: A bolt waiting on the user's yes
 - **WHEN** crew's bolt `b`, given to crw-6 five hours ago, has every unit merged, and its kit's landings card has been open for two hours
@@ -149,3 +149,18 @@ A fix of the kit's main whose code has delivered and whose submission waits held
 #### Scenario: A fix of main waits beside a bolt
 - **WHEN** `main--a-test-reads-its-fixture`'s code has delivered and its submission waits held
 - **THEN** crew's landings row has a line `fix main--a-test-reads-its-fixture` with the failure's first line, and names its `--send` command
+
+### Requirement: A bolt whose conductor was not told of its give is said after the groups
+After its groups, `crew rail` SHALL list each bolt a team holds on today's path whose newest refused `bolt.notice` since its newest give has not been followed by a notice that told its conductor or a greeting of it. Each line SHALL give when, the bolt, its partition, the team and crew's words, which say how the conductor is told. It SHALL be no row of the four groups and raise no card.
+
+#### Scenario: A conductor not up
+- **WHEN** `crew bolt give swb-2 kept-work` finds swb-2-conductor not up
+- **THEN** `crew rail` lists `kept-work (wldn), given to swb-2:` with the words that it is not up and that `crew up swb-2` starts and greets it, under "gives whose conductor was not told:"
+
+#### Scenario: Told since
+- **WHEN** `crew up swb-2` then starts swb-2-conductor and greets it
+- **THEN** `crew rail` no longer lists `kept-work`
+
+#### Scenario: Dropped
+- **WHEN** the planner drops `kept-work` before swb-2-conductor is told
+- **THEN** `crew rail` no longer lists `kept-work`

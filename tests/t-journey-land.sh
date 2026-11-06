@@ -18,7 +18,8 @@
 # its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's read
 # finds not running and its crew card session then starts, changing the card to carry its link, until the landing
 # ends it; the bolt read proven, its team
-# is given its next bolt beside it and refused a third (teams.16); on the user's send a landing whose checks the host
+# is given its next bolt beside it and refused a third (teams.16), its idle conductor, running background work of its
+# own, told of the give at once and restarted once that work is over (teams.7); on the user's send a landing whose checks the host
 # could not run takes up the place a stopped landing left on the bolt's branch, levels the host's copy, which the
 # fix's merge sluice landed on GitHub left behind, to GitHub's head first and says so (plan.19), and is stopped, nothing
 # of the bolt's, recorded with no refusal, its row keeping its box, the card the user answered left as it is and crew
@@ -33,7 +34,8 @@
 # in main-level ops's name, though the waiter's read and the submission's own each tried it, and its head line on the
 # board says it landed on main and was not closed, in those words; once the planner drops the chore, the team's read
 # that follows closes it, its branch, holding a commit main lacks after the landing, kept on GitHub, sluice refusing
-# its delete, and on the host, named, its mark unset and the keeping recorded, and the team's next read leaves it; a
+# its delete, and on the host, named, its mark unset and the keeping recorded, and the team's next read leaves it, the
+# give of that bolt to a team whose conductor is not up saying it was not told, and the rail saying so while it holds it; a
 # landing outlives the crew bolt submit that queued it (plan.21): killed once sluice has queued the landing, its waiter
 # on the team's host calls sluice wait again while sluice is undecided, then reads the landing from sluice's record,
 # recording it landed and closing the bolt, and with the waiter stopped too, the conductor's next command reads and
@@ -291,8 +293,14 @@ ok "the conductor's read of its bolt's row with no reading says so, and its crew
 unset CREW_AGENT
 
 # The bolt reads proven, so its team is free for its next bolt while it waits to land (teams.16): the give hands swb-1
-# ssh-fix beside it, and a third is refused, naming the bolt whose landing frees the team.
-: > "$CREW_TEST_LOG"
+# ssh-fix beside it, and a third is refused, naming the bolt whose landing frees the team. Its conductor, idle, runs
+# background work of its own, as wldn's swb-2-conductor did when it was given a bolt on 2026-11-06 and never told.
+ctr=$(ls "$(home_of $box)"/.claude*/projects/*/"sid-$(pane swb-1-conductor | tr : -).jsonl" | head -1)
+[[ -f $ctr ]] || fail "swb-1-conductor has no transcript to give background work"
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tu-own","name":"Bash","input":{"command":"crew tell swb-1-ops \"read the row\"","run_in_background":true}}]}}' \
+  '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu-own"}]},"toolUseResult":{"backgroundTaskId":"own-1"}}' >> "$ctr"
+log=$(home_of $box)/.local/state/crew/renew/swb-1-conductor.log
+: > "$log"; : > "$CREW_TEST_LOG"
 expect_ok crew bolt give swb-1
 has "$out" "swb-1 holds ssh-fix: sluice made bolt/ssh-fix on GitHub (origin) from switchboard-kit's main at"
 given=$out
@@ -304,6 +312,17 @@ has "$out" "swb-1 builds ssh-fix; tenant-environments waits to land"
 crew bolt new third-one "The bolt after." --repo switchboard-kit >/dev/null
 expect_fail "swb-1 holds tenant-environments and ssh-fix; tenant-environments waits to land, and its landing frees swb-1" crew bolt give swb-1
 ok "a team whose bolt reads proven is given its next bolt beside it, and a third is refused, naming the bolt whose landing frees the team"
+
+# The give's notice reaches the conductor at once though its restart waits on its background work (teams.7): crew
+# tells it both bolts, records it told, and restarts it only once that work is over.
+has "$given" "swb-1-conductor is told of ssh-fix once it is idle: at once if it is, else at the end of its turn"
+until_ok grep -q "swb-1-conductor is told of ssh-fix" "$log" || fail "swb-1-conductor was not told of its give: $(cat "$log" 2>/dev/null)"
+told=$(calls | grep "^$box wldn-1 agent prompt swb-1-conductor '\[crew\] Your team now builds the bolt ssh-fix. Bolt tenant-environments waits to land")
+has "$told" "crew starts you again at a later stop, once nothing of your own runs in the background"
+eq "$(field $box bolt.notice On bolt/ssh-fix) | $(field $box bolt.notice Refused bolt/ssh-fix)" "bolt/ssh-fix team/swb-1 agent/swb-1-conductor | "
+grep -q "swb-1-conductor is restarted on crew" "$log" && fail "swb-1-conductor was restarted over its own background work"
+printf '%s\n' '{"type":"user","message":{"content":"<task-notification><task-id>own-1</task-id><status>completed</status></task-notification>"}}' >> "$ctr"
+ok "a give beside a waiting bolt tells its idle conductor at once, both bolts and the waiting one's row, while its restart waits on background work of its own"
 
 # The give restarts neither the conductor, which waits on its bolt's reading, nor ops at once: each starts again at its
 # next stop, once idle, the conductor fresh and greeted with both bolts and the waiting one's row on the kit's card.
@@ -680,7 +699,13 @@ ok "dropping a held bolt removes its units' places and has sluice delete its bra
 # marked dropped, named as the drop's unmerged work in sluice's words and recorded once; the team's next read leaves it,
 # saying nothing, until a landing brings its tip into main, when the next read has sluice delete it.
 crew bolt new kept-work "Work dropped before it landed." --repo switchboard-kit >/dev/null
-crew bolt give swb-2 kept-work >/dev/null
+# swb-2's conductor is not up: the give says it was not told, and the rail says so until something tells it (teams.7).
+expect_ok crew bolt give swb-2 kept-work
+untold="swb-2-conductor is not up, so it was not told of kept-work: crew up swb-2 starts and greets it"
+has "$out" "$untold"
+expect_ok crew rail --label wldn
+has "$out" "gives whose conductor was not told:"
+has "$out" "kept-work (wldn), given to swb-2: $untold"
 git -C "$k" worktree add -q "$T/kept-work" bolt/kept-work && echo kept > "$T/kept-work/kept.txt" &&
   commit_all "$T/kept-work" "feat: work merged into the bolt" && git -C "$k" worktree remove "$T/kept-work" &&
   git -C "$k" push -q origin bolt/kept-work || fail "the bolt took no merge"  # as sluice pushes a landing on a bolt on GitHub
@@ -693,8 +718,10 @@ eq "$(field $box branch.kept Head bolt/kept-work team/swb-2) | $(field $box bran
   "${tip:0:7} | bolt kept-work was dropped, and main does not hold its tip (sluice)"
 expect_ok crew status swb-2
 lacks "$out" "bolt/kept-work"
-eq "$(record_of $box | grep -c "^On: bolt/kept-work")" "1"
-ok "a dropped bolt holding a merge main lacks is kept on GitHub and the host, marked, named in sluice's words and recorded once, and the next read leaves it"
+eq "$(record_of $box | grep -A1 "^Act: branch.kept" | grep -c "^On: bolt/kept-work")" "1"
+expect_ok crew rail --label wldn
+lacks "$out" "kept-work (wldn), given to swb-2"
+ok "a give to a team whose conductor is not up says it was not told and the rail says so while it holds the bolt; a dropped bolt holding a merge main lacks is kept on GitHub and the host, marked, named in sluice's words and recorded once, and the next read leaves it"
 git -C "$k" merge -q --no-edit bolt/kept-work && push "$k"  # a landing that carried its work
 expect_ok crew status swb-2
 has "$out" "bolt/kept-work is removed: main now holds bolt kept-work's tip, and sluice deleted it from GitHub at ${tip:0:7}"
