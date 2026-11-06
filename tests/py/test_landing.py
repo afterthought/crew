@@ -10,6 +10,7 @@ import datetime
 import io
 import json
 import pathlib
+import re
 
 import pytest
 
@@ -18,6 +19,7 @@ from facts import START, at
 import plan
 
 OLD, NEW, TIP = "a" * 40, "b" * 40, "c" * 40
+WHOLE = dict(repo="o/switchboard-kit", base="abc1234" + "0" * 33, main="/kit/main", host="box")  # where a bolt's diff is read whole
 SIGNAL = "sluice: releasing try/abc1234: its command failed"
 SLUICE = pathlib.Path(__file__).parent / "sluice-0.36.4"
 STATUS = json.loads((SLUICE / "status-all.json").read_text())
@@ -1906,20 +1908,20 @@ class TestTheLandingsPoint:
         a = [("tasks.md", "a's tasks"), ("specs/x/spec.md", "a's spec"), ("proposal.md", "a's proposal"), ("design.md", "a's design")]
         b = [("proposal.md", "b's proposal")]
         files = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, ["a", "b"], ["c"], [("a", a), ("b", b)],
-                                     "diff --git a/x b/x\n")
+                                     "diff --git a/x b/x\n", WHOLE)
         assert [n for n, _ in files] == ["00-y.md", "01-a-proposal.md", "01-a-design.md", "01-a-specs-x-spec.md", "01-a-tasks.md",
                                          "02-b-proposal.md", "03-y-diff.txt"]
         assert files[1][1] == "a's proposal" and files[-1][1] == "diff --git a/x b/x\n"
 
     def test_a_bolt_of_chores_alone_reads_as_its_cover_and_its_diff(self):
-        files = plan.landing_reading("y", "k", "def5678", [], ["c", "d"], [], "diff --git a/x b/x\n")
+        files = plan.landing_reading("y", "k", "def5678", [], ["c", "d"], [], "diff --git a/x b/x\n", WHOLE)
         assert [n for n, _ in files] == ["00-y.md", "01-y-diff.txt"]
-        assert plan.landing_reading("y", "k", "def5678", [], ["c"], [], "")[-1][1] == (
+        assert plan.landing_reading("y", "k", "def5678", [], ["c"], [], "", WHOLE)[-1][1] == (
             "The bolt changes nothing against main outside its change folders.\n")
 
     def test_the_cover_names_every_unit_and_chore_and_says_the_reading_lands_nothing(self):
         cover = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, ["a", "b"], ["c"],
-                                     [("a", [("proposal.md", "")]), ("b", [("proposal.md", "")])], "")[0][1]
+                                     [("a", [("proposal.md", "")]), ("b", [("proposal.md", "")])], "", WHOLE)[0][1]
         assert cover.startswith("# Bolt y, landing on switchboard-kit's main\n\nWhat lands, at its head def5678:\n\n- a\n- b\n- c (chore)\n")
         assert "This reading lands nothing: approving the landing card is the word to land" in cover
         assert "reaches the bolt's conductor as notes on the landing card, and a note naming a defect holds the landing for a fix" in cover
@@ -1931,7 +1933,7 @@ class TestTheLandingsPoint:
         asked = []
         monkeypatch.setattr(plan, "change_held", lambda main, ref, u: asked.append((main, ref, u)) or held.get(u))
         monkeypatch.setattr(plan, "kit_git", lambda fleet, t, where, *args: asked.append((where, *args)) or (0, "diff --git a/x b/x"))
-        fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main"}}}}
+        fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main", "repo": "o/switchboard-kit"}}}}
         f = dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], head="def5678" + "0" * 33, base="abc1234",
                  team="swb-1", host="box")
         folder = tmp_path / "def5678"
@@ -1952,6 +1954,84 @@ class TestTheLandingsPoint:
         with pytest.raises(plan.Refusal, match="unit a's change is not on bolt y at def5678, open or archived, in /kit/main on box"):
             plan.landing_write(fleet, f, tmp_path / "def5678")
         assert not (tmp_path / "def5678").exists()
+
+    @staticmethod
+    def section(path, size):
+        """git's diff of one new file, path, about size bytes long."""
+        head = f"diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1 @@\n"
+        return head + ("+" + "x" * 98 + "\n") * ((size - len(head)) // 100)
+
+    def test_a_diff_past_plannotators_limit_is_read_in_parts_each_of_whole_files_in_gits_order(self):
+        """card-sessions "A diff past plannotator's limit for one file" (wldn's switchboard-kit bolt
+        a-deploy-row-follows-its-stack-to-the-end, whose reading plannotator refused on 2026-11-06: "File too large to
+        annotate (max 2MB)"): five files' changes of 0.9 MB each, 4.5 MB in all, come in three parts, none over the
+        most plannotator opens, each holding whole files' changes, and nothing is left out."""
+        mb = 1024 * 1024
+        diff = "".join(self.section(f"src/f{i}.ts", int(0.9 * mb)) for i in range(5))
+        files = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, [], ["c"], [], diff, WHOLE)
+        assert [n for n, _ in files] == ["00-y.md", "01-y-diff-1-of-3.txt", "01-y-diff-2-of-3.txt", "01-y-diff-3-of-3.txt"]
+        parts = [text for _, text in files[1:]]
+        assert all(len(text.encode()) <= plan.PLANNOTATOR_MOST for text in parts)
+        assert "".join(parts) == diff
+        assert [len(re.findall(r"(?m)^diff --git ", text)) for text in parts] == [2, 2, 1]
+        assert "That diff comes in 3 files, each holding whole files' changes in git's order, since plannotator opens no file over 2 MB." in files[0][1]
+        assert "Left out" not in files[0][1]
+
+    def test_a_file_whose_own_change_passes_the_limit_is_named_in_its_place_and_on_the_page_with_where_to_read_it(self):
+        """card-sessions "One file's change past plannotator's limit", as sluice core.43 names a request's commits past
+        the forge's limit: the file's change is cut nowhere, a line stands in its place, and the page names it, its
+        size, how many and where to read it whole; every other file's change is in the reading whole."""
+        mb = 1024 * 1024
+        small, big = self.section("README.md", 4000), self.section("vendor/bundle.js", int(2.5 * mb))
+        files = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, [], ["c"], [], small + big + small, WHOLE)
+        assert [n for n, _ in files] == ["00-y.md", "01-y-diff.txt"]
+        said = files[1][1]
+        assert said.startswith(small) and said.endswith(small)
+        assert said[len(small):-len(small)] == ("vendor/bundle.js: its change, 2.5 MB, passes the 2 MB plannotator opens in one "
+                                                "file, so it is not in this reading; its first page says where to read it whole.\n")
+        cover = files[0][1]
+        assert "That diff comes in" not in cover
+        assert ("Left out of this reading, 1 file whose change alone passes the 2 MB plannotator opens in one file, each "
+                "named in its place in the diff:\n\n- `vendor/bundle.js`, 2.5 MB\n") in cover
+        assert (f"Read it whole in GitHub's compare view of the bolt against main, "
+                f"https://github.com/o/switchboard-kit/compare/{WHOLE['base']}...def5678{'0' * 33}, or on box with "
+                f"`git -C /kit/main diff {WHOLE['base']} def5678{'0' * 33} -- <path>`.") in cover
+
+    def test_a_diff_of_exactly_the_limit_is_one_file_and_one_byte_more_two(self):
+        """plannotator 0.28.48 opens a file of exactly its most and refuses one a byte longer."""
+        one = self.section("a.txt", 1024 * 1024)
+        head = "diff --git a/b.txt b/b.txt\n+"
+        fits = head + "x" * (plan.PLANNOTATOR_MOST - len(one) - len(head) - 1) + "\n"
+        assert len((one + fits).encode()) == plan.PLANNOTATOR_MOST
+        assert plan.diff_parts(one + fits) == ([one + fits], [])
+        passes = head + "x" * (plan.PLANNOTATOR_MOST - len(one) - len(head)) + "\n"
+        assert plan.diff_parts(one + passes) == ([one, passes], [])
+
+    def test_a_file_is_named_by_its_path_or_by_both_sides_as_git_wrote_them(self):
+        assert plan.diff_path("diff --git a/src/x y.ts b/src/x y.ts\nindex 1..2\n") == "src/x y.ts"
+        assert plan.diff_path("diff --git a/old.ts b/new.ts\nrename from old.ts\n") == "a/old.ts b/new.ts"
+        assert plan.diff_path('diff --git "a/caf\\303\\251" "b/caf\\303\\251"\n') == '"a/caf\\303\\251" "b/caf\\303\\251"'
+
+    def test_a_size_is_said_in_plannotators_mb_rounded_up_so_one_past_its_most_never_reads_as_it(self):
+        assert [plan.megabytes(n) for n in (plan.PLANNOTATOR_MOST, plan.PLANNOTATOR_MOST + 1, 2_621_440, 1)] == [
+            "2 MB", "2.1 MB", "2.5 MB", "0.1 MB"]
+
+    def test_a_landings_reading_past_the_limit_is_written_every_file_within_it(self, monkeypatch, tmp_path):
+        """The case the box met: a bolt whose diff passes plannotator's limit is written as files plannotator opens,
+        each within its most bytes on disk, so its reading opens."""
+        mb = 1024 * 1024
+        diff = self.section("src/a.ts", int(1.5 * mb)) + self.section("src/b.ts", int(1.5 * mb)) + self.section("gen/c.json", 3 * mb)
+        monkeypatch.setattr(plan, "change_held", lambda main, ref, u: [("proposal.md", "a's proposal")])
+        monkeypatch.setattr(plan, "kit_git", lambda fleet, t, where, *args: (0, diff.strip()))
+        fleet = {"teams": {"swb-4": {"name": "swb-4", "machine": "box", "kit": {"main": "/kit/main", "repo": "o/switchboard-kit"}}}}
+        f = dict(bolt="y", kit="switchboard-kit", units=["a"], chores=[], head="def5678" + "0" * 33, base="abc1234",
+                 team="swb-4", host="box")
+        paths = [pathlib.Path(p) for p in plan.landing_write(fleet, f, tmp_path / "def5678")]
+        assert [p.name for p in paths] == ["00-y.md", "01-a-proposal.md", "02-y-diff-1-of-2.txt", "02-y-diff-2-of-2.txt"]
+        assert all(p.stat().st_size <= plan.PLANNOTATOR_MOST for p in paths)
+        assert "- `gen/c.json`, 3 MB" in paths[0].read_text()
+        assert paths[3].read_text().startswith("diff --git a/src/b.ts b/src/b.ts\n")
+        assert "gen/c.json: its change, 3 MB, passes the 2 MB plannotator opens in one file" in paths[3].read_text()
 
     def test_a_proven_bolts_card_waits_on_its_batches_and_says_which(self):
         """briefs.12, as crew card session land/<bolt> says why the bolt has no card yet."""

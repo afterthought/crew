@@ -18,6 +18,10 @@ object ({"decision": "approved", "feedback": ...}, "annotated", or "dismissed"),
 atomically to the result file and to stdout, then exits. Sent SIGTERM first, it writes no result and exits 143. As
 plannotator 0.28.26 does, it removes its registry file whenever it exits, SIGTERM's exit among them.
 
+As plannotator 0.28.48 does, it refuses before registering any file of more than 2 MiB (2,097,152 bytes) by its size
+on disk, and with it the whole review, saying `File too large to annotate (max 2MB): <path>` and exiting 2 when given a
+result file, else 1; a review of several files has no cap on them together.
+
 A test makes the next starts fail by writing a count to $HOME/.stub-plannotator/refuse-starts: each `annotate` while
 it is above zero takes one from it and exits 1 before registering, saying `stub: refused to start` on stderr, as a
 plannotator that ends before its session is ready does.
@@ -87,6 +91,10 @@ if result and not ("--gate" in args and "--json" in args):
 if not paths:
     print("Usage: plannotator annotate <file.md | folder/>", file=sys.stderr)
     sys.exit(2)
+for p in paths:
+    if os.path.isfile(p) and os.path.getsize(p) > 2 * 1024 * 1024:
+        print(f"File too large to annotate (max 2MB): {os.path.abspath(p)}", file=sys.stderr)
+        sys.exit(2 if result or "--require-approval" in args else 1)
 
 refuse = reg / "refuse-starts"
 if refuse.exists():
