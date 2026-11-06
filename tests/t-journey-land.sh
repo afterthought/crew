@@ -855,7 +855,7 @@ has "$(calls | grep "^$box pendingyou cancel_request ")" "far takes main first: 
 posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
 eq "$(jq -c '[.kind, .follows, .title]' <<<"${posted#* post_request }")" "[\"approve\",\"$kit\",\"Land the bolt west on switchboard-kit's main\"]"
 has "$posted" "**far**: takes main first: forecast to conflict with main on far.txt at $(short origin/main)"
-has "$(told swb-1-conductor)" "bolt/far is forecast to conflict with main on far.txt"
+has "$(told swb-1-conductor)" "bolt/far at $(short bolt/far) is forecast to conflict with main on far.txt"
 has "$(told swb-1-conductor)" "take-main-$(short origin/main)"
 has "$(told swb-1-conductor)" "--bolt far"
 eq "$(field $box forecast Heads bolt/far) | $(field $box forecast Paths bolt/far) | $(field $box forecast Reached bolt/far)" \
@@ -901,7 +901,7 @@ echo '{"answer": {"choiceIds": ["land:west"]}}' > "$(home_of $box)/.stub-pending
 out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
 has "$out" "west takes main first: its team takes main in by a fix, and the user's send stands for it"
 lacks "$out" "crew bolt submit"
-has "$(told swb-1-conductor)" "bolt/west is forecast to conflict with main on west.txt"
+has "$(told swb-1-conductor)" "bolt/west at $(short bolt/west) is forecast to conflict with main on west.txt"
 has "$(told swb-1-conductor)" "take-main-$(short origin/main)"
 eq "$(field $box forecast Reached bolt/west)" "told"
 eq "$(field $box landing.left Heads kit/switchboard-kit)" "near@$(short bolt/near)"

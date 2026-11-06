@@ -560,7 +560,7 @@ ok "ops, every stage and the dispatcher post no card, the four that ask carry on
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
 # a unit; crew orders and lifts its own forecast orders, which neither the conductor nor the planner asks anyone to lift
 # (plan.13); the conductor takes main into the bolt on a forecast against main, and waits out one against a submission
-# queued there (teams.21); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
+# queued there, and takes nothing in for one of a head the bolt has moved from (teams.21); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
 # one reading session on the batch, posts and closes no batch card, and sends the notes the card's wait prints from the
 # session and the card to each unit they speak of (briefs.9, briefs.12, briefs.13);
 # construct writes Touches as a block crew reads;
@@ -581,6 +581,7 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
   "When it names a batch the user has not answered, your bolt waits for their answer on that batch's card" "submits the unit to the bolt, \`sluice submit bolt/<bolt>\`, and waits on it with \`sluice wait\` from its harness's background, so the submission never holds the agent's session" "changed and did not declare in its Touches" \
   "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it" \
   "crew also forecasts the bolt itself against the kit's main" "start the take-main fix it gives at once, as when \`wldn-ops\` tells you a landing conflicts" \
+  "a forecast is the bolt's at that head alone, so when the wait's answer says the bolt moved from that head while it waited, take nothing in for that forecast" \
   "when it says the bolt would conflict with a submission queued on main, take nothing in"; do
   has "$out" "$want"
 done

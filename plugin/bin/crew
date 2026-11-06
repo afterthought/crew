@@ -97,7 +97,9 @@
 #                                      stuck, or the timeout (an hour) passes, or the Claude session that started
 #                                      the wait ends, recording nothing, and says which,
 #                                      first saying, in sluice's words, each conflict or failed check sluice's
-#                                      overview shows for a submission from the stage's place. A stuck answer lists
+#                                      overview shows for a submission from the stage's place, and of each
+#                                      forecast of a bolt against main it said as it began, which names the
+#                                      bolt's head, that it is not the bolt's now when the bolt moved from it. A stuck answer lists
 #                                      the branch's commits since the stage began and quotes the agent's last words
 #                                      since then, or says what crew could not read, for the conductor to read
 #                                      before it asks anyone

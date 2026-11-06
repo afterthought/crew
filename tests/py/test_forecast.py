@@ -404,8 +404,8 @@ class TestBoltAgainstMain:
         assert heads == f"bolt/tenant-environments@{self.H[:7]} main@{self.M[:7]}"
         assert paths == ["docs/builds.md"]
         assert words == (
-            "bolt/tenant-environments is forecast to conflict with main on docs/builds.md: main has landed work on them "
-            "since the bolt took it. Take main into the bolt now, while the conflict is small, by a fix as when wldn-ops "
+            "bolt/tenant-environments at 1111111 is forecast to conflict with main on docs/builds.md: main has landed work "
+            "on them since the bolt took it. Take main into the bolt now, while the conflict is small, by a fix as when wldn-ops "
             f'says a landing conflicts: crew fix swb-1 take-main-{self.M[:7]} "Take main into the bolt: it is forecast to '
             'conflict on docs/builds.md"')
 
@@ -419,7 +419,7 @@ class TestBoltAgainstMain:
         heads, paths, words = self.told(self.QUEUED)
         assert heads == f"bolt/tenant-environments@{self.H[:7]} main@{self.M[:7]} #217"
         assert words == (
-            "bolt/tenant-environments is forecast to conflict on docs/builds.md, docs/identity.md with #217 "
+            "bolt/tenant-environments at 1111111 is forecast to conflict on docs/builds.md, docs/identity.md with #217 "
             "(design/runner-credential), queued on main ahead of it. Take nothing in for it: it may yet fail and leave "
             "the queue, and crew forecasts the bolt again when main or its queue moves.")
 
@@ -456,6 +456,40 @@ class TestBoltAgainstMain:
         assert plan.unread_said("t", None, "it exited 1", set()) == (None, "no forecast of bolt/t against main: it exited 1")
 
 
+class TestAForecastIsOfItsHead:
+    """bolt-teams "The bolt moves while the wait waits": a forecast of the bolt against main is the bolt's at the head
+    it was made of alone, so a wait's answer says one whose bolt moved from that head while it waited is not the bolt's
+    now (plan.forecasts_moved). wldn's swb-3 conductor, 2026-11-02: its wait forecast the-class-declares-its-
+    environments-identity-settings at 75016a0 as it began, at 23:35:27Z, while the take-main fix's merge into the bolt
+    was under test; the bolt stood at 2722779 from 23:36:59Z and was submitted to main as #1277 at 23:38:43Z; the
+    wait answered at 23:45, and the take-main fix its forecast named withdrew #1277, which merged cleanly."""
+    B, OLD, NOW = "identity-settings", "75016a0558eed6394e25c4d75fd3fe36f7a5dcde", "27227790f5caec92da2128858fd142c1e4e1d5d3"
+
+    def test_a_bolt_that_moved_while_the_wait_waited_has_its_forecast_said_as_not_the_bolts_now(self):
+        assert plan.forecasts_moved([(self.B, self.OLD)], {self.B: (self.NOW, None)}) == [
+            "bolt/identity-settings moved from 75016a0 to 2722779 while this wait waited, so the forecast against main it "
+            "said as it began is of 75016a0, not of the bolt now: take nothing in for it. Your next wait forecasts "
+            "bolt/identity-settings at 2722779."]
+
+    def test_a_bolt_still_at_the_head_forecast_keeps_its_forecast_as_said(self):
+        assert plan.forecasts_moved([(self.B, self.OLD)], {self.B: (self.OLD, None)}) == []
+        assert plan.forecasts_moved([(self.B, self.OLD[:7])], {self.B: (self.OLD, None)}) == []
+
+    def test_a_head_crew_cant_read_is_said_with_why_and_never_as_standing(self):
+        # read.1: a bolt crew can't read is neither moved nor still where it was.
+        said = ("crew can't tell whether bolt/identity-settings still stands at 75016a0, the head this wait forecast "
+                "against main as it began: {}. Read its head before you take anything in for that forecast; your next "
+                "wait forecasts the bolt where it stands.")
+        assert plan.forecasts_moved([(self.B, self.OLD)], {self.B: (None, "cannot fetch it from GitHub")}) == [
+            said.format("cannot fetch it from GitHub")]
+        assert plan.forecasts_moved([(self.B, self.OLD)], {}) == [said.format("crew did not read it")]
+
+    def test_only_the_bolts_said_are_judged(self):
+        assert plan.forecasts_moved([], {self.B: (self.NOW, None)}) == []
+        assert len(plan.forecasts_moved([(self.B, self.OLD), ("other", self.NOW)],
+                                        {self.B: (self.NOW, None), "other": (self.NOW, None)})) == 1
+
+
 class TestWaitChangesTheCard:
     """bolt-teams "A wait's forecast conflict with main changes the kit's landings card": plan.bolt_said, with the run
     record's write and the card's raise stood in for."""
@@ -484,6 +518,16 @@ class TestWaitChangesTheCard:
         emitted, handed, words = self.said(monkeypatch, self.LANDED, done=["bolt/tenant-environments@1111111 main@2222222"])
         assert (emitted, handed, words) == ([], [], [])
 
+    def test_it_gives_the_head_its_forecast_is_of_and_none_when_it_said_nothing(self, monkeypatch):
+        """What the wait's answer judges against where the bolt stands then (plan.forecasts_moved)."""
+        import record
+        monkeypatch.setattr(record, "emit", lambda *a, **f: None)
+        monkeypatch.setattr(plan, "land_hand", lambda *a, **f: None)
+        b = plan.Plan("%rec: Bolt\n\nBolt: tenant-environments\nRepo: switchboard-kit\nTeam: swb-1\n\n%rec: Unit\n\n").bolt("tenant-environments")
+        said = lambda out, done=(): plan.bolt_said({}, self.T, b, plan.bolt_forecast_read(2, out, "")[0], set(done), False, print)
+        assert said(self.LANDED) == "1" * 40 and said(self.QUEUED) == "1" * 40
+        assert said(self.LANDED, ["bolt/tenant-environments@1111111 main@2222222"]) is None
+
 
 class TestALeftBolt:
     """bolt-teams "A bolt the user left" and "Ticked at the same heads": a conductor's wait says a left bolt's conflict
@@ -504,9 +548,9 @@ class TestALeftBolt:
 
     def test_a_left_bolts_conflict_with_what_main_landed_gives_no_fix_and_is_recorded_as_found_while_left(self, monkeypatch):
         emitted, handed, words = self.said(monkeypatch, self.LANDED)
-        assert words == ["bolt/tenant-environments, which the user left on its kit's landings card, is forecast to conflict "
-                         "with main on docs/builds.md. Take nothing in while it is left: crew tells you the take-main fix once "
-                         "they tick it."]
+        assert words == ["bolt/tenant-environments at 1111111, which the user left on its kit's landings card, is forecast to "
+                         "conflict with main on docs/builds.md. Take nothing in while it is left: crew tells you the take-main "
+                         "fix once they tick it."]
         assert "crew fix" not in words[0]
         assert [(e["Act"], e["Heads"], e["Paths"], e["Reached"]) for e in emitted] == [
             ("forecast", self.HEADS, "docs/builds.md", "left")]

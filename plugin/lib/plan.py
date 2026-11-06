@@ -10786,12 +10786,14 @@ def reach(fleet, t):
     heads (`forecast`, with both heads, the paths and how it reached the unit) and reaching it once (deliver). The
     earlier unit is told nothing, and the forecast orders neither: a settle that takes the other's work does, and an
     order of crew's own whose settle found nothing to change is lifted, both before the forecasts (settle_orders,
-    plan.13). What crew can't read or write here is said on standard error, and the wait goes on (teams.12)."""
+    plan.13). What crew can't read or write here is said on standard error, and the wait goes on (teams.12). Then each
+    bolt the team holds is forecast against its kit's main (teams.21); returns [(bolt, head)] for each such forecast
+    said, the head the one it is of, for the wait's answer (forecasts_after)."""
     label, main = t["label"], t["kit"]["main"]
     plan = plan_of(fleet, label)
     if plan is None:
         print(f"no forecast: {label}'s plan could not be read", file=sys.stderr)
-        return
+        return []
     bolts = held_by(plan, t["name"])
     with READ.fresh():
         st = stages_for(fleet, plan, bolts)
@@ -10867,7 +10869,9 @@ def reach(fleet, t):
                 record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
                             why=f"unit({name}): forecast to conflict with {other}", Heads=heads, Paths=" ".join(paths), Reached=way)
                 done.add(heads)
-    # The bolt itself against its kit's main and what is queued there, by sluice's forecast (teams.21).
+    # The bolt itself against its kit's main and what is queued there, by sluice's forecast (teams.21), each said kept
+    # with the head it is of, for the wait's answer (forecasts_moved).
+    forecast = []
     for b in bolts:
         k, _ = st.kit(b)
         if not k:
@@ -10890,7 +10894,10 @@ def reach(fleet, t):
                                 Heads=heads, Reached="wait")
                     done.add(heads)
             continue
-        bolt_said(fleet, t, b, doc, done, len(bolts) > 1, say, b.name() in left)
+        head = bolt_said(fleet, t, b, doc, done, len(bolts) > 1, say, b.name() in left)
+        if head:
+            forecast.append((b.name(), head))
+    return forecast
 
 
 def bolt_said(fleet, t, b, doc, done, two, say, left=False):
@@ -10900,10 +10907,12 @@ def bolt_said(fleet, t, b, doc, done, two, say, left=False):
     bolt's row takes main first without waiting for main to move again (bolt-teams "A wait's forecast conflict with main
     changes the kit's landings card"); one with a queued submission hands nothing. For a bolt the user left (left), a
     conflict with what main has landed gives no fix and is recorded as found while it is left (Reached: left), its card
-    changed with a note saying it would take main first (left_said), since its row keeps its box (landing_rows)."""
+    changed with a note saying it would take main first (left_said), since its row keeps its box (landing_rows).
+    Returns the bolt's head the forecast it said is of, for the wait's answer to say whether it still stands
+    (forecasts_moved), or None when it said nothing."""
     told = bolt_forecast(t["name"], t["label"], b.name(), doc, done, two, left)
     if not told:
-        return
+        return None
     heads, paths, words = told
     say(words)
     landed = "#" not in heads
@@ -10912,6 +10921,7 @@ def bolt_said(fleet, t, b, doc, done, two, say, left=False):
     done.add(heads)
     if landed:  # a waiting bolt's with no note of its own: the card changes only when the bolt's row does
         land_hand(fleet, t["label"], b.get("Repo") or t["kit"]["name"], note=left_said(b.name(), doc["onto"], paths) if left else None)
+    return doc["head"]
 
 
 # The time sluice's forecast of a bolt against main is given on a conductor's wait, by its branch name or from a place
@@ -11096,7 +11106,7 @@ def bolt_forecast(team, label, bolt, doc, done, two=False, left=False):
     a bolt the user left on its kit's landings card (left), which takes nothing in until they tick it, when crew tells
     the fix (bolt-teams "A bolt the user left"); one with a submission queued on main is waited out, since that
     submission may yet fail and leave the queue. While the team holds two bolts (two), the fix's command names its bolt
-    (teams.16)."""
+    (teams.16). The words name the bolt's head the forecast is of, so they are never read as a later head's."""
     c = doc.get("conflict")
     if not c:
         return None
@@ -11105,21 +11115,21 @@ def bolt_forecast(team, label, bolt, doc, done, two=False, left=False):
     heads = f"bolt/{bolt}@{doc['head'][:7]} main@{doc['onto'][:7]}" + "".join(f" #{w['id']}" for w in met)
     if heads in done:
         return None
-    on = ", ".join(paths)
+    on, at = ", ".join(paths), doc["head"][:7]
     if not met and left:
         return heads, paths, (
-            f"bolt/{bolt}, which the user left on its kit's landings card, is forecast to conflict with main on {on}. Take "
-            "nothing in while it is left: crew tells you the take-main fix once they tick it.")
+            f"bolt/{bolt} at {at}, which the user left on its kit's landings card, is forecast to conflict with main on "
+            f"{on}. Take nothing in while it is left: crew tells you the take-main fix once they tick it.")
     if not met:
         return heads, paths, (
-            f"bolt/{bolt} is forecast to conflict with main on {on}: main has landed work on them since the bolt took it. "
+            f"bolt/{bolt} at {at} is forecast to conflict with main on {on}: main has landed work on them since the bolt took it. "
             f"Take main into the bolt now, while the conflict is small, by a fix as when {label}-ops says a landing "
             f'conflicts: crew fix {team} take-main-{doc["onto"][:7]} "Take main into the bolt: it is forecast to conflict '
             f'on {on}"' + (f" --bolt {bolt}" if two else ""))
     who = ", ".join(f"#{w['id']}" + (f" ({w['from']['worktree']})" if isinstance(w.get("from"), dict)
                                      and isinstance(w["from"].get("worktree"), str) else "") for w in met)
     return heads, paths, (
-        f"bolt/{bolt} is forecast to conflict on {on} with {who}, queued on main ahead of it. Take nothing in for it: "
+        f"bolt/{bolt} at {at} is forecast to conflict on {on} with {who}, queued on main ahead of it. Take nothing in for it: "
         "it may yet fail and leave the queue, and crew forecasts the bolt again when main or its queue moves.")
 
 
@@ -11130,6 +11140,62 @@ def unread_said(bolt, bolt_head, why, done):
     if heads and heads in done:
         return None
     return heads, f"no forecast of bolt/{bolt} against main: {why}"
+
+
+def forecasts_moved(said, now):
+    """What a wait's answer says of the forecasts of its bolts against main that it said as it began (said, [(bolt,
+    head)], each head the one sluice forecast), from where each bolt stands as the wait ends (now, {bolt: (head, None)},
+    or (None, why) when crew can't read it): a forecast is the bolt's at the head it was made of alone, so for each bolt
+    that moved from that head while the wait waited, that the forecast is of that head and not of the bolt now, nothing
+    is taken in for it and the next wait forecasts the bolt where it stands (teams.21); for each whose head crew can't
+    read, that it can't tell whether the bolt still stands there, and why (read.1); nothing for a bolt still at the
+    head forecast, whose forecast stands as said. A decision of facts alone (code.7)."""
+    out = []
+    for bolt, head in said:
+        at, why = now.get(bolt) or (None, "crew did not read it")
+        if why:
+            out.append(f"crew can't tell whether bolt/{bolt} still stands at {head[:7]}, the head this wait forecast against "
+                       f"main as it began: {why}. Read its head before you take anything in for that forecast; your next "
+                       "wait forecasts the bolt where it stands.")
+        elif not (at.startswith(head) or head.startswith(at)):
+            out.append(f"bolt/{bolt} moved from {head[:7]} to {at[:7]} while this wait waited, so the forecast against main "
+                       f"it said as it began is of {head[:7]}, not of the bolt now: take nothing in for it. Your next wait "
+                       f"forecasts bolt/{bolt} at {at[:7]}.")
+    return out
+
+
+def forecast_heads_now(fleet, t, said):
+    """Where each bolt a wait forecast as it began stands as it ends (forecasts_moved), read where it lives after a
+    fetch, as a decision of the moment reads a bolt (plan.18, plan.19): {bolt: (head, None)}, or (None, why) for each
+    crew can't read, the plan or the kit among them (read.1)."""
+    bolts = [b for b, _ in said]
+    try:
+        plan = plan_of(fleet, t["label"])
+        if plan is None:
+            return {b: (None, f"{t['label']}'s plan could not be read") for b in bolts}
+        held = [b for b in held_by(plan, t["name"]) if b.name() in bolts]
+        st = stages_for(fleet, plan, held, fetch=True)
+    except Refusal as e:
+        return {b: (None, str(e)) for b in bolts}
+    out = {}
+    for b in bolts:
+        if b not in {h.name() for h in held}:
+            out[b] = (None, f"{t['name']} no longer holds bolt {b}")
+            continue
+        k, why = st.kit(plan.bolt(b))
+        head = (k or {"bolts": {}})["bolts"].get(b, {}).get("head")
+        out[b] = (head, None) if head else (None, why or f"bolt/{b} has no branch where it lives")
+    return out
+
+
+def forecasts_after(fleet, t, said):
+    """Said on standard error as a wait answers, before its answer: each forecast it said as it began that is no longer
+    the bolt's (forecasts_moved), its bolts read where they stand now (forecast_heads_now); nothing read when it said
+    none."""
+    if not said:
+        return
+    for words in forecasts_moved(said, forecast_heads_now(fleet, t, said)):
+        print(words, file=sys.stderr)
 
 
 def main_conflict(entries, bolt, head):
@@ -11652,7 +11718,8 @@ def stage_wait(fleet, a):
     life, so crew needs knows a wait is there to hand its words to. A unit's settle that ends delivered or short orders
     or lifts its unit's forecast orders, and its line says so (settle_said). Each look also reads sluice's overview,
     and says at once, before that line, each conflict or blame sluice records for a submission from the stage's place
-    (overview_look)."""
+    (overview_look). Its answer says first each forecast of a bolt against main it said as it began that is no longer
+    the bolt's, the bolt having moved from the head forecast while it waited (forecasts_after)."""
     t = at_work(fleet, a.team)
     agent = f"{t['name']}-{a.slot}"
     (team_state(t) / "waits").mkdir(parents=True, exist_ok=True)
@@ -11661,7 +11728,7 @@ def stage_wait(fleet, a):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         fail(f"a wait on {agent}'s stage is already running: its answer is the one to read")
-    before_waiting(fleet, t)
+    forecast = before_waiting(fleet, t)
     held = {l.split()[0]: l.split() for l in (team_state(t) / "slots").read_text().splitlines() if l.strip()} \
         if (team_state(t) / "slots").exists() else {}
     with stages_file(t, shared=True) as lines:
@@ -11713,6 +11780,7 @@ def stage_wait(fleet, a):
             if how:  # once more at the stage's end, before a merge's tidy removes the place
                 made()
             if how == "ended":
+                forecasts_after(fleet, t, forecast)
                 print(ended_said(t, agent))
                 return
             then = []
@@ -11724,6 +11792,7 @@ def stage_wait(fleet, a):
             if how in ("delivered", "short") and o.stage == "settle" and not o.fix and not o.chore:
                 said = settle_said(fleet, t, o.name, said)
             if how:
+                forecasts_after(fleet, t, forecast)
                 print(said, flush=True)
                 after_answer(fleet, t, then, got)
                 return
@@ -11734,12 +11803,15 @@ def before_waiting(fleet, t):
     """What each wait of a conductor's does before it waits: its units' merges forecast (reach), then the partition's
     batch reckoned (batch_reckoned), so a bolt whose last unit merged reaches the planner on every wait until it is
     told, whatever the merge's own end did (briefs.12). What crew can't read of either is said on standard error, and
-    neither keeps the other, or the wait, from going on."""
+    neither keeps the other, or the wait, from going on. Returns the forecasts of its bolts against main it said, as
+    reach gives them, for its answer (forecasts_after)."""
     try:
-        reach(fleet, t)
+        forecast = reach(fleet, t)
     except Refusal as e:
         print(f"no forecast: {e}", file=sys.stderr)
+        forecast = []
     batch_reckoned(fleet, t)
+    return forecast
 
 
 def after_answer(fleet, t, then, got):

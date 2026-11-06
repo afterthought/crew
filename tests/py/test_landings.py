@@ -1472,9 +1472,9 @@ def test_a_row_newly_taking_main_first_tells_its_conductor_the_fix_once_and_reco
     acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED, against_main={"z": [("main", ["README.md"])]})
     raised(monkeypatch, acts)
     conductor = [w for n, w in acts.told if n == "crw-1-conductor"]
-    assert conductor == [f"bolt/z is forecast to conflict with main on README.md: main has landed work on them since the bolt "
-                         f"took it. Take main into the bolt now, while the conflict is small, by a fix as when swancloud-ops "
-                         f"says a landing conflicts: {FIX} --bolt z"]
+    assert conductor == [f"bolt/z at {H1[:7]} is forecast to conflict with main on README.md: main has landed work on them "
+                         f"since the bolt took it. Take main into the bolt now, while the conflict is small, by a fix as when "
+                         f"swancloud-ops says a landing conflicts: {FIX} --bolt z"]
     assert [e for e in acts.emitted if e["Act"] == "forecast"] == [TOLD]
     again = LandActs({"y": row("y"), "z": row("z")}, partition=[TOLD],
                      answers=dict(POSTED, get_request=({"status": "pending", "turn": "you", "version": 2}, None)),
