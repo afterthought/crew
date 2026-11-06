@@ -14,7 +14,7 @@ Retired 2026-11-03 for deneb alone with `the-team-machinery-leaves` on `teamless
 - **[record.1]** Every command that moves work appends one entry per act, after the act, done or refused; a pure read appends nothing.
 - **[record.2]** A failed append is said once on standard error and never changes what the command does or how it exits.
 - **[record.3]** No entry holds text anyone typed: not a tell's text, a stage's words, an intent, a goal, a reason, an excerpt or a proposal's `Do` line; `Why` is composed from names, a tell records its length, a refusal records crew's own message.
-- **[record.4]** A host appends only to its own `runs/<host>/<UTC day>.rec`, each entry in one write after the descriptor, never rewritten or removed; the branch's copy of a day is the union of both by `Id`, so carrying twice changes nothing.
+- **[record.4]** A host appends only to its own `runs/<host>/<UTC day>.rec`, each entry in one write after the descriptor, never rewritten or removed but for a kit's rename, which renames the kit in the branch's entries (`plan.22`); the branch's copy of a day is the union of both by `Id`, so carrying twice changes nothing. (Amended 2026-11-06 by record 0055. Status: proposed to the user on 2026-11-06; accepted only on their yes.)
 
 ## Details
 
@@ -24,5 +24,5 @@ Retired 2026-11-03 for deneb alone with `the-team-machinery-leaves` on `teamless
 
 **[record.3]** Rules out: `Refused: \`unit add x "the whole intent"\``. Source: `run-record` spec "An entry holds no text anyone typed"; `record.py` 6–7; `tests/py/test_record.py`, `tests/t-journey-signals.sh`.
 
-**[record.4]** Rules out: a host writing another's file; an entry edited in place. Source: `record.py` `emit`, `carry`; state-repository design; `tests/py/test_record.py`, `tests/contract/test_record.py`, `tests/t-journey-state.sh`.
+**[record.4]** Rules out: a host writing another's file; an entry edited in place, but for a kit's name a rename rewrites (`plan.22`), in the rename's one commit. Source: `record.py` `emit`, `carry`; state-repository design; `tests/py/test_record.py`, `tests/contract/test_record.py`, `tests/t-journey-state.sh`.
 
