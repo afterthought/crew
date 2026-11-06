@@ -541,6 +541,8 @@ def drawn(before, after, argvs):
 # --------------------------------------------------------------------------------- the words rule (briefs.13)
 
 TITLE, SUMMARY, DETAIL, LABEL = 140, 400, 200, 80  # Pending You's budgets: a title, a summary, a detail, consequence or rationale, an option's label
+STEP = 299  # an action step's words: post_request's refusal "Keep each step’s words under 300 characters." (deneb, 2026-11-06); its schema states none
+ABOUT, NOTE = 120, 120  # a card's about title, when it asks questions; update_request's changeNote
 OUTCOME = 200  # Pending You's budget for a close's words: ack_answer's outcome and cancel_request's reason
 ARTIFACTS = 8  # Pending You's most artifacts on a card: post_request's artifacts maxItems (read 2026-10-19)
 LINE = 40  # the most characters a line of a list on a card's face holds: the phone shows it in monospace
@@ -908,7 +910,7 @@ def landings_card(f):
         g = -(-n // BOXES)
         sizes = [n // g + (1 if k < n % g else 0) for k in range(g)]
         groups = [options[sum(sizes[:k]):sum(sizes[:k + 1])] for k in range(g)]
-        shape = dict(intent="decide", about={"kind": "other", "title": cut(f"Land on {about}", 120)},
+        shape = dict(intent="decide", about={"kind": "other", "title": cut(f"Land on {about}", ABOUT)},
                      questions=[dict(id=f"rows-{k}", kind="multi", title=f"Bolts {grp[0]['label'].split('.')[0]} to "
                                      f"{grp[-1]['label'].split('.')[0]} of {n}, in order", options=grp,
                                      multi={"min": 0, "max": len(grp)}, recommendedIds=[o["id"] for o in grp if o["id"] in ticked],
@@ -982,33 +984,52 @@ QUIET = {"quiet": ("When the host is quiet", "No stage is cut; it could be hours
          "skip": ("Skip it", "It is not done")}
 
 
+def step(words, command=None, short=None):
+    """An action step as Pending You takes it: its words when they fit a step's budget (STEP), else short, words within
+    it that say what to do, the card holding the long words whole elsewhere; its command whole, never cut, since a
+    command cut short does not run."""
+    s = {"text": words if len(words) <= STEP else short}
+    return dict(s, command=command) if command else s
+
+
 def step_card(f):
     """An after-deploy step's card (record 0031 §5, plan.14): the user's step a `do` with its words, where, each
     command whole and what is seen when it worked, its Done, Skip and Later the app's own; an agent's step held for
     the user's word a choice of when, quiet recommended, now or skip, each with its consequence; a deploy waiting at
-    its gate (plan.14) the user's `do` to approve it there, its one step, its where and its link the gate's. f: env, n,
-    text, doer ("user" or the agent), held, why, where, commands, done, gate (the gate's link) or None, to (the commit
-    the step names) or None, consequences ({quiet, now, skip}), follows."""
-    key, title = f"op/{f['env']}/{f['n']}", f"After {f['env']}'s deploy: {f['text']}"
+    its gate (plan.14) the user's `do` to approve it there, its one step, its where and its link the gate's. Each of
+    its action steps holds to a step's budget (step), and the step's words reach the user whole: in its title, its one
+    action step or its summary when one holds them, else on its face as inline Markdown, so words of any length get
+    their card. f: env, n, text, doer ("user" or the agent), held, why, where, commands, done, gate (the gate's link)
+    or None, to (the commit the step names) or None, consequences ({quiet, now, skip}), follows."""
+    key, head, words = f"op/{f['env']}/{f['n']}", f"After {f['env']}'s deploy: ", f["text"]
+    face = [markdown("The step", f"op-{f['env']}-{f['n']}.md", words)]
     if f.get("gate"):
         link, of = f["gate"], f" of {f['to'][:7]}" if f.get("to") else ""
         said = (f"The deploy{of} to {f['env']} waits at its gate for your approval there. Approving it at the gate is the "
                 "word to deploy; nothing else asks for it.")
         return built(key, f"Approve the deploy{of} to {f['env']} at its gate", said + (f" {f['why']}" if f.get("why") else ""),
                      links=[("The gate", link)], follows=f.get("follows"), kind="action", intent="do",
-                     action={"steps": [{"text": link}], "where": link, "done": "The run goes on past its gate."})
+                     action={"steps": [step(link, short="Open the gate at this card's link and approve the deploy there.")],
+                             "where": link, "done": "The run goes on past its gate."})
     if f["doer"] == "user":
-        steps = [{"text": c, "command": c} for c in f.get("commands") or []] or [{"text": f["text"]}]
+        titled = by_words(words, TITLE - len(head))
+        steps = ([step(c, c, "Run this command.") for c in f.get("commands") or []]
+                 or [step(words, short=prose(words, STEP))])
+        summary = f.get("why") or words
+        whole = (titled == " ".join(words.split()) or [s["text"] for s in steps] == [words]
+                 or (summary == words and prose(words) == prose(words, 10 ** 6)))
         action = dict({"steps": steps}, **{k: f[k] for k in ("where", "done") if f.get(k)})
-        return built(key, title, f.get("why") or f["text"], follows=f.get("follows"), kind="action", intent="do",
-                     action=action)
+        return built(key, head + titled, summary, artifacts=() if whole else face, follows=f.get("follows"),
+                     kind="action", intent="do", action=action)
     said = dict(f.get("consequences") or {})
     options = [{"id": k, "label": label, "consequence": by_words(said.get(k) or then, DETAIL)}
                for k, (label, then) in QUIET.items()]
-    return built(key, f"{title}, now or when the host is quiet?",
+    asks = ", now or when the host is quiet?"
+    titled = by_words(words, TITLE - len(head) - len(asks))
+    return built(key, head + titled + asks,
                  f"{f['doer']} can do it. " + (f"{f['why']} " if f.get("why") else "") + "Held for your word.",
-                 follows=f.get("follows"), urgency="whenever", kind="choice", intent="decide", options=options,
-                 recommendedIds=["quiet"])
+                 artifacts=() if titled == " ".join(words.split()) else face, follows=f.get("follows"),
+                 urgency="whenever", kind="choice", intent="decide", options=options, recommendedIds=["quiet"])
 
 
 AMENDED = re.compile(r"^Amended\b[^:.]*:\s*")
@@ -1275,7 +1296,7 @@ def proposal_card(f):
         lists = [{"options": [option(r) for r in grp], "multi": {"min": 0, "max": len(grp)},
                   "recommendedIds": [r["id"] for r in grp]} for grp in groups]
         form = (dict(kind="multi", intent="decide", **lists[0]) if g == 1 else
-                dict(intent="decide", about={"kind": "other", "title": cut(f"Plan change to {to}", 120)},
+                dict(intent="decide", about={"kind": "other", "title": cut(f"Plan change to {to}", ABOUT)},
                      questions=[dict(id=f"rows-{k}", kind="multi", title=f"The change, part {k} of {g}: each row as proposed", **q)
                                 for k, q in enumerate(lists, 1)]))
     if shape != "approve" and also:
@@ -1521,8 +1542,9 @@ def told_to(owner, caller):
 
 def change_args(card, note):
     """update_request's arguments for a card crew built again, but the card's id, name and version: what it takes of
-    the card, and the change note the user sees."""
-    return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
+    the card, its face emptied when the card carries none now, so a step's words a face held whole go once its title
+    or its step holds them, and the change note the user sees."""
+    return dict({k: card[k] for k in CHANGED if k in card}, artifacts=card.get("artifacts") or [], changeNote=cut(note, NOTE))
 
 
 # The statuses get_request gives a card that waits on nobody any more: picked up or acked (resolved, or closed),

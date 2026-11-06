@@ -14197,7 +14197,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
                 state = cards.ended(got)
                 how = cards.revision(got, kind_changed, "questions" in b["card"], anew is not None)
             if lost is None and how == "follow":
-                tool, args, state = cards.close_call(got, card, owner, outcome=cut(note, 120))
+                tool, args, state = cards.close_call(got, card, owner, outcome=cut(note, cards.NOTE))
                 _, lost = py.answer(tool, args)
             elif lost is None and how == "change":
                 change = dict(cards.change_args(b["card"], note), requestId=card, name=owner,
