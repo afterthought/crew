@@ -92,7 +92,7 @@ None. The logic tier proves each decision, and the land, teams and hold journeys
 
 **1.4** `bolt_give`'s no-bolt path restarts ops alone from the giver. `tests/t-journey-teams.sh` waits for the conductor's restart on its host and checks its greeting names the bolt.
 
-**1.5** `plugin/lib/plan.py`: `notice_unsent`, `untold_gives`, `rail_text`'s section. `plugin/lib/board.py`: the ledger's `record` carries `untold`; `head_said`, `needs_eye`, the attention item `untold` and `attention_text`. Cases in `tests/py/test_teams.py`. `tests/t-journey-land.sh`: the beside give with the conductor running background work of its own (told, recorded, not restarted until the work ends, then restarted as before); the give of `kept-work` to swb-2, whose conductor is not up, said and on `crew rail` until the bolt is dropped.
+**1.5** `plugin/lib/plan.py`: `notice_unsent`, `untold_gives`, `rail_text`'s section. `plugin/lib/board.py`: the ledger's `record` carries `untold`; `head_said`, `needs_eye`, the attention item `untold` and `attention_text`. Cases in `tests/py/test_teams.py`. `tests/t-journey-land.sh`: the beside give with the conductor running background work of its own (told, recorded, not restarted until the work ends, then restarted as before); the give of `kept-work` to swb-2, whose conductor is not up, said and on `crew rail`; that a dropped bolt leaves the rail is the logic case's.
 
 **1.6** README, `plugin/skills/crew/SKILL.md` and the usage of `bolt give` and `rail` in `plugin/bin/crew` say what a give tells its conductor and what the rail lists (`docs.2`).
 

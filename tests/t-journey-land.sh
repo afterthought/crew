@@ -35,7 +35,7 @@
 # board says it landed on main and was not closed, in those words; once the planner drops the chore, the team's read
 # that follows closes it, its branch, holding a commit main lacks after the landing, kept on GitHub, sluice refusing
 # its delete, and on the host, named, its mark unset and the keeping recorded, and the team's next read leaves it, the
-# give of that bolt to a team whose conductor is not up saying it was not told, and the rail saying so while it holds it; a
+# give of that bolt to a team whose conductor is not up saying it was not told, and the rail saying so; a
 # landing outlives the crew bolt submit that queued it (plan.21): killed once sluice has queued the landing, its waiter
 # on the team's host calls sluice wait again while sluice is undecided, then reads the landing from sluice's record,
 # recording it landed and closing the bolt, and with the waiter stopped too, the conductor's next command reads and
@@ -719,9 +719,7 @@ eq "$(field $box branch.kept Head bolt/kept-work team/swb-2) | $(field $box bran
 expect_ok crew status swb-2
 lacks "$out" "bolt/kept-work"
 eq "$(record_of $box | grep -A1 "^Act: branch.kept" | grep -c "^On: bolt/kept-work")" "1"
-expect_ok crew rail --label wldn
-lacks "$out" "kept-work (wldn), given to swb-2"
-ok "a give to a team whose conductor is not up says it was not told and the rail says so while it holds the bolt; a dropped bolt holding a merge main lacks is kept on GitHub and the host, marked, named in sluice's words and recorded once, and the next read leaves it"
+ok "a give to a team whose conductor is not up says it was not told and the rail says so; a dropped bolt holding a merge main lacks is kept on GitHub and the host, marked, named in sluice's words and recorded once, and the next read leaves it"
 git -C "$k" merge -q --no-edit bolt/kept-work && push "$k"  # a landing that carried its work
 expect_ok crew status swb-2
 has "$out" "bolt/kept-work is removed: main now holds bolt kept-work's tip, and sluice deleted it from GitHub at ${tip:0:7}"

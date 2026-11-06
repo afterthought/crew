@@ -470,6 +470,8 @@ class TestTeamGreetings:
         assert plan.untold_gives(found, {"wldn": [self.GIVE, self.NOT_UP]}) == [
             ("wldn", "b", "swb-2", {"words": self.NOT_UP["Refused"], "at": "2026-11-06T21:02:30Z"})]
         assert plan.untold_gives(found, {}) == []
+        dropped = [("wldn", None, None, Plan({"name": "c", "Team": "swb-1", "Path": "flume"}))]
+        assert plan.untold_gives(dropped, {"wldn": [self.GIVE, self.NOT_UP]}) == []  # a bolt the plan no longer holds
 
     def test_a_bolts_head_line_says_its_conductor_was_not_told_and_draws_the_eye(self):
         import board
