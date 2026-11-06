@@ -1130,10 +1130,10 @@ class ReadSent:
              "teams": {"crw-1": {"name": "crw-1", "label": "swancloud", "machine": "mac-studio",
                                  "kit": {"name": "crew", "repo": "afterthought/crew", "main": "/c/main", "dir": "/c"}}}}
 
-    def __init__(self, monkeypatch, got, told=(), branch=()):
+    def __init__(self, monkeypatch, got, told=(), branch=(), now=None):
         import argparse
         self.entries = [post("land/crew", "swancloud-ops", "req_k1", Heads="y@abc1234 z@abc1234")]
-        self.raised, self.calls = [], []
+        self.raised, self.calls, self.worked = [], [], []
         acts = self
 
         class Bridge(Py):
@@ -1150,6 +1150,11 @@ class ReadSent:
         monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
         monkeypatch.setattr(plan, "land_hand", raised)
         monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: list(branch))
+
+        def work(fleet, label, kit, moves):  # each bolt's head now where it lives, at the head the card showed unless now
+            self.worked.append(moves)
+            return {b: dict(head=(now or {}).get(b, sent), gained=[], lost=[], why=None) for b, (sent, _) in moves.items()}
+        monkeypatch.setattr(plan, "bolt_work", work)
         self.run = lambda json=False: plan.card_read(self.FLEET, argparse.Namespace(key="land/crew", label=None, json=json, sub="read"))
 
 
@@ -1168,6 +1173,20 @@ def test_reading_a_sent_landings_card_raises_it_first_and_leaves_a_bolt_taking_m
         "  to land, in the card's order: y",
         "  z takes main first: its team takes main in by a fix, and the user's send stands for it",
         "  lands them: crew bolt submit y --label swancloud"]
+
+
+def test_a_ticked_bolt_whose_take_main_fix_moved_it_since_its_conflict_lands_on_the_send(monkeypatch, capsys):
+    """rail-cards "A send stands for a ticked bolt taking main in": z's conflict is recorded at the head the card
+    showed, abc1234, and its take-main fix has moved it to def5678, with no conflict recorded there."""
+    read = ReadSent(monkeypatch, TICKED, told=[Z_TOLD], now={"z": "def5678" + "0" * 33})
+    read.run()
+    assert read.worked == [{"z": ("abc1234", None)}]
+    assert capsys.readouterr().out.splitlines()[-2:] == [
+        "  to land, in the card's order: y and z", "  lands them: crew bolt submit y z --label swancloud"]
+    again = ReadSent(monkeypatch, TICKED, told=[Z_TOLD, dict(Z_TOLD, Heads="bolt/z@def5678 main@9999999")],
+                     now={"z": "def5678" + "0" * 33})
+    again.run()
+    assert capsys.readouterr().out.splitlines()[-1] == "  lands them: crew bolt submit y --label swancloud"
 
 
 def test_a_conflict_a_wait_recorded_on_the_branch_leaves_the_bolt_out_too(monkeypatch, capsys):

@@ -763,11 +763,28 @@ def forecast_said(forecast, why=None, would=None):
     return " ".join(said)
 
 
+def taking_said(r):
+    """What a row of a kit's landings card taking main first says in place of its forecast (rail-cards "A row taking
+    main first stays on the card"): r's taking, why it takes main first as plan.landing_rows words it, and what a tick
+    on it does, which its send stands through (send_stands)."""
+    return (f"It {r['taking'].rstrip('.')}. Ticked, it lands once its team has taken main in and sluice has proven it, "
+            "your send standing through it.")
+
+
+def row_said(r):
+    """What a row of a kit's landings card says of where it stands against main and the rows above it: taking main
+    first (taking_said), else its forecast (forecast_said)."""
+    return taking_said(r) if r.get("taking") else forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main"))
+
+
 def landings_form(n):
-    """The form of a kit's landings card by how many of its rows can land (rail-cards, record 0031 as amended
-    2026-10-23): "approve", a hold-to-approve of risk high, for one; "multi", one list of boxes carrying highStakes, for
-    two to BOXES; "lists", lists of BOXES at most, each a question, for more. Pending You changes neither a card's kind
-    nor its questions, so a change from one form to another is followed rather than changed."""
+    """The form of a kit's landings card by how many rows it shows, those that can land and those taking main first
+    beside them (plan.card_rows; rail-cards, record 0031 as amended 2026-10-23): "approve", a hold-to-approve of risk
+    high, for one; "multi", one list of boxes carrying highStakes, for two to BOXES; "lists", lists of BOXES at most,
+    each a question, for more. Pending You changes neither a card's kind nor its questions, and takes no list of fewer
+    than two options (update_request and post_request, pendingyou 0.39.0, read 2026-11-06), so a change from one form
+    to another is followed rather than changed; a row coming to take main first or coming back from it keeps the
+    card's count, so it changes the card in place."""
     return "approve" if n <= 1 else "multi" if n <= BOXES else "lists"
 
 
@@ -808,7 +825,7 @@ def row_paragraph(n, r):
     units, chores = list(r["units"]), list(r.get("chores") or [])
     moved = r.get("moved") or 0
     lines = [f"**{n}. {r['bolt']}** · {r.get('conductor') or r['team'] + '-conductor'}"
-             + (" · *left on your last send*" if r.get("left") else ""), ""]
+             + (" · *takes main first*" if r.get("taking") else " · *left on your last send*" if r.get("left") else ""), ""]
     lines += [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores] + [""]
     _, read, green, _ = row_bits(r)
     said = ([stopped_said(r)] if r.get("stopped") else []) + ([f"Read in {read[8:]}."] if read else []) + [f"sluice is {green}."]
@@ -817,7 +834,7 @@ def row_paragraph(n, r):
     if frees:
         said.append(f"A yes frees {frees['team']} for {frees['next']}." if frees.get("next") else
                     f"A yes frees {frees['team']}, and nothing is planned for it.")
-    said.append(forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main")))
+    said.append(row_said(r))
     lines.append(" ".join(said))
     links = ([f"[Read {r['bolt']}]({r['link']})"] if r.get("link") else
              [f"Its reading could not be opened: {r['unread']}; crew tries it again when the rail is read, and "
@@ -833,27 +850,29 @@ def row_paragraph(n, r):
 
 def landings_card(f):
     """A kit's landings card (rail-cards, record 0031 as amended 2026-10-23, briefs.13), keyed land/<kit>, main-level
-    ops's: every bolt of the kit that can land, a row each in the plan's order, one send the word for every row the
-    user leaves ticked, in the order shown. One row is the landing card of today (landing_card), an approve of risk
-    high that never carries highStakes; two to BOXES, one list of boxes carrying highStakes, each `<n>. <bolt>`, its
-    detail the row's counts, batches, verdict and conductor, its consequence its forecast, each ticked as crew
-    proposes but one the user cleared on their last send; more, lists of BOXES at most, in order, each a question
-    about the kit's main (landings_form). What follows a yes is its rationale, each list's own when it has several,
+    ops's: every bolt of the kit that can land, and each beside them taking main first (plan.card_rows), a row each in
+    the plan's order, one send the word for every row the user leaves ticked, in the order shown. One row is the
+    landing card of today (landing_card), an approve of risk high that never carries highStakes; two to BOXES, one list
+    of boxes carrying highStakes, each `<n>. <bolt>`, its detail the row's counts, batches, verdict and conductor, its
+    consequence its forecast, each ticked as crew proposes but one the user cleared on their last send and one taking
+    main first, whose detail and consequence say why and what a tick on it does (taking_said); more, lists of BOXES at
+    most, in order, each a question about the kit's main (landings_form). What follows a yes is its rationale, each list's own when it has several,
     since Pending You refuses a card's rationale beside questions. On its face, one Markdown artifact, a paragraph a row (row_paragraph), then
     the rows held with no box and why; in its details, every row's reading first, then its previews and pull request,
     as many as the card's artifacts leave room for. f: kit, rows (each the facts landing_card takes, with team,
-    conductor, forecast, forecast_why, link or unread and preview, and stopped when sluice or its host stopped its
-    last landing at its head, which its paragraph and its box's detail say, stopped_said), held ([{bolt, why}]), left
-    (the bolts the user cleared on their last send), ops (the main-level ops whose card it is), follows. Also handed
-    back: heads, each row as <bolt>@<head> and :left for one the user cleared, which the run record keeps on the card's
-    post and change for the next raise to read (plan.landings_step), and linked, since each row's reading was opened
-    with it and the card has no reading of its own."""
+    conductor, forecast, forecast_why, link or unread and preview, stopped when sluice or its host stopped its last
+    landing at its head, which its paragraph and its box's detail say, stopped_said, and taking, why, for a row taking
+    main first), held ([{bolt, why}]), left (the bolts the user cleared on their last send), ops (the main-level ops
+    whose card it is), follows. Also handed back: heads, each row as <bolt>@<head>, :main for one taking main first and
+    :left for one the user cleared, which the run record keeps on the card's post and change for the next raise to
+    read (plan.landings_step), and linked, since each row's reading was opened with it and the card has no reading of
+    its own."""
     kit, rows, held, left = f["kit"], [dict(r) for r in f["rows"]], list(f.get("held") or []), set(f.get("left") or [])
     key, form = f"land/{kit}", landings_form(len(rows))
     rows or fail(f"{key} has no bolt that can land, so it has no card")
     for r in rows:
         r["left"], r["ops"] = r["bolt"] in left, f.get("ops")
-    heads = [f"{r['bolt']}@{r['head'][:7]}" + (":left" if r["left"] else "") for r in rows]
+    heads = [f"{r['bolt']}@{r['head'][:7]}" + (":main" if r.get("taking") else ":left" if r["left"] else "") for r in rows]
     unread = [(r["bolt"], r["unread"]) for r in rows if r.get("unread")]
     why = unread[0][1] if len(rows) == 1 and unread else "; ".join(f"{b}: {w}" for b, w in unread)
     if form == "approve":
@@ -865,20 +884,25 @@ def landings_card(f):
     face = "\n\n".join(row_paragraph(i, r) for i, r in enumerate(rows, 1))
     if held:
         face += "\n\n**Held, with no box**\n\n" + "\n".join(f"- **{h['bolt']}**: {h['why']}" for h in held)
-    left_said = [r["bolt"] for r in rows if r["left"]]
+    left_said = [r["bolt"] for r in rows if r["left"] and not r.get("taking")]
+    taking = [r["bolt"] for r in rows if r.get("taking")]
     summary = (f"{n} bolts wait to land on {about}, in the order below. One send lands the ticked ones in that order, each "
                "queued behind the one before; clear a box to leave that bolt waiting. A note can move one in the order, or "
                "name a defect in one, which goes to its conductor."
                + (f" {joined(left_said)} {'was' if len(left_said) == 1 else 'were'} left on your last send, and "
                   f"{'is' if len(left_said) == 1 else 'are'} unticked." if left_said else "")
+               + (f" {joined(taking)} {'takes' if len(taking) == 1 else 'take'} main first, and "
+                  f"{'is' if len(taking) == 1 else 'are'} unticked." if taking else "")
                + (f" Held, with no box: {joined([h['bolt'] for h in held])}." if held else ""))
 
     def option(i, r):
         return {"id": f"land:{r['bolt']}", "label": cut(f"{i}. {r['bolt']}", LABEL),
-                "detail": by_words(("Left on your last send. " if r["left"] else "") + row_counts(r), DETAIL),
-                "consequence": by_words(forecast_said(r.get("forecast") or [], r.get("forecast_why"), r.get("would_main")), DETAIL)}
+                "detail": by_words((f"{r['taking'][0].upper()}{r['taking'][1:].rstrip('.')}. " if r.get("taking") else
+                                    "Left on your last send. " if r["left"] else "") + row_counts(r), DETAIL),
+                "consequence": by_words("Ticked, it lands once its team has taken main in and sluice has proven it, your send "
+                                        "standing through it." if r.get("taking") else row_said(r), DETAIL)}
     options = [option(i, r) for i, r in enumerate(rows, 1)]
-    ticked = [o["id"] for o, r in zip(options, rows) if not r["left"]]
+    ticked = [o["id"] for o, r in zip(options, rows) if not r["left"] and not r.get("taking")]
     then = by_words("After they land: main-level ops lands them through sluice in this order, closing each as it lands, "
                     "and every host takes them.", DETAIL)
     if form == "multi":
@@ -899,7 +923,7 @@ def landings_card(f):
     pulls = [(f"Pull request #{r['pr']['number']} for {r['bolt']}, opened by sluice", r["pr"]["url"]) for r in rows if r.get("pr")]
     links = reads + previews + pulls
     background = ("\n\n".join(f"{i}. {r['bolt']} ({r.get('conductor') or r['team'] + '-conductor'}): {row_counts(r)}. "
-                              + forecast_said(r.get("forecast") or [], r.get("forecast_why"))
+                              + (taking_said(r) if r.get("taking") else forecast_said(r.get("forecast") or [], r.get("forecast_why")))
                               + (f" Read it: {r['link']}" if r.get("link") else
                                  f" Its reading could not be opened: {r['unread']}" if r.get("unread") else "")
                               for i, r in enumerate(rows, 1))

@@ -1639,6 +1639,25 @@ class TestLandings:
         assert c["options"][1]["detail"].startswith("Left on your last send. ")
         assert landings(3, left=["b2"])["heads"] == ["b1@abc1234", "b2@abc1234:left", "b3@abc1234"]
 
+    TAKING = "takes main first: forecast to conflict with main on README.md at e4f5a6b; swc-1-conductor takes main in by a fix"
+
+    def test_a_row_taking_main_first_is_an_unticked_box_saying_why_and_what_a_tick_does(self):
+        """rail-cards "A row taking main first stays on the card": its box unticked, its detail why, its consequence
+        that a tick stands through its take-main, marked :main in the heads the run record keeps."""
+        b = built.landings_card(dict(kit="crew", rows=[landings_row("y"), landings_row("z", taking=self.TAKING)]))
+        c = b["card"]
+        assert (c["kind"], c["highStakes"], c["recommendedIds"]) == ("multi", True, ["land:y"])
+        assert [o["id"] for o in c["options"]] == ["land:y", "land:z"]
+        assert c["options"][1]["detail"].startswith("Takes main first: forecast to conflict with main on README.md at e4f5a6b")
+        assert c["options"][1]["consequence"] == ("Ticked, it lands once its team has taken main in and sluice has proven it, "
+                                                  "your send standing through it.")
+        assert b["heads"] == ["y@abc1234", "z@abc1234:main"]
+        assert "z takes main first, and is unticked." in c["summary"]
+        face = "\n".join(c["artifacts"][0]["lines"])
+        assert "**2. z** · swc-1-conductor · *takes main first*" in face
+        assert f"It {self.TAKING}. Ticked, it lands once" in face and "No conflict is forecast." not in face.split("**2. z**")[1]
+        assert "Held, with no box" not in face
+
     def test_the_face_names_each_rows_reading_preview_and_pull_request(self):
         preview = {"head": "abc1234def", "name": "preview/1", "addresses": {"web": "http://web-abc1234"}, "state": "up"}
         rows = [landings_row("y", preview=preview), landings_row("z", link=None, unread="plannotator is not on the path")]

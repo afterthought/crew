@@ -831,9 +831,9 @@ ok "a ticked bolt sluice refused keeps the user's send through a fix that only t
 # Main moving under a proven row: GitHub's main lands a change to the file far's unit added, and the builder's host
 # has it as origin/main, as the fleet's timer fetches it; crew rail on the main level's host, the partition's main
 # machine, raises the kit's landings card again, which forecasts far against main after a fetch, holds far taking main
-# first, so a list of two becomes an approval of west alone, followed, and tells swb-1-conductor the take-main fix,
-# naming far while swb-1 holds two bolts, recorded on far; a second crew rail, main not having moved, tells nothing,
-# raises nothing and records nothing.
+# first, an unticked box beside west, so the one card is changed in place and never withdrawn and posted again, and
+# tells swb-1-conductor the take-main fix, naming far while swb-1 holds two bolts, recorded on far; a second crew rail,
+# main not having moved, tells nothing, raises nothing and records nothing.
 crew bolt new west "The west regions." --repo switchboard-kit >/dev/null; crew bolt give swb-1 west >/dev/null 2>&1
 crew unit add west-files "West's files." --bolt west >/dev/null
 proven west west-files west.txt west || fail "west's unit did not merge"
@@ -851,10 +851,12 @@ echo "main's far" > "$k/far.txt"; commit_all "$k" "feat: main's own far"; push "
 expect_ok on_box rail --label wldn
 has "$out" "land/switchboard-kit (wldn): main is at $(short origin/main), its rows forecast at ${was:0:7}: raised again"
 eq "$(cat "$kept")" "$(git -C "$k" rev-parse origin/main)"
-has "$(calls | grep "^$box pendingyou cancel_request ")" "far takes main first: forecast to conflict with main on far.txt at $(short origin/main); swb-1-conductor takes main in by a fix"
-posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
-eq "$(jq -c '[.kind, .follows, .title]' <<<"${posted#* post_request }")" "[\"approve\",\"$kit\",\"Land the bolt west on switchboard-kit's main\"]"
-has "$posted" "**far**: takes main first: forecast to conflict with main on far.txt at $(short origin/main)"
+changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
+has "$changed" "far takes main first: forecast to conflict with main on far.txt at $(short origin/main); swb-1-conductor takes main in by a fix"
+calls | grep -q "^$box pendingyou \(post\|cancel\)_request " && fail "far taking main first withdrew and posted the landings card again:"$'\n'"$(calls)"
+eq "$(jq -c '[.requestId, .recommendedIds]' <<<"${changed#* update_request }")" "[\"$kit\",[\"land:west\"]]"
+has "$changed" "Takes main first: forecast to conflict with main on far.txt at $(short origin/main)"
+eq "$(field $box card.update Heads kit/switchboard-kit)" "west@$(short bolt/west) far@$(short bolt/far):main"
 has "$(told swb-1-conductor)" "bolt/far at $(short bolt/far) is forecast to conflict with main on far.txt"
 has "$(told swb-1-conductor)" "take-main-$(short origin/main)"
 has "$(told swb-1-conductor)" "--bolt far"
@@ -866,10 +868,11 @@ lacks "$out" "landings cards forecast again"
 eq "$(told swb-1-conductor)" ""
 calls | grep -q "^$box pendingyou \(post\|update\|cancel\)_request " && fail "a second rail read changed the landings card:"$'\n'"$(calls)"
 eq "$(record_of $box | grep -c "^Heads: bolt/far@")" "1"
-ok "main moving under a proven row makes crew rail on the main level's host raise the kit's landings card again, holding the row taking main first and telling its conductor the take-main fix, recorded once; a second crew rail tells and raises nothing"
+ok "main moving under a proven row makes crew rail on the main level's host raise the kit's landings card again, changing it in place with the row taking main first unticked and telling its conductor the take-main fix, recorded once; a second crew rail tells and raises nothing"
 
-# A bolt the user left: near joins west on a card of two boxes, and the user sends it ticking none, which ops's crew
-# card read acts on at once, closing it and following it with both rows unticked as left, the set recorded. Main then
+# A bolt the user left: near joins west and far, which takes main first, on the card, changed in place, and the user
+# sends it ticking none, which ops's crew card read acts on at once, closing it and following it with west and near
+# unticked as left, the set recorded, and far unticked as taking main first, which is no bolt the user left. Main then
 # lands a change to the file west's unit added: crew rail's raise keeps west's box, changes the waiting card in place
 # saying it would take main first, records the forecast as found while left, and tells swb-1-conductor nothing of
 # west. The user ticks west on the card that follows: crew card read raises it first, so swb-1-conductor is told the
@@ -879,12 +882,12 @@ crew unit add near-files "Near's files." --bolt near >/dev/null
 proven near near-files near.txt near || fail "near's unit did not merge"
 expect_ok on_box _land-card wldn switchboard-kit
 two=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | tail -1 | cut -d' ' -f3)
-eq "$(field $box card.post Heads kit/switchboard-kit)" "west@$(short bolt/west) near@$(short bolt/near)"
+eq "$(field $box card.update Heads kit/switchboard-kit)" "west@$(short bolt/west) far@$(short bolt/far):main near@$(short bolt/near)"
 echo '{"answer": {"choiceIds": []}}' > "$(home_of $box)/.stub-pendingyou/answered/$two.json"
 out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
 has "$out" "no bolt ticked: nothing lands"
 eq "$(field $box landing.left Heads kit/switchboard-kit)" "west@$(short bolt/west) near@$(short bolt/near)"
-eq "$(field $box card.post Heads kit/switchboard-kit)" "west@$(short bolt/west):left near@$(short bolt/near):left"
+eq "$(field $box card.post Heads kit/switchboard-kit)" "west@$(short bolt/west):left far@$(short bolt/far):main near@$(short bolt/near):left"
 left=$(field $box card.post Card kit/switchboard-kit)
 [[ $left != "$two" ]] || fail "no card followed the send that left west and near"
 echo "main's west" > "$k/west.txt"; commit_all "$k" "feat: main's own west"; push "$k"
