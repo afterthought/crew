@@ -279,7 +279,7 @@ def here(monkeypatch):
     monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
 
 
-def bolts(submissions=None, error=None):
+def bolts(submissions=None, error=None, sent=None):
     p = plan.Plan(plan_text(bolts=[("y", "switchboard-kit", "swb-1")],
                             units=[("a", "switchboard-kit", "y", []), ("b", "switchboard-kit", "y", []), ("bump", "switchboard-kit", "y", [], "chore")]))
     place = {"path": "/kit/places/a", "head": "f" * 40, "head_at": "2026-10-28T10:00:00Z", "tasks": (2, 2), "planning": True, "open": [],
@@ -287,7 +287,7 @@ def bolts(submissions=None, error=None):
     kit = {"ok": True, "main": [], "fixes": [], "places": {"a": place}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": []}},
            **({"submissions": submissions} if submissions is not None else {}), **({"submissions_error": error} if error else {})}
     sv = {BOX: {"ok": True, "kits": {"/kit/main": kit}}}
-    return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, p)], sv, {})
+    return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, p)], sv, {}, sent=sent)
 
 
 def held(d):
@@ -327,3 +327,19 @@ def test_a_queue_that_cant_be_read_is_said_once_on_the_head_line_and_no_line_sho
     out = plan.bolts_text(d)
     assert out.count("can't be read") == 1 and "#41" not in out
     assert out.splitlines()[2] == f"  submissions: can't be read on {BOX}: sluice overview exited 2: not a repository sluice serves"
+
+
+def test_a_landing_sluice_sent_back_at_the_bolts_head_reads_as_its_teams_fix():
+    """bolt-teams "A landing sluice sent back is its team's fix": crew bolts reads it from the run record's refusal that
+    still stands at the bolt's head (plan.sent_back), saying sluice's words, that it is its team's fix and that crew bolt
+    submit submits it again once that fix has merged; at an older head it says nothing; a run record that can't be read
+    is named."""
+    sent = {"wldn": {"y": {"head": "d" * 40, "words": "#1474 failed: tests:logic on 41a7c09", "n": "1474"}}}
+    d = bolts([], sent=sent)
+    assert held(d)["sent_back"] == {"head": "d" * 40, "words": "#1474 failed: tests:logic on 41a7c09", "submission": "1474"}
+    assert plan.bolts_text(d).splitlines()[2] == ("  landing: sent back at ddddddd, its team's fix: #1474 failed: tests:logic on 41a7c09; "
+                                                  "once that fix has merged, crew bolt submit y submits it again")
+    assert held(bolts([], sent={"wldn": {"y": dict(sent["wldn"]["y"], head="c" * 40)}}))["sent_back"] is None
+    out = plan.bolts_text(bolts([], sent={"wldn": "crew can't tell which changes have been in a batch: wldn/main could not be read"}))
+    assert out.splitlines()[-1] == ("wldn's run record can't be read (crew can't tell which changes have been in a batch: wldn/main could "
+                                    "not be read): which landings sluice sent back is unknown")
