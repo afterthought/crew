@@ -104,10 +104,11 @@ def text(data):
 
 
 def main(argv):
-    plan.need_recutils()
     ap = argparse.ArgumentParser(prog="crew sites")
     ap.add_argument("label", nargs="?")
     ap.add_argument("--json", action="store_true")
+    crew.answer_usage(ap, argv)
+    plan.need_recutils()
     a = ap.parse_args(argv)
     fleet = crew.load()
     label = a.label or crew.caller_label(fleet)
