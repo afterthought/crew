@@ -465,7 +465,7 @@ The deliverables SHALL be: construct, the unit's change committed since the stag
 - **THEN** the team's next read drops it, records no end for it, and owes nothing
 
 ### Requirement: A stage's agent says what it needs through crew
-A stage's agent that cannot finish without something only someone else can give SHALL say so with `crew needs "<what it needs>"`, which ends its stage short. crew SHALL carry the agent's words to the conductor: in the answer of a wait running on the stage, otherwise in a tell marked as from that agent. crew SHALL refuse `crew needs` from anyone but the agent of a stage crew owes an end, and with no words.
+A stage's agent that cannot finish without something only someone else can give SHALL say so with `crew needs "<what it needs>"`, which ends its stage short. crew SHALL carry the agent's words to the conductor: in the answer of a wait running on the stage, otherwise in a tell marked as from that agent. crew SHALL refuse `crew needs` from anyone but the agent of a stage crew owes an end, and with no words. `crew needs --help` and `crew needs -h` SHALL ask for the command's usage and end no stage (crew-command, "A help flag shows a command's usage and acts on nothing").
 
 #### Scenario: A coder pauses
 - **WHEN** a code agent runs `crew needs "a decision on which table holds tenants"` while the conductor waits on its unit
@@ -478,6 +478,10 @@ A stage's agent that cannot finish without something only someone else can give 
 #### Scenario: Not a stage's agent
 - **WHEN** a conductor, or a slot's agent whose stage has already ended, runs `crew needs "x"`
 - **THEN** crew refuses, saying the caller runs no stage crew is waiting on
+
+#### Scenario: The agent reads the command's usage
+- **WHEN** the agent of a stage crew owes an end runs `crew needs --help` to read how to use it
+- **THEN** crew prints the usage, the stage stays begun and nothing is recorded or told
 
 ### Requirement: A stage quiet too long is reported stuck
 A wait SHALL report a stage stuck, naming the stage and its agent, when the agent has not been working for longer than crew's limit (15 minutes unless the wait is given another), with no deliverable, no stop-short, and no background work of its own still running. Before it reports a stage stuck, the wait SHALL read the agent's last words, the last message the agent wrote in its own Claude transcript since the stage began, and the commits on the stage's branch made since the stage began, and the report SHALL carry both: the words quoted with their time, and each commit by its short sha and subject, newest first. Where the agent has written nothing since the stage began, or the branch holds no commit since then, the report SHALL say so; where crew cannot read either, the report SHALL say what it could not read and why, and SHALL NOT stand a guess in its place. A stuck report SHALL end neither the stage nor its agent, and SHALL NOT enter the agent's words in the run record. When crew cannot read whether the agent waits on work of its own, the clock SHALL run and the report SHALL say what could not be read.
@@ -747,7 +751,7 @@ At verify, every path `git diff --name-only bolt/<bolt>...unit/<unit>` names tha
 - **THEN** the verify report names `README.md` as changed and not declared, and the code stage run on the finding adds it to the Touches block
 
 ### Requirement: A conflict is forecast on the conductor's waits
-Each time the conductor waits on a stage or a proof through crew, crew SHALL dry-run, with `git merge-tree`, the merge of each unmerged unit's head with `bolt/<bolt>` and with the head of each unmerged unit ahead of it in the bolt's merge order, writing no ref. A dependent SHALL be compared with a unit it comes after only on what it adds beyond the head of that unit its place took.
+Each time the conductor waits on a stage or a proof through crew, crew SHALL dry-run, with `git merge-tree`, the merge of each unmerged unit's head with `bolt/<bolt>` and with the head of each unmerged unit ahead of it in the bolt's merge order, writing no ref. A unit SHALL be compared with one ahead of it only on what each adds beyond the newest of that one's work it holds, read from git and never from a commit's words. A unit whose head holds that one's head, by a merge in its place, a settle or anything else, SHALL be forecast nothing against it. A unit that still holds the head of that one its place took SHALL be compared from that head only while that one's line no longer holds it, because its rebase or settle rewrote that work, and the two share nothing newer of that one's work. Any other unit SHALL be compared from their merge base, the newest commit both hold. When git cannot tell what a unit holds, crew SHALL say so, naming the two units, and SHALL forecast nothing for them.
 
 #### Scenario: The dry run moves nothing
 - **WHEN** the conductor's wait forecasts the merges of three unmerged units
@@ -756,6 +760,18 @@ Each time the conductor waits on a stage or a proof through crew, crew SHALL dry
 #### Scenario: A dependent carries its After unit's rewritten work
 - **WHEN** B, after A, holds A's work as its place took it, A is rebased onto the bolt and its settle revises A's own file, and the conductor's wait runs
 - **THEN** B is forecast nothing against A for that file, and a line B's own commit changed that A's settle also changed is forecast
+
+#### Scenario: A unit that merged the one ahead of it in its place
+- **WHEN** B's place took A's head, A's code then changed `shared.txt`, B merged A's new head in its place and changed the next line itself, and the conductor's wait runs
+- **THEN** B is forecast nothing against A, and no settle starts for it
+
+#### Scenario: The unit ahead moved on from the head the place took
+- **WHEN** B's place took A's head and B revised A's design, and A has since added its tasks and changed `other.txt`, which B's own code changes too
+- **THEN** B is forecast against A on `other.txt` alone, and not on A's design, which both would change from the bolt
+
+#### Scenario: A newer head merged after the one taken
+- **WHEN** B's place took A's first head, B merged A's second in its place and changed the line after A's, and A then changed `other.txt`, which B changes too
+- **THEN** B is forecast against A on `other.txt` alone, and not on the line of A's that B already holds
 
 ### Requirement: A forecast reaches the later unit once
 A predicted conflict SHALL reach the later unit once for the same two heads, with the conflicting paths and the other unit's OpenSpec change: told to its agent once the agent is not working, when its stage is running; carried in the prompt of its next stage, when no agent of it is running; or as a settle stage, when it has delivered and waits to merge. Overlap SHALL order merging only, and SHALL NOT hold any unit's construct, code or verify.
@@ -1056,11 +1072,15 @@ A team on today's path SHALL build one bolt at a time, and MAY hold one more tha
 - **THEN** crw-4 holds `x`, `y` and `z`, and nothing is refused for the bolts it holds
 
 ### Requirement: A give to a team holding a waiting bolt restarts its roles at their next stop
-A give to a team that holds a proven bolt SHALL restart neither its conductor nor its ops at once: each SHALL be restarted at its next stop, once idle, as an agent whose team's bolt changed under it is, the conductor fresh and ops with its conversation. The conductor's greeting at that restart SHALL name the bolt it now builds, the bolt that waits to land as a row of its kit's landings card, main-level ops's, that crew tells it when the user sends that bolt's reading and `crew card read land/<bolt>` then gives the notes, and each fix in flight on it. It SHALL name no wait to start. A give to a team that holds no bolt SHALL restart both at once, as before.
+A give to a team that holds a proven bolt SHALL restart neither its conductor nor its ops at once: each SHALL be restarted at its next stop, once idle, as an agent whose team's bolt changed under it is, the conductor fresh and ops with its conversation. The conductor's greeting at that restart SHALL name the bolt it now builds, the bolt that waits to land as a row of its kit's landings card, main-level ops's, that crew tells it when the user sends that bolt's reading and `crew card read land/<bolt>` then gives the notes, and each fix in flight on it. It SHALL name no wait to start. A give to a team that holds no bolt SHALL restart its ops at once, greeted with the bolt, and its conductor fresh on the team's host, at once when herdr reads it idle with no question open and nothing of its own running in the background, else at its next stop, its greeting naming the bolt.
 
 #### Scenario: A give while the conductor waits on its landing card
 - **WHEN** `crew bolt give swc-1` gives `ssh-fix` while swc-1 holds `doctor-rows`, a row of its kit's landings card, and swc-1-conductor is idle
 - **THEN** the conductor is restarted fresh once idle, and its first message says it builds `ssh-fix`, that `doctor-rows` waits to land as a row of the kit's landings card, that crew tells it when the user sends `land/doctor-rows`'s reading and `crew card read land/doctor-rows` gives the notes, and names no `crew card wait`
+
+#### Scenario: A give to a team that holds no bolt
+- **WHEN** `crew bolt give swb-1 smoke` gives swb-1 its only bolt while its conductor and ops are idle with nothing of their own running
+- **THEN** the give restarts ops and greets it with `smoke`, and the conductor is restarted fresh on its host at once, its greeting saying its team now holds `smoke`
 
 ### Requirement: A brief names nothing of a change's content but what crew reads
 No brief crew gives an agent SHALL name a proof list, a task's shape or a design's sections. The construct's brief SHALL say that what a change holds is the kit's, from OpenSpec's schema and the kit's `openspec/config.yaml`, which `/opsx:propose` hands it, and SHALL name of a change only what crew reads: its name, which is the unit's; its tasks' tick boxes; its proposal's `## Touches` block; and its archive at merge. The results section every brief carries SHALL name no proof list.
@@ -1590,3 +1610,112 @@ When sluice refuses a crossed team's bolt at its landing for a conflict with mai
 #### Scenario: Read twice
 - **WHEN** a later read of the same refusal finds `x--take-main-4d3d9be` standing
 - **THEN** no second launch is appended
+
+### Requirement: A give's notice reaches its conductor whatever it is doing
+Every give to a team on today's path SHALL reach the team's conductor with the bolt it was given, handed to the team's host before the give starts any agent. The host SHALL tell an idle conductor with no question open at once: by its restart's greeting when it is due a restart that may run now, else by crew's notice naming the bolt, or both bolts beside one that waits to land. A working conductor SHALL be told at the end of its turn. A start of the conductor after the give SHALL be its notice.
+
+#### Scenario: An idle conductor whose restart waits on its own background work
+- **WHEN** `crew bolt give swb-2` gives `the-hand-run-takes-a-release-whole-again` while swb-2 holds `the-full-stand-passes-the-runner-test-on-githubs-runner`, which waits to land, and swb-2-conductor is idle with a `crew tell` of its own running in the background
+- **THEN** crew tells swb-2-conductor at once that its team builds `the-hand-run-takes-a-release-whole-again` and that `the-full-stand-passes-the-runner-test-on-githubs-runner` waits to land, and that crew starts it again at a later stop, the run record holds a `bolt.notice` for it, and it is restarted only once that work is over
+
+#### Scenario: A working conductor
+- **WHEN** the give finds swb-2-conductor working
+- **THEN** nothing is typed to it, and at the end of its turn it is told, by its restart's greeting or by crew's notice
+
+#### Scenario: Started since the give
+- **WHEN** swb-2-conductor is started again by `crew rebuild swb-2` before its notice is given
+- **THEN** crew tells it nothing more of the give, its greeting having told it
+
+### Requirement: A give's notice is recorded, and one not given is said
+crew SHALL record a `bolt.notice` on the bolt, its team and the conductor when crew's notice tells the conductor. When the conductor is not up, its team's host could not take the notice, or it did not take it, crew SHALL say so and record a refused `bolt.notice` in crew's words, which say how the conductor is told, each reason once. A notice not taken SHALL be tried again at the end of the conductor's next turn.
+
+#### Scenario: A conductor not up
+- **WHEN** the give finds swb-2-conductor not up
+- **THEN** the give says it was not told and that `crew up swb-2` starts and greets it, and the run record holds a refused `bolt.notice` in those words
+
+#### Scenario: The team's host does not answer
+- **WHEN** chuck-herdr-alpha does not answer the give's hand-off of the notice
+- **THEN** the give says swb-2-conductor was not told, since its host did not answer, with the `crew tell` that tells it, and records it refused
+
+#### Scenario: A notice not taken
+- **WHEN** swb-2-conductor does not take crew's notice, sent twice
+- **THEN** the run record holds one refused `bolt.notice` saying so, and the notice is tried again at the end of its next turn
+
+### Requirement: A landing sluice sent back is its team's fix
+A landing sluice sent back for the bolt's own content SHALL be its team's fix until a fix moves the bolt's head: crew SHALL name what failed from sluice's record of the submission, never from a check's words, and SHALL offer the team's `crew fix` and the `crew bolt submit` that lands it once that fix has merged, never a submission again at the head sluice sent back. A later submit at that head that submitted nothing SHALL leave it its team's fix, never a stop of sluice's.
+
+#### Scenario: A check fails
+- **WHEN** `crew bolt submit z` waits on `#7` and sluice's record has it failed with `tests:logic`, which ran and failed, tested on main at `db8bc25`
+- **THEN** the command fails, saying `z` did not land, that a failed check is the bolt's, `crew fix <team> landing-7 "Mend what sluice sent bolt/z's landing back for: #7 failed tests:logic, tested on main at db8bc25" --bolt z`, and that once that fix has merged into `bolt/z`, `crew bolt submit z` submits the landing again at its new head
+
+#### Scenario: Submitted again at the head sluice sent back
+- **WHEN** ops runs `crew bolt submit z` again while `z`'s head is still the one sluice sent back as `#7`
+- **THEN** crew reads sluice's record of `#7` on the team's host and submits nothing, runs no `wt submit` and leaves the pull request a draft, refusing in words that name what failed and the team's fix with its command and the submit once it has merged, saying it is its team's fix, not a stop, and `z` stays held on its row
+
+#### Scenario: A submit that submitted nothing
+- **WHEN** `z`'s landing was refused at `977138a` and a later `crew bolt submit z` at `977138a` ends with sluice's driver submitting nothing, recorded stopped with no submission
+- **THEN** `z` reads as held for its team's fix at `977138a`, on its kit's landings card, the rail and `crew bolts`, and no reader says it was stopped or that ops submits it again as it is
+
+#### Scenario: The fix moves the head
+- **WHEN** `z`'s team's fix has merged and `z`'s head is no longer the one sluice sent back
+- **THEN** `crew bolt submit z` submits it at its new head as any landing, asking sluice's record of `#7` nothing
+
+#### Scenario: sluice's record can't be read
+- **WHEN** `crew bolt submit z` finds `z`'s landing refused at its head and `sluice status 7 --json` fails
+- **THEN** it submits nothing, saying the words the refusal was recorded with and why the record can't be read, and offers the team's fix with no command
+
+#### Scenario: crew bolts
+- **WHEN** `z`'s landing was refused at its present head
+- **THEN** `crew bolts` shows on `z` `landing: sent back at <head>, its team's fix: <sluice's words>; once that fix has merged, crew bolt submit z submits it again`, and its JSON gives `z` `sent_back` with the head, the words and sluice's number
+
+### Requirement: A bolt carrying another bolt's work does not land
+Another bolt's work is a commit on that bolt's first-parent line beyond main, read from branches as GitHub holds them. `crew bolt submit` SHALL submit nothing of a bolt whose head, read after a fetch, holds such a commit that main lacks and that is off its own first-parent line, naming each bolt and its landings. The bolt whose work was carried SHALL NOT be held for it. A head crew can't read SHALL be refused, naming why.
+
+#### Scenario: A bolt built on another bolt's landing is refused at its submit
+- **WHEN** bolt `popover`'s branch on GitHub holds bolt `deleting`'s landing `f5e67f35`, which main lacks, and ops runs `crew bolt submit popover`
+- **THEN** nothing of `popover` is submitted and sluice is asked for nothing, and the refusal names bolt `deleting` and its landing `f5e67f3`, recorded with no head
+
+#### Scenario: The bolt whose work was carried lands
+- **WHEN** `popover` carries `deleting`'s landing, and ops runs `crew bolt submit deleting`
+- **THEN** `deleting` is not refused for it, since it holds nothing on `popover`'s first-parent line
+
+#### Scenario: Main holds the carried work
+- **WHEN** `deleting` has landed on main, and ops runs `crew bolt submit popover`
+- **THEN** `popover` carries nothing main lacks, and is submitted as any bolt
+
+#### Scenario: What a head carries can't be read
+- **WHEN** the fetch `crew bolt submit` makes to read what the head carries fails
+- **THEN** nothing is submitted, and the refusal says git's words
+
+### Requirement: A merge carries no other bolt's work
+crew SHALL refuse a unit's, chore's or fix's merge into its bolt before its submission while its branch holds another bolt's landing that main and its own bolt lack, read after one fetch. The refusal SHALL name that bolt and its landings, and say to take that work out of the branch, building it on its own bolt where it lives, or to merge once main holds that work.
+
+#### Scenario: A unit's branch holds another bolt's landing
+- **WHEN** `unit/pop` of bolt `popover` was rebased onto bolt `deleting`'s landing, which main and `bolt/popover` lack, and its conductor runs `crew unit run pop merge`
+- **THEN** the merge is refused before its submission, naming bolt `deleting`, its landing, and the way on
+
+#### Scenario: A unit built on its own bolt alone merges
+- **WHEN** `unit/own`'s branch holds only its own commits on `origin/bolt/popover`
+- **THEN** its merge is not refused for another bolt's work
+
+### Requirement: A place's work starts at its own bolt alone
+A unit's place SHALL be cut from its own bolt on GitHub after a fetch, whatever the slot that builds it last built. The coder's brief SHALL name its bolt as the one its branch tracks, and say no other bolt's branch is its to rebase onto, merge, test against or take work from. A unit moved to another bolt SHALL be rebased from the bolt it leaves onto the one it joins, each read where it lives after a fetch.
+
+#### Scenario: A slot builds a unit of one bolt, then one of another
+- **WHEN** slot `brd-2-unit-1` built a unit of bolt `deleting`, its place holding `deleting`'s landing, and then starts the construct of a unit of bolt `popover`
+- **THEN** the second unit's place is cut from `origin/bolt/popover` after a fetch, tracks it, and holds nothing of `deleting`'s landing
+
+#### Scenario: The coder is told its bolt
+- **WHEN** crew starts a coder for a unit's stage
+- **THEN** its brief names its bolt as the one its branch tracks, `git rev-parse --abbrev-ref @{upstream}`, and says no other bolt's branch is its to build on
+
+#### Scenario: A unit moves off a bolt whose host copy lags
+- **WHEN** a unit whose place was cut from GitHub's `bolt/b`, which holds a landing the host's own `bolt/b` lacks, is moved to bolt `cp`
+- **THEN** only the unit's own commits go onto `origin/bolt/cp`, and nothing of `bolt/b`'s landing
+
+### Requirement: crew bolts says a bolt carries another bolt's work
+`crew bolts` SHALL say under a bolt whose kit's read says it carries another bolt's work that main lacks that its landing is held, naming that bolt and its landings, and SHALL give it in its JSON as `carries`, or why it can't be read as `carries_error`.
+
+#### Scenario: crew bolts shows a bolt carrying another's work
+- **WHEN** the kit's read says bolt `y` carries bolt `x`'s landing `f5e67f35`
+- **THEN** `crew bolts` shows under `y` "landing: held: carries bolt x's work, its landing f5e67f3, which main lacks", and its JSON gives `carries`

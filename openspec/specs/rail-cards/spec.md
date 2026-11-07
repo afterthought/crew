@@ -862,15 +862,19 @@ Each row SHALL carry the conflicts crew forecasts when its bolt is merged onto t
 - **THEN** the read raises no landings card and fetches nothing for it
 
 ### Requirement: A refused landing is held on its row
-A bolt whose landing sluice refused for its own content, its submission in conflict or blamed for a check that ran and failed, SHALL be held on its row at that head, with no box, the row saying sluice's words and that it waits for its team's fix, while the bolts after it go on. Once its head moves and it reads proven, it SHALL land on the user's send that ticked it when that send still stands for its work, and SHALL otherwise have a box again. A landing that did not land for any other cause SHALL NOT hold its row.
+A bolt whose landing sluice refused for its own content, its submission in conflict or blamed for a check that ran and failed, SHALL be held on its row at that head, with no box, the row saying sluice's words, that it waits for its team's fix and that ops submits it again once that fix has merged, while the bolts after it go on. A later submit at that head that submitted nothing SHALL leave it held. Once its head moves and it reads proven, it SHALL land on the user's send that ticked it when that send still stands for its work, and SHALL otherwise have a box again. A landing that did not land for any other cause SHALL NOT hold its row.
 
 #### Scenario: The second of three is refused
 - **WHEN** the user sends `land/crew` with `y`, `z` and `w` ticked, and sluice refuses `z` for a conflict on `plugin/lib/plan.py`
-- **THEN** `y` and `w` land, `z` stays on crew's landing row held, saying sluice's words and that it waits for its team's fix, and the next landings card raised carries `z` held with no box
+- **THEN** `y` and `w` land, `z` stays on crew's landing row held, saying sluice's words, that it waits for its team's fix and that ops submits it again once that fix has merged, and the next landings card raised carries `z` held with no box
 
 #### Scenario: A check fails
 - **WHEN** sluice blames `z`'s landing for `tests:logic`, which ran and failed
 - **THEN** `z` is held on its row with no box, saying sluice's words and that it waits for its team's fix
+
+#### Scenario: Submitted again with nothing submitted
+- **WHEN** `z` was refused at `977138a`, and a later `crew bolt submit z` at `977138a` is recorded stopped with no submission of sluice's
+- **THEN** `z` is still held on its row with no box for its team's fix, and the row says nothing of a stop
 
 #### Scenario: The fix merges
 - **WHEN** `z`'s team's take-main fix merges into `z` and `z` reads proven at its new head, its own work unchanged since the user's send
@@ -1271,3 +1275,18 @@ A card about a revision that has landed, a deploy's card and the close of a land
 #### Scenario: A landed row
 - **WHEN** `y` lands on GitHub's main as `1a2b3c4` and its card closes
 - **THEN** the close names `1a2b3c4` as the commit it landed as, and says nothing of a preview
+
+### Requirement: A row carrying another bolt's work is held
+A bolt whose kit's read says it carries another bolt's work that main lacks SHALL be held on its landings row with no box, as a conflict holds one, whatever else holds it, and not marked as taking main first. The row SHALL name each bolt and its landings, and say it lands once main holds that work. No landing card SHALL be raised for it. A bolt whose carried work can't be read SHALL be held the same way, saying why.
+
+#### Scenario: A bolt built on another bolt's landing
+- **WHEN** bolt `y`'s branch holds bolt `breadboard-shows-a-deleted-app-as-deleting`'s landing `f5e67f35`, which main lacks
+- **THEN** `y`'s row has no box and says "held: carries bolt breadboard-shows-a-deleted-app-as-deleting's work, its landing f5e67f3, which main lacks", and no landing card is raised for it
+
+#### Scenario: Held with a take-main fix in flight
+- **WHEN** `y` carries another bolt's work and a take-main fix is in flight on it
+- **THEN** `y`'s row is held for the work it carries, not marked as taking main first
+
+#### Scenario: What it carries can't be read
+- **WHEN** the kit's read could not list another bolt's own commits beyond main
+- **THEN** `y`'s row has no box and says crew can't tell whether it carries another bolt's work, with why

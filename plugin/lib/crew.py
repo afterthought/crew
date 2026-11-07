@@ -82,6 +82,34 @@ class Stopped(Exception):
         self.code = code
 
 
+# A help flag: either one among a command's arguments asks for the command's usage, and crew does nothing else (code.11).
+HELP = ("-h", "--help")
+
+
+def usage_asked(ap, argv):
+    """The parser whose usage a command's arguments ask for, or None when they ask for none: -h or --help anywhere
+    among them asks for the usage of the deepest command their leading words name, so no word before the flag that the
+    parser would refuse answers in its place. A word that is not exactly -h or --help is a word."""
+    if not any(w in HELP for w in argv):
+        return None
+    import argparse
+    for w in argv:
+        subs = next((x for x in ap._actions if isinstance(x, argparse._SubParsersAction)), None)
+        if subs is None or w not in subs.choices:
+            break
+        ap = subs.choices[w]
+    return ap
+
+
+def answer_usage(ap, argv):
+    """A command whose arguments ask for its usage prints it and exits 0, first, before it reads, records, starts or
+    sends anything to another host (code.11)."""
+    asked = usage_asked(ap, argv)
+    if asked is not None:
+        asked.print_help()
+        sys.exit(0)
+
+
 def need(entry, what, field, kind=None):
     if field not in entry or entry[field] in (None, "", []):
         fail(f"{what} in {TEAMS} has no '{field}'")
@@ -2102,6 +2130,26 @@ def starts():
 def start_of(name):
     """What an agent's last start on this host recorded (starts), or None when it has no record."""
     return starts().get(name)
+
+
+# Where crew _renew keeps, for each standing agent of this host, its lock, its log and what it still owes the agent:
+# <agent>.given, a give's notice not yet told it (hold.owe_given), and <agent>.owed, a restart it gave up on that the end
+# of the agent's next turn hands back (hold.owe_restart).
+RENEW = pathlib.Path.home() / ".local/state/crew/renew"
+
+
+def renew_owed(name):
+    """Whether crew _renew owes a standing agent of this host something its Stop hook hands back at the end of its turn:
+    a give's notice, or a restart it gave up on (RENEW)."""
+    return (RENEW / f"{name}.given").exists() or (RENEW / f"{name}.owed").exists()
+
+
+def stop_hands(due, owed, started, session):
+    """Whether crew's Stop hook hands an agent to crew _renew at the end of its turn (teams.19, teams.20, teams.7): it is
+    due a restart for an update, or crew _renew owes it a give's notice or a restart it gave up on (owed, renew_owed),
+    and the session whose turn ended is the one its last start recorded, since an older session of it is not the one that
+    runs. A decision of facts alone (code.7)."""
+    return bool((due or owed) and started and started.get("session") == session)
 
 
 # What the update check says of a start that recorded its launch but no crew commit, as one on a host that loads crew

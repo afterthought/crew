@@ -648,6 +648,7 @@ class TestWhenABoltIsFetched:
         asks = self.asked(monkeypatch)
         p = self.plan()
         monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("wldn", "o/state", "f" * 40, p)])
+        monkeypatch.setattr(plan, "partition_entries", lambda fleet, label: [])
         with pytest.raises(SystemExit) as e:
             plan.bolts_view(self.FLEET, argparse.Namespace(label="wldn", bolt=None, json=True))
         assert e.value.code == 0

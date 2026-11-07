@@ -71,6 +71,7 @@ def test_merge_tree_from_the_head_a_dependent_took_leaves_out_its_dependencys_ow
     took = dependency_rebased(repo)
     assert plan.merge_tree(str(repo.path), "a", "b") == ["a/design.md", "shared.txt"]
     assert plan.merge_tree(str(repo.path), "a", "b", took) == []
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([], [])
 
 
 def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overlap(repo):
@@ -81,12 +82,92 @@ def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overl
     assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
 
 
-def rebase(repo, tmp_path, unit, src, to, upstream=None):
-    """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit> <kind> <the
-    upstream of the bolt it moves to>, bolt/<to> unless given."""
+def forecast(repo, took):
+    """plan.forecasts_due for units a and b, b after a, on git as crew's wait reads it in the kit's main checkout: their
+    merge in git merge-tree (plan.merge_tree), what b holds of a (plan.git_holds) and what the two share beyond the bolt
+    (plan.shared_beyond), with the head b's place took (took, {"b": {"a": <head>}})."""
     import plan
-    return subprocess.run(["bash", "-c", plan.REBASE, "crew", str(tmp_path / "place"), src, to, unit, "unit", upstream or f"bolt/{to}"],
-                          capture_output=True, text=True)
+    main, rev = str(repo.path), lambda ref: repo.git("rev-parse", ref)
+    bolt = rev("bolt")
+    return plan.forecasts_due([("a", rev("a"), []), ("b", rev("b"), ["a"])], "t", bolt,
+                              lambda o, h, base: plan.merge_tree(main, o, h, base), lambda c, h: plan.git_holds(main, c, h),
+                              lambda h, o: plan.shared_beyond(main, h, o, bolt), set(), took)
+
+
+def dependent_took(repo):
+    """A unit a and a dependent b cut from the bolt: a's construct commits its change, b's place takes a's head (crew's
+    TAKE, a merge commit of its own) and b's construct and code build on it. Returns the head b took, which crew
+    records as the construct's Took."""
+    repo.commit("main", {"shared.txt": "one\ntwo\nthree\nfour\nfive\n", "other.txt": "x\n"})
+    repo.git("branch", "bolt")
+    repo.git("checkout", "-q", "-b", "a", "bolt")
+    took = repo.commit("feat(a): its change", {"a/design.md": "z\n"})
+    repo.git("checkout", "-q", "-b", "b", "bolt")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "-m", "chore(b): build on a as it stands", "a")
+    repo.commit("feat(b): its change", {"b/design.md": "y\n", "a/design.md": "z, as b builds on it\n"})
+    return took
+
+
+def test_a_unit_that_merged_the_unit_ahead_of_it_in_its_place_is_forecast_no_conflict(repo):
+    """plan.forecasts_due through plan.git_holds (teams.12, plan.13): b took a's head at its construct, a's code then
+    changed shared.txt, and b merged a's new head in its place, as a settle does, and changed the next line itself.
+    From the head b took, which for shared.txt is the bolt's, git merge-tree names shared.txt, as atl-1's gateway unit
+    was forecast on four paths with nothing to settle (wldn, 2026-11-07); b holds a's head, so it is forecast nothing,
+    and no settle starts."""
+    import plan
+    took = dependent_took(repo)
+    repo.git("checkout", "-q", "a")
+    repo.commit("feat(a): its code", {"shared.txt": "one\ntwo, as a has it\nthree\nfour\nfive\n"})
+    repo.git("checkout", "-q", "b")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "-m", "fix(b): settle on a", "a")
+    repo.commit("feat(b): its code", {"shared.txt": "one\ntwo, as a has it\nthree, as b has it\nfour\nfive\n"})
+    assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
+    assert plan.merge_tree(str(repo.path), "a", "b", repo.git("rev-parse", "bolt")) == ["a/design.md", "shared.txt"]
+    assert plan.merge_tree(str(repo.path), "a", "b") == []
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([], [])
+    assert forecast(repo, {}) == ([], [])
+
+
+def test_a_unit_whose_unit_ahead_moved_on_from_the_head_it_took_is_forecast_on_what_that_one_added_since(repo):
+    """plan.forecasts_due through plan.git_holds and plan.shared_beyond (teams.12, plan.13): b took a's head and
+    revised a's design, and a has since moved on, adding its tasks and changing other.txt, which b's own code changes
+    too. From the bolt, a/design.md would be in conflict as well, both having added it; b is forecast on other.txt
+    alone, what a added since the head b took against what b added."""
+    import plan
+    took = dependent_took(repo)
+    repo.commit("feat(b): its code", {"other.txt": "x, as b has it\n"})
+    repo.git("checkout", "-q", "a")
+    repo.commit("feat(a): its code", {"a/tasks.md": "- [x] 1.1\n", "other.txt": "x, as a has it\n"})
+    a, b = repo.git("rev-parse", "a"), repo.git("rev-parse", "b")
+    assert plan.merge_tree(str(repo.path), "a", "b", repo.git("rev-parse", "bolt")) == ["a/design.md", "other.txt"]
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([("b", "a", ["other.txt"], f"b@{b[:7]} a@{a[:7]}")], [])
+
+
+def test_a_unit_that_took_an_early_head_and_merged_a_newer_one_is_forecast_beyond_the_newer(repo):
+    """plan.forecasts_due through plan.git_holds (teams.12, plan.13): b took a's first head, merged a's second in its
+    place and changed the line after a's, and a then changed other.txt, which b changes too. b is forecast on other.txt
+    alone: from the head b took, git merge-tree would name shared.txt as well, a's work b already holds."""
+    import plan
+    took = dependent_took(repo)
+    repo.git("checkout", "-q", "a")
+    repo.commit("feat(a): its code", {"shared.txt": "one\ntwo, as a has it\nthree\nfour\nfive\n"})
+    repo.git("checkout", "-q", "b")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "-m", "chore(b): take a's code", "a")
+    repo.commit("feat(b): its code", {"shared.txt": "one\ntwo, as a has it\nthree, as b has it\nfour\nfive\n",
+                                      "other.txt": "x, as b has it\n"})
+    repo.git("checkout", "-q", "a")
+    repo.commit("fix(a): its verify's finding", {"other.txt": "x, as a has it\n"})
+    a, b = repo.git("rev-parse", "a"), repo.git("rev-parse", "b")
+    assert plan.merge_tree(str(repo.path), "a", "b", took) == ["other.txt", "shared.txt"]
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([("b", "a", ["other.txt"], f"b@{b[:7]} a@{a[:7]}")], [])
+
+
+def rebase(repo, tmp_path, unit, src, to, upstream=None, left=None):
+    """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit> <kind> <the
+    bolt it moves to where it lives> <the bolt it leaves where it lives>, bolt/<to> and bolt/<src> unless given."""
+    import plan
+    return subprocess.run(["bash", "-c", plan.REBASE, "crew", str(tmp_path / "place"), src, to, unit, "unit", upstream or f"bolt/{to}",
+                           left or f"bolt/{src}"], capture_output=True, text=True)
 
 
 def test_a_move_rebases_the_units_own_commits_onto_the_new_bolt_and_tracks_it(repo, tmp_path):
@@ -127,9 +208,27 @@ def test_a_unit_moved_to_a_bolt_on_github_tracks_it_there(repo, tmp_path):
     subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
     repo.git("remote", "add", "origin", str(tmp_path / "github.git")); repo.git("fetch", "-q", "origin")
     repo.git("worktree", "add", "-q", "--track", "-b", "unit/c", str(tmp_path / "place"), "origin/bolt/te")
-    r = rebase(repo, tmp_path, "c", "te", "cp", "origin/bolt/cp")
+    r = rebase(repo, tmp_path, "c", "te", "cp", "origin/bolt/cp", "origin/bolt/te")
     assert r.returncode == 0, r.stderr
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/c") == "origin/bolt/cp"
+
+
+def test_a_unit_moved_from_a_bolt_whose_host_copy_lags_carries_none_of_that_bolts_work(repo, tmp_path):
+    """plan.op_unit_move through REBASE (plan.8, plan.19): a unit whose place was cut from GitHub's bolt/b, holding a
+    landing sluice made there from another host that the host's own bolt/b lacks, is moved to bolt/cp; the rebase reads
+    the bolt it leaves where it lives, after a fetch, so only the unit's own commit goes onto bolt/cp, and nothing of
+    bolt/b's landing, which a rebase from the host's lagging copy would carry."""
+    landed = bolt_on(repo, tmp_path, "origin")
+    repo.git("branch", "bolt/cp", "main")
+    subprocess.run(["git", "-C", str(repo.path), "push", "-q", "origin", "bolt/cp"], check=True)
+    repo.git("fetch", "-q", "origin")
+    repo.git("worktree", "add", "-q", "--track", "-b", "unit/c", str(tmp_path / "place"), "origin/bolt/b")
+    subprocess.run(["git", "-C", str(tmp_path / "place"), "commit", "-q", "--allow-empty", "-m", "feat(c): its own"], check=True)
+    assert repo.git("rev-parse", "bolt/b") != landed
+    r = rebase(repo, tmp_path, "c", "b", "cp", "origin/bolt/cp", "origin/bolt/b")
+    assert r.returncode == 0, r.stderr
+    assert repo.git("log", "--format=%s", "origin/bolt/cp..unit/c") == "feat(c): its own"
+    assert subprocess.run(["git", "-C", str(repo.path), "merge-base", "--is-ancestor", landed, "unit/c"]).returncode == 1
 
 
 def bolt_on(repo, tmp_path, remote):
@@ -194,6 +293,87 @@ def test_a_place_of_a_bolt_github_does_not_have_is_not_made_and_the_fetch_is_nam
         kit.place_said(said, "b")
     assert not (tmp_path / "places" / "x").exists()
     assert subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", "unit/x"], capture_output=True).returncode == 1
+
+
+def two_bolts(repo, tmp_path):
+    """A kit whose bolts live on GitHub, as the Willdan box's breadboard-kit stood on 2026-11-06 (signal
+    2026-11-07-wldn-ops-052d0a47/01): bolt/deleting and bolt/popover made from main there, deleting holding one landing,
+    #214, of its unit's commit, pushed from another clone as sluice lands from any host, the host's own copies of both
+    left at main. Returns (git run in the other clone, its folder, landing 214's sha)."""
+    policy = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
+    repo.commit("main", {".config/sluice.toml": policy})
+    repo.git("branch", "bolt/deleting"); repo.git("branch", "bolt/popover")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git"))
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "github.git"), str(other)], check=True)
+    o = lambda *a: subprocess.run(["git", "-C", str(other), *a], check=True, capture_output=True, text=True).stdout.strip()
+    o("checkout", "-q", "-b", "unit/x", "origin/bolt/deleting")
+    (other / "deleting").write_text("an app being deleted says so\n")
+    o("add", "deleting"); o("commit", "-qm", "feat: a deleted app reads deleting")
+    o("checkout", "-q", "-b", "bolt/deleting", "origin/bolt/deleting")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): #214 unit/x", "unit/x")
+    o("push", "-q", "origin", "bolt/deleting")
+    repo.git("fetch", "-q", "origin")
+    return o, other, o("rev-parse", "HEAD")
+
+
+def carries(repo, bolt, tip, into=""):
+    """plan.CARRIES as bolts_carried runs it in the kit's main checkout, read by kit.carries_of and decided by
+    gather.carried_bolts: {bolt: [its landings the tip holds]}."""
+    import gather
+    import kit
+    r = script("CARRIES", str(repo.path), bolt, tip, into)
+    assert r.returncode == 0, r.stderr
+    holds, lines, why = kit.carries_of(r.stdout, bolt)
+    assert why is None, why
+    return gather.carried_bolts(holds, lines, bolt)
+
+
+def test_a_slot_that_built_one_bolts_unit_cuts_the_next_bolts_unit_from_that_bolt_with_nothing_of_the_first(repo, tmp_path):
+    """plan.make_place through PLACE (plan.19): a slot builds a unit of bolt/deleting, cut from GitHub's head, landing
+    214 and all, then a unit of bolt/popover; the second unit's place is its own, cut from GitHub's bolt/popover after a
+    fetch whatever the slot last held, and holds nothing of deleting's landing."""
+    _, _, l214 = two_bolts(repo, tmp_path)
+    cut(repo, tmp_path, "a-deleted-app-reads-deleting", "deleting")
+    assert repo.git("rev-parse", "unit/a-deleted-app-reads-deleting") == l214
+    cut(repo, tmp_path, "who-can-open-an-app", "popover")
+    assert repo.git("rev-parse", "unit/who-can-open-an-app") == repo.git("rev-parse", "origin/bolt/popover")
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/who-can-open-an-app") == "origin/bolt/popover"
+    assert subprocess.run(["git", "-C", str(repo.path), "merge-base", "--is-ancestor", l214, "unit/who-can-open-an-app"]).returncode == 1
+
+
+def test_a_unit_built_on_another_bolts_landing_carries_that_bolts_work_into_its_own(repo, tmp_path):
+    """plan.merge_bolts through CARRIES (plan.8): the popover unit's coder rebased onto deleting's landing 214, so its
+    branch holds 214, which main and bolt/popover lack: its merge into bolt/popover carries deleting's work; a unit
+    built on bolt/popover alone carries none."""
+    _, _, l214 = two_bolts(repo, tmp_path)
+    repo.git("checkout", "-q", "-b", "unit/pop", l214)
+    repo.commit("docs(openspec): propose who-can-open-an-app", {"pop": "one popover\n"})
+    assert carries(repo, "popover", "refs/heads/unit/pop", "origin/bolt/popover") == {"deleting": [l214]}
+    repo.git("checkout", "-q", "-b", "unit/own", "origin/bolt/popover")
+    repo.commit("docs(openspec): propose its own", {"own": "own\n"})
+    assert carries(repo, "popover", "refs/heads/unit/own", "origin/bolt/popover") == {}
+
+
+def test_a_bolt_holding_another_bolts_landing_carries_it_until_main_holds_it_and_the_other_carries_nothing(repo, tmp_path):
+    """plan.landing_carries through CARRIES (plan.8): bolt/popover's landing #216 merged a unit built on deleting's
+    landing 214, so the popover bolt, read on GitHub after a fetch, carries deleting's work and the deleting bolt
+    carries nothing of popover's; once main holds deleting's landing, popover carries nothing."""
+    o, other, l214 = two_bolts(repo, tmp_path)
+    o("checkout", "-q", "-b", "unit/pop", l214)
+    (other / "pop").write_text("one popover\n")
+    o("add", "pop"); o("commit", "-qm", "docs(openspec): propose who-can-open-an-app")
+    o("checkout", "-q", "-b", "bolt/popover", "origin/bolt/popover")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): #216 unit/pop", "unit/pop")
+    o("push", "-q", "origin", "bolt/popover")
+    head = o("rev-parse", "HEAD")
+    assert carries(repo, "popover", head) == {"deleting": [l214]}
+    assert carries(repo, "deleting", l214) == {}
+    o("checkout", "-q", "-B", "main", "origin/main")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): bolt/deleting", "bolt/deleting")
+    o("push", "-q", "origin", "main")
+    assert carries(repo, "popover", head) == {}
 
 
 def split_kit(repo, tmp_path, merges):

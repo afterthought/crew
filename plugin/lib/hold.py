@@ -26,7 +26,7 @@
 Each runs on the host it acts on (code.3): crew _hold set|status|wait, crew _go and crew _update there, and crew
 _renew <agent> on the agent's host, which crew's Stop hook hands it to at the end of the agent's turn (hooks/stop).
 Every host crew runs agents on is one of --all; a host that does not answer is named, and the rest still act (read.3)."""
-import argparse, contextlib, datetime, fcntl, json, os, pathlib, re, shlex, subprocess, sys, threading, time
+import argparse, contextlib, datetime, fcntl, json, os, re, shlex, subprocess, sys, threading, time
 
 import crew
 import ops
@@ -36,8 +36,8 @@ import runner
 import transcript
 from crew import Refusal, Stopped, fail
 
-# Where each agent's restart for an update keeps its lock and says what it did.
-RENEW = pathlib.Path.home() / ".local/state/crew/renew"
+# Where each agent's restart for an update keeps its lock, says what it did and keeps what it still owes the agent.
+RENEW = crew.RENEW
 # How long a restart handed at the end of an agent's turn waits for herdr to read it idle.
 SETTLE = 120
 # How many times a restart looks for its agent's exit after its stop gave up, five seconds apart: ten minutes.
@@ -122,6 +122,45 @@ def renew_exited(holds, unread, marked, session, down):
     if holds is False and marked and marked == session:
         return True, None
     return False, "it is not up"
+
+
+def notice_spent(given, started):
+    """Whether a give's notice owed a conductor (given, owe_given's) was spent by a start of it since the give: its last
+    start recorded another session than the one it ran when it was given, and every start of a conductor is greeted,
+    told to read where its bolt stands (teams.7). Never when the give found no recorded start of it. A decision of facts
+    alone (code.7)."""
+    return bool(given.get("session") and started and started.get("session") and started["session"] != given["session"])
+
+
+def notice_now(status, asking, unread, due, ready):
+    """How crew _renew gives a conductor a give's notice it owes it, at one look (teams.7, teams.20), from what herdr and
+    its transcript read of the agent (status, asking, unread, as waits_on_question gives them), whether it is due a
+    restart and whether that restart may run now (ready, renew_ready's): "restart" when it is due one that may run now,
+    whose greeting names the bolt; "tell" when it is idle, waiting on no question, and its restart is not due or must
+    wait on background work of its own, so the notice waits on nothing a restart waits on; "not up" when herdr reads it
+    not up; else None, to look again, the end of its next turn handing it back once the look's time is spent. A decision
+    of facts alone (code.7)."""
+    if unread:
+        return None
+    if status is None:
+        return "not up"
+    if due and ready:
+        return "restart"
+    if status in ("idle", "done") and not asking:
+        return "tell"
+    return None
+
+
+def give_notice_said(bolts, restart_owed):
+    """What crew tells a conductor of a give that its restart does not carry (teams.7): the bolt its team now holds, or
+    both its bolts when it holds two (bolts, plan.conductor_bolts' words else the one bolt's), to read where it stands and
+    carry on, and, while it is still due a restart its own background work holds back (restart_owed), that crew starts
+    it again at a later stop, so sluice's board names the bolt's branch (teams.20)."""
+    said = f"{bolts} {crew.GREETING}"
+    if restart_owed:
+        said += (" Your session still carries the branch of the bolt before it for sluice's board: crew starts you again "
+                 "at a later stop, once nothing of your own runs in the background.")
+    return said
 
 
 def renew_notice(was, now, changes):
@@ -376,6 +415,100 @@ def hand(name):
                          stdout=log, stderr=log, start_new_session=True)
 
 
+def given_path(name):
+    return RENEW / f"{name}.given"
+
+
+def owe_given(name, label, team, bolt, session):
+    """A give's notice owed a team's conductor on its host, until crew _renew tells it, its restart's greeting names the
+    bolt or a start since spends it (teams.7): the bolt, its partition and team, and the session the conductor ran when
+    it was given (notice_spent). A later give's replaces it, since the conductor is told what its team holds now."""
+    RENEW.mkdir(parents=True, exist_ok=True)
+    keep_given(name, {"label": label, "team": team, "bolt": bolt, "session": session})
+
+
+def keep_given(name, given):
+    tmp = RENEW / f".{name}.given.{os.getpid()}"
+    tmp.write_text(json.dumps(given))
+    tmp.replace(given_path(name))
+
+
+def given_of(name):
+    """The give's notice owed an agent on this host (owe_given), or None. One crew can't read names no bolt to tell it
+    of, so it is said and removed: it is crew's own mark, and the give that wrote it recorded the bolt's give."""
+    p = given_path(name)
+    try:
+        given = json.loads(p.read_text())
+        if isinstance(given, dict) and all(isinstance(given.get(k), str) for k in ("label", "team", "bolt")):
+            return given
+        why = "it names no bolt"
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as e:
+        why = getattr(e, "strerror", None) or str(e)
+    print(f"crew can't read the give's notice it owes {name} ({p}: {why}), so it is dropped", file=sys.stderr)
+    p.unlink(missing_ok=True)
+    return None
+
+
+def drop_given(name):
+    given_path(name).unlink(missing_ok=True)
+
+
+def owe_restart(name, owed):
+    """A restart crew _renew gave up on kept for the end of the agent's next turn (owed), which crew's Stop hook hands
+    back (crew.renew_owed), or lifted once it is given or no longer due."""
+    p = RENEW / f"{name}.owed"
+    if owed:
+        RENEW.mkdir(parents=True, exist_ok=True)
+        p.touch()
+    else:
+        p.unlink(missing_ok=True)
+
+
+def notice_refused(given, name, words, keep):
+    """A give's notice crew could not give its conductor (teams.7): said, and recorded as a refused bolt.notice on the
+    bolt, its team and the conductor (plan.notice_on), the words the bolt's head line and the rail say until something
+    tells it (plan.notice_unsent), but only when they differ from the last refusal recorded for it, so a notice tried at
+    each stop records each reason once; its mark kept for the end of its next turn (keep), else dropped."""
+    print(words, file=sys.stderr)
+    if given.get("refused") != words:
+        record.emit(given["label"], "bolt.notice", plan.notice_on(given["team"], given["bolt"]), refused=words,
+                    why=f"team({given['team']}): tell {name} of bolt {given['bolt']}")
+    if keep:
+        keep_given(name, dict(given, refused=words))
+    else:
+        drop_given(name)
+
+
+def notice_tell(fleet, given, name, restart_owed):
+    """A give's notice told to its conductor while it waits on nothing (notice_now's "tell"), marked as crew's, taken or
+    sent again (teams.15): the bolt its team now holds, or both its bolts, read on this host where its kit is
+    (plan.conductor_bolts), and that it starts again later while its restart is owed (give_notice_said). Recorded as a
+    bolt.notice and the mark dropped; one not sent is said and recorded refused, its mark kept for the end of its next
+    turn (notice_refused). Whether it was told."""
+    t = crew.team_of(fleet, given["team"])
+    try:
+        bolts = plan.conductor_bolts(fleet, t)
+    except Refusal:
+        bolts = ""
+    text = give_notice_said(bolts or f"Your team now holds the bolt {given['bolt']}.", restart_owed)
+    status, asking, unread = crew.waits_on_question(fleet, name)
+    why = crew.tell_refusal(name, crew.place_of_agent(fleet, name)[0], status, asking, unread)
+    if not why:
+        how, why = crew.send_taken(fleet, name, f"[crew] {text}")
+        why = None if how == "taken" else crew.untaken_said(name, "the notice of its give", how, why,
+                                                             "the end of its next turn tells it again")
+    if why:
+        notice_refused(given, name, why, keep=True)
+        return False
+    record.emit(given["label"], "bolt.notice", plan.notice_on(given["team"], given["bolt"]),
+                why=f"team({given['team']}): tell {name} of bolt {given['bolt']}", Chars=len(text))
+    drop_given(name)
+    print(f"{name} is told of {given['bolt']}")
+    return True
+
+
 def holding(fleet, name):
     """The Agents an agent's standing role is kept in, and that role: a team's, a main level's or a dispatcher's."""
     return crew.holding_of(fleet, name) or fail(f"{name} is no standing agent of crew's: only those are restarted for an update")
@@ -393,31 +526,52 @@ def renew(fleet, a):
     end (crew.end_due), is ended in the same way once idle and never started again (cross_end); one not up has
     nothing to end, and once neither is up its team's crossing is closed (close_crossing), however they went down. A
     main level's agent whose role now runs as its kind is ended so too, its pane left with nothing started in it
-    (kind_end)."""
+    (kind_end).
+
+    A give's notice owed a conductor (owe_given) is given here too, read again at every look (teams.7): by its
+    restart's greeting, which names the bolt, when it is due a restart that may run now; told to it once it is idle
+    with no question open when its restart is not due or waits on background work of its own (notice_now,
+    notice_tell); dropped once a start since has greeted it (notice_spent); and said and recorded refused when it is
+    not up, or when it was not taken. A restart or a notice still owed when the looks run out, the agent working, is
+    kept for the end of its next turn, which crew's Stop hook hands back (owe_restart, crew.renew_owed)."""
     name = a.agent
     host, _ = crew.place_of_agent(fleet, name)
     host == crew.this_host() or fail(f"{name} runs on {host}: crew _renew runs there")
     RENEW.mkdir(parents=True, exist_ok=True)
     lock = open(RENEW / f"{name}.lock", "w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print(f"{name} is already being restarted")
-        return
     deadline = time.monotonic() + a.wait
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            # The one running reads a give's notice at every look; one owed as it ends is this one's, once it has
+            # ended, or an idle conductor would have no turn's end to hand it back.
+            if not given_path(name).exists() or time.monotonic() >= deadline:
+                print(f"{name} is already being restarted")
+                return
+            crew.nap(1)
     branch = crew.branch_now(fleet, name)  # read once: it reads the plan
     gone = False  # an earlier restart's keys ended it, so it is started with no stop
+    tried = False  # a give's notice sent once and not taken waits for the end of its next turn
     while True:
         if crew.held():
             print(f"{host} is held; crew go {host} hands {name} what it is due")
             return
         due, why, started = crew.due_of(fleet, name, branch=branch)
-        if not due:
+        # Read at every look: a give may owe it a notice while this restart waits on it (owe_given).
+        given = given_of(name)
+        if given and notice_spent(given, started):
+            print(f"{name} started since {given['bolt']} was given, so its start's greeting told it")
+            drop_given(name)
+            given = None
+        if not due and not given:
+            owe_restart(name, False)
             print(f"{name} is not due a restart" + (f": {why}" if why else ""))
             return
-        ending = why in (crew.CROSSED_SAID, crew.KIND_SAID)
+        ending = due and why in (crew.CROSSED_SAID, crew.KIND_SAID)
         status, asking, unread = crew.waits_on_question(fleet, name)
-        if status is None and not unread and why == crew.KIND_SAID:
+        if status is None and not unread and ending and why == crew.KIND_SAID:
             print(f"{name} is not up, so nothing of it is left to end: {why}")
             return
         if status is None and not unread and ending:
@@ -428,18 +582,37 @@ def renew(fleet, a):
                 close_crossing(fleet, team)
             return
         if status is None and not unread:
-            holds, unread = crew.read_pane_agent(fleet, name)
-            session = started["session"]
-            gone, not_yet = renew_exited(holds, unread, marked_exit(name, session), session, holding(fleet, name)[0].down())
-            if gone:
-                break
+            not_yet = "it is not up"
+            if due:
+                holds, unread = crew.read_pane_agent(fleet, name)
+                session = started["session"]
+                gone, not_yet = renew_exited(holds, unread, marked_exit(name, session), session, holding(fleet, name)[0].down())
+                if gone:
+                    break
+            if given and not unread:
+                notice_refused(given, name, f"{name} is not up, so it was not told of {given['bolt']}: crew up {given['team']} "
+                                            "starts and greets it", keep=False)
+                given = None
+            if not due and not given:
+                return
         else:
             own, unread2 = own_work(crew.agent_get(fleet, name)) if status and not unread else ([], None)
             ready, not_yet = renew_ready(status, asking, unread or unread2, own)
-            if ready:
+            how = notice_now(status, asking, unread, due, ready) if given else ("restart" if ready else None)
+            if how == "restart":
                 break
+            if how == "tell" and not tried:
+                tried = True
+                notice_tell(fleet, given, name, due)
+                if not due:  # told, or kept for the end of its next turn
+                    return
         if time.monotonic() >= deadline:
-            print(f"{name} is not {'ended' if ending else 'restarted'}: {not_yet}; the end of its next turn hands it back")
+            owe_restart(name, due)
+            if due:
+                print(f"{name} is not {'ended' if ending else 'restarted'}: {not_yet}; the end of its next turn hands it back")
+            owed = given_of(name)
+            if owed:
+                print(f"{name} is not told of {owed['bolt']} yet: {not_yet}; the end of its next turn hands it back")
             return
         crew.nap(5)
     agents, role = holding(fleet, name)
@@ -457,6 +630,7 @@ def renew(fleet, a):
     else:
         why = agents.stop(role, waits=True)  # renew_ready: nothing runs in its background but crew's waits, which end here
         if why == crew.working_said(name):  # it went to work since herdr read it idle, and nothing was typed to it
+            owe_restart(name, True)
             print(why, file=sys.stderr)
             return
         if why:  # its exit was typed and it has not gone yet: the keys may still end it
@@ -464,18 +638,28 @@ def renew(fleet, a):
                 mark.write_text(started["session"] + "\n")
             print(f"{name} did not exit at once; crew watches for its exit")
             if not agents.exited(role, EXITING):
+                owe_restart(name, True)
                 print(f"{why}; it runs on as it was, still due: the end of its next turn hands it back", file=sys.stderr)
                 return
     fresh = role == "conductor"
     if not agents.start(role, None if fresh else "resume"):
         raise Stopped(1)
     mark.unlink(missing_ok=True)
+    owe_restart(name, False)
     agents.record("agent.renew", f"update({host}): restart {name}", [role])
     started = started or {}
     moved = crew.branch_due(started, branch)[1] if branch is not crew.UNREAD else None
     notice = renew_notice(started.get("version"), version, changes_for(started.get("commit"), commit) + ([moved] if moved else []))
     if isinstance(agents, crew.Team) and role == "conductor":
-        plan.greeted(plan.greet_team(fleet, agents.t, ["conductor"], notice=notice))
+        # A give's notice owed it is carried by this greeting, which names the bolt (teams.7), read again since a give
+        # may have owed it while it was stopped.
+        given, greeted = given_of(name), {}
+        plan.greeted(plan.greet_team(fleet, agents.t, ["conductor"], notice=notice, bolt=given and given["bolt"], outcome=greeted))
+        if given and greeted.get("conductor"):
+            drop_given(name)
+        elif given:
+            notice_refused(given, name, f"{name} was restarted and did not take its greeting, which named {given['bolt']}: "
+                                        f"crew tell {name} \"Your team now holds the bolt {given['bolt']}.\" tells it", keep=False)
     elif role in agents.fresh:  # it had no conversation to pick up, so it is greeted as any fresh start is
         plan.greeted(plan.greet_team(fleet, agents.t, [role]) if isinstance(agents, crew.Team) else plan.greeting(fleet, agents, [role]))
     else:
@@ -673,11 +857,14 @@ def parser():
 
 
 def main(argv):
+    ap = parser()
+    if argv[:1] not in (["hold"], ["go"], ["update"]):  # those three are answered by crew's usage, in plugin/bin/crew
+        crew.answer_usage(ap, argv)
     plan.need_recutils()
     fleet = crew.load()
     if argv[:1] in (["hold"], ["go"], ["update"]):
         sys.exit(front(fleet, argv))
-    a = parser().parse_args(argv)
+    a = ap.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)
     if a.cmd == "_hold":
         {"set": hold_set, "status": hold_status, "wait": hold_wait}[a.act](fleet, a)

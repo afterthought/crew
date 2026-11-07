@@ -279,15 +279,15 @@ def here(monkeypatch):
     monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
 
 
-def bolts(submissions=None, error=None):
+def bolts(submissions=None, error=None, sent=None, carries=None):
     p = plan.Plan(plan_text(bolts=[("y", "switchboard-kit", "swb-1")],
                             units=[("a", "switchboard-kit", "y", []), ("b", "switchboard-kit", "y", []), ("bump", "switchboard-kit", "y", [], "chore")]))
     place = {"path": "/kit/places/a", "head": "f" * 40, "head_at": "2026-10-28T10:00:00Z", "tasks": (2, 2), "planning": True, "open": [],
              "bolt": "y"}
-    kit = {"ok": True, "main": [], "fixes": [], "places": {"a": place}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": []}},
+    kit = {"ok": True, "main": [], "fixes": [], "places": {"a": place}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": [], **({"carries": carries} if carries else {})}},
            **({"submissions": submissions} if submissions is not None else {}), **({"submissions_error": error} if error else {})}
     sv = {BOX: {"ok": True, "kits": {"/kit/main": kit}}}
-    return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, p)], sv, {})
+    return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, p)], sv, {}, sent=sent)
 
 
 def held(d):
@@ -304,6 +304,18 @@ def test_crew_bolts_shows_a_merge_under_test_on_its_line_and_the_landing_on_the_
     assert out[1] == f"y  switchboard-kit  swb-1 @ {BOX}  active  landing #355 queued"
     assert "  a                                        verify 2/2 #41 under test places/a" in out
     assert json.loads(json.dumps(d))["partitions"][0]["plans"][0]["bolts"][0]["units"][0]["submission"] == {"id": 41, "state": "testing"}
+
+
+def test_crew_bolts_says_a_bolt_carrying_another_bolts_work_is_held_naming_it():
+    """plan.8: a bolt whose kit's read says it holds another bolt's landing main lacks shows it held on the line under
+    its head, naming that bolt and its landing, and carries it in its JSON as carries; a bolt carrying none shows no such
+    line."""
+    d = bolts(carries={"x": ["f5e67f35" + "0" * 32]})
+    assert held(d)["carries"] == {"x": ["f5e67f35" + "0" * 32]}
+    assert plan.bolts_text(d).splitlines()[2] == (
+        "  landing: held: carries bolt x's work, its landing f5e67f3, which main lacks; a bolt never carries another bolt's "
+        "work to main, so it lands once main holds that work, by the landing of bolt x")
+    assert held(bolts())["carries"] == {} and "carries" not in plan.bolts_text(bolts())
 
 
 def test_a_merge_passed_and_nothing_waiting_on_it_still_shows():
@@ -327,3 +339,19 @@ def test_a_queue_that_cant_be_read_is_said_once_on_the_head_line_and_no_line_sho
     out = plan.bolts_text(d)
     assert out.count("can't be read") == 1 and "#41" not in out
     assert out.splitlines()[2] == f"  submissions: can't be read on {BOX}: sluice overview exited 2: not a repository sluice serves"
+
+
+def test_a_landing_sluice_sent_back_at_the_bolts_head_reads_as_its_teams_fix():
+    """bolt-teams "A landing sluice sent back is its team's fix": crew bolts reads it from the run record's refusal that
+    still stands at the bolt's head (plan.sent_back), saying sluice's words, that it is its team's fix and that crew bolt
+    submit submits it again once that fix has merged; at an older head it says nothing; a run record that can't be read
+    is named."""
+    sent = {"wldn": {"y": {"head": "d" * 40, "words": "#1474 failed: tests:logic on 41a7c09", "n": "1474"}}}
+    d = bolts([], sent=sent)
+    assert held(d)["sent_back"] == {"head": "d" * 40, "words": "#1474 failed: tests:logic on 41a7c09", "submission": "1474"}
+    assert plan.bolts_text(d).splitlines()[2] == ("  landing: sent back at ddddddd, its team's fix: #1474 failed: tests:logic on 41a7c09; "
+                                                  "once that fix has merged, crew bolt submit y submits it again")
+    assert held(bolts([], sent={"wldn": {"y": dict(sent["wldn"]["y"], head="c" * 40)}}))["sent_back"] is None
+    out = plan.bolts_text(bolts([], sent={"wldn": "crew can't tell which changes have been in a batch: wldn/main could not be read"}))
+    assert out.splitlines()[-1] == ("wldn's run record can't be read (crew can't tell which changes have been in a batch: wldn/main could "
+                                    "not be read): which landings sluice sent back is unknown")

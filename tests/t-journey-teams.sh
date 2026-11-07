@@ -68,6 +68,10 @@ eq "$(git --git-dir "$r" rev-parse bolt/smoke) $(git -C "$k" rev-parse bolt/smok
 [[ $(git -C "$k" rev-parse bolt/smoke) != "$(git -C "$k" rev-parse main)" ]] || fail "the bolt was cut from the host's own main"
 eq "$(git -C "$k" config branch.bolt/smoke.crew)" "given"
 eq "$(calls | grep " sluice branch ")" "$box sluice branch create bolt/smoke --from main --json in $(cd "$k" && pwd -P)"
+# The conductor, idle, starts again on its host at once, its restart's greeting the give's notice (teams.7).
+has "$out" "swb-1-conductor is told of smoke once it is idle: at once if it is, else at the end of its turn"
+log=$(home_of $box)/.local/state/crew/renew/swb-1-conductor.log
+until_ok grep -q "swb-1-conductor is restarted on crew" "$log" || fail "swb-1-conductor was not restarted on its give: $(cat "$log" 2>/dev/null)"
 eq "$(launched swb-1-conductor)" "$k fresh"; eq "$(launched swb-1-ops)" "$k fresh"
 eq "$(pane_cwd conductor)" "$k"
 eq "$(greetings $box wldn-1 swb-1-conductor)" "1"

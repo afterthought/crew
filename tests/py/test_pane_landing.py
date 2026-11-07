@@ -78,8 +78,8 @@ def submit(monkeypatch, tmp_path):
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
     monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TEAM)
     monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
-    monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(
-        "MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE)))
+    monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: "LANDING=yes\nHOLDS=\nOWN=\n" if script == plan.CARRIES else (
+        got["ran"].append("MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE))))
     names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK", plan.SUBMISSIONS: "SUBMISSIONS",
              plan.LAND_COPIES: "COPIES", plan.QUEUE: "OVERVIEW", plan.SUBMISSION_STATUS: "STATUS"}
     waited = [None]
