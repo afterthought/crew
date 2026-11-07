@@ -332,6 +332,9 @@ def board_data(fleet, labels, read, now):
                 subs, landing = plan.submission_rows(None if unread else k.get("submissions"), b.name(),
                                                      [(u.name(), plan.kind_of(u)) for u in units] + [(f["fix"], "fix") for f in fixes])
                 recorded = landing_of(logs, b.name())
+                untold = plan.notice_unsent(logs, b.name(), b.get("Team")) if t and not crossed else None
+                if untold:  # its conductor was not told of its give (teams.7), as the rail says it too
+                    recorded = dict(recorded or {}, untold=untold["words"])
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "path": paths.get(b.get("Team")), "given": b.get("Path"), "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
                           "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": [],
@@ -350,6 +353,8 @@ def board_data(fleet, labels, read, now):
                 if state == "landed" or (recorded or {}).get("unclosed"):
                     attention.append({"what": "landed", "name": b.name(), "why": f"it landed on main and was not closed: {recorded['unclosed']}"
                                       if (recorded or {}).get("unclosed") else "every unit has landed on main, and the bolt is still in the plan"})
+                if untold:
+                    attention.append({"what": "untold", "name": b.name(), "why": f"{b.get('Team')}-conductor was not told of its give: {untold['words']}"})
             queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))}
                      for u in pl.queue()]
         asking, fixing = flume_waits(construction, runs, l)
@@ -632,6 +637,7 @@ def attention_text(a):
     """What needs attention, as the board says it."""
     return {"host": f"{a['name']} did not answer ({a['why']})", "plan": f"the plan, {a['name']}: {a['why']}",
             "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}",
+            "untold": f"bolt {a['name']}: {a['why']}",
             "runner": f"{a['name']} can't be read ({a['why']}): the stages of the work crossed to Flume there are unknown",
             "run": f"{a['name']}: {a['why']}"}[a["what"]]
 
@@ -718,18 +724,24 @@ def head_said(b):
     """A held bolt's state as its head line says it, from what the run record holds of its landing (its record,
     landing_of): landed on main and not closed, in its last refused close's words; its landing queued, with sluice's
     number, only while sluice's queue was read and shows no landing of it standing, which landing_said says in its
-    stead, a queue that can't be read showing no number (queue_said, read.1); else its state (state_said)."""
+    stead, a queue that can't be read showing no number (queue_said, read.1); its state and that its conductor was not
+    told of its give, in the words of the notice's refusal, until something tells it (plan.notice_unsent, teams.7); else
+    its state (state_said)."""
     record = b.get("record") or {}
     if record.get("unclosed"):
         return f"landed on main, not closed: {record['unclosed']}"
     if record.get("queued") and not b.get("landing") and not b.get("submissions_error"):
         return f"landing queued as #{record['queued']}"
+    if record.get("untold"):
+        return "; ".join(x for x in (state_said(b["state"]), f"its conductor was not told of its give: {record['untold']}") if x)
     return state_said(b["state"])
 
 
 def needs_eye(b):
-    """Whether a held bolt's head line has the attention gutter: every unit of it landed, or its close refused."""
-    return b["state"] == "landed" or bool((b.get("record") or {}).get("unclosed"))
+    """Whether a held bolt's head line has the attention gutter: every unit of it landed, its close refused, or its
+    conductor not told of its give."""
+    record = b.get("record") or {}
+    return b["state"] == "landed" or bool(record.get("unclosed") or record.get("untold"))
 
 
 def bolt_row(b, team=None):

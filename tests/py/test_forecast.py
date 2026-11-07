@@ -20,13 +20,14 @@ from facts import at, plan_of
 import plan
 
 A, B, C, BOLT = "a" * 40, "b" * 40, "c" * 40, "f" * 40
+HOLDS_NONE, SHARE_NONE = (lambda c, h: False), (lambda h, o: False)  # no unit holds another's work
 
 
 def due(live, bolt_head=BOLT, clash=(), done=(), took=None):
     """forecasts_due over units whose heads conflict as clash says: pairs of heads, each (theirs, ours), compared from
     their merge base."""
     return plan.forecasts_due(live, "t", bolt_head, lambda o, h, base: ["shared.txt"] if (o, h) in clash and base is None else [],
-                              set(done), took or {})
+                              HOLDS_NONE, SHARE_NONE, set(done), took or {})
 
 
 class TestDue:
@@ -49,7 +50,7 @@ class TestDue:
 
     def test_what_git_cannot_read_is_named_and_the_rest_forecast(self):
         got = plan.forecasts_due([("a", A, []), ("b", B, [])], "t", BOLT, lambda o, h, base: None if o == BOLT else ["x"],
-                                 set(), {})
+                                 HOLDS_NONE, SHARE_NONE, set(), {})
         assert got == ([("b", "a", ["x"], f"b@{B[:7]} a@{A[:7]}")], [("a", "bolt/t"), ("b", "bolt/t")])
 
     def test_units_clean_with_each_other_have_none(self):
@@ -63,7 +64,8 @@ class TestDue:
     def test_one_that_comes_after_at_any_depth_is_forecast_with_its_four_parts(self):
         # c comes after b, which comes after a: c is forecast against a, and a is never forecast against c.
         got = plan.forecasts_due([("c", C, ["b"]), ("a", A, [])], "t", None,
-                                 lambda o, h, base: ["shared.txt"] if {o, h} == {A, C} else [], set(), {}, {"c": ["b"], "b": ["a"]})
+                                 lambda o, h, base: ["shared.txt"] if {o, h} == {A, C} else [], HOLDS_NONE, SHARE_NONE, set(), {},
+                                 {"c": ["b"], "b": ["a"]})
         assert got == ([("c", "a", ["shared.txt"], f"c@{C[:7]} a@{A[:7]}")], [])
 
 
@@ -168,22 +170,38 @@ class TestOrders:
 
 
 class TestDependent:
-    """A dependent b holds a's work as its place took it, a@1111111; a was since rebased onto the bolt and settled, its
-    head now A. git compares the two from 1111111, what b adds beyond it, else from their merge base, where both
-    change a's own files."""
+    """b, after a, holds a's work: as its place took it, a@1111111, or as a merge in its place or a settle left it. git
+    says what b holds (held, the (commit, head) pairs whose head holds the commit) and whether the two share work of
+    a's their bolt lacks (shared). b is forecast only on what each adds beyond the newest of a's work it holds."""
     OLD = "1111111"
 
-    def due(self, git, took=None, after=("a",)):
+    def due(self, git=lambda base: ["shared.txt"], held=((OLD, B),), shared=False, took=None, after=("a",)):
         asked = []
 
         def conflicts(o, h, base):
             asked.append((o, h, base))
             return git(base)
-        got = plan.forecasts_due([("a", A, []), ("b", B, list(after))], "t", None, conflicts, set(),
+        got = plan.forecasts_due([("a", A, []), ("b", B, list(after))], "t", None, conflicts,
+                                 lambda c, h: (c, h) in held, lambda h, o: shared, set(),
                                  {"b": {"a": self.OLD}} if took is None else took)
         return got, asked
 
+    def test_one_holding_the_other_units_head_is_forecast_nothing_and_no_settle_starts(self):
+        # wldn, atl-1, 2026-11-07: the gateway unit's settle had merged the warehouse unit's head 53bd5bb, and the
+        # forecast from the head its construct took, 9bb35a9, named four paths: a settle with nothing to settle.
+        for took in (None, {}):
+            got, asked = self.due(held=((self.OLD, B), (A, B)), took=took)
+            assert got == ([], [])
+            assert asked == []
+
+    def test_one_whose_after_unit_moved_on_from_the_head_it_took_is_forecast_from_their_merge_base(self):
+        # a's line still holds 1111111, so git's merge base is that head, or a newer one b merged since.
+        got, asked = self.due(held=((self.OLD, B), (self.OLD, A)))
+        assert got == ([("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}")], [])
+        assert asked == [(A, B, None)]
+
     def test_one_holding_its_after_units_old_head_is_not_forecast_on_that_units_own_files(self):
+        # a was since rebased onto the bolt and settled, its head now A, its line no longer holding 1111111.
         got, asked = self.due(lambda base: [] if base == self.OLD else ["openspec/changes/a/design.md"])
         assert got == ([], [])
         assert asked == [(A, B, self.OLD)]
@@ -192,14 +210,56 @@ class TestDependent:
         got, _ = self.due(lambda base: ["shared.txt"])
         assert got == ([("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}")], [])
 
+    def test_one_that_merged_the_rewritten_units_newer_work_is_forecast_from_their_merge_base(self):
+        _, asked = self.due(shared=True)
+        assert asked == [(A, B, None)]
+
+    def test_a_head_it_no_longer_holds_is_not_its_base(self):
+        _, asked = self.due(held=())
+        assert asked == [(A, B, None)]
+
     def test_one_with_no_took_is_compared_from_their_merge_base_as_before(self):
         got, asked = self.due(lambda base: ["openspec/changes/a/design.md"] if base is None else [], took={})
         assert got == ([("b", "a", ["openspec/changes/a/design.md"], f"b@{B[:7]} a@{A[:7]}")], [])
         assert asked == [(A, B, None)]
 
-    def test_a_head_taken_of_a_unit_it_does_not_come_after_is_not_its_base(self):
-        _, asked = self.due(lambda base: [], after=())
-        assert asked == [(A, B, None)]
+    def test_a_head_taken_of_a_unit_it_no_longer_comes_after_is_still_its_base_while_it_holds_it(self):
+        _, asked = self.due(after=())
+        assert asked == [(A, B, self.OLD)]
+
+    def test_what_git_cannot_tell_it_holds_is_named_and_nothing_forecast(self):
+        got = plan.forecasts_due([("a", A, []), ("b", B, ["a"])], "t", BOLT, lambda o, h, base: ["x"],
+                                 lambda c, h: None, lambda h, o: False, set(), {"b": {"a": self.OLD}})
+        assert got == ([("a", "bolt/t", ["x"], f"a@{A[:7]} bolt/t@{BOLT[:7]}"),
+                        ("b", "bolt/t", ["x"], f"b@{B[:7]} bolt/t@{BOLT[:7]}")], [])
+        got = plan.forecasts_due([("a", A, []), ("b", B, ["a"])], "t", BOLT, lambda o, h, base: [] if o == BOLT else ["x"],
+                                 lambda c, h: None, lambda h, o: False, set(), {"b": {"a": self.OLD}})
+        assert got == ([], [("b", "a")])
+
+
+class TestBase:
+    """plan.forecast_base on its own: what git says the later unit holds of the other, and the base that gives."""
+    OLD = "1111111"
+
+    def base(self, held=(), shared=False, taken=OLD):
+        return plan.forecast_base(B, A, taken, lambda c, h: (c, h) in held, lambda h, o: shared)
+
+    def test_holding_the_others_head_is_held(self):
+        assert self.base(held=((A, B),)) == (True, None)
+
+    def test_with_nothing_taken_from_their_merge_base(self):
+        assert self.base(taken=None) == (False, None)
+
+    def test_the_taken_head_only_while_it_holds_it_the_others_line_does_not_and_nothing_newer_is_shared(self):
+        assert self.base(held=((self.OLD, B),)) == (False, self.OLD)
+        assert self.base(held=((self.OLD, B), (self.OLD, A))) == (False, None)
+        assert self.base(held=((self.OLD, B),), shared=True) == (False, None)
+        assert self.base(held=((self.OLD, A),)) == (False, None)
+
+    def test_none_when_git_cannot_tell(self):
+        assert plan.forecast_base(B, A, self.OLD, lambda c, h: None, lambda h, o: False) is None
+        assert plan.forecast_base(B, A, self.OLD, lambda c, h: {(A, B): False, (self.OLD, B): True}.get((c, h)), lambda h, o: False) is None
+        assert plan.forecast_base(B, A, self.OLD, lambda c, h: (c, h) == (self.OLD, B), lambda h, o: None) is None
 
 
 class TestTook:

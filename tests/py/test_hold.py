@@ -496,6 +496,173 @@ class TestRenew:
         assert agents.herdr.acts == typed
 
 
+TWO = ("Your team now builds the bolt the-hand-run-takes-a-release-whole-again. Bolt the-full-stand-passes-the-runner-test-on-"
+       "githubs-runner waits to land, a row of switchboard-kit's landings card, wldn-ops's.")
+OWN_WORK = ['C=/nix/store/crew-0.40.0/plugin/bin/crew\n$C tell swb-2-ops "Bolt every-email-template-reads-back-as-frontegg-stores-it landed"']
+
+
+class TestGiveNotice:
+    """A give reaches the conductor of the team it goes to (teams.7, bolt-teams "A give's notice reaches its conductor
+    whatever it is doing"): crew _renew on the team's host gives the notice by the conductor's restart's greeting when
+    it is due one that may run now, tells it when it is idle and its restart is not due or waits on background work of
+    its own, keeps it for the end of its next turn when it works, which crew's Stop hook hands back, and says and records
+    it refused when the conductor is not up or did not take it. Read on wldn's box on 2026-11-06: swb-2-conductor, given
+    the-hand-run-takes-a-release-whole-again at 21:02:24Z beside the-full-stand-passes-the-runner-test-on-githubs-runner,
+    which waited to land, sat idle an hour; crew _renew found it running background work of its own and gave up ("the end
+    of its next turn hands it back"), the Stop hook asked whether it was due with no branch, so nothing handed it back,
+    and the give's one notice was that restart's greeting. That the give hands the notice to the team's host and its
+    conductor is told or greeted through herdr is the land and teams journeys' (t-journey-land, t-journey-teams)."""
+    GIVEN = {"label": "wldn", "team": "swb-2", "bolt": "the-hand-run-takes-a-release-whole-again", "session": "sid-1"}
+    NAME = "swb-2-conductor"
+
+    def test_the_stop_hook_hands_back_an_agent_owed_a_notice_or_a_restart_as_one_due(self):
+        assert crew.stop_hands(True, False, STARTED, "sid-1")
+        assert crew.stop_hands(False, True, STARTED, "sid-1")
+        assert not crew.stop_hands(False, False, STARTED, "sid-1")
+        assert not crew.stop_hands(False, True, STARTED, "sid-0")  # an older session of it is not the one that runs
+        assert not crew.stop_hands(True, True, None, "sid-1")
+
+    def test_what_crew_renew_owes_is_read_from_its_marks(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(crew, "RENEW", tmp_path)
+        assert not crew.renew_owed(self.NAME)
+        (tmp_path / f"{self.NAME}.given").write_text("{}")
+        assert crew.renew_owed(self.NAME)
+        (tmp_path / f"{self.NAME}.given").unlink()
+        (tmp_path / f"{self.NAME}.owed").touch()
+        assert crew.renew_owed(self.NAME)
+
+    def test_a_notice_is_spent_by_a_start_since_the_give_whose_greeting_told_it(self):
+        assert not hold.notice_spent(self.GIVEN, STARTED)
+        assert hold.notice_spent(self.GIVEN, dict(STARTED, session="sid-2"))
+        assert not hold.notice_spent(dict(self.GIVEN, session=None), dict(STARTED, session="sid-2"))
+        assert not hold.notice_spent(self.GIVEN, None)
+
+    def test_an_idle_conductor_is_told_at_once_by_its_restart_or_by_crews_notice_and_a_working_one_at_its_next_stop(self):
+        assert hold.notice_now("idle", False, None, True, True) == "restart"  # its restart's greeting names the bolt
+        assert hold.notice_now("idle", False, None, True, False) == "tell"  # the box's case: its restart waits on its own work
+        assert hold.notice_now("idle", False, None, False, True) == "tell"  # no restart due
+        assert hold.notice_now("done", False, None, False, False) == "tell"
+        assert hold.notice_now("working", False, None, True, False) is None
+        assert hold.notice_now("idle", True, None, False, True) is None  # a question to the user open in its pane
+        assert hold.notice_now("blocked", False, None, False, False) is None
+        assert hold.notice_now(None, False, None, True, False) == "not up"
+        assert hold.notice_now(None, False, "herdr did not answer", True, False) is None  # read.1
+
+    def test_the_notice_names_the_bolt_and_says_a_restart_still_owed(self):
+        said = hold.give_notice_said("Your team now holds the bolt b.", False)
+        assert said == "Your team now holds the bolt b. " + crew.GREETING
+        later = hold.give_notice_said(TWO, True)
+        assert later.startswith(TWO + " " + crew.GREETING)
+        assert later.endswith("crew starts you again at a later stop, once nothing of your own runs in the background.")
+
+    @pytest.fixture
+    def box(self, monkeypatch, tmp_path):
+        """swb-2's host as crew _renew reads swb-2-conductor there, a give's notice owed it: what herdr reads of it, its
+        background work, whether it is due a restart and in which session; what crew sends it and records."""
+        import plan
+        import record
+        monkeypatch.setattr(hold, "RENEW", tmp_path / "renew")
+        monkeypatch.setattr(crew, "this_host", lambda: "chuck-herdr-alpha")
+        monkeypatch.setattr(crew, "place_of_agent", lambda fleet, name: ("chuck-herdr-alpha", "wldn-1"))
+        monkeypatch.setattr(crew, "held", lambda: None)
+        monkeypatch.setattr(crew, "nap", lambda seconds: None)
+        monkeypatch.setattr(crew, "branch_now", lambda fleet, name: f"bolt/{self.GIVEN['bolt']}")
+        at = {"status": "idle", "own": [], "due": True, "session": "sid-1", "taken": "taken", "sent": [], "emitted": []}
+        monkeypatch.setattr(crew, "due_of", lambda fleet, name, started=None, commit=None, branch=None: (
+            at["due"], f"its team's bolt is now bolt/{self.GIVEN['bolt']}" if at["due"] else None, dict(STARTED, session=at["session"])))
+        monkeypatch.setattr(crew, "waits_on_question", lambda fleet, name: (at["status"], False, None))
+        monkeypatch.setattr(crew, "agent_get", lambda fleet, name: {})
+        monkeypatch.setattr(hold, "own_work", lambda info: (at["own"], None))
+        monkeypatch.setattr(crew, "send_taken", lambda fleet, name, text: (
+            at["sent"].append((name, text)) or (("taken", 1) if at["taken"] == "taken" else (at["taken"], "sent twice"))))
+        monkeypatch.setattr(plan, "conductor_bolts", lambda fleet, t: TWO)
+        monkeypatch.setattr(record, "emit", lambda label, act, on=(), **kw: at["emitted"].append((label, act, list(on), kw.get("refused"))))
+        monkeypatch.setattr(hold, "holding", lambda fleet, name: pytest.fail("a notice told restarts nothing"))
+        hold.owe_given(self.NAME, "wldn", "swb-2", self.GIVEN["bolt"], "sid-1")
+        return at
+
+    def renew(self):
+        hold.renew(FLEET, types.SimpleNamespace(agent=self.NAME, wait=0))
+
+    ON = ["bolt/the-hand-run-takes-a-release-whole-again", "team/swb-2", "agent/swb-2-conductor"]
+
+    def test_the_boxs_conductor_idle_with_background_work_of_its_own_is_told_now_and_restarted_at_a_later_stop(self, box, capsys):
+        box["own"] = OWN_WORK
+        self.renew()
+        [(name, text)] = box["sent"]
+        assert name == self.NAME and text.startswith(f"[crew] {TWO} {crew.GREETING}")
+        assert "crew starts you again at a later stop" in text
+        assert box["emitted"] == [("wldn", "bolt.notice", self.ON, None)]
+        assert hold.given_of(self.NAME) is None
+        assert (hold.RENEW / f"{self.NAME}.owed").exists()  # its restart is handed back at the end of its next turn
+        out = capsys.readouterr().out
+        assert f"{self.NAME} is told of {self.GIVEN['bolt']}" in out
+        assert f"{self.NAME} is not restarted: it runs background work of its own" in out
+
+    def test_an_idle_conductor_no_restart_is_due_for_is_told_and_owes_nothing_after(self, box):
+        box["due"] = False
+        self.renew()
+        [(_, text)] = box["sent"]
+        assert text == f"[crew] {TWO} {crew.GREETING}"
+        assert box["emitted"] == [("wldn", "bolt.notice", self.ON, None)]
+        assert hold.given_of(self.NAME) is None and not (hold.RENEW / f"{self.NAME}.owed").exists()
+
+    def test_a_working_conductor_is_told_nothing_now_and_is_handed_back_at_the_end_of_its_turn(self, box, capsys):
+        box["status"] = "working"
+        self.renew()
+        assert box["sent"] == [] and box["emitted"] == []
+        assert hold.given_of(self.NAME)["bolt"] == self.GIVEN["bolt"]
+        assert (hold.RENEW / f"{self.NAME}.owed").exists()
+        assert f"{self.NAME} is not told of {self.GIVEN['bolt']} yet: it is working; the end of its next turn hands it back" in capsys.readouterr().out
+
+    def test_a_conductor_not_up_is_not_told_said_and_recorded_refused(self, box, capsys):
+        box.update(status=None, due=False)
+        self.renew()
+        words = f"{self.NAME} is not up, so it was not told of {self.GIVEN['bolt']}: crew up swb-2 starts and greets it"
+        assert box["sent"] == [] and box["emitted"] == [("wldn", "bolt.notice", self.ON, words)]
+        assert hold.given_of(self.NAME) is None
+        assert words in capsys.readouterr().err
+
+    def test_a_conductor_started_since_the_give_was_greeted_and_is_told_nothing_more(self, box):
+        box.update(session="sid-2", due=False)
+        self.renew()
+        assert box["sent"] == [] and box["emitted"] == [] and hold.given_of(self.NAME) is None
+
+    def test_a_notice_not_taken_is_kept_for_the_next_stop_and_its_refusal_recorded_once(self, box):
+        box.update(due=False, taken="never")
+        self.renew()
+        self.renew()
+        assert len(box["sent"]) == 2
+        [(_, act, on, words)] = box["emitted"]
+        assert (act, on) == ("bolt.notice", self.ON)
+        assert words == f"{self.NAME} did not take the notice of its give, sent twice; nothing is left typed; the end of its next turn tells it again"
+        assert hold.given_of(self.NAME)["refused"] == words
+        box["taken"] = "taken"
+        self.renew()
+        assert box["emitted"][-1] == ("wldn", "bolt.notice", self.ON, None) and hold.given_of(self.NAME) is None
+
+    def test_a_second_renew_waits_for_the_one_running_while_a_notice_is_owed(self, box, monkeypatch, capsys):
+        import fcntl
+        hold.RENEW.mkdir(parents=True, exist_ok=True)
+        held = open(hold.RENEW / f"{self.NAME}.lock", "w")
+        fcntl.flock(held, fcntl.LOCK_EX)
+        looks = []
+
+        def nap(seconds):  # the one running ends at the second look
+            looks.append(seconds)
+            if len(looks) == 2:
+                held.close()
+        monkeypatch.setattr(crew, "nap", nap)
+        box["due"] = False
+        hold.renew(FLEET, types.SimpleNamespace(agent=self.NAME, wait=60))
+        assert looks == [1, 1] and len(box["sent"]) == 1
+        held2 = open(hold.RENEW / f"{self.NAME}.lock", "w")
+        fcntl.flock(held2, fcntl.LOCK_EX)
+        hold.drop_given(self.NAME)
+        hold.renew(FLEET, types.SimpleNamespace(agent=self.NAME, wait=60))
+        assert f"{self.NAME} is already being restarted" in capsys.readouterr().out
+
+
 EXIT_SCREEN = """ Background work is running
  The following will stop when you exit:
 

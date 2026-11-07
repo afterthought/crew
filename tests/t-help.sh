@@ -122,6 +122,7 @@ _update
 _renew swb-1-conductor
 _end-short swb-1 unit-1
 _tidy swb-1
+_notice swb-1 tenant-environments
 _construct-again swb-1 a --by proposal
 _preview wldn land/b b bolt/b HEAD
 _answered
