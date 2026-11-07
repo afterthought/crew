@@ -42,7 +42,7 @@ crew SHALL record at each agent's start the crew it loaded and what it was start
 - **THEN** no agent is due
 
 ### Requirement: A due agent is restarted at its next stop
-crew SHALL restart a due agent once herdr reads it idle with no question open and no background work of its own but crew's waits: at the end of its turn, and for one sitting idle when crew's checkout or the teams file moves or on `crew update`. A conductor SHALL start fresh; every other standing role SHALL resume its conversation and be told what changed. Nothing SHALL be restarted on a held host. A restart SHALL end with its agent running: on crew as it now is once the agent has exited, or as it was when it could not be ended. A restart whose agent has not exited when its stop gives up SHALL watch it for ten minutes and start it the moment it exits; one whose agent still runs after that SHALL leave it running, still due, and say so. A later restart that finds the agent exited by an earlier restart's keys, its pane kept and no start of it since, SHALL start it without a stop. No restart SHALL leave its agent's pane a shell with no agent in it.
+crew SHALL restart a due agent once herdr reads it idle with no question open and no background work of its own but crew's waits: at the end of its turn, and for one sitting idle when crew's checkout or the teams file moves or on `crew update`. A conductor SHALL start fresh; every other standing role SHALL resume its conversation and be told what changed. Nothing SHALL be restarted on a held host. A restart SHALL end with its agent running: on crew as it now is once the agent has exited, or as it was when it could not be ended. A restart whose agent has not exited when its stop gives up SHALL watch it for ten minutes and start it the moment it exits; one whose agent still runs after that SHALL leave it running, still due, and say so. A later restart that finds the agent exited by an earlier restart's keys, its pane kept and no start of it since, SHALL start it without a stop. No restart SHALL leave its agent's pane a shell with no agent in it. A restart that gives up on its agent, the agent working past its looks, running background work of its own or not exiting, SHALL be handed back at the end of the agent's next turn, whatever made it due, its team's bolt changing under it among them, which only the restart reads; and so SHALL a give's notice not yet given its conductor.
 
 #### Scenario: At the end of its turn
 - **WHEN** the planner is due and ends its turn
@@ -67,6 +67,10 @@ crew SHALL restart a due agent once herdr reads it idle with no question open an
 #### Scenario: Exited by something else
 - **WHEN** swb-1-ops is due and not up, and no restart of its session gave up on it, or its team was taken down with `crew down`
 - **THEN** the restart starts nothing and says it is not up
+
+#### Scenario: Its team's bolt changed while it worked
+- **WHEN** swb-2-conductor's session carries the branch of a bolt its team no longer holds, and its restart gave up because it was working
+- **THEN** at the end of its next turn crew's Stop hook hands it back, and it is restarted fresh without that branch
 
 ### Requirement: A band shows the crew its agent runs
 Each standing agent's band SHALL show the crew version it started on, and once it is due the version it takes at its next stop. Every band on a held host SHALL open with the hold: who held it, since when and why.

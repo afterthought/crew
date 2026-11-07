@@ -2,7 +2,9 @@
 """crew's Stop hook: at the end of each turn of a standing crew agent, one that an update of crew, or of its brief, has
 made due a restart (crew.due_of, teams.19) is handed to crew _renew on its host, which restarts it on crew as it now is
 once herdr reads it idle, with no question to the user open and nothing of its own running in the background but crew's
-waits. One due an end instead, a crossed team's conductor or ops, or a main level's agent whose role now runs as its
+waits. So is one crew _renew owes something it could not give it when last handed it (crew.renew_owed): a give's notice,
+which tells a conductor the bolt its team was given (teams.7), or a restart it gave up on, as one whose team's bolt
+changed under it while it worked (teams.20), which only crew _renew reads, since it reads the plan. One due an end instead, a crossed team's conductor or ops, or a main level's agent whose role now runs as its
 kind (crew.end_due), is handed over the same way and ended, never started again. The end of a turn is the agent's own
 good point to stop: whatever it was doing is done or handed to the background, and nothing it says is cut off.
 
@@ -37,7 +39,7 @@ def main():
     if crew.held() or crew.standing_role(fleet, name) is None:
         return
     due, _, started = crew.due_of(fleet, name)
-    if due and started and started["session"] == sid:  # an older session of the agent's is not the one that runs
+    if crew.stop_hands(due, crew.renew_owed(name), started, sid):
         import hold
         hold.hand(name)
 
