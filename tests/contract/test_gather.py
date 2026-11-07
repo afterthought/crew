@@ -506,6 +506,22 @@ def landed_on_github(other, files, message):
     return other.git("rev-parse", "HEAD")
 
 
+def test_a_bolt_on_github_that_merged_another_bolts_landing_carries_that_bolts_work(repo, tmp_path):
+    """The landings card's rows, the rail and crew bolts (plan.8): bolt/te on GitHub merged bolt/cp's landing, which
+    main lacks, so the kit's read says te carries cp's work, naming cp's landing, read at each bolt's copy on GitHub as
+    the host last fetched it, cp's among them though the host holds no branch of it; cp carries nothing of te's."""
+    k, other = on_github(repo, tmp_path)
+    other.git("checkout", "-q", "-b", "bolt/cp", "origin/main")
+    landing = other.commit("chore(land): #1 unit/c", {"c": "1\n"})
+    other.git("push", "-q", "origin", "bolt/cp")
+    other.git("checkout", "-q", "bolt/te")
+    other.git("merge", "-q", "--no-ff", "-m", "chore(land): #2 unit/t", "bolt/cp")
+    other.git("push", "-q", "origin", "bolt/te")
+    repo.git("fetch", "-q", "origin")
+    got = gather.kit({"main": str(repo.path), "dir": str(k.dir), "bolts": ["te", "cp"]})["bolts"]
+    assert (got["te"]["carries"], got["cp"]["carries"]) == ({"cp": [landing]}, {})
+
+
 def test_a_merge_landed_on_github_is_read_there_with_the_hosts_copy_left_behind(repo, tmp_path):
     """Stages, crew bolts and the landing card (bolt-plan "A merge landed on GitHub while the host's copy stayed
     behind"): a bolt on GitHub is read at origin/bolt/<bolt> as the host last fetched it, its archived change, its

@@ -279,12 +279,12 @@ def here(monkeypatch):
     monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
 
 
-def bolts(submissions=None, error=None, sent=None):
+def bolts(submissions=None, error=None, sent=None, carries=None):
     p = plan.Plan(plan_text(bolts=[("y", "switchboard-kit", "swb-1")],
                             units=[("a", "switchboard-kit", "y", []), ("b", "switchboard-kit", "y", []), ("bump", "switchboard-kit", "y", [], "chore")]))
     place = {"path": "/kit/places/a", "head": "f" * 40, "head_at": "2026-10-28T10:00:00Z", "tasks": (2, 2), "planning": True, "open": [],
              "bolt": "y"}
-    kit = {"ok": True, "main": [], "fixes": [], "places": {"a": place}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": []}},
+    kit = {"ok": True, "main": [], "fixes": [], "places": {"a": place}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": [], **({"carries": carries} if carries else {})}},
            **({"submissions": submissions} if submissions is not None else {}), **({"submissions_error": error} if error else {})}
     sv = {BOX: {"ok": True, "kits": {"/kit/main": kit}}}
     return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, p)], sv, {}, sent=sent)
@@ -304,6 +304,18 @@ def test_crew_bolts_shows_a_merge_under_test_on_its_line_and_the_landing_on_the_
     assert out[1] == f"y  switchboard-kit  swb-1 @ {BOX}  active  landing #355 queued"
     assert "  a                                        verify 2/2 #41 under test places/a" in out
     assert json.loads(json.dumps(d))["partitions"][0]["plans"][0]["bolts"][0]["units"][0]["submission"] == {"id": 41, "state": "testing"}
+
+
+def test_crew_bolts_says_a_bolt_carrying_another_bolts_work_is_held_naming_it():
+    """plan.8: a bolt whose kit's read says it holds another bolt's landing main lacks shows it held on the line under
+    its head, naming that bolt and its landing, and carries it in its JSON as carries; a bolt carrying none shows no such
+    line."""
+    d = bolts(carries={"x": ["f5e67f35" + "0" * 32]})
+    assert held(d)["carries"] == {"x": ["f5e67f35" + "0" * 32]}
+    assert plan.bolts_text(d).splitlines()[2] == (
+        "  landing: held: carries bolt x's work, its landing f5e67f3, which main lacks; a bolt never carries another bolt's "
+        "work to main, so it lands once main holds that work, by the landing of bolt x")
+    assert held(bolts())["carries"] == {} and "carries" not in plan.bolts_text(bolts())
 
 
 def test_a_merge_passed_and_nothing_waiting_on_it_still_shows():

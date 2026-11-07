@@ -21,7 +21,9 @@ The answer, on stdout, is JSON keyed by each kit's main checkout: the changes ma
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
 whether it exists, the changes and chores it holds, those it holds archived, the tasks of each it holds open
-that main does not hold, its worktree, its head and the head's time; each place under
+that main does not hold, its worktree, its head and the head's time, and the commits it holds that are another bolt's
+own, on that bolt's first-parent line beyond main, every bolt GitHub holds among them (carries, carried_bolts, bolt_lines),
+or why that can't be read (carries_error); each place under
 <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
 paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
 head, head's time and how many commits of its own it holds beyond the bolt; each fix's place with its branch's facts
@@ -212,6 +214,39 @@ def bolt_read(main, bolt, tracked=None, local=None):
         except ValueError as e:
             return None, f"{POLICY} at origin/bolt/{bolt} is not TOML, so crew can't read bolt {bolt}: {e}"
     return bolt_at(bolt, tracked, there(f"refs/heads/bolt/{bolt}") if local is None else local, remote), None
+
+
+def carried_bolts(holds, lines, own):
+    """What a branch carries of other bolts' work (plan.8, plan.19): each commit it holds beyond main (holds) that is
+    another bolt's own, on that bolt's first-parent line beyond main (lines, {bolt: [commits]}, each line as git
+    lists it, newest first), and not on the line of the bolt it is of (own), by bolt: {bolt: [commits]}, in each
+    line's order; {} when it carries none. A bolt's first-parent line beyond main is the landings sluice made on it,
+    so a commit there is that bolt's work, whichever branch it reached by a merge; read from the branches alone,
+    never a commit's words. A decision of facts alone (code.7)."""
+    held, mine = set(holds), set(lines.get(own) or ())
+    out = {}
+    for b in sorted(lines):
+        if b == own:
+            continue
+        got = [c for c in lines[b] if c in held and c not in mine]
+        if got:
+            out[b] = got
+    return out
+
+
+def bolt_lines(main, now, refs):
+    """Each bolt's first-parent line beyond the kit's main now (now), from the ref each is read at (refs, {bolt: ref}):
+    ({bolt: [commits]}, None), or (None, why) when git could not list one (read.1). A ref another command removed while
+    this read ran, as a fetch prunes a landed bolt's, is left out: the branch is gone, and no bolt."""
+    lines = {}
+    for b, ref in sorted(refs.items()):
+        out = run(["git", "rev-list", "--first-parent", ref, f"^{now}"], main)
+        if out is None:
+            if run(["git", "rev-parse", "-q", "--verify", ref], main) is None:
+                continue
+            return None, f"git could not list bolt/{b}'s own commits beyond main at {short(ref)}"
+        lines[b] = out.split()
+    return lines, None
 
 
 def short(ref):
@@ -902,6 +937,19 @@ def kit(req, sites=False, running=None, board=False, fetch=False, stamped=False)
                            "verdict": (run(["git", "log", "-1", "--format=%(trailers:key=Sluice-Result,valueonly)",
                                             ref], main) or "").strip() if ref else None,
                            **({"error": why} if why else {})}
+    # Each bolt's own line beyond main, read where it lives, every bolt GitHub holds among them (bolt_lines), and what
+    # each bolt read carries of another's (carries, carried_bolts): a bolt never carries another bolt's work to main
+    # (plan.8). A line git can't list is said on each bolt (carries_error), never read as none (read.1).
+    lines, lwhy = bolt_lines(main, now, {b: reads.get(b) or (f"refs/remotes/origin/bolt/{b}" if b in github else f"refs/heads/bolt/{b}")
+                                         for b in sorted(github | set(have) | {b for b, r in reads.items() if r})})
+    for b, ref in reads.items():
+        if not ref:
+            continue
+        holds = run(["git", "rev-list", ref, f"^{now}"], main) if not lwhy else None
+        if holds is None:
+            out["bolts"][b]["carries_error"] = lwhy or f"git could not list what bolt/{b} holds beyond main at {short(ref)}"
+        else:
+            out["bolts"][b]["carries"] = carried_bolts(holds.split(), lines, b)
     places, dropped = os.path.join(kdir, "places"), None
     for path, branch in at.items():
         if os.path.dirname(path) != places or not branch:

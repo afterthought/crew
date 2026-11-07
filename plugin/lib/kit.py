@@ -436,6 +436,27 @@ def said_of(out):
     return dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
 
 
+def carries_of(out, bolt):
+    """What a branch holds and each bolt's own line, from what CARRIES printed in a kit's main checkout after its
+    fetch (plan.8, plan.19): (holds, lines, None), holds the commits the tip holds beyond main (and beyond its bolt,
+    for a merge), lines {bolt: its first-parent commits beyond main}, every bolt GitHub holds, and the host's own for
+    a bolt it keeps, the bolt read itself at the tip judged (OWN) when CARRIES judged its landing; or (None, None, why)
+    when git could not fetch or list one (READ), or the output is not CARRIES's (read.1, read.2)."""
+    f = said_of(out)
+    if "READ" in f:
+        return None, None, f["READ"].strip() or "git said nothing"
+    if not {"HOLDS", "OWN", "LANDING"} <= set(f):
+        return None, None, f"crew can't read what bolt/{bolt} carries from: {(out or '').strip()[:200] or 'nothing'}"
+    lines = {}
+    for line in (out or "").splitlines():
+        if line.startswith("LINE "):
+            _, b, *commits = line.split()
+            lines[b] = commits
+    if f["LANDING"] == "yes":
+        lines[bolt] = f["OWN"].split()
+    return f["HOLDS"].split(), lines, None
+
+
 def main_now(out, kit, host):
     """Which of a kit's mains is its main now, from what MAINS read in its main checkout on its host (plan.18): (ref,
     sha, None), or (None, None, why). A kit with an origin remote has its main on GitHub, where sluice lands every

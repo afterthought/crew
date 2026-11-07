@@ -150,6 +150,17 @@ A fix of the kit's main whose code has delivered and whose submission waits held
 - **WHEN** `main--a-test-reads-its-fixture`'s code has delivered and its submission waits held
 - **THEN** crew's landings row has a line `fix main--a-test-reads-its-fixture` with the failure's first line, and names its `--send` command
 
+### Requirement: A bolt carrying another bolt's work is held on its land line
+A bolt whose kit's read says it carries another bolt's work that main lacks SHALL NOT be able to land on its kit's land row. Its line SHALL say it is held, naming each bolt whose work it carries and that bolt's landings, and that it lands once main holds that work. It SHALL be left out of the row's answer to ops. Once the kit's read finds nothing carried, the line SHALL say it can land.
+
+#### Scenario: A bolt carrying another bolt's work
+- **WHEN** bolt `apex-zones` reads proven and the kit's read says it carries bolt `tenant-environments`'s landing `f5e67f35`
+- **THEN** its line says "held: carries bolt tenant-environments's work, its landing f5e67f3, which main lacks", it can't land, and the row offers ops nothing for it
+
+#### Scenario: Main holds the carried work
+- **WHEN** the kit's read says `apex-zones` carries nothing
+- **THEN** its line says it can land
+
 ### Requirement: A bolt whose conductor was not told of its give is said after the groups
 After its groups, `crew rail` SHALL list each bolt a team holds on today's path whose newest refused `bolt.notice` since its newest give has not been followed by a notice that told its conductor or a greeting of it. Each line SHALL give when, the bolt, its partition, the team and crew's words, which say how the conductor is told. It SHALL be no row of the four groups and raise no card.
 
