@@ -7,6 +7,7 @@ import pytest
 
 import kit
 from crew import Refusal
+from facts import BESIDE_HEAD, BESIDE_NEW, BESIDE_OLD, COVERING, landed_beside
 
 FULL = '[tests]\ntoolchain = ["devenv", "print-dev-env"]\nrunner = "moon"\n'
 SCRIPT = "/kit.git/worktrees/a/crew/toolchain.sh"
@@ -420,6 +421,62 @@ class TestVerification:
     def test_nothing_else_reads_green(self):
         assert kit.verification(None, "passed (1 run, 0 replayed)")[0] == "unknown"
         assert kit.verification("abc1234", "failed (1 run, 0 replayed)")[0] == "unknown"
+
+
+class TestLandedBeside:
+    """A bolt whose last landing sluice made beside its queue, with nothing run because no required check reads its
+    changes (sluice clause 140, core.39), reads as the verdict that covers it, from sluice's record of that landing
+    (sluice record 0083), never from its trailer's words (merge-gate "A landing beside reads as the verdict that
+    covers it"). The case is the box's: switchboard-kit's bolt at b01e966, #1319 landed beside on #1316's e25fea4."""
+    HEAD, COVERING, OLD, NEW = BESIDE_HEAD, COVERING, BESIDE_OLD, BESIDE_NEW
+
+    def test_covered_by_a_verdict_that_passed_it_is_green_with_that_verdicts_own_counts(self):
+        assert kit.verification(self.HEAD, self.NEW, landed_beside("0.69.0")) == (
+            "green", "sluice's verdict covering its last landing, b01e966, which landed beside the queue with nothing "
+                     "run (#1319): passed (141 run, 0 replayed), at e25fea4")
+
+    def test_a_record_that_names_no_covering_verdict_as_sluice_0_68_1_writes_it_is_unknown_saying_why(self):
+        assert kit.verification(self.HEAD, self.OLD, landed_beside("0.68.1")) == (
+            "unknown", "its head b01e966 landed beside sluice's queue with nothing run (#1319), and sluice's record of "
+                       "it names no verdict that covers it, as sluice records none before 0.69.0: the bolt reads proven "
+                       "once a landing on it carries a verdict of its own or names the one that covers it")
+
+    def test_the_trailers_words_alone_never_read_green(self):
+        """sluice 0.69.0's trailer opens `passed`, but its counts are the landing's own, nothing run: with no record
+        read, it is unknown, whatever the trailer says of what covers it."""
+        unread = landed_beside("0.69.0", why="sluice status 1319 did not answer within 15 seconds")
+        assert kit.verification(self.HEAD, self.NEW, unread) == (
+            "unknown", "its head b01e966 landed beside sluice's queue with nothing run (#1319), and crew can't read "
+                       "sluice's record of it, which names the verdict that covers it: sluice status 1319 did not "
+                       "answer within 15 seconds")
+
+    def test_a_covering_verdict_that_did_not_pass_is_unknown(self):
+        failed = landed_beside("0.69.0", covered_by={"at": self.COVERING, "result": "failed", "ran": 3, "replayed": 0})
+        assert kit.verification(self.HEAD, self.NEW, failed) == (
+            "unknown", "its head b01e966 landed beside sluice's queue with nothing run (#1319), covered by sluice's "
+                       "verdict at e25fea4, which crew does not read as a pass: failed (3 run, 0 replayed)")
+
+    @pytest.mark.parametrize("covered", [{"at": "e25fea4", "result": "passed", "ran": "141", "replayed": 0},
+                                         {"at": None, "result": "passed", "ran": 141, "replayed": 0},
+                                         {"at": "e25fea4", "result": "", "ran": 141, "replayed": 0},
+                                         {"at": "e25fea4", "result": "passed", "ran": True, "replayed": 0}, "passed"])
+    def test_a_covering_verdict_crew_cant_read_is_unknown(self, covered):
+        state, said = kit.verification(self.HEAD, self.NEW, landed_beside("0.69.0", covered_by=covered))
+        assert (state, said.split(": ")[0]) == (
+            "unknown", "its head b01e966 landed beside sluice's queue with nothing run (#1319), and crew can't read the "
+                       "verdict sluice's record of it names as covering it")
+
+    @pytest.mark.parametrize("change", [{"landed_as": COVERING}, {"state": "landing"}, {"landed_as": None}])
+    def test_a_record_that_does_not_have_it_landed_as_the_head_is_unknown(self, change):
+        assert kit.verification(self.HEAD, self.NEW, landed_beside("0.69.0", **change)) == (
+            "unknown", "its head b01e966 landed beside sluice's queue with nothing run (#1319), and sluice's record of "
+                       "#1319 does not have it landed as b01e966")
+
+    def test_a_record_that_has_it_landed_through_the_queue_reads_the_heads_own_verdict(self):
+        through = landed_beside("0.69.0", beside=None, covered_by=None)
+        assert kit.verification(self.HEAD, "passed (2 run, 0 replayed)", through) == (
+            "green", "sluice's verdict on its last landing, b01e966: passed (2 run, 0 replayed)")
+        assert kit.verification(self.HEAD, self.OLD, through)[0] == "unknown"
 
 
 RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"

@@ -540,6 +540,75 @@ def test_a_merge_landed_on_github_is_read_there_with_the_hosts_copy_left_behind(
     assert gather.bolt_read(str(repo.path), "te") == ("refs/remotes/origin/bolt/te", None)
 
 
+RECORDS = Path(__file__).parent.parent / "py"
+
+
+def test_a_head_landed_beside_the_queue_is_read_with_sluices_record_of_its_submission(repo, tmp_path, monkeypatch):
+    """kit.verification, crew bolts and the landings card (merge-gate "A landing beside reads as the verdict that covers
+    it"; crew-board "The follower follows each kit's queue through sluice's overview"): git's trailers, read in one
+    `git log` as `%(trailers:key=…,valueonly)` joined by NULs, give a landing's Sluice-Result, Sluice-Submission and
+    Sluice-Tested apart; a head that names a submission and no Sluice-Tested, as sluice writes a landing beside its
+    queue (text.rs beside_message, v0.69.0), has its record read by one `sluice status <n> --json` in the kit's main
+    checkout, and a head landed through the queue asks sluice nothing. sluice here is a script on the path that logs
+    every call and answers the record as tests/py/sluice-0.69.0/ holds it, its landed_as the head; with the record
+    sluice 0.68.1 printed on the box, the same read names no covering verdict, and a sluice that refuses is said."""
+    import kit
+    k, other = on_github(repo, tmp_path)
+    covering = landed_on_github(other, {"src.txt": "s\n"}, (
+        "chore(land): #1316 unit/u\n\nSluice-Submission: 1316\nSluice-From: swb-3-unit-1 (unit/u)\n"
+        f"Sluice-Tested: {'f' * 40}\nSluice-Result: passed (141 run, 0 replayed)"))
+    bin_, log = tmp_path / "bin", tmp_path / "sluice.log"
+    bin_.mkdir()
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
+
+    def answers(version, head, code=0):
+        rec = json.loads((RECORDS / f"sluice-{version}" / "status-landed-beside.json").read_text())
+        out = tmp_path / f"status-{version}.json"
+        out.write_text(json.dumps(dict(rec, landed_as=head, **({"covered_by": dict(rec["covered_by"], at=covering)}
+                                                                if "covered_by" in rec else {}))))
+        (bin_ / "sluice").write_text(f"""#!/bin/sh
+echo "$(pwd -P) $*" >> {log}
+case "$*" in
+  "status 1319 --json") {f"cat {out}" if not code else "echo '{\"error\": {\"message\": \"no submission 1319\"}}'"}; exit {code} ;;
+  "overview --json") echo '{{"schema": "sluice/overview@1", "branches": []}}' ;;
+  *) echo "sluice: $* is not stubbed" >&2; exit 2 ;;
+esac
+""")
+        (bin_ / "sluice").chmod(0o755)
+
+    repo.git("fetch", "-q", "origin")
+    answers("0.69.0", covering)
+    got = k.read()["bolts"]["te"]
+    assert (got["head"], got["verdict"], got["beside"]) == (covering, "passed (141 run, 0 replayed)", None)
+    assert "status" not in log.read_text()
+
+    words = (f"passed (0 run, 0 replayed) beside the queue: no required check reads its changes; covered by the result "
+             f"at {covering}, passed (141 run, 0 replayed)")
+    head = landed_on_github(other, {"docs/guide.md": "g\n"}, (
+        "chore(land): #1319 fix/te/take-main\n\nSluice-Submission: 1319\nSluice-From: swb-3-unit-1 (fix/te/take-main)\n"
+        f"Sluice-Result: {words}"))
+    repo.git("fetch", "-q", "origin")
+    answers("0.69.0", head)
+    log.unlink()
+    got = k.read()["bolts"]["te"]
+    main = os.path.realpath(repo.path)
+    assert [l for l in log.read_text().splitlines() if "status" in l] == [f"{main} status 1319 --json"]
+    assert (got["head"], got["verdict"], got["beside"]["submission"], got["beside"]["why"]) == (head, words, "1319", None)
+    assert got["beside"]["record"] == {"id": 1319, "branch": "bolt/the-shared-applications-landing-sends-a-person-where-they-were-invited",
+                                       "state": "landed", "landed_as": head, "beside": True,
+                                       "covered_by": {"at": covering, "result": "passed", "ran": 141, "replayed": 0}}
+    assert kit.verification(got["head"], got["verdict"], got["beside"]) == (
+        "green", f"sluice's verdict covering its last landing, {head[:7]}, which landed beside the queue with nothing run "
+                 f"(#1319): passed (141 run, 0 replayed), at {covering[:7]}")
+
+    answers("0.68.1", head)
+    got = k.read()["bolts"]["te"]
+    assert got["beside"]["record"]["covered_by"] is None and kit.verification(head, words, got["beside"])[0] == "unknown"
+    answers("0.69.0", head, code=1)
+    got = k.read()["bolts"]["te"]
+    assert (got["beside"]["record"], got["beside"]["why"]) == (None, "sluice status 1319 exited 1: no submission 1319")
+
+
 def test_a_chores_place_and_a_fix_beside_a_bolt_on_github_are_read_against_githubs_copy(repo, tmp_path):
     """Stages and slot_stage (bolt-plan "A chore's place and a fix beside a bolt on GitHub"): a chore's place one
     commit of its own beyond GitHub's bolt reads ahead 1, which the host's copy two commits behind would read 3, and

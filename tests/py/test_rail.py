@@ -227,6 +227,33 @@ class TestRows:
                                    "landing of sluice's, so it has no verdict")
         assert land["cmds"] == []
 
+    def beside(self, version):
+        """apex-zones' head the box's b01e966, landed beside sluice's queue with nothing run (#1319), its record as sluice
+        <version> prints it."""
+        from facts import BESIDE_HEAD, BESIDE_NEW, BESIDE_OLD, landed_beside
+        sv = survey()
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"].update(
+            head=BESIDE_HEAD, verdict=BESIDE_NEW if version == "0.69.0" else BESIDE_OLD, beside=landed_beside(version))
+        land, = [r for r in rows(sv=sv) if r["group"] == "land"]
+        return land
+
+    def test_a_bolt_whose_head_landed_beside_the_queue_lands_on_the_verdict_that_covers_it(self):
+        """merge-gate "A landing beside reads as the verdict that covers it": sluice 0.69.0's record of #1319 names the
+        verdict that covers it, #1316's at e25fea4, which passed, so apex-zones reads proven and is a row of its kit's
+        landings card that can land."""
+        land = self.beside("0.69.0")
+        assert (land["key"], land["what"][1]) == (f"land/{KIT}", f"apex-zones, swb-2 on {BOX}: can land")
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')] and land["bolts"][0]["can"] is True
+
+    def test_a_landing_beside_whose_record_names_no_covering_verdict_does_not_land_and_says_why(self):
+        """The box's case, sluice 0.68.1, whose record of #1319 names no covering verdict: the row says so."""
+        land = self.beside("0.68.1")
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: lands once its verification is green; now its head b01e966 "
+                                   "landed beside sluice's queue with nothing run (#1319), and sluice's record of it names "
+                                   "no verdict that covers it, as sluice records none before 0.69.0: the bolt reads proven "
+                                   "once a landing on it carries a verdict of its own or names the one that covers it")
+        assert land["cmds"] == []
+
     def test_a_bolt_lands_only_once_every_units_latest_change_has_been_in_a_batch(self):
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": {"zone-one"}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
@@ -1483,6 +1510,17 @@ class TestBolts:
         b = {x["bolt"]: x for x in self.data()["partitions"][0]["plans"][0]["bolts"]}
         assert b["apex-zones"]["verification"] == {"state": "green", "said": "sluice's verdict on its last landing, abc1234: passed (3 run, 1 replayed)"}
         assert "  verification: green, sluice's verdict on its last landing, abc1234: passed (3 run, 1 replayed)" in plan.bolts_text(self.data())
+
+    def test_a_held_bolt_whose_head_landed_beside_the_queue_shows_the_verdict_that_covers_it(self, monkeypatch):
+        """crew bolts shows a landing beside's verification as the verdict that covers it, with that verdict's counts."""
+        from facts import BESIDE_HEAD, BESIDE_NEW, landed_beside
+        sv = survey()
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"].update(head=BESIDE_HEAD, verdict=BESIDE_NEW, beside=landed_beside("0.69.0"))
+        b = {x["bolt"]: x for x in self.data(sv=sv)["partitions"][0]["plans"][0]["bolts"]}
+        said = ("sluice's verdict covering its last landing, b01e966, which landed beside the queue with nothing run "
+                "(#1319): passed (141 run, 0 replayed), at e25fea4")
+        assert b["apex-zones"]["verification"] == {"state": "green", "said": said}
+        assert b["apex-zones"]["state"] == "waits"
 
     def test_an_unreachable_hosts_bolts_read_unknown_and_the_host_is_named(self):
         d = self.data(sv=survey(ok=False))
