@@ -27,7 +27,7 @@ Amends the change `a-kit-renamed-on-its-host-is-renamed-across-the-plan` (archiv
    - a Source's repository where it names a decision record, `<owner>/<old>:docs/adr/<file>`;
    - the open cards whose keys name the kit, `land/<old>` and `record/<old>/<n>`, which the act closes, saying the kit is renamed, and raises again under the name now, each in its owner's name with its words whole.
 
-   An entry a host still holds unpushed under `<old>` reaches the branch under `<new>`. `Count` in the act's entry is the number of records it renamed, all of them together.
+   A field holding the kit itself keeps its form: a name becomes `<new>`, and a forge address `<owner>/<old>` becomes `<owner>/<new>` unless `<new>` is given as an address, so no reader matching by address loses the owner. An object built on the kit takes `<new>`'s name. An entry a host still holds unpushed under `<old>` reaches the branch under `<new>`. `Count` in the act's entry is the number of records it renamed, all of them together.
 
 3. **What crew leaves as written, and why.** Words no reader looks a kit up from: the plan's Goals and Intents, signals and `moves.rec`, commit messages, and a closed proposal's `Do` lines, which are what the user approved (`plan.4`). A proposal still open whose `Do` names `<old>` refuses the rename, naming the proposal: the user answers it first, or the planner proposes it again, so no card ever changes under the user (`plan.4`). A proposal may hold the rename, and the commands after it in that proposal name `<new>`.
 
