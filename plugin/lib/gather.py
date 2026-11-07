@@ -236,11 +236,14 @@ def carried_bolts(holds, lines, own):
 
 def bolt_lines(main, now, refs):
     """Each bolt's first-parent line beyond the kit's main now (now), from the ref each is read at (refs, {bolt: ref}):
-    ({bolt: [commits]}, None), or (None, why) when git could not list one (read.1)."""
+    ({bolt: [commits]}, None), or (None, why) when git could not list one (read.1). A ref another command removed while
+    this read ran, as a fetch prunes a landed bolt's, is left out: the branch is gone, and no bolt."""
     lines = {}
     for b, ref in sorted(refs.items()):
         out = run(["git", "rev-list", "--first-parent", ref, f"^{now}"], main)
         if out is None:
+            if run(["git", "rev-parse", "-q", "--verify", ref], main) is None:
+                continue
             return None, f"git could not list bolt/{b}'s own commits beyond main at {short(ref)}"
         lines[b] = out.split()
     return lines, None

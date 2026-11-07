@@ -5744,17 +5744,18 @@ echo "BEYOND=$(git rev-list --count --merges "$own..$there" 2>/dev/null)"
 
 
 # What a tip carries of other bolts' work (plan.8, plan.19), for kit.carries_of and gather.carried_bolts, read in its kit's
-# main checkout with one fetch of main and every bolt from origin, pruning the bolts GitHub no longer holds: $3 the tip
-# judged, $4 its bolt where it lives for a merge into it, or empty for the bolt's own landing. READ with git's words when
-# a fetch or a listing fails; else LANDING, yes for a landing; HOLDS, the commits the tip holds beyond main now, and
-# beyond its bolt for a merge; OWN, the tip's first-parent commits beyond main; and a LINE for each bolt, its name and
-# its first-parent commits beyond main, every bolt GitHub holds read there, and a bolt the host keeps with no copy on
-# GitHub read in the host's refs. Read from the branches alone, never a commit's words.
+# main checkout with one fetch of main and every bolt from origin, pruning nothing, since a bolt's branch GitHub deleted
+# was in main and its line beyond main is empty: $3 the tip judged, $4 its bolt where it lives for a merge into it, or
+# empty for the bolt's own landing. READ with git's words when a fetch or a listing fails; else LANDING, yes for a
+# landing; HOLDS, the commits the tip holds beyond main now, and beyond its bolt for a merge; OWN, the tip's
+# first-parent commits beyond main; and a LINE for each bolt, its name and its first-parent commits beyond main, every
+# bolt GitHub holds read there, and a bolt the host keeps with no copy on GitHub read in the host's refs, a ref another
+# command removed while it was read left out, as gone. Read from the branches alone, never a commit's words.
 CARRIES = r"""main=$1 bolt=$2 tip=$3 into=${4:-}
 cd "$main" || exit 1
 now=refs/heads/main
 if git remote get-url origin >/dev/null 2>&1; then
-  if ! err=$(git fetch -q --prune origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/bolt/*:refs/remotes/origin/bolt/*' 2>&1); then
+  if ! err=$(git fetch -q origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/bolt/*:refs/remotes/origin/bolt/*' 2>&1); then
     echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
   fi
   now=refs/remotes/origin/main
@@ -5769,7 +5770,10 @@ for r in $(git for-each-ref --format='%(refname)' refs/remotes/origin/bolt/) $(g
   b=${r#refs/remotes/origin/bolt/}; b=${b#refs/heads/bolt/}
   case "$seen" in *" $b "*) continue ;; esac
   seen="$seen$b "
-  l=$(git rev-list --first-parent "$r" "^$now" 2>&1) || read_out "bolt/$b's own commits" "$l"
+  if ! l=$(git rev-list --first-parent "$r" "^$now" 2>&1); then
+    git rev-parse -q --verify "$r" >/dev/null || continue
+    read_out "bolt/$b's own commits" "$l"
+  fi
   echo "LINE $b $(printf '%s' "$l" | tr '\n' ' ')"
 done
 """

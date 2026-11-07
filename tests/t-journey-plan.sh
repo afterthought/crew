@@ -202,6 +202,7 @@ CREW_AGENT= crew bolt give swb-2 console-pages >/dev/null 2>&1
 pz=$(place "$k" tenant-environments zone-first); echo z > "$pz/z-file"; commit_all "$pz" "feat(zone-first): z"
 pt=$kd/places/the-deploy-names-its-host-tenant; echo t > "$pt/same-file"; commit_all "$pt" "feat: same file"
 on_branch "$k" bolt/console-pages "feat: same file, otherwise" same-file $'console\n'
+git -C "$k" push -q origin bolt/console-pages  # landed on GitHub's bolt, where the move reads it (plan.19)
 ztip=$(git -C "$k" rev-parse unit/zone-first); ttip=$(git -C "$k" rev-parse unit/the-deploy-names-its-host-tenant)
 crew plan propose "$(proposal 'Case: Both belong with the console.' 'Do: unit move zone-first console-pages' \
   'Do: unit move the-deploy-names-its-host-tenant console-pages')" >/dev/null

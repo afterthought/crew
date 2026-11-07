@@ -75,7 +75,7 @@ Considered: refusing a bolt that holds any commit main lacks and another bolt's 
 
 ### Decision 3: crew bolt submit reads what the head carries after one fetch
 
-`landing_submitted` runs `landing_carries` after `landing_sent_back` and before sluice's queue is read. It judges the head the landing would submit, or the host's `bolt/<bolt>` for a bolt kept there. `CARRIES` runs on the team's host. It fetches main and every bolt from origin with `--prune`, so a branch GitHub deleted is no other bolt. It prints what the tip holds beyond main, its own first-parent line and each bolt's line. `kit.carries_of` reads the output, and `carries_refusal` words the refusal.
+`landing_submitted` runs `landing_carries` after `landing_sent_back` and before sluice's queue is read. It judges the head the landing would submit, or the host's `bolt/<bolt>` for a bolt kept there. `CARRIES` runs on the team's host. It fetches main and every bolt from origin and prunes nothing: a branch GitHub deleted was in main, so its line beyond main is empty. It prints what the tip holds beyond main, its own first-parent line and each bolt's line. `kit.carries_of` reads the output, and `carries_refusal` words the refusal.
 
 A bolt that carries another's work returns crew's own refusal. Nothing is submitted, no worktree is cut and sluice is asked for nothing. The refusal is recorded with no head, so it holds no row of its own (`landing_ended`). The row is held by what the kit's read says, and is never read as sluice sending the landing back. A fetch or a listing git refuses refuses the submission, naming git's words (`read.1`).
 
