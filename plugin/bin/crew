@@ -507,18 +507,66 @@
 # A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and no
 # git tab, and "<team> units", one pane per slot in flight, which exists only while a unit or fix is. A team's panes
 # and state live on its host, so a command about a team runs there. Add --force to act on an agent that is working.
+#
+# -h or --help among any command's arguments prints that command's usage and does nothing else, exiting 0: its own lines
+# here, or its parser's for a command crew hands to one (crew bolt give --help). Any other word is a word, so
+# crew needs "--help with the tenant table" ends a stage as any needs does.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 py() { python3 "$here/../lib/crew.py" "$@"; }
 teams() { py teams || exit 1; }
 this_host() { hostname -s; }
-usage() { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
+# usage [<command> [<word>]]: crew's usage, the lines above; with a command, only its own lines there, each a line
+# `crew <command> ...` with the lines indented under it, those whose next word names <word> (crew unit run) when any
+# does, else all of the command's (crew fix); a command the lines above name nowhere is given them whole
+usage() {
+  awk -v cmd="${1:-}" -v sub_="${2:-}" '
+    NR == 1 {next}
+    !/^#/ {exit}
+    {sub(/^# ?/, ""); line[++n] = $0}
+    END {
+      for (i = 1; i <= n; i++) {
+        if (cmd == "") {print line[i]; continue}
+        if (line[i] ~ /^  crew /) {split(line[i], w, " "); own = (w[2] == cmd); named = 0
+          if (own) {k = split(w[3], alt, "|"); for (j = 1; j <= k; j++) if (alt[j] == sub_) named = 1}
+          if (named) any = 1}
+        else if (line[i] !~ /^    /) own = 0
+        mine[i] = own; word[i] = named
+        if (own) found = 1
+      }
+      if (cmd == "") exit
+      for (i = 1; i <= n; i++) if (!found || (mine[i] && (!any || word[i]))) print line[i]
+    }' "$0"
+}
 
 orig=("$@"); forced=(); greet=(); args=()
 for a in "$@"; do case $a in --force) forced=(--force) ;; --no-greet) greet=(--no-greet) ;; *) args+=("$a") ;; esac; done
 set -- ${args[@]+"${args[@]}"}
 cmd=${1:-}
+
+# -h or --help among a command's own arguments asks for its usage, and crew does nothing else (code.11): it is answered
+# here, before anything is read, recorded, started or sent to another host, and crew exits 0. A command whose arguments
+# crew hands whole to a Python parser is answered by that parser's usage, before it reads anything, as crew
+# bolt|unit|chore|plan|signal --help always were; every other by its own lines of the usage above. A word that is not
+# exactly -h or --help is a word.
+case $cmd in -h | --help) usage; exit 0 ;; esac
+asked=
+for a in ${args[@]+"${args[@]:1}"}; do
+  [[ $a == -h || $a == --help ]] || continue
+  asked=1
+  case $cmd in
+    bolts | bolt | signal | state | plan | rail | card | record | answer | role | events | trace | page | sites | ops | \
+      board | _views | _board | _rail | _follow | _hold | _go | _update | _renew | _preview | _answered | _card-preview | \
+      _preview-release | _made | _batch-card | _land-row | _land-card | _landing-read) break ;;  # their own arms below
+    _end-short | _tidy | _notice | _construct-again | _dispatch) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;  # plan.py's of that name
+    unit | chore) [[ ${2:-} == free || ${2:-} == wait || ${2:-} == run ]] || break ;;
+    main) [[ ${2:-} == fix ]] && break ;;
+    review) [[ ${2:-} == delivered ]] && break ;;
+    operator) usage console; exit 0 ;;  # the console's name before record 0035
+  esac
+  usage "$cmd" "${2:-}"; exit 0
+done
 
 # ------------------------------------------------------------------------------------------- where a command runs
 
@@ -528,7 +576,7 @@ cmd=${1:-}
 # environment: in a place named as a run's, crew-<role>--<label>, it is named here as its role, <label>-<role>, and
 # given its partition, as crew-role names a standing agent, so every command runs, and is carried, as the role.
 flume_place=${FLUME_PLACE:-}; flume_place=${flume_place%/}
-if [[ -z ${CREW_AGENT:-} && ${flume_place##*/} == crew-*--* ]]; then
+if [[ -z $asked && -z ${CREW_AGENT:-} && ${flume_place##*/} == crew-*--* ]]; then
   run_name=$(py run-name) || exit 1
   eval "$run_name"
 fi
