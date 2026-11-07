@@ -15548,7 +15548,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("--wait", action="store_true")
     x.add_argument("--timeout", type=int, default=3600000)
-    x = sub.add_parser("review-delivered")
+    x = sub.add_parser("review-delivered", prog="crew review delivered")
     x.add_argument("--label")
     x = sub.add_parser("_console")
     x.add_argument("act", choices=("up", "down"))
@@ -15633,11 +15633,13 @@ def refused(fleet, a, key, e):
 
 
 def main(argv):
-    need_recutils()
     if argv[:2] in (["signal", "move"], ["signal", "show"], ["signal", "land"], ["review", "delivered"]):  # beside crew signal <slug> "<asserts>"
         argv = [f"{argv[0]}-{argv[1]}"] + argv[2:]
     ap = parser(only=argv[0]) if argv and not argv[0].startswith("-") else None
-    args = (ap if ap is not None and argv[0] in ap.built else parser()).parse_args(argv)
+    ap = ap if ap is not None and argv[0] in ap.built else parser()
+    crew.answer_usage(ap, argv)
+    need_recutils()
+    args = ap.parse_args(argv)
     fleet = crew.load()
     key = (args.cmd, getattr(args, "sub", None))
     if key in HOST_COMMANDS:  # one process says what each of its steps did, in the order they did it

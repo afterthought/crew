@@ -543,11 +543,14 @@ def parser():
 
 
 def main(argv):
+    ap = parser()
+    if argv[:1] not in (["hold"], ["go"], ["update"]):  # those three are answered by crew's usage, in plugin/bin/crew
+        crew.answer_usage(ap, argv)
     plan.need_recutils()
     fleet = crew.load()
     if argv[:1] in (["hold"], ["go"], ["update"]):
         sys.exit(front(fleet, argv))
-    a = parser().parse_args(argv)
+    a = ap.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)
     if a.cmd == "_hold":
         {"set": hold_set, "status": hold_status, "wait": hold_wait}[a.act](fleet, a)

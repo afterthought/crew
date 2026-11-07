@@ -943,7 +943,6 @@ def fleet_page(fleet, a):
 
 
 def main(argv):
-    plan.need_recutils()
     sub, argv = (argv[0], argv[1:]) if argv else (None, [])
     sub == "page" or fail(f"page.py runs crew page, not {sub}")
     ap = argparse.ArgumentParser(prog="crew page")
@@ -952,6 +951,8 @@ def main(argv):
     ap.add_argument("--out")
     ap.add_argument("--since")
     ap.add_argument("--json", action="store_true", help=argparse.SUPPRESS)  # the page's data, for tests: nothing is written
+    crew.answer_usage(ap, argv)
+    plan.need_recutils()
     a = ap.parse_args(argv)
     if a.fleet:
         a.label is None or fail(f"crew page takes a partition's label or --fleet, not both: {a.label} and --fleet")

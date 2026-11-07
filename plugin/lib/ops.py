@@ -985,7 +985,9 @@ def args_refusal(fleet, a):
 
 
 def main(argv):
-    a = parser().parse_args(argv)
+    ap = parser()
+    crew.answer_usage(ap, argv)
+    a = ap.parse_args(argv)
     fleet = crew.load()
     why = args_refusal(fleet, a)
     why is None or fail(why)
