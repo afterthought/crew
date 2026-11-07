@@ -124,6 +124,17 @@ eq "$(drafted "$pr")" true
 eq "$(calls | grep -A100 "^$box wt submit " | grep -c "^$box gh pr ready $pr -R $gh_repo --undo$")" 1
 ok "crew bolt submit lands a bolt by a submission to main from a short-lived worktree, and a conflict lands nothing, is named for the team and leaves its pull request a draft, said with its link"
 
+# Submitted again at the head sluice sent back, nothing is submitted: the landing is its team's fix, not a stop, read
+# from sluice's record of the submission on the team's host (bolt-teams "A landing sluice sent back is its team's fix").
+: > "$CREW_TEST_LOG"
+expect_fail "bolt/tenant-environments was not submitted: sluice sent its landing back at $(short bolt/tenant-environments): #" \
+  crew bolt submit tenant-environments
+has "$out" " in conflict with main on README.md. It is its team's fix, not a stop: a conflict is the bolt's, and swb-1-conductor takes main into it by a fix it submits to the bolt, crew fix swb-1 take-main-"
+has "$out" "; once that fix has merged into bolt/tenant-environments, crew bolt submit tenant-environments submits the landing again at its new head."
+eq "$(calls | grep -c "^$box wt submit ")" 0
+eq "$(drafted "$pr")" true
+ok "a landing sluice sent back is its team's fix: submitted again at the same head, crew submits nothing and names the fix and the submit after it"
+
 # The team takes main into the bolt: a fix merges main in its place, resolving the title, and submits to the bolt.
 # The team's host gives a plannotator session a link on its tailnet name, as swancloud sets it.
 export PLANNOTATOR_URL_HOST=auto PLANNOTATOR_PORT=19432-19451

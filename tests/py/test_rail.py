@@ -139,7 +139,8 @@ class TestRows:
                          "refused": {"apex-zones": ("abc1234" + "0" * 33, "bolt/apex-zones did not land: sluice found a conflict")}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: held: sluice refused its landing at abc1234, until its team's fix "
-                                   "moves its head: bolt/apex-zones did not land: sluice found a conflict")
+                                   "moves its head: bolt/apex-zones did not land: sluice found a conflict; once that fix has merged, "
+                                   "wldn-ops submits it again")
         assert land["cmds"] == []
         held["wldn"]["refused"] = {"apex-zones": ("c" * 40, "an older head's")}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
