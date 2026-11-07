@@ -592,7 +592,8 @@ class TestTheSubmission:
     def _state(self, tmp_path):
         self.tmp = tmp_path
 
-    def submit(self, monkeypatch, before, outs, bolts=("b",), runs_at=None, close=None, said=None, record=None, copies=None, overview=None, statuses=None):
+    def submit(self, monkeypatch, before, outs, bolts=("b",), runs_at=None, close=None, said=None, record=None, copies=None, overview=None, statuses=None,
+               carries=None):
         """bolt_submit of the bolts on mac-studio, whose work runs on box unless runs_at says otherwise, MAIN saying before on
         each host and POLICY said, a policy at main taking no pull requests unless given, the bolt's two copies read
         right after MAIN (LAND_COPIES) answering copies, a bolt that lives on its host unless given, sluice's
@@ -603,7 +604,9 @@ class TestTheSubmission:
         record of the submission (SUBMISSION_STATUS) answering from statuses in turn, else as its last wait did, the
         record it printed or one in the state its exit gives; what ran (the script and its bolt, the submission's number,
         gh's act or the main checkout), what was recorded of each landing's outcome, its entry as sluice queued it kept
-        apart (self.queued), and which bolts crew bolt land closed, kept on self."""
+        apart (self.queued), and which bolts crew bolt land closed, kept on self. What each bolt carries of another's
+        (CARRIES) answers carries, nothing unless given, its arguments kept apart (self.carries_read), so the scripts
+        above read as they did before it."""
         ran_, emitted, closed, argvs = self.ran, self.emitted, self.closed, self.argvs = [], [], [], []
         self.order = []  # the scripts run and the entries recorded, in turn
         statuses, waited = list(statuses or []), [None]
@@ -617,8 +620,10 @@ class TestTheSubmission:
         monkeypatch.setattr(plan, "plan_of", lambda fleet, label: type("P", (), {"bolt": bolt})())
         monkeypatch.setattr(plan, "bolt_at", lambda fleet, label, b, run=None: (runs_at or {}).get(b["Bolt"], self.T))
         monkeypatch.setattr(plan, "READ", type("R", (), {"drop_kit": lambda s, h, m: None})())
-        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: ran_.append(("MAIN" if script == plan.MAIN else "POLICY", host))
-                            or (before if script == plan.MAIN else said))
+        self.carries_read = []
+        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: (
+            self.carries_read.append((host, *args)) or (carries or "LANDING=yes\nHOLDS=\nOWN=\n") if script == plan.CARRIES else
+            ran_.append(("MAIN" if script == plan.MAIN else "POLICY", host)) or (before if script == plan.MAIN else said)))
         monkeypatch.setattr(plan.crew, "this_host", lambda: here[0])
         monkeypatch.setattr(plan.crew, "crew_argv", lambda fleet, host, *args: ["crew", *args])
         monkeypatch.setattr(plan, "landing_state", lambda t: self.tmp / f"{t['label']}-crew")
@@ -1132,6 +1137,37 @@ class TestTheSubmission:
         """What LAND_COPIES says of bolt/b on box once it has fetched GitHub's, whose policy names origin for it."""
         return ran_as(0, f"OWN={own}\nTHERE={GITHUBS}\nAT_THERE={base64.b64encode(ON_GITHUB.encode()).decode()}\n"
                          f"HELD={held}\nAHEAD={ahead}\nLACKS={lacks}\nBEYOND={beyond}\n")
+
+    def test_a_bolt_carrying_another_bolts_unlanded_work_submits_nothing_and_names_that_bolt_and_its_landing(self, monkeypatch, capsys):
+        """The Willdan box's case (signal 2026-11-07-wldn-ops-052d0a47/01; plan.8): the popover bolt's head holds the
+        deleting bolt's landing 214, which main lacks. Read after one fetch on the bolt's host at the head the landing
+        would submit, GitHub's (CARRIES), the bolt is refused as a conflict holds a landing: sluice's queue is not read,
+        nothing is submitted and no wt submit runs; the refusal names the bolt whose work it carries and that bolt's
+        landing, and is recorded with no head, so it holds no row of its own (landing_ended), the row held by what the
+        kit's read says it carries."""
+        l214, unit = "f5e67f35" + "0" * 32, "6165532d" + "0" * 32
+        carries = f"LANDING=yes\nHOLDS={GITHUBS} {l214} {unit}\nOWN={GITHUBS}\nLINE b {GITHUBS}\nLINE deleting {l214}\n"
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, self.BEFORE, [], copies=self.copies(GITHUBS, "yes", "yes", 0, 0), carries=carries)
+        assert self.scripts() == ["MAIN", "COPIES"] and self.closed == []
+        assert self.carries_read == [("box", "/k/main", "b", GITHUBS, "")]
+        refused = ("bolt/b was not submitted: it carries bolt deleting's work, its landing f5e67f3, which main lacks; a bolt never "
+                   "carries another bolt's work to main, so it lands once main holds that work, by the landing of bolt deleting")
+        assert self.emitted == [("bolt.submit", ["bolt/b"], {"refused": refused})]
+        assert refused in capsys.readouterr().err
+        entries = [dict(Act="bolt.submit", On=["bolt/b"], Refused=refused)]
+        assert plan.held_at(plan.refusals(entries), "b", GITHUBS) is None and plan.stops(entries) == {}
+
+    def test_a_bolt_whose_carried_work_cant_be_read_submits_nothing_naming_why(self, monkeypatch):
+        """read.1: the fetch CARRIES makes fails, so crew can't tell what the bolt carries, and submits nothing, saying git's
+        words."""
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, self.BEFORE, [], copies=self.copies(GITHUBS, "yes", "yes", 0, 0),
+                        carries="READ=fatal: could not read from remote repository\n")
+        assert self.scripts() == ["MAIN", "COPIES"]
+        assert self.emitted == [("bolt.submit", ["bolt/b"], {"refused": (
+            f"bolt/b was not submitted: crew can't tell whether {GITHUBS} carries another bolt's work: fatal: could not read "
+            "from remote repository")})]
 
     def test_a_copy_that_lags_githubs_is_levelled_and_githubs_head_submitted(self, monkeypatch, capsys):
         """bolt-teams "The host's copy lags GitHub's" (plan.19, design Decision 4): SUBMIT is given GitHub's head and

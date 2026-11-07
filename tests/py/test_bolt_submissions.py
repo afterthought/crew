@@ -287,7 +287,7 @@ def here(monkeypatch):
     monkeypatch.setenv("CREW_AGENT", "chuck")
 
 
-def bolts(submissions=None, error=None, at="code"):
+def bolts(submissions=None, error=None, at="code", carries=None):
     """crew bolts of wldn's plan, its bolt y started and its work launched, taken by the runner on the box, which keeps
     switchboard-kit in /kit/main, a's place at the Flume 0.3.6 status fixture named (tests/py/flume-0.3.6/<at>.json), the
     kit's submissions in sluice's queue as given."""
@@ -297,7 +297,8 @@ def bolts(submissions=None, error=None, at="code"):
                              units=[("a", "switchboard-kit", "y", []), ("b", "switchboard-kit", "y", []), ("bump", "switchboard-kit", "y", [], "chore")]))
     plan.reach_places(FLEET, w, "y")
     requests = plan.Plan(w.files.get("requests.rec") or runner.REQUESTS).recs("Request")
-    kit = {"ok": True, "main": [], "fixes": [], "places": {}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": []}},
+    kit = {"ok": True, "main": [], "fixes": [], "places": {}, "bolts": {"y": {"exists": True, "head": "d" * 40, "changes": [],
+                                                                         **({"carries": carries} if carries else {})}},
            **({"submissions": submissions} if submissions is not None else {}), **({"submissions_error": error} if error else {})}
     sv = {BOX: {"ok": True, "kits": {"/kit/main": kit}}}
     return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, w.plan)], sv, {},
@@ -306,6 +307,18 @@ def bolts(submissions=None, error=None, at="code"):
 
 def held(d):
     return d["partitions"][0]["plans"][0]["bolts"][0]
+
+
+def test_crew_bolts_says_a_bolt_carrying_another_bolts_work_is_held_naming_it():
+    """bolt-teams "crew bolts says a bolt carries another bolt's work" (plan.8): a bolt whose kit's read says it holds
+    another bolt's landing main lacks shows it held on the line under its head, naming that bolt and its landing, and
+    carries it in its JSON as carries; a bolt carrying none shows no such line."""
+    d = bolts(carries={"x": ["f5e67f35" + "0" * 32]})
+    assert held(d)["carries"] == {"x": ["f5e67f35" + "0" * 32]}
+    assert plan.bolts_text(d).splitlines()[2] == (
+        "  landing: held: carries bolt x's work, its landing f5e67f3, which main lacks; a bolt never carries another bolt's "
+        "work to main, so it lands once main holds that work, by the landing of bolt x")
+    assert held(bolts())["carries"] == {} and "carries" not in plan.bolts_text(bolts())
 
 
 def test_crew_bolts_shows_a_merge_under_test_on_its_line_and_the_landing_on_the_head_line():

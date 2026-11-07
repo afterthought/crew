@@ -435,3 +435,22 @@ class TestPullMarked:
             255, "ssh: connect to host box port 22: timed out")
         assert kit.pull_marked(0, "RC=0\n", "")[0] != 0
         assert kit.pull_marked(0, "RC=0\nSAID=%%%\n", "")[0] != 0
+
+
+# ---------------------------------------------------------------------------------------- what a branch carries
+
+def test_carries_of_reads_what_the_tip_holds_and_each_bolts_line_its_own_at_the_tip_for_a_landing():
+    """plan.8 (CARRIES): a landing's own line is the tip's first-parent line, whatever GitHub's copy of it said."""
+    out = "LANDING=yes\nHOLDS=b1 a1 u1\nOWN=b1\nLINE a a1\nLINE b stale\nLINE c \n"
+    assert kit.carries_of(out, "b") == (["b1", "a1", "u1"], {"a": ["a1"], "b": ["b1"], "c": []}, None)
+
+
+def test_carries_of_beyond_a_branch_keeps_the_bolts_line_as_github_holds_it():
+    out = "LANDING=no\nHOLDS=u2 a1\nOWN=u2 a1\nLINE a a1\nLINE b b1\n"
+    assert kit.carries_of(out, "b") == (["u2", "a1"], {"a": ["a1"], "b": ["b1"]}, None)
+
+
+def test_carries_of_says_gits_words_or_what_it_could_not_read():
+    """read.1, read.2: a failed fetch or listing is said in git's words; output that is not CARRIES's is named."""
+    assert kit.carries_of("READ=fatal: no remote\n", "b") == (None, None, "fatal: no remote")
+    assert kit.carries_of("HOLDS=x\n", "b")[2] == "crew can't read what bolt/b carries from: HOLDS=x"

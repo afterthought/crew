@@ -293,6 +293,33 @@ def landed_on_github(other, files, message):
     return other.git("rev-parse", "HEAD")
 
 
+def test_a_bolt_on_github_that_merged_another_bolts_landing_carries_that_bolts_work(repo, tmp_path):
+    """The landings card's rows, the rail and crew bolts (plan.8): bolt/te on GitHub merged bolt/cp's landing, which
+    main lacks, so the kit's read says te carries cp's work, naming cp's landing, read at each bolt's copy on GitHub as
+    the host last fetched it, cp's among them though the host holds no branch of it; cp carries nothing of te's."""
+    k, other = on_github(repo, tmp_path)
+    other.git("checkout", "-q", "-b", "bolt/cp", "origin/main")
+    landing = other.commit("chore(land): #1 unit/c", {"c": "1\n"})
+    other.git("push", "-q", "origin", "bolt/cp")
+    other.git("checkout", "-q", "bolt/te")
+    other.git("merge", "-q", "--no-ff", "-m", "chore(land): #2 unit/t", "bolt/cp")
+    other.git("push", "-q", "origin", "bolt/te")
+    repo.git("fetch", "-q", "origin")
+    got = gather.kit({"main": str(repo.path), "dir": str(k.dir), "bolts": ["te", "cp"]})["bolts"]
+    assert (got["te"]["carries"], got["cp"]["carries"]) == ({"cp": [landing]}, {})
+
+
+def test_a_bolts_ref_gone_while_the_lines_are_read_is_left_out_and_one_git_cant_list_is_named(repo):
+    """gather.bolt_lines (read.1): a ref another command removed while the read ran, as a fetch prunes a landed bolt's,
+    is no bolt; a ref that stands and git can't list beyond main is named, never read as no line."""
+    head = repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b", head)
+    lines, why = gather.bolt_lines(str(repo.path), "refs/heads/main", {"b": "refs/heads/bolt/b", "gone": "refs/remotes/origin/bolt/gone"})
+    assert (lines, why) == ({"b": []}, None)
+    lines, why = gather.bolt_lines(str(repo.path), "refs/heads/no-main", {"b": "refs/heads/bolt/b"})
+    assert lines is None and why == "git could not list bolt/b's own commits beyond main at bolt/b"
+
+
 def test_a_merge_landed_on_github_is_read_there_with_the_hosts_copy_left_behind(repo, tmp_path):
     """Stages, crew bolts and the landing card (bolt-plan "A merge landed on GitHub while the host's copy stayed
     behind"): a bolt on GitHub is read at origin/bolt/<bolt> as the host last fetched it, its archived change, its

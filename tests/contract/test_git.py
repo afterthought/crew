@@ -163,6 +163,77 @@ def script(name, *args, cwd=None):
     return subprocess.run(["bash", "-c", getattr(plan, name), "crew", *args], capture_output=True, text=True, cwd=cwd)
 
 
+def two_bolts(repo, tmp_path):
+    """A kit whose bolts live on GitHub, as the Willdan box's breadboard-kit stood on 2026-11-06 (signal
+    2026-11-07-wldn-ops-052d0a47/01): bolt/deleting and bolt/popover made from main there, deleting holding one landing,
+    #214, of its unit's commit, pushed from another clone as sluice lands from any host, the host's own copies of both
+    left at main. Returns (git run in the other clone, its folder, landing 214's sha)."""
+    policy = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
+    repo.commit("main", {".config/sluice.toml": policy})
+    repo.git("branch", "bolt/deleting"); repo.git("branch", "bolt/popover")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git"))
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "github.git"), str(other)], check=True)
+    o = lambda *a: subprocess.run(["git", "-C", str(other), *a], check=True, capture_output=True, text=True).stdout.strip()
+    o("checkout", "-q", "-b", "unit/x", "origin/bolt/deleting")
+    (other / "deleting").write_text("an app being deleted says so\n")
+    o("add", "deleting"); o("commit", "-qm", "feat: a deleted app reads deleting")
+    o("checkout", "-q", "-b", "bolt/deleting", "origin/bolt/deleting")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): #214 unit/x", "unit/x")
+    o("push", "-q", "origin", "bolt/deleting")
+    repo.git("fetch", "-q", "origin")
+    return o, other, o("rev-parse", "HEAD")
+
+
+def carries(repo, bolt, tip, into=""):
+    """plan.CARRIES as bolts_carried runs it in the kit's main checkout, read by kit.carries_of and decided by
+    gather.carried_bolts: {bolt: [its landings the tip holds]}."""
+    import gather
+    import kit
+    r = script("CARRIES", str(repo.path), bolt, tip, into)
+    assert r.returncode == 0, r.stderr
+    holds, lines, why = kit.carries_of(r.stdout, bolt)
+    assert why is None, why
+    return gather.carried_bolts(holds, lines, bolt)
+
+
+def test_a_bolt_holding_another_bolts_landing_carries_it_until_main_holds_it_and_the_other_carries_nothing(repo, tmp_path):
+    """plan.landing_carries through CARRIES (plan.8): bolt/popover's landing #216 merged a unit built on deleting's
+    landing 214, so the popover bolt, read on GitHub after a fetch, carries deleting's work and the deleting bolt
+    carries nothing of popover's; once main holds deleting's landing, popover carries nothing."""
+    o, other, l214 = two_bolts(repo, tmp_path)
+    o("checkout", "-q", "-b", "unit/pop", l214)
+    (other / "pop").write_text("one popover\n")
+    o("add", "pop"); o("commit", "-qm", "docs(openspec): propose who-can-open-an-app")
+    o("checkout", "-q", "-b", "bolt/popover", "origin/bolt/popover")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): #216 unit/pop", "unit/pop")
+    o("push", "-q", "origin", "bolt/popover")
+    head = o("rev-parse", "HEAD")
+    assert carries(repo, "popover", head) == {"deleting": [l214]}
+    assert carries(repo, "deleting", l214) == {}
+    o("checkout", "-q", "-B", "main", "origin/main")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): bolt/deleting", "bolt/deleting")
+    o("push", "-q", "origin", "main")
+    assert carries(repo, "popover", head) == {}
+
+
+def test_a_bolt_github_deleted_after_it_landed_is_read_as_carrying_nothing_and_its_tracking_ref_kept(repo, tmp_path):
+    """CARRIES prunes nothing (read.1): once bolt/deleting has landed on main and GitHub deletes its branch, the host's
+    tracking ref of it stays, so no other read loses it mid-read, and its line beyond main is empty, so popover, which
+    holds its landing, carries nothing."""
+    o, other, l214 = two_bolts(repo, tmp_path)
+    o("checkout", "-q", "-B", "bolt/popover", "origin/bolt/popover")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): #216 bolt/deleting's work", l214)
+    o("push", "-q", "origin", "bolt/popover")
+    head = o("rev-parse", "HEAD")
+    o("checkout", "-q", "-B", "main", "origin/main")
+    o("merge", "-q", "--no-ff", "-m", "chore(land): bolt/deleting", "bolt/deleting")
+    o("push", "-q", "origin", "main", ":bolt/deleting")
+    assert carries(repo, "popover", head) == {}
+    assert repo.git("rev-parse", "refs/remotes/origin/bolt/deleting") == l214
+
+
 def test_the_mark_crew_sets_on_a_bolts_branch_goes_when_git_deletes_the_branch(repo):
     """plan.tidy (plan.9, read.4): crew marks a bolt's branch as its own in the kit's git config, branch.bolt/<bolt>.crew,
     once sluice has made it (BOLT_CREATE), and the mark goes with the branch when git deletes it, so the tidy reads it as
