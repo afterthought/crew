@@ -10,7 +10,11 @@
 # With "resume" the role picks its last conversation back up, by the name it was started under.
 # A main level's role starts only on the host the teams file names for its main level; on any other it is refused,
 # naming that host, and no Claude starts (crew.py main_elsewhere_said).
+# -h or --help among the arguments prints these lines and starts nothing (code.11).
 set -euo pipefail
+for a in "$@"; do
+  [[ $a == -h || $a == --help ]] && { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; exit 0; }
+done
 scope=${1:?usage: crew-role <team|label> <role> [stage|resume]}; role=${2:?usage: crew-role <team|label> <role> [stage|resume]}
 here=$(cd "$(dirname "$0")" && pwd)
 spec=$(python3 "$here/../lib/crew.py" launch "$scope" "$role" ${3:+"$3"}) || exit 2

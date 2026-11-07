@@ -82,6 +82,34 @@ class Stopped(Exception):
         self.code = code
 
 
+# A help flag: either one among a command's arguments asks for the command's usage, and crew does nothing else (code.11).
+HELP = ("-h", "--help")
+
+
+def usage_asked(ap, argv):
+    """The parser whose usage a command's arguments ask for, or None when they ask for none: -h or --help anywhere
+    among them asks for the usage of the deepest command their leading words name, so no word before the flag that the
+    parser would refuse answers in its place. A word that is not exactly -h or --help is a word."""
+    if not any(w in HELP for w in argv):
+        return None
+    import argparse
+    for w in argv:
+        subs = next((x for x in ap._actions if isinstance(x, argparse._SubParsersAction)), None)
+        if subs is None or w not in subs.choices:
+            break
+        ap = subs.choices[w]
+    return ap
+
+
+def answer_usage(ap, argv):
+    """A command whose arguments ask for its usage prints it and exits 0, first, before it reads, records, starts or
+    sends anything to another host (code.11)."""
+    asked = usage_asked(ap, argv)
+    if asked is not None:
+        asked.print_help()
+        sys.exit(0)
+
+
 def need(entry, what, field, kind=None):
     if field not in entry or entry[field] in (None, "", []):
         fail(f"{what} in {TEAMS} has no '{field}'")

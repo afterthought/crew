@@ -465,7 +465,7 @@ The deliverables SHALL be: construct, the unit's change committed since the stag
 - **THEN** the team's next read drops it, records no end for it, and owes nothing
 
 ### Requirement: A stage's agent says what it needs through crew
-A stage's agent that cannot finish without something only someone else can give SHALL say so with `crew needs "<what it needs>"`, which ends its stage short. crew SHALL carry the agent's words to the conductor: in the answer of a wait running on the stage, otherwise in a tell marked as from that agent. crew SHALL refuse `crew needs` from anyone but the agent of a stage crew owes an end, and with no words.
+A stage's agent that cannot finish without something only someone else can give SHALL say so with `crew needs "<what it needs>"`, which ends its stage short. crew SHALL carry the agent's words to the conductor: in the answer of a wait running on the stage, otherwise in a tell marked as from that agent. crew SHALL refuse `crew needs` from anyone but the agent of a stage crew owes an end, and with no words. `crew needs --help` and `crew needs -h` SHALL ask for the command's usage and end no stage (crew-command, "A help flag shows a command's usage and acts on nothing").
 
 #### Scenario: A coder pauses
 - **WHEN** a code agent runs `crew needs "a decision on which table holds tenants"` while the conductor waits on its unit
@@ -478,6 +478,10 @@ A stage's agent that cannot finish without something only someone else can give 
 #### Scenario: Not a stage's agent
 - **WHEN** a conductor, or a slot's agent whose stage has already ended, runs `crew needs "x"`
 - **THEN** crew refuses, saying the caller runs no stage crew is waiting on
+
+#### Scenario: The agent reads the command's usage
+- **WHEN** the agent of a stage crew owes an end runs `crew needs --help` to read how to use it
+- **THEN** crew prints the usage, the stage stays begun and nothing is recorded or told
 
 ### Requirement: A stage quiet too long is reported stuck
 A wait SHALL report a stage stuck, naming the stage and its agent, when the agent has not been working for longer than crew's limit (15 minutes unless the wait is given another), with no deliverable, no stop-short, and no background work of its own still running. Before it reports a stage stuck, the wait SHALL read the agent's last words, the last message the agent wrote in its own Claude transcript since the stage began, and the commits on the stage's branch made since the stage began, and the report SHALL carry both: the words quoted with their time, and each commit by its short sha and subject, newest first. Where the agent has written nothing since the stage began, or the branch holds no commit since then, the report SHALL say so; where crew cannot read either, the report SHALL say what it could not read and why, and SHALL NOT stand a guess in its place. A stuck report SHALL end neither the stage nor its agent, and SHALL NOT enter the agent's words in the run record. When crew cannot read whether the agent waits on work of its own, the clock SHALL run and the report SHALL say what could not be read.
