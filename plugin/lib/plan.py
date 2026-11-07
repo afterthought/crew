@@ -10909,6 +10909,28 @@ def merge_tree(main, ours, theirs, base=None):
     return paths
 
 
+def git_holds(main, commit, head):
+    """Whether head holds commit, by git merge-base --is-ancestor in the kit's main checkout: True or False, None when
+    git can't tell (forecast_base)."""
+    r = subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", commit, head], capture_output=True, text=True, env=gitenv())
+    return {0: True, 1: False}.get(r.returncode)
+
+
+def shared_beyond(main, ours, theirs, bolt):
+    """Whether ours and theirs share a commit their bolt (its head) lacks, read in the kit's main checkout: one of
+    their merge bases is not in the bolt (forecast_base). None when git can't tell, or the bolt's head is not known."""
+    if not bolt:
+        return None
+    r = subprocess.run(["git", "-C", main, "merge-base", "--all", ours, theirs], capture_output=True, text=True, env=gitenv())
+    if r.returncode == 1 and not r.stdout.strip():
+        return False
+    if r.returncode != 0:
+        return None
+    r = subprocess.run(["git", "-C", main, "rev-list", "-n1", *r.stdout.split(), "--not", bolt],
+                       capture_output=True, text=True, env=gitenv())
+    return bool(r.stdout.strip()) if r.returncode == 0 else None
+
+
 def case_of(text):
     """A proposal's Why, and the lead sentence of each of its What Changes items, in its own words."""
     sections, cur = {}, None
@@ -11216,7 +11238,8 @@ def took_heads(unit, entries):
 def reach(fleet, t):
     """On each of the conductor's waits, before it waits: for each unmerged unit of the team's bolt with a place, git
     merge-tree on the team's host forecasts its merge with the bolt and with each unmerged unit ahead of it in the file's
-    order, writing no ref, a dependent's with a unit it comes after from the head its place took; a unit that
+    order, writing no ref, a later unit's with one ahead of it from the newest of that one's work it holds, read from
+    git (forecast_base), none for a unit holding the other's head; a unit that
     conflicts with the bolt resolves that first, and is forecast against the units ahead of it once it is clean with
     the bolt. A conflict is a forecast for the later unit, recorded once for a pair of
     heads (`forecast`, with both heads, the paths and how it reached the unit) and reaching it once (deliver). The
@@ -11295,10 +11318,12 @@ def reach(fleet, t):
                 if k["places"].get(u.name()) and k["places"][u.name()].get("head")
                 and st.of(u.name())["stage"] not in ("merged", "landed", "unknown")]
         took = {name: took_heads(name, entries) for name, _, _ in live}
-        due, unread = forecasts_due(live, b.name(), k["bolts"].get(b.name(), {}).get("head"),
-                                    lambda o, h, base: merge_tree(main, o, h, base), done, took, bolt_order(plan, b.name())[1])
+        bhead = k["bolts"].get(b.name(), {}).get("head")
+        due, unread = forecasts_due(live, b.name(), bhead, lambda o, h, base: merge_tree(main, o, h, base),
+                                    lambda c, h: git_holds(main, c, h), lambda h, o: shared_beyond(main, h, o, bhead),
+                                    done, took, bolt_order(plan, b.name())[1])
         for name, other in unread:
-            print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
+            print(f"no forecast of {name} against {other}: git could not read them", file=sys.stderr)
         for name, other, paths, heads in due:
             way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, b.name(), name, other, paths))
             if way:
@@ -11652,26 +11677,34 @@ def main_conflict(entries, bolt, head):
     return None
 
 
-def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
+def forecasts_due(live, bolt, bolt_head, conflicts, holds, shared, done, took, after_of=None):
     """The forecasts a conductor's wait makes for a bolt (teams.12): live is each unmerged unit with a place, in the
     plan's order, as (name, head, its After units); conflicts(theirs, ours, base) the paths git merge-tree forecasts in
     conflict when theirs is merged into ours, from base or, when it is None, their merge base, [] for none, None when
     git can't tell. Each unit is forecast against the bolt, then against each unit ahead of it in the bolt's merge order
     (ahead, through after_of, the bolt's work's After names, the live units' own when none is given) once it is clean
     with the bolt, the later unit taking the forecast, so a unit is never forecast against one that comes after it; one
-    already made for the same heads (done) is not made again. A unit is forecast against one it comes after only on
-    what it adds beyond that unit's head its place took (took, {unit: {after unit: head}}), so the other's own work it
-    carries, rewritten since by a rebase or a settle, is no conflict of its; with no head taken, from their merge base
-    (plan.13). Returns the forecasts as (unit, other, paths, heads), none of which orders the two (plan.13, teams.12),
-    and the pairs git could not read."""
+    already made for the same heads (done) is not made again. Against a unit ahead of it, a unit is forecast only on
+    what each adds beyond the newest of the other's work it holds, read from git (forecast_base, with holds and shared,
+    plan.13): nothing when it holds the other's head, and from the head of the other its place took (took, {unit:
+    {other: head}}) only while git finds nothing newer of the other's that both hold. Returns the forecasts as (unit,
+    other, paths, heads), none of which orders the two (plan.13, teams.12), and the pairs git could not read."""
     due, unread = [], []
     order = [name for name, _, _ in live]
     after_of = after_of if after_of is not None else {name: after for name, _, after in live}
-    for name, head, after in live:
+    for name, head, _ in live:
         others = ([(f"bolt/{bolt}", bolt_head)] if bolt_head else []) + [
             (o, h) for o, h, _ in live if o != name and ahead(order, after_of, o, name)]
         for other, ohead in others:
-            paths = conflicts(ohead, head, took.get(name, {}).get(other) if other in after else None)
+            base = (False, None) if other.startswith("bolt/") else \
+                forecast_base(head, ohead, took.get(name, {}).get(other), holds, shared)
+            if base is None:
+                unread.append((name, other))
+                continue
+            held, base = base
+            if held:
+                continue
+            paths = conflicts(ohead, head, base)
             if paths is None:
                 unread.append((name, other))
                 continue
@@ -11683,6 +11716,39 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
             if other.startswith("bolt/"):
                 break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
     return due, unread
+
+
+def forecast_base(head, ohead, taken, holds, shared):
+    """How a later unit at head is forecast against an unmerged unit ahead of it at ohead: from the newest of the
+    other's work the later unit holds, read from git and never from a commit's words (plan.13, teams.12). holds(commit,
+    head) says whether head holds commit; shared(head, ohead) whether the two share a commit their bolt lacks, work of
+    the other's both hold; each answers None when git can't tell. taken is the head of the other its place took (Took),
+    or None.
+
+    A later unit that holds the other's head holds all of its work, as a merge in its place or a settle leaves it: it is
+    forecast nothing, so no settle starts (wldn, atl-1, 2026-11-07, signal 2026-11-07-atl-1-conductor-d88c52fa/01). It is
+    forecast from the head its place took only while it still holds that head, the other's line no longer does, its
+    rebase or settle having rewritten it, and the two share nothing newer of the other's: that rewritten work, which the
+    later unit carries as it took it, is then no conflict of its. Otherwise from their merge base, which git takes at
+    the newest commit both hold, the head the place took or one merged since. Returns (True, None) for a later unit
+    holding the other's head, else (False, base), base the taken head or None for their merge base; None when git
+    can't tell."""
+    held = holds(ohead, head)
+    if held is None:
+        return None
+    if held:
+        return True, None
+    if not taken:
+        return False, None
+    kept, still = holds(taken, head), holds(taken, ohead)
+    if kept is None or still is None:
+        return None
+    if not kept or still:
+        return False, None
+    beyond = shared(head, ohead)
+    if beyond is None:
+        return None
+    return False, (None if beyond else taken)
 
 
 # The subject crew wrote an After with at a forecast, before a forecast stopped ordering two units (plan.13): crew's

@@ -71,6 +71,7 @@ def test_merge_tree_from_the_head_a_dependent_took_leaves_out_its_dependencys_ow
     took = dependency_rebased(repo)
     assert plan.merge_tree(str(repo.path), "a", "b") == ["a/design.md", "shared.txt"]
     assert plan.merge_tree(str(repo.path), "a", "b", took) == []
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([], [])
 
 
 def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overlap(repo):
@@ -79,6 +80,86 @@ def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overl
     import plan
     took = dependency_rebased(repo, own={"shared.txt": "one\ntwo, as b has it\nthree\n"})
     assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
+
+
+def forecast(repo, took):
+    """plan.forecasts_due for units a and b, b after a, on git as crew's wait reads it in the kit's main checkout: their
+    merge in git merge-tree (plan.merge_tree), what b holds of a (plan.git_holds) and what the two share beyond the bolt
+    (plan.shared_beyond), with the head b's place took (took, {"b": {"a": <head>}})."""
+    import plan
+    main, rev = str(repo.path), lambda ref: repo.git("rev-parse", ref)
+    bolt = rev("bolt")
+    return plan.forecasts_due([("a", rev("a"), []), ("b", rev("b"), ["a"])], "t", bolt,
+                              lambda o, h, base: plan.merge_tree(main, o, h, base), lambda c, h: plan.git_holds(main, c, h),
+                              lambda h, o: plan.shared_beyond(main, h, o, bolt), set(), took)
+
+
+def dependent_took(repo):
+    """A unit a and a dependent b cut from the bolt: a's construct commits its change, b's place takes a's head (crew's
+    TAKE, a merge commit of its own) and b's construct and code build on it. Returns the head b took, which crew
+    records as the construct's Took."""
+    repo.commit("main", {"shared.txt": "one\ntwo\nthree\nfour\nfive\n", "other.txt": "x\n"})
+    repo.git("branch", "bolt")
+    repo.git("checkout", "-q", "-b", "a", "bolt")
+    took = repo.commit("feat(a): its change", {"a/design.md": "z\n"})
+    repo.git("checkout", "-q", "-b", "b", "bolt")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "-m", "chore(b): build on a as it stands", "a")
+    repo.commit("feat(b): its change", {"b/design.md": "y\n", "a/design.md": "z, as b builds on it\n"})
+    return took
+
+
+def test_a_unit_that_merged_the_unit_ahead_of_it_in_its_place_is_forecast_no_conflict(repo):
+    """plan.forecasts_due through plan.git_holds (teams.12, plan.13): b took a's head at its construct, a's code then
+    changed shared.txt, and b merged a's new head in its place, as a settle does, and changed the next line itself.
+    From the head b took, which for shared.txt is the bolt's, git merge-tree names shared.txt, as atl-1's gateway unit
+    was forecast on four paths with nothing to settle (wldn, 2026-11-07); b holds a's head, so it is forecast nothing,
+    and no settle starts."""
+    import plan
+    took = dependent_took(repo)
+    repo.git("checkout", "-q", "a")
+    repo.commit("feat(a): its code", {"shared.txt": "one\ntwo, as a has it\nthree\nfour\nfive\n"})
+    repo.git("checkout", "-q", "b")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "-m", "fix(b): settle on a", "a")
+    repo.commit("feat(b): its code", {"shared.txt": "one\ntwo, as a has it\nthree, as b has it\nfour\nfive\n"})
+    assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
+    assert plan.merge_tree(str(repo.path), "a", "b", repo.git("rev-parse", "bolt")) == ["a/design.md", "shared.txt"]
+    assert plan.merge_tree(str(repo.path), "a", "b") == []
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([], [])
+    assert forecast(repo, {}) == ([], [])
+
+
+def test_a_unit_whose_unit_ahead_moved_on_from_the_head_it_took_is_forecast_on_what_that_one_added_since(repo):
+    """plan.forecasts_due through plan.git_holds and plan.shared_beyond (teams.12, plan.13): b took a's head and
+    revised a's design, and a has since moved on, adding its tasks and changing other.txt, which b's own code changes
+    too. From the bolt, a/design.md would be in conflict as well, both having added it; b is forecast on other.txt
+    alone, what a added since the head b took against what b added."""
+    import plan
+    took = dependent_took(repo)
+    repo.commit("feat(b): its code", {"other.txt": "x, as b has it\n"})
+    repo.git("checkout", "-q", "a")
+    repo.commit("feat(a): its code", {"a/tasks.md": "- [x] 1.1\n", "other.txt": "x, as a has it\n"})
+    a, b = repo.git("rev-parse", "a"), repo.git("rev-parse", "b")
+    assert plan.merge_tree(str(repo.path), "a", "b", repo.git("rev-parse", "bolt")) == ["a/design.md", "other.txt"]
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([("b", "a", ["other.txt"], f"b@{b[:7]} a@{a[:7]}")], [])
+
+
+def test_a_unit_that_took_an_early_head_and_merged_a_newer_one_is_forecast_beyond_the_newer(repo):
+    """plan.forecasts_due through plan.git_holds (teams.12, plan.13): b took a's first head, merged a's second in its
+    place and changed the line after a's, and a then changed other.txt, which b changes too. b is forecast on other.txt
+    alone: from the head b took, git merge-tree would name shared.txt as well, a's work b already holds."""
+    import plan
+    took = dependent_took(repo)
+    repo.git("checkout", "-q", "a")
+    repo.commit("feat(a): its code", {"shared.txt": "one\ntwo, as a has it\nthree\nfour\nfive\n"})
+    repo.git("checkout", "-q", "b")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "-m", "chore(b): take a's code", "a")
+    repo.commit("feat(b): its code", {"shared.txt": "one\ntwo, as a has it\nthree, as b has it\nfour\nfive\n",
+                                      "other.txt": "x, as b has it\n"})
+    repo.git("checkout", "-q", "a")
+    repo.commit("fix(a): its verify's finding", {"other.txt": "x, as a has it\n"})
+    a, b = repo.git("rev-parse", "a"), repo.git("rev-parse", "b")
+    assert plan.merge_tree(str(repo.path), "a", "b", took) == ["other.txt", "shared.txt"]
+    assert forecast(repo, {"b": {"a": took[:7]}}) == ([("b", "a", ["other.txt"], f"b@{b[:7]} a@{a[:7]}")], [])
 
 
 def rebase(repo, tmp_path, unit, src, to, upstream=None, left=None):
