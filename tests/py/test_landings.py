@@ -95,8 +95,8 @@ def test_the_plan_write_that_adds_a_bolt_named_as_a_kit_refuses_it_writing_nothi
 
 # ---------------------------------------------------------------------------------------------- the card's rows
 
-def facts(bolt, head="a" * 40, fixes=None):
-    return dict(bolt=bolt, kit="crew", head=head, fixes=fixes or {})
+def facts(bolt, head="a" * 40, fixes=None, **more):
+    return dict(bolt=bolt, kit="crew", head=head, fixes=fixes or {}, **more)
 
 
 def submitted(bolt, head, refused=None):
@@ -203,6 +203,56 @@ def test_a_conflict_only_with_a_row_above_holds_nothing():
     """rail-cards "Only a bolt above it": a forecast against a row above is said on the row, not held."""
     rows = plan.landing_rows(["y", "z"], {"y": facts("y"), "z": dict(facts("z"), forecast=[("y", ["plan.py"])])}, {}, takes_main={})
     assert [r["box"] for r in rows] == [True, True]
+
+
+# The Willdan box's breadboard-kit on 2026-11-06 (signal 2026-11-07-wldn-ops-052d0a47/01): bolt deleting landed its
+# unit as 214, f5e67f35, merging the unit's commits; the popover unit's coder rebased onto that landing, so the
+# popover bolt's landing 216, b0fdceeb, holds 214 and every commit it merged, while main holds neither bolt.
+UNITS_214 = ["6165532d" + "0" * 32, "c162f231" + "0" * 32, "56e28202" + "0" * 32]
+L214, L216, POPOVER_UNIT = "f5e67f35" + "0" * 32, "b0fdceeb" + "0" * 32, ["d4a01a89" + "0" * 32, "8d11ad43" + "0" * 32]
+DELETING_HOLDS = [L214] + UNITS_214
+POPOVER_HOLDS = [L216] + POPOVER_UNIT + [L214] + UNITS_214
+LINES = {"breadboard-shows-a-deleted-app-as-deleting": [L214], "breadboards-access-choice-is-one-popover": [L216]}
+
+
+def test_a_bolt_holding_another_bolts_landing_carries_that_bolts_work_and_the_other_carries_nothing():
+    """plan.8 (gather.carried_bolts): the popover bolt holds deleting's landing 214, on deleting's own first-parent line and
+    not on its own, so it carries deleting's work; deleting holds nothing on the popover bolt's line, so the bolt
+    whose work was carried is free to land, its own landing taking that work to main."""
+    assert plan.gather.carried_bolts(POPOVER_HOLDS, LINES, "breadboards-access-choice-is-one-popover") == {
+        "breadboard-shows-a-deleted-app-as-deleting": [L214]}
+    assert plan.gather.carried_bolts(DELETING_HOLDS, LINES, "breadboard-shows-a-deleted-app-as-deleting") == {}
+
+
+def test_a_commit_on_the_bolts_own_line_or_one_main_holds_is_carried_from_no_one():
+    """plan.8: a landing on the bolt's own first-parent line is its own, whichever other line also lists it; and a
+    commit main holds is in no bolt's holds beyond main, so once deleting lands the popover bolt carries nothing."""
+    lines = dict(LINES, other=[L216])
+    assert plan.gather.carried_bolts(POPOVER_HOLDS, lines, "breadboards-access-choice-is-one-popover") == {
+        "breadboard-shows-a-deleted-app-as-deleting": [L214]}
+    assert plan.gather.carried_bolts([L216] + POPOVER_UNIT, LINES, "breadboards-access-choice-is-one-popover") == {}
+
+
+def test_a_bolt_carrying_another_bolts_work_is_held_with_no_box_naming_that_bolt_and_its_landing():
+    """plan.8: held as a conflict holds it, whatever else holds it, a take-main fix in flight on it among them, so it is
+    no row the user ticks and no card is raised for it; its words name the bolt whose work it carries and that bolt's
+    landing it holds."""
+    carried = {"breadboard-shows-a-deleted-app-as-deleting": [L214]}
+    words = "Take main into the bolt: it is forecast to conflict on README.md"
+    y, z = plan.landing_rows(["y", "z"], {"y": facts("y", carries=carried, fixes={"fix/y/take-main-e4f5a6b": words}), "z": facts("z")}, {},
+                             takes_main={"y": ("e4f5a6b", ["README.md"])})
+    assert (y["box"], y.get("takes_main"), y["why"]) == (False, None, (
+        "held: carries bolt breadboard-shows-a-deleted-app-as-deleting's work, its landing f5e67f3, which main lacks; a bolt "
+        "never carries another bolt's work to main, so it lands once main holds that work, by the landing of bolt "
+        "breadboard-shows-a-deleted-app-as-deleting"))
+    assert z["box"]
+
+
+def test_a_bolt_whose_carried_work_cant_be_read_is_held_saying_why():
+    """read.1: what a bolt carries that git could not list holds it too, saying why, never read as nothing."""
+    row, = plan.landing_rows(["y"], {"y": facts("y", carries_error="git could not list bolt/z's own commits beyond main")}, {})
+    assert (row["box"], row["why"]) == (False, "held: crew can't tell whether it carries another bolt's work, so it does not "
+                                               "land: git could not list bolt/z's own commits beyond main")
 
 
 def test_a_take_main_fix_in_flight_holds_its_row_as_taking_main_first_in_its_words():

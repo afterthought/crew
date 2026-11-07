@@ -183,6 +183,22 @@ class TestRows:
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == f"apex-zones, on {BOX}, in Flume stream wldn: can land"
 
+    def test_a_bolt_carrying_another_bolts_work_is_held_on_its_land_line_and_left_out_of_the_tell(self):
+        """crew-rail "A bolt carrying another bolt's work is held on its land line" (plan.8): its kit's read says the
+        bolt holds another bolt's landing main lacks, so its line says so, naming the bolt and its landing, and it can't
+        land; once main holds that work, its kit's read finds nothing carried and it can land."""
+        sv = survey()
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"]["carries"] = {"tenant-environments": ["f5e67f35" + "0" * 32]}
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {}}}
+        land, = [r for r in rows(held=held, sv=sv) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, on {BOX}, in Flume stream wldn: held: carries bolt tenant-environments's work, "
+                                   "its landing f5e67f3, which main lacks; a bolt never carries another bolt's work to main, so it "
+                                   "lands once main holds that work, by the landing of bolt tenant-environments")
+        assert land["cmds"] == [] and land["bolts"][0]["can"] is False
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"]["carries"] = {}
+        land, = [r for r in rows(held=held, sv=sv) if r["group"] == "land"]
+        assert land["what"][1] == f"apex-zones, on {BOX}, in Flume stream wldn: can land"
+
     def test_a_bolt_forecast_at_its_head_to_conflict_with_main_takes_main_first_and_is_left_out_of_the_tell(self):
         """crew-rail "A bolt taking main first" and "A conflict forecast at an older head"."""
         conflict = dict(Act="forecast", On=["bolt/apex-zones"], Heads="bolt/apex-zones@abc1234 main@e4f5a6b", Paths="README.md",

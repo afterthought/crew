@@ -714,7 +714,9 @@ def parser():
 
 
 def main(argv):
-    a = parser().parse_args(argv)
+    ap = parser()
+    crew.answer_usage(ap, argv)
+    a = ap.parse_args(argv)
     if a.cmd == "emit":
         extra = dict(f.split("=", 1) for f in a.field if "=" in f)
         eid = emit(a.label, a.act, a.on, a.frm, a.commit, a.why, a.refused, eid=a.id, **{k: v for k, v in extra.items() if k in EXTRA})

@@ -1906,33 +1906,32 @@ def ended_by_signal():
 # ------------------------------------------------------------------------------------------------- commands
 
 def main(argv):
-    plan.need_recutils()
     sub, argv = (argv[0], argv[1:]) if argv else ("board", [])
     sub in ("board", "_views", "_board", "_rail", "_follow") or fail(f"board.py runs crew board, _views, _board, _rail or _follow, not {sub}")
     ap = argparse.ArgumentParser(prog=f"crew {sub}")
-    fleet = crew.load()
-    if sub in ("_board", "_rail"):
+    if sub in ("_board", "_rail", "_views"):
         ap.add_argument("label")
+    if sub in ("_board", "_rail", "_follow"):
         ap.add_argument("--once", action="store_true")
-        a = ap.parse_args(argv)
+    if sub == "board":
+        ap.add_argument("--label")
+        ap.add_argument("--json", action="store_true")
+    crew.answer_usage(ap, argv)
+    plan.need_recutils()
+    fleet = crew.load()
+    a = ap.parse_args(argv)
+    if sub in ("_board", "_rail"):
         if sub == "_rail":
             ended_by_signal()
         (follow if sub == "_board" else rail_follow)(crew.partition_of(fleet, a.label)["label"], a.once)
         return
     if sub == "_follow":
-        ap.add_argument("--once", action="store_true")
-        a = ap.parse_args(argv)
         ended_by_signal()
         run_follow(a.once)
         return
     if sub == "_views":
-        ap.add_argument("label")
-        a = ap.parse_args(argv)
         labels = [crew.partition_of(fleet, a.label)["label"]]
     else:
-        ap.add_argument("--label")
-        ap.add_argument("--json", action="store_true")
-        a = ap.parse_args(argv)
         label = plan.default_label(fleet, a)
         labels = [label] if label else list(fleet["partitions"])
     read = flow_read(fleet, labels, sweep=sub == "_views")

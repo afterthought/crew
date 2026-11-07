@@ -2495,6 +2495,27 @@ def work_said(bolt, sent, head, work):
 TAKE_MAIN = "Take main into the bolt"
 
 
+def carries_said(carries, error=None):
+    """What holds a bolt's landing while it carries another bolt's work (plan.8, gather.carried_bolts), as one clause, or
+    None while it carries none: each bolt whose work it carries, with that bolt's landings it holds, which main lacks,
+    and that it lands once main holds them, by that bolt's own landing; or, when what it carries can't be read
+    (error), that crew can't tell, with why, which holds it too (read.1). The same words on its row, the rail's land
+    line, crew bolts and crew bolt submit's refusal. A decision of facts alone (code.7)."""
+    if error:
+        return f"crew can't tell whether it carries another bolt's work, so it does not land: {error}"
+    if not carries:
+        return None
+    return (f"carries {carried_named(carries)}, which main lacks; a bolt never carries another bolt's work to main, so "
+            f"it lands once main holds that work, by the landing of {joined([f'bolt {b}' for b in sorted(carries)])}")
+
+
+def carried_named(carries):
+    """Each bolt whose work a branch carries, with that bolt's landings it holds by their short shas, as words:
+    `bolt <b>'s work, its landing <sha>` (carries, {bolt: [commits]}, gather.carried_bolts)."""
+    return joined([f"bolt {b}'s work, its " + ("landing " if len(cs) == 1 else "landings ") + ", ".join(c[:7] for c in cs)
+                   for b, cs in sorted(carries.items())])
+
+
 def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
     """The rows of a kit's landings card (rail-cards, record 0031 as amended 2026-10-23), from facts alone: order, the
     plan's bolts of the kit by name, in its order; rows, {bolt: facts} for each that reads proven as a fix in flight on
@@ -2505,7 +2526,9 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
     the card's forecast or the run record's (main_conflict). In the plan's order, each {bolt, box: True, facts}, a row
     the user ticks, its facts carrying stopped, (head, words), when its last landing was stopped at its present head
     (stopped_at), which holds nothing (rail-cards "A landing sluice or its host stopped keeps its box"); or {bolt, box:
-    False, why, facts}, held with no box: for a fix in flight on it, in the fix's words, or for sluice's rejection of its
+    False, why, facts}, held with no box: while its facts say it carries another bolt's work main lacks, or that what
+    it carries can't be read (carries, carries_error; carries_said), whatever else holds it, so no landing card is raised
+    for it nor its row marked able to land (plan.8); for a fix in flight on it, in the fix's words, or for sluice's rejection of its
     landing at its present head, the row saying the landing was rejected and the bolt is open for work, until a fix on
     the bolt moves the head; or, marked takes_main, taking main first,
     forecast to conflict with main, or with only take-main fixes in flight (TAKE_MAIN), each named with its words; but a
@@ -2518,7 +2541,10 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
         fixes = f.get("fixes") or {}
         at, words = held.get(b, (None, None))
         main_first = bool(fixes) and all((note or "").startswith(TAKE_MAIN) for note in fixes.values())
-        if fixes:
+        carry = carries_said(f.get("carries"), f.get("carries_error"))
+        if carry:  # another bolt's work it carries holds it as a conflict does, whatever else holds it (plan.8)
+            why, main_first = f"held: {carry}", False
+        elif fixes:
             why = "; ".join(f'takes main first: {fix.rsplit("/", 1)[-1]} taking main in: "{note}"' if (note or "").startswith(TAKE_MAIN)
                             else f"held for a fix: {note} ({fix})" if note else f"held for {fix} until it merges or is dropped"
                             for fix, note in sorted(fixes.items()))
@@ -3000,7 +3026,9 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
         return None, batch_waits([n for n, kind, _ in work if kind == "unit"], due, unanswered)
     held = {} if fixes_hold else dict(fixes={f: flume[f] for f in fixes}, refusal=refusals(entries).get(bolt),
                                       stop=stops(entries).get(bolt))
-    return dict(card, host=t["machine"], main=t["kit"]["main"], base=base, **held), None
+    # Another bolt's work it carries, or why that can't be read (gather.carried_bolts), for landing_rows to hold it by (plan.8).
+    carry = {x: facts[x] for x in ("carries", "carries_error") if facts.get(x)}
+    return dict(card, host=t["machine"], main=t["kit"]["main"], base=base, **held, **carry), None
 
 
 def landing_retry(why, fresh, fresh_why):
@@ -4467,11 +4495,16 @@ def landing_submitted(fleet, label, t, bolt, frm=(), excerpt=None):
         return dict(bolt=bolt, t=t, refused=decided)
     head, own = (decided["head"], copies["own"]) if decided["head"] else ("", "")
     path = f"{t['kit']['dir']}/places/land-{bolt}"
+    at_head = head or (copies["own"] if copies.get("own") not in (None, "-") else None)
+    # A bolt that carries another bolt's work main lacks lands nothing, as a conflict holds it (plan.8): read from the
+    # branches as GitHub holds them, after one fetch, at the head this landing submits.
+    refused = landing_carries(fleet, t, bolt, at_head)
+    if refused:
+        return dict(bolt=bolt, t=t, refused=refused)
     # The bolt's landing already standing in sluice, as after a session that submitted it ended: waited on again at
     # its head, nothing submitted (teams.22, plan.16).
     o = crew.on_machine(fleet, host, ["bash", "-c", QUEUE, "crew", main])
     queued, why = queue_read(o.returncode, o.stdout, o.stderr)
-    at_head = head or (copies["own"] if copies.get("own") not in (None, "-") else None)
     step, n, at = landing_standing(queued, bolt, at_head) if not why else ("unread", None, None)
     if why:
         print(f"crew can't read sluice's queue on {host}, so whether a landing of bolt/{bolt} stands there can't be told: "
@@ -4518,6 +4551,71 @@ def landing_submitted(fleet, label, t, bolt, frm=(), excerpt=None):
     if f["RC"] == "0" and f["ID"]:
         landing_queued(label, t, bolt, f["ID"], f["TIP"], before, frm, excerpt)
     return dict(bolt=bolt, t=t, before=before, path=path, **f, standing=standing, last=last)
+
+
+def carries_refusal(bolt, carries):
+    """crew bolt submit's words for a bolt it submits nothing of while it carries another bolt's work main lacks
+    (plan.8, carries_said), or None while it carries none. A decision of facts alone (code.7)."""
+    said = carries_said(carries)
+    return f"bolt/{bolt} was not submitted: it {said}" if said else None
+
+
+def landing_carries(fleet, t, bolt, head):
+    """Why crew bolt submit submits nothing of a bolt, or None: it carries another bolt's work main lacks at the head
+    this landing submits (head; the host's own bolt/<bolt> for a bolt kept on its host, which SUBMIT submits as it
+    stands), read from the branches as GitHub holds them after one fetch on the bolt's host (bolts_carried), as a
+    conflict holds a landing (plan.8); a read git refused is a refusal too, naming what could not be read (read.1)."""
+    try:
+        return carries_refusal(bolt, bolts_carried(fleet, t, bolt, head or f"refs/heads/bolt/{bolt}"))
+    except Refusal as e:
+        return f"bolt/{bolt} was not submitted: {e}"
+
+
+# What a bolt's tip carries of other bolts' work (plan.8, plan.19), for kit.carries_of and gather.carried_bolts, read in
+# its kit's main checkout with one fetch of main and every bolt from origin, pruning nothing, since a bolt's branch
+# GitHub deleted was in main and its line beyond main is empty: $3 the tip judged, $4 a branch it is judged beyond, or
+# empty for the bolt's own landing, which is all crew judges on this line, since Flume merges a place into its bolt.
+# READ with git's words when a fetch or a listing fails; else LANDING, yes for a landing; HOLDS, the commits the tip
+# holds beyond main now (and beyond $4); OWN, the tip's first-parent commits beyond main; and a LINE for each bolt, its
+# name and its first-parent commits beyond main, every bolt GitHub holds read there, and a bolt the host keeps with no
+# copy on GitHub read in the host's refs, a ref another command removed while it was read left out, as gone. Read from
+# the branches alone, never a commit's words.
+CARRIES = r"""main=$1 bolt=$2 tip=$3 into=${4:-}
+cd "$main" || exit 1
+now=refs/heads/main
+if git remote get-url origin >/dev/null 2>&1; then
+  if ! err=$(git fetch -q origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/bolt/*:refs/remotes/origin/bolt/*' 2>&1); then
+    echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+  fi
+  now=refs/remotes/origin/main
+fi
+read_out() { echo "READ=git could not list $1: $(printf '%s' "$2" | tr '\n' ' ')"; exit 0; }
+if [ -n "$into" ]; then h=$(git rev-list "$tip" "^$now" "^$into" 2>&1) || read_out "what $tip holds beyond $into" "$h"; echo LANDING=no
+else h=$(git rev-list "$tip" "^$now" 2>&1) || read_out "what $tip holds" "$h"; echo LANDING=yes; fi
+o=$(git rev-list --first-parent "$tip" "^$now" 2>&1) || read_out "$tip's own commits" "$o"
+echo "HOLDS=$(printf '%s' "$h" | tr '\n' ' ')"; echo "OWN=$(printf '%s' "$o" | tr '\n' ' ')"
+seen=" "
+for r in $(git for-each-ref --format='%(refname)' refs/remotes/origin/bolt/) $(git for-each-ref --format='%(refname)' refs/heads/bolt/); do
+  b=${r#refs/remotes/origin/bolt/}; b=${b#refs/heads/bolt/}
+  case "$seen" in *" $b "*) continue ;; esac
+  seen="$seen$b "
+  if ! l=$(git rev-list --first-parent "$r" "^$now" 2>&1); then
+    git rev-parse -q --verify "$r" >/dev/null || continue
+    read_out "bolt/$b's own commits" "$l"
+  fi
+  echo "LINE $b $(printf '%s' "$l" | tr '\n' ' ')"
+done
+"""
+
+
+def bolts_carried(fleet, t, bolt, tip, into=""):
+    """What a bolt's tip carries of other bolts' work (gather.carried_bolts), read on the bolt's host after one fetch
+    (CARRIES, kit.carries_of): {bolt: [its landings the tip holds]} beyond main that are not on the tip's own
+    first-parent line, and beyond into when given. Refused, naming what could not be read, when git could not fetch or
+    list it (read.1)."""
+    holds, lines, why = kit.carries_of(host_run(fleet, t["machine"], CARRIES, t["kit"]["main"], bolt, tip, into), bolt)
+    not why or fail(f"crew can't tell whether {tip} carries another bolt's work: {why}")
+    return gather.carried_bolts(holds, lines, bolt)
 
 
 def landing_queued(label, t, bolt, n, tip, before, frm=(), excerpt=None):
@@ -9553,7 +9651,8 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None, runs=None, logs=None
                 bolts.append(dict(bolt=b.name(), repo=b.get("Repo"), goal=b.get("Goal"), sources=b.all("Source"),
                                   host=t["machine"] if t else None, state=st.bolt_state(b), verification=verified, units=units, fixes=fixes,
                                   landing=landing, submissions_error=unread, given=b.get("Path"), stream=t["stream"] if t else None,
-                                  head=bk.get("head"), landing_record=landing_phase(log, b.name()) if crossed and isinstance(log, list) else None))
+                                  head=bk.get("head"), landing_record=landing_phase(log, b.name()) if crossed and isinstance(log, list) else None,
+                                  carries=bk.get("carries") or {}, carries_error=bk.get("carries_error")))
             queue = [] if bolt else [dict(unit=u.name(), kind=kind_of(u), repo=u.get("Repo"), stage="queued", sources=u.all("Source"))
                                      for u in plan.queue()]
             part["plans"].append({"repo": repo, "plan": tip, "bolts": bolts, "queue": queue})
@@ -9584,6 +9683,9 @@ def bolts_text(data):
                 record_said = phase_said(b.get("landing_record"), b.get("head"), live=bool(b.get("landing")))
                 lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}" + (f"  {record_said}" if record_said else "")
                              + (f"  landing {standing_said(b['landing'])}" if b.get("landing") else ""))
+                carry = carries_said(b.get("carries"), b.get("carries_error"))
+                if carry:
+                    lines.append(f"  landing: held: {carry}")
                 if b.get("submissions_error"):
                     lines.append(f"  submissions: can't be read on {b['host']}: {b['submissions_error']}")
                 if b.get("verification"):
@@ -10808,8 +10910,12 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
             conflict = main_conflict(held.get(l, {}).get("forecasts") or [], b.name(), head)
             phase = (held.get(l, {}).get("phases") or {}).get(b.name())
             kit_name = b.get("Repo") or k["kit"]["name"]
+            bk = k["bolts"].get(b.name(), {})
+            carry = carries_said(bk.get("carries"), bk.get("carries_error"))
             if phase and phase["state"] in ("queued", "again"):  # submitted and not yet decided: its work held (landing_hold)
                 lands = [f"{phase_said(phase, head)}: no unit, chore or fix joins it until sluice decides"]
+            elif not lands and carry:  # another bolt's work it carries holds it as a conflict does (plan.8)
+                lands = [f"held: {carry}"]
             elif not lands and fixes:  # a fix started on the bolt holds its landing
                 lands = [f"lands once {either(sorted(fixes))} has merged or been dropped"]
             elif not lands and refused:  # sluice rejected its landing at this head (refused_at), the bolt open for work
@@ -15442,7 +15548,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("--wait", action="store_true")
     x.add_argument("--timeout", type=int, default=3600000)
-    x = sub.add_parser("review-delivered")
+    x = sub.add_parser("review-delivered", prog="crew review delivered")
     x.add_argument("--label")
     x = sub.add_parser("_console")
     x.add_argument("act", choices=("up", "down"))
@@ -15527,11 +15633,13 @@ def refused(fleet, a, key, e):
 
 
 def main(argv):
-    need_recutils()
     if argv[:2] in (["signal", "move"], ["signal", "show"], ["signal", "land"], ["review", "delivered"]):  # beside crew signal <slug> "<asserts>"
         argv = [f"{argv[0]}-{argv[1]}"] + argv[2:]
     ap = parser(only=argv[0]) if argv and not argv[0].startswith("-") else None
-    args = (ap if ap is not None and argv[0] in ap.built else parser()).parse_args(argv)
+    ap = ap if ap is not None and argv[0] in ap.built else parser()
+    crew.answer_usage(ap, argv)
+    need_recutils()
+    args = ap.parse_args(argv)
     fleet = crew.load()
     key = (args.cmd, getattr(args, "sub", None))
     if key in HOST_COMMANDS:  # one process says what each of its steps did, in the order they did it
