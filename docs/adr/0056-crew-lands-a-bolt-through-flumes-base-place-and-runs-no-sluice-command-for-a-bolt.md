@@ -1,12 +1,12 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-07
 decision-makers: the user (crew no longer submits to sluice); the design agent (what crew asks of Flume and reads from it)
 ---
 
 # 0056. crew lands a bolt through Flume's base place, and runs no sluice command for a bolt
 
-Status: proposed to the user on 2026-11-07, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-11-07, in agentplot-design's pane: "For 56, yes."
 
 Deciders: the user, 2026-11-07, in agentplot-design's pane, after a bolt's landing card had agentplot-ops run `sluice submit` by hand, relayed by agentplot-design through the operator: "I want to make sure that the changes required to retrofit crew are part of all of that because crew would no longer have to be submitting to sluice". That crew stops submitting to sluice is theirs. What crew asks of Flume in its place, and what it reads, is the design agent's, on Flume's statement as written.
 
