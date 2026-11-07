@@ -51,6 +51,10 @@ done
 [[ ${named[*]} == "main-ops" ]] || fail "the briefs naming wt submit are ${named[*]}"
 ok "every brief that names wt submit says never to run wt submit --help in a worktree, and to read sluice submit --help or wt --help"
 
+expect_ok crewpy brief swb-1 coder; has "$out" "That bolt is the only one you build on"
+has "$out" "no other \`bolt/*\` branch is yours to rebase onto, merge, test against or take work from"; lacks "$out" "git rebase bolt/<bolt>"
+ok "the coder builds on the bolt its branch tracks alone, never on another bolt's branch, and rebases onto it where it lives"
+
 expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by hand: sluice runs it."
 has "$out" "run the tests of what you changed, as the kit's CLAUDE.md says"; lacks "$out" "moon run"
 expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it runs only those the change affects"

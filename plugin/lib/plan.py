@@ -2726,6 +2726,27 @@ def work_said(bolt, sent, head, work):
 TAKE_MAIN = "Take main into the bolt"
 
 
+def carries_said(carries, error=None):
+    """What holds a bolt's landing while it carries another bolt's work (plan.8, gather.carried_bolts), as one clause, or
+    None while it carries none: each bolt whose work it carries, with that bolt's landings it holds, which main lacks,
+    and that it lands once main holds them, by that bolt's own landing; or, when what it carries can't be read
+    (error), that crew can't tell, with why, which holds it too (read.1). The same words on its row, the rail's land
+    line, crew bolts and crew bolt submit's refusal. A decision of facts alone (code.7)."""
+    if error:
+        return f"crew can't tell whether it carries another bolt's work, so it does not land: {error}"
+    if not carries:
+        return None
+    return (f"carries {carried_named(carries)}, which main lacks; a bolt never carries another bolt's work to main, so "
+            f"it lands once main holds that work, by the landing of {joined([f'bolt {b}' for b in sorted(carries)])}")
+
+
+def carried_named(carries):
+    """Each bolt whose work a branch carries, with that bolt's landings it holds by their short shas, as words:
+    `bolt <b>'s work, its landing <sha>` (carries, {bolt: [commits]}, gather.carried_bolts)."""
+    return joined([f"bolt {b}'s work, its " + ("landing " if len(cs) == 1 else "landings ") + ", ".join(c[:7] for c in cs)
+                   for b, cs in sorted(carries.items())])
+
+
 def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
     """The rows of a kit's landings card (rail-cards, record 0031 as amended 2026-10-23), from facts alone: order, the
     plan's bolts of the kit by name, in its order; rows, {bolt: facts} for each that reads proven as a fix in flight on
@@ -2736,7 +2757,9 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
     the card's forecast or the run record's (main_conflict). In the plan's order, each {bolt, box: True, facts}, a row
     the user ticks, its facts carrying stopped, (head, words), when its last landing was stopped at its present head
     (stopped_at), which holds nothing (rail-cards "A landing sluice or its host stopped keeps its box"); or {bolt, box:
-    False, why, facts}, held with no box: for a fix in flight on it, in the fix's words, or for sluice's refusal of its
+    False, why, facts}, held with no box: while its facts say it carries another bolt's work main lacks, or that what
+    it carries can't be read (carries, carries_error; carries_said), whatever else holds it, so no landing card is raised
+    for it nor its row marked able to land (plan.8); for a fix in flight on it, in the fix's words, or for sluice's refusal of its
     landing at its present head, until its team's fix moves the head, saying ops submits it again once that fix has
     merged (bolt-teams "A landing sluice sent back is its team's fix"); or, marked takes_main, taking main first,
     forecast to conflict with main, or with only take-main fixes in flight (TAKE_MAIN), each named with its words; but a
@@ -2749,7 +2772,10 @@ def landing_rows(order, rows, held, stopped=None, takes_main=None, left=()):
         fixes = f.get("fixes") or {}
         at, words = held.get(b, (None, None))
         main_first = bool(fixes) and all((note or "").startswith(TAKE_MAIN) for note in fixes.values())
-        if fixes:
+        carry = carries_said(f.get("carries"), f.get("carries_error"))
+        if carry:  # another bolt's work it carries holds it as a conflict does, whatever else holds it (plan.8)
+            why, main_first = f"held: {carry}", False
+        elif fixes:
             why = "; ".join(f'takes main first: {fix.rsplit("/", 1)[-1]} taking main in: "{note}"' if (note or "").startswith(TAKE_MAIN)
                             else f"held for a fix: {note} ({fix})" if note else f"held for {fix} until it merges or is dropped"
                             for fix, note in sorted(fixes.items()))
@@ -3273,7 +3299,9 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
         return None, batch_waits([n for n, kind, _ in work if kind == "unit"], due, unanswered)
     held = {} if fixes_hold else dict(fixes={f: flume[f] if flume is not None else fix_words(t, f) for f in fixes}, refusal=refusals(entries).get(bolt),
                                       stop=stops(entries).get(bolt))
-    return dict(card, team=t["name"], conductor=f"{t['name']}-conductor", host=t["machine"], base=base, **held), None
+    # Another bolt's work it carries, or why that can't be read (gather.carried_bolts), for landing_rows to hold it by (plan.8).
+    carry = {x: facts[x] for x in ("carries", "carries_error") if facts.get(x)}
+    return dict(card, team=t["name"], conductor=f"{t['name']}-conductor", host=t["machine"], base=base, **held, **carry), None
 
 
 def fix_said(t, fix, words):
@@ -4951,6 +4979,11 @@ def landing_submitted(fleet, label, t, bolt, frm=(), excerpt=None):
     refused = landing_sent_back(fleet, label, t, bolt, at_head)
     if refused:
         return dict(bolt=bolt, t=t, refused=refused)
+    # A bolt that carries another bolt's work main lacks lands nothing, as a conflict holds it (plan.8): read from the
+    # branches as GitHub holds them, after one fetch, at the head this landing submits.
+    refused = landing_carries(fleet, t, bolt, at_head)
+    if refused:
+        return dict(bolt=bolt, t=t, refused=refused)
     # The bolt's landing already standing in sluice, as after a session that submitted it ended: waited on again at
     # its head, nothing submitted (teams.22, plan.16).
     o = crew.on_machine(fleet, host, ["bash", "-c", QUEUE, "crew", main])
@@ -5023,6 +5056,24 @@ def sent_back_refusal(bolt, team, head, held, due):
                   f" (its record of{n} still has it {STANDING.get(due[1], due[1])})" if due else "")
         said = f"sluice sent its landing back at {head[:7]}, as the run record has it: {held['words'].rstrip('.')}{unread}"
     return f"bolt/{bolt} was not submitted: {said}. It is its team's fix, not a stop: {team_fix_said(bolt, team, s)}"
+
+
+def carries_refusal(bolt, carries):
+    """crew bolt submit's words for a bolt it submits nothing of while it carries another bolt's work main lacks
+    (plan.8, carries_said), or None while it carries none. A decision of facts alone (code.7)."""
+    said = carries_said(carries)
+    return f"bolt/{bolt} was not submitted: it {said}" if said else None
+
+
+def landing_carries(fleet, t, bolt, head):
+    """Why crew bolt submit submits nothing of a bolt, or None: it carries another bolt's work main lacks at the head
+    this landing submits (head; the host's own bolt/<bolt> for a bolt kept on its host, which SUBMIT submits as it
+    stands), read from the branches as GitHub holds them after one fetch on the team's host (bolts_carried), as a
+    conflict holds a landing (plan.8); a read git refused is a refusal too, naming what could not be read (read.1)."""
+    try:
+        return carries_refusal(bolt, bolts_carried(fleet, t, bolt, head or f"refs/heads/bolt/{bolt}"))
+    except Refusal as e:
+        return f"bolt/{bolt} was not submitted: {e}"
 
 
 def landing_sent_back(fleet, label, t, bolt, head):
@@ -5619,12 +5670,19 @@ def unit_stage(fleet, plan, name):
     return (stages_for(fleet, plan, [b]) if b else Stages(fleet, plan, {})).of(name)
 
 
-# A moved unit's place, or a chore's (its kind the fifth word), rebased onto the bolt it moves to, its branch then
-# tracking that bolt where it lives (the sixth word, bolt_upstream); UNREBASE puts it back, tracking the bolt it left.
+# A moved unit's place, or a chore's (its kind the fifth word), rebased from the bolt it leaves onto the bolt it moves
+# to, each read where it lives (the seventh and sixth words, bolt_upstream; plan.19), a bolt on GitHub fetched first,
+# never the host's copy, which lags and would carry the bolt it leaves into the one it joins (plan.8); its branch then
+# tracks the bolt it moves to; UNREBASE puts it back, tracking the bolt it left.
 REBASE = r"""cd "$1" || exit 1
 branch="$5/$4"
+for up in "$6" "$7"; do
+  case "$up" in origin/bolt/*)
+    git fetch -q origin "+refs/heads/${up#origin/}:refs/remotes/$up" >&2 || { echo "git could not fetch $up from GitHub" >&2; exit 4; } ;;
+  esac
+done
 orig=$(git rev-parse HEAD)
-if git rebase -q --onto "bolt/$3" "bolt/$2" "$branch" >/dev/null 2>&1; then
+if git rebase -q --onto "$6" "$7" "$branch" >/dev/null 2>&1; then
   git branch -q --set-upstream-to="$6" "$branch"; echo "$orig"
 else
   git rebase --abort >/dev/null 2>&1; exit 3
@@ -5683,6 +5741,70 @@ git merge-base --is-ancestor "$there" "$own" 2>/dev/null; case $? in 0) echo "AH
 echo "LACKS=$(git rev-list --count --merges "$there..$own" 2>/dev/null)"
 echo "BEYOND=$(git rev-list --count --merges "$own..$there" 2>/dev/null)"
 """
+
+
+# What a tip carries of other bolts' work (plan.8, plan.19), for kit.carries_of and gather.carried_bolts, read in its kit's
+# main checkout with one fetch of main and every bolt from origin, pruning the bolts GitHub no longer holds: $3 the tip
+# judged, $4 its bolt where it lives for a merge into it, or empty for the bolt's own landing. READ with git's words when
+# a fetch or a listing fails; else LANDING, yes for a landing; HOLDS, the commits the tip holds beyond main now, and
+# beyond its bolt for a merge; OWN, the tip's first-parent commits beyond main; and a LINE for each bolt, its name and
+# its first-parent commits beyond main, every bolt GitHub holds read there, and a bolt the host keeps with no copy on
+# GitHub read in the host's refs. Read from the branches alone, never a commit's words.
+CARRIES = r"""main=$1 bolt=$2 tip=$3 into=${4:-}
+cd "$main" || exit 1
+now=refs/heads/main
+if git remote get-url origin >/dev/null 2>&1; then
+  if ! err=$(git fetch -q --prune origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/bolt/*:refs/remotes/origin/bolt/*' 2>&1); then
+    echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+  fi
+  now=refs/remotes/origin/main
+fi
+read_out() { echo "READ=git could not list $1: $(printf '%s' "$2" | tr '\n' ' ')"; exit 0; }
+if [ -n "$into" ]; then h=$(git rev-list "$tip" "^$now" "^$into" 2>&1) || read_out "what $tip holds beyond $into" "$h"; echo LANDING=no
+else h=$(git rev-list "$tip" "^$now" 2>&1) || read_out "what $tip holds" "$h"; echo LANDING=yes; fi
+o=$(git rev-list --first-parent "$tip" "^$now" 2>&1) || read_out "$tip's own commits" "$o"
+echo "HOLDS=$(printf '%s' "$h" | tr '\n' ' ')"; echo "OWN=$(printf '%s' "$o" | tr '\n' ' ')"
+seen=" "
+for r in $(git for-each-ref --format='%(refname)' refs/remotes/origin/bolt/) $(git for-each-ref --format='%(refname)' refs/heads/bolt/); do
+  b=${r#refs/remotes/origin/bolt/}; b=${b#refs/heads/bolt/}
+  case "$seen" in *" $b "*) continue ;; esac
+  seen="$seen$b "
+  l=$(git rev-list --first-parent "$r" "^$now" 2>&1) || read_out "bolt/$b's own commits" "$l"
+  echo "LINE $b $(printf '%s' "$l" | tr '\n' ' ')"
+done
+"""
+
+
+def bolts_carried(fleet, t, bolt, tip, into=""):
+    """What a tip carries of other bolts' work (gather.carried_bolts), read on the team's host after one fetch (CARRIES,
+    kit.carries_of): {bolt: [its landings the tip holds]} beyond main, and beyond its bolt where it lives for a merge
+    into it (into); for the bolt's own landing (into empty), those that are not on the tip's own first-parent line.
+    Refused, naming what could not be read, when git could not fetch or list it (read.1)."""
+    holds, lines, why = kit.carries_of(host_run(fleet, t["machine"], CARRIES, t["kit"]["main"], bolt, tip, into), bolt)
+    not why or fail(f"crew can't tell whether {tip} carries another bolt's work: {why}")
+    return gather.carried_bolts(holds, lines, bolt)
+
+
+def merge_carried_refusal(kind, name, branch, bolt, up, carries):
+    """Why a merge into a bolt is refused while its branch carries another bolt's work that main and the bolt lack
+    (plan.8, bolts_carried), or None while it carries none: naming each bolt and its landings the branch holds, and the
+    way on, that work taken out of the branch, which is then built on its own bolt where it lives (up), or the merge
+    run once main holds that work, by that bolt's own landing. A decision of facts alone (code.7)."""
+    if not carries:
+        return None
+    whose = joined([f"bolt {b}" for b in sorted(carries)])
+    return (f"{kind} {name} does not merge into bolt/{bolt}: {branch} carries {carried_named(carries)}, which main and bolt/{bolt} lack; a "
+            f"{kind} builds on its own bolt alone, so take that work out of {branch}, building it on {up} alone, or merge "
+            f"once main holds that work, by the landing of {whose}")
+
+
+def merge_bolts(fleet, t, bolt, kind, name, branch):
+    """A unit's, chore's or fix's merge refused before its submission while its branch carries another bolt's work that
+    main and its bolt lack (plan.8, plan.19): read on the team's host after one fetch (bolts_carried), against its bolt
+    where it lives (bolt_upstream), worded by merge_carried_refusal; refused when it can't be read (read.1)."""
+    up = bolt_upstream(fleet, t, bolt)
+    why = merge_carried_refusal(kind, name, branch, bolt, up, bolts_carried(fleet, t, bolt, f"refs/heads/{branch}", up))
+    not why or fail(why)
 
 
 # Where a bolt lives (BOLT_LIVES), and AT_MAIN, the policy at the kit's main now as this host last fetched it, with no
@@ -6310,7 +6432,7 @@ def op_unit_move(ctx, a):
 
         def prepare():
             ups = {b: bolt_upstream(ctx.fleet, ft, b) for b in (src, to)}
-            r = crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", REBASE, "crew", s["worktree"], src, to, a.unit, k, ups[to]])
+            r = crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", REBASE, "crew", s["worktree"], src, to, a.unit, k, ups[to], ups[src]])
             READ.drop_kit(ft["machine"], ft["kit"]["main"])
             r.returncode != 3 or fail(f"rebasing {a.unit} onto bolt/{to} conflicts: the move is abandoned and the plan is unchanged")
             r.returncode == 0 or fail(f"rebasing {a.unit} on {ft['machine']} failed: {r.stderr.strip()}")
@@ -8892,6 +9014,7 @@ def run_check(fleet, a):
         if not s.get("worktree"):  # carried onto the bolt inside another's merge, its place gone: made again from the bolt
             make_place(fleet, t, place, f"unit/{a.unit}", bolt)
         merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "unit", a.unit)
+        merge_bolts(fleet, t, bolt, "unit", a.unit, f"unit/{a.unit}")
         merge_holds(fleet, t, bolt, f"unit {a.unit}'s merge into bolt/{bolt}")
         facts = dict(bolt=bolt, merge=merge_command(bolt))
     else:
@@ -9141,6 +9264,7 @@ def chore_check(fleet, a, label, plan, c):
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
                           + f" not: run its code again to add the trailer (crew chore run {a.unit} code)")
         merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "chore", a.unit)
+        merge_bolts(fleet, t, bolt, "chore", a.unit, f"chore/{a.unit}")
         merge_holds(fleet, t, bolt, f"chore {a.unit}'s merge into bolt/{bolt}")
         merge = merge_command(bolt)
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
@@ -9524,6 +9648,7 @@ def fix_cmd(fleet, a):
             split = bolt_split_check(fleet, t, bolt, f"refs/heads/{fix}")
             why = split and split_refusal("fix", a.name, bolt, t["machine"], *split)
             not why or fail(why)
+            merge_bolts(fleet, t, bolt, "fix", a.name, fix)
             merge_holds(fleet, t, bolt, f"{fix}'s merge into bolt/{bolt}")
             said["MERGE"] = merge_command(bolt)
         elif a.mode == "drop":
@@ -13874,7 +13999,8 @@ def bolts_data(fleet, labels, found, sv, errors, bolt=None, runs=None, sent=None
                 bolts.append(dict(bolt=b.name(), repo=b.get("Repo"), goal=b.get("Goal"), sources=b.all("Source"), team=b.get("Team"),
                                   host=t["machine"] if t else None, state=st.bolt_state(b), verification=verified, units=units, fixes=fixes,
                                   landing=landing, sent_back=back, submissions_error=unread, given=b.get("Path"),
-                                  path=path_facts(plan, t) if t else None))
+                                  path=path_facts(plan, t) if t else None, carries=bk.get("carries") or {},
+                                  carries_error=bk.get("carries_error")))
             queue = [] if bolt else [dict(unit=u.name(), kind=kind_of(u), repo=u.get("Repo"), stage="queued", sources=u.all("Source"))
                                      for u in plan.queue()]
             part["plans"].append({"repo": repo, "plan": tip, "bolts": bolts, "queue": queue})
@@ -13905,6 +14031,9 @@ def bolts_text(data):
                     f", {runner.path_said(b['path'])}" if b.get("path") and runner.path_said(b["path"]) else "")
                 lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}"
                              + (f"  landing {standing_said(b['landing'])}" if b.get("landing") else ""))
+                carry = carries_said(b.get("carries"), b.get("carries_error"))
+                if carry:
+                    lines.append(f"  landing: held: {carry}")
                 if b.get("sent_back"):
                     lines.append(f"  landing: sent back at {b['sent_back']['head'][:7]}, its team's fix: {b['sent_back']['words'].rstrip('.')}; "
                                  f"once that fix has merged, crew bolt submit {b['bolt']} submits it again")
@@ -15152,7 +15281,11 @@ def rail_rows(fleet, found, sv, props, times, held=None, runs=None):
             stop = stopped_at(held.get(l, {}).get("stopped") or {}, b.name(), head)
             conflict = main_conflict(held.get(l, {}).get("forecasts") or [], b.name(), head)
             kit_name = b.get("Repo") or k["kit"]["name"]
-            if not lands and fixes:  # a fix started on the bolt holds its landing (landing_held)
+            bk = k["bolts"].get(b.name(), {})
+            carry = carries_said(bk.get("carries"), bk.get("carries_error"))
+            if not lands and carry:  # another bolt's work it carries holds it as a conflict does (plan.8)
+                lands = [f"held: {carry}"]
+            elif not lands and fixes:  # a fix started on the bolt holds its landing (landing_held)
                 lands = [f"lands once {either(sorted(fixes))} has merged or been dropped"]
             elif not lands and refused:  # sluice refused its landing at this head (refused_at)
                 lands = [f"held: sluice refused its landing at {head[:7]}, until its team's fix moves its head: {refused.rstrip('.')}; "

@@ -136,6 +136,22 @@ class TestCarried:
             "archiving its change (crew unit run <unit> merge)")
 
 
+class TestAMergeCarriesNoOtherBoltsWork:
+    """plan.8, plan.19: a unit's, chore's or fix's merge into its bolt is refused while its branch holds another bolt's
+    landing that main and its bolt lack, as the popover unit's coder's rebase onto the deleting bolt's landing 214 did on
+    the Willdan box (signal 2026-11-07-wldn-ops-052d0a47/01)."""
+
+    def test_its_refusal_names_the_bolt_and_its_landing_and_the_way_on(self):
+        assert plan.merge_carried_refusal("unit", "pop", "unit/pop", "popover", "origin/bolt/popover",
+                                          {"deleting": ["f5e67f35" + "0" * 32]}) == (
+            "unit pop does not merge into bolt/popover: unit/pop carries bolt deleting's work, its landing f5e67f3, which main "
+            "and bolt/popover lack; a unit builds on its own bolt alone, so take that work out of unit/pop, building it on "
+            "origin/bolt/popover alone, or merge once main holds that work, by the landing of bolt deleting")
+
+    def test_a_branch_carrying_none_merges(self):
+        assert plan.merge_carried_refusal("fix", "f", "fix/popover/f", "popover", "origin/bolt/popover", {}) is None
+
+
 class TestArchivesOwed:
     """A unit's merge archives what its own archive needs first, so it never stops short for an archive it can make
     (teams.17, roles.3): wldn, awb-1, 2026-10-19, the merge of the-production-class-account-is-seeded stopped short for

@@ -195,7 +195,9 @@
 #                                      own content, a conflict or a check that ran and failed, held on its row as its
 #                                      team's fix, what failed named from sluice's record with the team's crew fix and
 #                                      this submit once that fix has merged, and refused, nothing submitted, while its
-#                                      head is still the one sluice sent back; one
+#                                      head is still the one sluice sent back; one that carries another bolt's work
+#                                      main lacks, a landing of that bolt's its head holds, refused with nothing
+#                                      submitted, naming that bolt and its landings, until main holds that work; one
 #                                      sluice or its host stopped keeping its box and the user's word, and submitted
 #                                      again once that is cleared; a landing still standing in sluice at the bolt's
 #                                      head, as after ops's session ended, waited on again with nothing submitted,
