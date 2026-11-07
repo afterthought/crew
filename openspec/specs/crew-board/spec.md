@@ -129,7 +129,7 @@ The board SHALL print no command that answers or moves anything, and SHALL write
 - **THEN** its output holds no `crew plan approve`, `crew unit approve` or `crew tell`, the flywheel's branch has the same tip, and the run record has no new entry
 
 ### Requirement: The attention line names what is wrong
-The board SHALL end with an attention line, each item marked !, naming each host that did not answer for its kits, never for its run record, which is read from the partition's branch; each plan or signals home it could not read, with why, the branch among them when its run record could not be read; and each bolt a team holds whose every unit has landed but which is still in the plan. A ledger whose bolt is in that state SHALL also carry ! on its head line. With nothing to name, the attention line SHALL say none.
+The board SHALL end with an attention line, each item marked !, naming each host that did not answer for its kits, never for its run record, which is read from the partition's branch; each plan or signals home it could not read, with why, the branch among them when its run record could not be read; each bolt a team holds whose every unit has landed but which is still in the plan; and each bolt a team holds whose conductor was not told of its give, in crew's words, until a notice or a greeting tells it. A ledger whose bolt is in either state SHALL also carry ! on its head line, and the head line of one whose conductor was not told SHALL say so after its state, in those words, in the lane, the board's JSON and every band that draws it. With nothing to name, the attention line SHALL say none.
 
 #### Scenario: A host down
 - **WHEN** the box holding swb-1 does not answer
@@ -142,6 +142,10 @@ The board SHALL end with an attention line, each item marked !, naming each host
 #### Scenario: Landed but still in the plan
 - **WHEN** every unit of a held bolt has landed on main and `crew bolt land` has not run
 - **THEN** its ledger's head carries ! and the attention line names the bolt as landed and still in the plan
+
+#### Scenario: A conductor not told of its give
+- **WHEN** swb-2 holds `kept-work`, whose give found swb-2-conductor not up
+- **THEN** `kept-work`'s head carries ! and says its conductor was not told of its give, with the words that `crew up swb-2` starts and greets it, and the attention line names the bolt
 
 ### Requirement: The board prints its lanes as JSON
 `crew board --json` SHALL print the same board as JSON: for each partition, its lanes as lists of objects, each object with its partition, its team where it has one, and its markers, each marker with its rail group, its card key, when its row began to wait, its card, and, when no card is open, the words of Pending You's refusal of the last post under its key, or none, and the attention items; and the hosts that did not answer and the plans not read.

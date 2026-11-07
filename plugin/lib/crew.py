@@ -2104,6 +2104,26 @@ def start_of(name):
     return starts().get(name)
 
 
+# Where crew _renew keeps, for each standing agent of this host, its lock, its log and what it still owes the agent:
+# <agent>.given, a give's notice not yet told it (hold.owe_given), and <agent>.owed, a restart it gave up on that the end
+# of the agent's next turn hands back (hold.owe_restart).
+RENEW = pathlib.Path.home() / ".local/state/crew/renew"
+
+
+def renew_owed(name):
+    """Whether crew _renew owes a standing agent of this host something its Stop hook hands back at the end of its turn:
+    a give's notice, or a restart it gave up on (RENEW)."""
+    return (RENEW / f"{name}.given").exists() or (RENEW / f"{name}.owed").exists()
+
+
+def stop_hands(due, owed, started, session):
+    """Whether crew's Stop hook hands an agent to crew _renew at the end of its turn (teams.19, teams.20, teams.7): it is
+    due a restart for an update, or crew _renew owes it a give's notice or a restart it gave up on (owed, renew_owed),
+    and the session whose turn ended is the one its last start recorded, since an older session of it is not the one that
+    runs. A decision of facts alone (code.7)."""
+    return bool((due or owed) and started and started.get("session") == session)
+
+
 # What the update check says of a start that recorded its launch but no crew commit, as one on a host that loads crew
 # from its release, where there is no git to read the commit from (record 0050 as amended 2026-10-30).
 NO_COMMIT_SAID = ("crew can't tell whether its plugin changed since it started, its start having recorded no crew commit: "

@@ -166,7 +166,10 @@
 #                                      words when it makes none, and while a bolt the team holds is not proven (every
 #                                      unit and chore merged, sluice green at its head) or it holds two; a branch
 #                                      already on GitHub at main's tip with no commit of its own, as a give that
-#                                      failed after sluice made it leaves it, is taken and the give goes on. A team
+#                                      failed after sluice made it leaves it, is taken and the give goes on. The
+#                                      conductor is told of the give whatever it is doing: at once when idle, by its
+#                                      restart's greeting or crew's notice, at the end of its turn when it works; one
+#                                      not up is said, and named on crew rail until it is told. A team
 #                                      due to cross to Flume or back is refused, naming each bolt it finishes first.
 #                                      To a team crossed to Flume, a give is never refused for the bolts it holds,
 #                                      but while its host is held or no runner answers there (no
@@ -226,7 +229,8 @@
 #                                      approval once it holds them all
 #   crew rail  [--label L]             what waits on the user: proposals, review batches and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
-#                                      You card; then the questions the agents asked; then the decision records
+#                                      You card; then each bolt whose conductor was not told of its give, and why;
+#                                      then the questions the agents asked; then the decision records
 #                                      waiting on you, each the design agent's open card for one; then any open card
 #                                      whose row is gone. It sweeps the cards on this host under its sign-in: closes
 #                                      a card whose row is gone, withdraws a question whose asker has ended, and
@@ -624,6 +628,9 @@ case $cmd in
     # landing, have sluice delete the bolt's branch once the landing's place is gone, and close the bolt's landing card
     # there with the words
     need_team "${2:-}"; one _tidy "${args[@]:1}" ${forced[@]+"${forced[@]}"} ;;
+  _notice)  # crew _notice <team> <bolt>: a give's notice owed the team's conductor on its host, told it once it is idle,
+    # at once if it is, else at the end of its turn, or said and recorded where it is not up (teams.7, code.9)
+    need_team "${2:-}"; one _notice "${@:2}" ;;
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;

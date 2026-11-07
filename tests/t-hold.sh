@@ -3,7 +3,8 @@
 # crew starts no agent there; hold status says what still works; hold wait, once the host is quiet, ends every crew
 # agent there with its pane kept; crew go lifts the hold and brings each back with its conversation, greeted; crew
 # update hands each standing agent an update made due its restart, which brings it back on crew as it now is, told
-# so; crew's Stop hook does the same at the end of a due agent's turn; --now ends every agent at once; and a standing
+# so; crew's Stop hook does the same at the end of a due agent's turn, and hands back a restart crew _renew gave up
+# on; --now ends every agent at once; and a standing
 # agent whose role now runs as its kind is passed over by crew update and ended at its turn's end, never started again.
 # What makes an agent due, what keeps a host from being quiet, when a due agent may be restarted and what the bands
 # say are logic cases (tests/py/test_hold.py).
@@ -116,6 +117,18 @@ echo '{"session_id":"nobody"}' | as $box python3 "$CREW/plugin/hooks/stop"
 echo 'not json' | as $box python3 "$CREW/plugin/hooks/stop"
 eq "$(launches)" ""
 ok "the Stop hook hands a due conductor a fresh start at the end of its turn, and leaves one not due and a session crew never started alone"
+
+# A restart crew _renew gave up on, the agent working past its looks, is handed back at the end of its next turn, as
+# one for a bolt its team no longer holds (teams.20), which only crew _renew reads, since it reads the plan: wldn's
+# swb-2-conductor, its restart given up on twice on 2026-11-06, was never handed back.
+cond=$(rec swb-1-conductor); rewrite "$cond" "s|^CREW_BRANCH=.*|CREW_BRANCH=bolt/gone|"
+touch "$(home_of $box)/.local/state/crew/renew/swb-1-conductor.owed"
+: > "$log"; : > "$CREW_TEST_CLAUDE_LOG"
+as $box bash -c "echo '{\"session_id\":\"$(basename "$cond")\"}' | python3 '$CREW/plugin/hooks/stop'"
+until_ok grep -q "swb-1-conductor is restarted on crew" "$log" || fail "the conductor's restart was not handed back: $(cat "$log" 2>/dev/null)"
+eq "$(launched swb-1-conductor | cut -d' ' -f2)" "fresh"
+[[ -e $(home_of $box)/.local/state/crew/renew/swb-1-conductor.owed ]] && fail "the restart left its mark owed"
+ok "the Stop hook hands back a restart crew _renew gave up on, one for a bolt its team no longer holds among them, and the restart lifts it"
 
 : > "$CREW_TEST_LOG"
 expect_ok crew hold --all "reboot" --now
