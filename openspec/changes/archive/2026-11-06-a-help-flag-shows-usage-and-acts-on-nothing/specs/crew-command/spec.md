@@ -1,3 +1,6 @@
+## Purpose
+What the `crew` command, and `crew-role` beside it, do with what they are given, whatever the command: the rules every command holds to at its entry point, before it reads, records, starts or forwards anything (`code.11`).
+
 ## ADDED Requirements
 
 ### Requirement: A help flag shows a command's usage and acts on nothing

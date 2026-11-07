@@ -8,5 +8,5 @@
 
 ## 2. The docs and the change's tests
 
-- [ ] 2.1 README, the crew skill and `crew`'s usage header say a bolt carrying another bolt's work does not land (`docs.2`; Task notes 2.1). Verify `tests/suite t-docs` ends with "0 failed".
-- [ ] 2.2 The tests the change affects pass. Verify `tests/suite --affected` ends with "0 failed".
+- [x] 2.1 README, the crew skill and `crew`'s usage header say a bolt carrying another bolt's work does not land (`docs.2`; Task notes 2.1). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 2.2 The tests the change affects pass. Verify `tests/suite --affected` ends with "0 failed".
